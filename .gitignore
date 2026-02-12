@@ -139,3 +139,15 @@ credentials.json
 #######################
 
 # Add custom patterns below
+
+# RepoKit Private Content Protection (DO NOT REMOVE)
+.env.private
+**/private_*
+CLAUDE.md
+test_runs/
+private/claude/
+test-runs/
+private/temp/
+private/notes/
+revisions/
+private/docs/
