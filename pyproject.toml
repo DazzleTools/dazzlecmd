@@ -7,7 +7,7 @@ name = "dazzle-dz"
 dynamic = ["version"]
 description = "Unified CLI for the DazzleTools collection - many tools, one command"
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "GPL-3.0-or-later"}
 requires-python = ">=3.8"
 authors = [
     {name = "Dustin", email = "6962246+djdarcy@users.noreply.github.com"},
@@ -19,6 +19,7 @@ dependencies = []
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
+    "flake8>=5.0.0",
 ]
 
 [project.urls]

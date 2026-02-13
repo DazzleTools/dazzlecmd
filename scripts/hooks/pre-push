@@ -36,8 +36,10 @@ echo -e "${GREEN}✓${NC} Python syntax check passed"
 echo ""
 echo -e "${BLUE}Running tests...${NC}"
 
-# Run unit tests
-if python -m pytest tests/ -q 2>/dev/null; then
+# Run unit tests (skip if no tests directory or no tests found)
+if [ ! -d "tests" ] || [ -z "$(find tests/ -name 'test_*.py' -o -name '*_test.py' 2>/dev/null)" ]; then
+    echo -e "${YELLOW}⚠${NC} No tests found (tests/ empty or missing)"
+elif python -m pytest tests/ -q 2>/dev/null; then
     echo -e "${GREEN}✓${NC} All tests passed"
 else
     echo -e "${YELLOW}⚠${NC} Some tests failed"

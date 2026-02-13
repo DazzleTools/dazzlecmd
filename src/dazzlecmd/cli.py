@@ -307,6 +307,12 @@ def _cmd_kit_status(kits):
     return 0
 
 
+def _cmd_version():
+    """Show version info (alternate to --version flag)."""
+    print(f"dazzlecmd {DISPLAY_VERSION} ({__version__})")
+    return 0
+
+
 def _cmd_new(args, project_root):
     """Create a new tool project with progressive scaffolding."""
     name = args.name
