@@ -1,0 +1,22 @@
+{
+    "name": "dos2unix",
+    "version": "0.1.0",
+    "description": "Pure-Python cross-platform line ending converter (dos2unix/unix2dos)",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "dos2unix.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "file-tools",
+        "tags": ["text", "line-endings", "conversion", "dos2unix", "unix2dos"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

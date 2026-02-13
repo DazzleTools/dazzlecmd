@@ -1,0 +1,22 @@
+{
+    "name": "delete-nul",
+    "version": "0.1.0",
+    "description": "Delete Windows NUL device files that get accidentally created",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "windows",
+    "platforms": ["windows"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "delete_nul.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "file-tools",
+        "tags": ["windows", "cleanup", "nul", "device-names"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

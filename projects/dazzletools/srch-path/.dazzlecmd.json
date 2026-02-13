@@ -1,0 +1,25 @@
+{
+    "name": "srch-path",
+    "version": "0.1.0",
+    "description": "Search the system PATH for executables and commands",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "srch_path.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "system-tools",
+        "tags": ["path", "search", "which", "where", "executable"]
+    },
+    "dependencies": {
+        "python": ["pyperclip"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}
