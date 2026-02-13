@@ -118,15 +118,9 @@ out/
 #######################
 
 # Token and credential files
-*token*
-*credential*
-*secret*
-*password*
-.env
-.secret
 credentials.json
-*auth*.json
-*config*.json
+.secret
+.env
 
 # Project-specific directories
 /log/
@@ -138,16 +132,29 @@ credentials.json
 # Project Specific    #
 #######################
 
-# Add custom patterns below
+# Build artifacts
+.build/
+bin/
+
+# Local kit overrides
+*.kit.local.json
+
+# Version backup files (from update-version.sh)
+*_version.py.backup
+*_version.py.tmp
+
+# Revision tracking
+/revisions/
+
+# Test run artifacts
+/test_runs/
+/test-runs/
 
 # RepoKit Private Content Protection (DO NOT REMOVE)
 .env.private
 **/private_*
 CLAUDE.md
-test_runs/
 private/claude/
-test-runs/
 private/temp/
 private/notes/
-revisions/
 private/docs/

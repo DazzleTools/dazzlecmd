@@ -1,0 +1,14 @@
+{
+    "name": "dazzletools",
+    "version": "0.1.0",
+    "description": "DazzleTools collection - cross-platform utilities",
+    "author": "DazzleTools",
+    "always_active": true,
+    "tools": [
+        "dazzletools:dos2unix",
+        "dazzletools:delete-nul",
+        "dazzletools:srch-path",
+        "dazzletools:split"
+    ],
+    "notes": "The default DazzleTools collection bundled with dazzlecmd. Contains frequently used utilities from the DazzleTools org. Intended to eventually become a git submodule at projects/dazzletools/."
+}

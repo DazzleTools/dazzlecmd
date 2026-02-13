@@ -1,0 +1,22 @@
+{
+    "name": "split",
+    "version": "0.1.0",
+    "description": "Split text by separator with optional token filtering",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "split_text",
+        "script_path": "split.py"
+    },
+    "pass_through": true,
+    "taxonomy": {
+        "category": "text-tools",
+        "tags": ["text", "split", "filter", "pipe"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

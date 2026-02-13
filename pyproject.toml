@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dazzle-dz"
+dynamic = ["version"]
+description = "Unified CLI for the DazzleTools collection - many tools, one command"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.8"
+authors = [
+    {name = "Dustin", email = "6962246+djdarcy@users.noreply.github.com"},
+]
+keywords = ["cli", "tools", "utility", "dazzletools", "dazzle", "command-line", "aggregator"]
+
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/DazzleTools/dazzlecmd"
+Repository = "https://github.com/DazzleTools/dazzlecmd"
+Issues = "https://github.com/DazzleTools/dazzlecmd/issues"
+
+[project.scripts]
+dazzlecmd = "dazzlecmd.cli:main"
+dz = "dazzlecmd.cli:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "dazzlecmd._version.PIP_VERSION"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["dazzlecmd*"]
+
+[tool.setuptools.package-data]
+"dazzlecmd" = ["templates/*"]

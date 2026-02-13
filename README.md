@@ -1,52 +1,87 @@
-# dazzlecmd
+# dazzlecmd (`dz`)
 
-$badges
-
-Unified CLI for the DazzleTools collection - many tools, one command
+Unified CLI for the DazzleTools collection - many tools, one command.
 
 ## Overview
 
-## Features
+DazzleCMD aggregates many small standalone tools into a single discoverable, version-tracked interface. Instead of remembering where dozens of scripts live or which repo they're in, just use `dz <tool> [args]`.
 
-- Feature 1
-- Feature 2
-- Feature 3
+Tools live as projects within the `projects/` directory, organized by namespace. Each tool keeps its own versioning and structure — dazzlecmd provides the discovery and dispatch layer.
 
 ## Installation
 
 ```bash
-# Installation instructions here
+pip install dazzle-dz
+```
+
+Or install from source:
+
+```bash
+git clone https://github.com/DazzleTools/dazzlecmd.git
+cd dazzlecmd
+pip install -e .
 ```
 
 ## Usage
 
 ```bash
-# Usage examples here
+# List available tools
+dz list
+
+# Run a tool (passes all arguments through)
+dz dos2unix myfile.txt
+dz delete-nul C:\projects
+dz rn *.txt --dry-run
+
+# Get info about a tool
+dz info dos2unix
+
+# Show version
+dz --version
+
+# List available kits
+dz kit list
+
+# Create a new tool project
+dz new my-tool                # Bare minimum (blank canvas)
+dz new my-tool --simple       # + TODO.md, NOTES.md
+dz new my-tool --full         # + ROADMAP.md, private/claude/, tests/
 ```
 
-## Development
+## Project Structure
 
-### Prerequisites
-
-- List prerequisites here
-
-### Setup
-
-```bash
-# Setup instructions here
+```
+dazzlecmd/
+├── src/dazzlecmd/          # Installable Python package
+│   ├── cli.py              # Main entry point and dispatch
+│   ├── loader.py           # Kit-aware project discovery
+│   └── templates/          # Scaffolding templates
+├── projects/               # Tool projects organized by namespace
+│   └── dazzletools/        # Default namespace
+│       ├── dos2unix/
+│       ├── delete-nul/
+│       └── ...
+├── kits/                   # Kit definitions (*.kit.json)
+│   ├── core.kit.json
+│   └── dazzletools.kit.json
+├── config/                 # Schema and configuration
+└── scripts/                # Version management and git hooks
 ```
 
-## Contributions
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details on how to contribute.
+## Kits
 
-Like the project?
+Kits are curated collections of tools. The `core` kit (CLI framework) and `dazzletools` kit (default utilities) are always active.
 
-[!["Buy Me A Coffee"](https://camo.githubusercontent.com/0b448aabee402aaf7b3b256ae471e7dc66bcf174fad7d6bb52b27138b2364e47/68747470733a2f2f7777772e6275796d6561636f666665652e636f6d2f6173736574732f696d672f637573746f6d5f696d616765732f6f72616e67655f696d672e706e67)](https://www.buymeacoffee.com/djdarcy)
+## Adding Tools
+
+Each tool lives in `projects/<namespace>/<tool>/` with a `.dazzlecmd.json` manifest describing how to run it. Tools can be Python scripts, shell scripts, compiled binaries, or any executable — dazzlecmd handles dispatch.
 
 ## License
 
-This project is licensed under the terms specified in the LICENSE file.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## Acknowledgements
+## Contributing
 
-Dustin 6962246+djdarcy@users.noreply.github.com
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details.
+
+[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://www.buymeacoffee.com/djdarcy)

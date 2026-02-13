@@ -1,0 +1,161 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "DazzleCMD Tool Manifest",
+    "description": "Schema for .dazzlecmd.json tool manifest files",
+    "type": "object",
+    "required": ["name", "version", "description"],
+    "properties": {
+        "name": {
+            "type": "string",
+            "description": "Tool name (used as CLI command)",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "version": {
+            "type": "string",
+            "description": "Semantic version string",
+            "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-zA-Z0-9.]+)?$"
+        },
+        "description": {
+            "type": "string",
+            "description": "Short description of the tool"
+        },
+        "namespace": {
+            "type": "string",
+            "description": "Namespace for organization (e.g., dazzletools, contrib, local)"
+        },
+        "language": {
+            "type": "string",
+            "description": "Primary programming language",
+            "enum": ["python", "javascript", "ruby", "perl", "shell", "batch", "powershell", "c", "cpp", "rust", "go"]
+        },
+        "platform": {
+            "type": "string",
+            "description": "Quick-glance target platform category",
+            "enum": ["cross-platform", "windows", "linux", "macos", "bsd"]
+        },
+        "platforms": {
+            "type": "array",
+            "description": "Specific platforms this tool is verified to work on. More honest than 'cross-platform' alone — enumerate what's actually tested.",
+            "items": {
+                "type": "string",
+                "enum": ["windows", "linux", "macos", "bsd", "freebsd", "openbsd", "solaris", "aix"]
+            }
+        },
+        "runtime": {
+            "type": "object",
+            "description": "How to execute this tool",
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "description": "Runtime type",
+                    "enum": ["python", "binary", "script", "shell", "managed"]
+                },
+                "entry_point": {
+                    "type": "string",
+                    "description": "Function name to call (for python type)"
+                },
+                "script_path": {
+                    "type": "string",
+                    "description": "Relative path to the main script/binary"
+                },
+                "interpreter": {
+                    "type": "string",
+                    "description": "Interpreter command (for script type)"
+                },
+                "shell": {
+                    "type": "string",
+                    "description": "Shell to use (for shell type)",
+                    "enum": ["bash", "sh", "cmd", "pwsh", "powershell"]
+                }
+            },
+            "required": ["type"]
+        },
+        "pass_through": {
+            "type": "boolean",
+            "description": "If true, run via subprocess instead of importing",
+            "default": false
+        },
+        "taxonomy": {
+            "type": "object",
+            "description": "Classification metadata",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "description": "Primary category"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Tags for search and filtering"
+                },
+                "group": {
+                    "type": "string",
+                    "description": "Logical grouping within namespace"
+                }
+            }
+        },
+        "dependencies": {
+            "type": "object",
+            "description": "Tool dependencies",
+            "properties": {
+                "python": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Python package dependencies"
+                },
+                "system": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "System-level dependencies"
+                }
+            }
+        },
+        "build": {
+            "type": "object",
+            "description": "Build configuration for compiled tools",
+            "properties": {
+                "command": {
+                    "type": "string",
+                    "description": "Build command"
+                },
+                "output": {
+                    "type": "string",
+                    "description": "Path to built artifact relative to tool dir"
+                }
+            }
+        },
+        "fallback": {
+            "type": "object",
+            "description": "Fallback options if primary runtime fails",
+            "properties": {
+                "binary_url": {
+                    "type": "string",
+                    "description": "URL to download pre-built binary"
+                },
+                "package_manager": {
+                    "type": "string",
+                    "description": "Package manager install command"
+                }
+            }
+        },
+        "lifecycle": {
+            "type": "object",
+            "description": "Project lifecycle metadata",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "enum": ["active", "stable", "maintenance", "deprecated", "graduated"]
+                },
+                "graduated_to": {
+                    "type": "string",
+                    "description": "GitHub repo URL if tool graduated to standalone"
+                }
+            }
+        },
+        "kit": {
+            "type": "string",
+            "description": "Preferred kit membership"
+        }
+    },
+    "additionalProperties": true
+}

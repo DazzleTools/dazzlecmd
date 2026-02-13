@@ -1,0 +1,11 @@
+{
+    "name": "core",
+    "version": "0.1.0",
+    "description": "Core tools that ship with dazzlecmd - fundamental utilities available everywhere",
+    "author": "DazzleTools",
+    "always_active": true,
+    "tools": [
+        "core:rn"
+    ],
+    "notes": "Core tools are the 'coreutils' of dazzlecmd. These are fundamental, universally useful tools that every user gets regardless of kit selection. They live permanently in the dazzlecmd repo under projects/core/."
+}
