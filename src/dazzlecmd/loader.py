@@ -75,11 +75,16 @@ def discover_projects(projects_dir, active_kits=None):
                 continue
 
             manifest_path = os.path.join(tool_dir, ".dazzlecmd.json")
-            if not os.path.isfile(manifest_path):
-                continue
 
             try:
-                project = _load_manifest(manifest_path, namespace, tool_name, tool_dir)
+                if os.path.isfile(manifest_path):
+                    project = _load_manifest(manifest_path, namespace, tool_name, tool_dir)
+                else:
+                    # No manifest on disk — try cached manifest (e.g. remote
+                    # repo lacks .dazzlecmd.json after mode switch)
+                    project = _load_cached_manifest(
+                        projects_dir, namespace, tool_name, tool_dir
+                    )
                 if project is None:
                     continue
 
@@ -120,6 +125,36 @@ def _load_manifest(manifest_path, namespace, tool_name, tool_dir):
     manifest.setdefault("runtime", {"type": "python"})
 
     return manifest
+
+
+def _load_cached_manifest(projects_dir, namespace, tool_name, tool_dir):
+    """Try to load a tool's manifest from the mode cache.
+
+    When a tool is in remote/submodule mode and the remote repo doesn't
+    include .dazzlecmd.json, the manifest was cached in mode_local.json
+    during the switch. This function retrieves it so the tool remains
+    discoverable by dz list and other commands.
+    """
+    try:
+        from dazzlecmd.mode import get_cached_manifest
+        project_root = os.path.dirname(projects_dir)
+        qualified = f"{namespace}:{tool_name}"
+        cached = get_cached_manifest(project_root, qualified)
+        if cached is None:
+            return None
+        # Apply same defaults as _load_manifest
+        cached["namespace"] = namespace
+        cached["_dir"] = tool_dir
+        cached["_manifest_path"] = None
+        cached["_cached"] = True
+        cached.setdefault("version", "0.0.0")
+        cached.setdefault("description", "")
+        cached.setdefault("platform", "cross-platform")
+        cached.setdefault("pass_through", False)
+        cached.setdefault("runtime", {"type": "python"})
+        return cached
+    except Exception:
+        return None
 
 
 def resolve_entry_point(project):

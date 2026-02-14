@@ -139,6 +139,9 @@ bin/
 # Local kit overrides
 *.kit.local.json
 
+# Dev mode local config (machine-specific dev paths)
+mode_local.json
+
 # Version backup files (from update-version.sh)
 *_version.py.backup
 *_version.py.tmp

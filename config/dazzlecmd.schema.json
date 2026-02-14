@@ -155,6 +155,29 @@
         "kit": {
             "type": "string",
             "description": "Preferred kit membership"
+        },
+        "source": {
+            "type": "object",
+            "description": "Where this tool was imported from (for copied/cloned projects)",
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": ["local", "github", "git", "manual"],
+                    "description": "How the tool was added"
+                },
+                "path": {
+                    "type": "string",
+                    "description": "Local filesystem path to original source"
+                },
+                "url": {
+                    "type": "string",
+                    "description": "Remote URL (GitHub, git, etc.)"
+                },
+                "added_at": {
+                    "type": "string",
+                    "description": "ISO 8601 timestamp when the tool was added"
+                }
+            }
         }
     },
     "additionalProperties": true

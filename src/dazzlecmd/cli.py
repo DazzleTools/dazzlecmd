@@ -17,7 +17,7 @@ from dazzlecmd.loader import (
 # Reserved command names that cannot be used as tool names
 RESERVED_COMMANDS = {
     "new", "add", "list", "info", "kit", "search",
-    "build", "tree", "version", "enhance", "graduate",
+    "build", "tree", "version", "enhance", "graduate", "mode",
 }
 
 
@@ -120,6 +120,44 @@ def _register_meta_commands(subparsers):
     new_parser.add_argument("--language", "-l", default="python", help="Primary language (default: python)")
     new_parser.set_defaults(_meta="new")
 
+    # dz add
+    add_parser = subparsers.add_parser("add", help="Import an existing tool/repo")
+    add_parser.add_argument("--repo", "-r", required=True,
+                            help="Path to source repo (or URL in future)")
+    add_parser.add_argument("--namespace", "-n", default="core",
+                            help="Namespace (default: core)")
+    add_parser.add_argument("--name", help="Override tool name")
+    add_parser.add_argument("--link", action="store_true",
+                            help="Create symlink to source (editable install)")
+    add_parser.add_argument("--kit", "-k", help="Register in this kit")
+    add_parser.set_defaults(_meta="add")
+
+    # dz mode
+    mode_parser = subparsers.add_parser("mode", help="Toggle dev/publish mode")
+    mode_sub = mode_parser.add_subparsers(dest="mode_command")
+
+    mode_status = mode_sub.add_parser("status", help="Show tool modes")
+    mode_status.add_argument("tool", nargs="?", default=None,
+                             help="Tool name (optional, show all if omitted)")
+    mode_status.add_argument("--kit", "-k", help="Filter by kit")
+    mode_status.set_defaults(_meta="mode_status")
+
+    mode_switch = mode_sub.add_parser("switch", help="Toggle dev/publish mode")
+    mode_switch.add_argument("tool", help="Tool name to switch")
+    mode_switch.add_argument("--path", "-p",
+                             help="Path to local source repo (for dev mode)")
+    mode_switch.add_argument("--dev", action="store_true",
+                             help="Force switch to dev mode")
+    mode_switch.add_argument("--publish", action="store_true",
+                             help="Force switch to publish mode")
+    mode_switch.add_argument("--url", help="Remote URL for submodule "
+                             "(reads from manifest if not given)")
+    mode_switch.add_argument("--dry-run", action="store_true",
+                             help="Show what would happen without doing it")
+    mode_switch.set_defaults(_meta="mode_switch")
+
+    mode_parser.set_defaults(_meta="mode")
+
     # dz version (alternate to --version)
     version_parser = subparsers.add_parser("version", help="Show version info")
     version_parser.set_defaults(_meta="version")
@@ -142,6 +180,15 @@ def dispatch_meta(args, projects, kits, project_root):
         return _cmd_kit_list(args, kits, projects)
     elif meta == "new":
         return _cmd_new(args, project_root)
+    elif meta == "add":
+        return _cmd_add(args, project_root)
+    elif meta == "mode_status":
+        return _cmd_mode_status(args, projects, project_root)
+    elif meta == "mode_switch":
+        return _cmd_mode_switch(args, projects, project_root)
+    elif meta == "mode":
+        # bare "dz mode" with no subcommand — show status
+        return _cmd_mode_status(args, projects, project_root)
     elif meta == "version":
         return _cmd_version()
 
@@ -233,6 +280,12 @@ def _cmd_info(args, projects):
     if deps.get("python"):
         print(f"Python deps: {', '.join(deps['python'])}")
 
+    # Show link status
+    from dazzlecmd.importer import is_linked_project, get_link_target
+    if is_linked_project(project["_dir"]):
+        target = get_link_target(project["_dir"])
+        print(f"Linked to:   {target or 'unknown'}")
+
     return 0
 
 
@@ -311,6 +364,106 @@ def _cmd_version():
     """Show version info (alternate to --version flag)."""
     print(f"dazzlecmd {DISPLAY_VERSION} ({__version__})")
     return 0
+
+
+def _cmd_add(args, project_root):
+    """Import an existing repo as a dazzlecmd tool."""
+    from dazzlecmd.importer import add_from_local
+
+    repo_path = args.repo
+    namespace = args.namespace
+    projects_dir = os.path.join(project_root, "projects")
+
+    # Expand and resolve path
+    repo_path = os.path.abspath(os.path.expanduser(repo_path))
+
+    if not os.path.isdir(repo_path):
+        print(f"Error: '{repo_path}' is not a directory", file=sys.stderr)
+        return 1
+
+    # Determine link mode
+    link_mode = "link" if args.link else "copy"
+
+    result = add_from_local(
+        source_path=repo_path,
+        projects_dir=projects_dir,
+        namespace=namespace,
+        link_mode=link_mode,
+        tool_name=args.name,
+    )
+
+    if result is None:
+        return 1
+
+    mode_desc = "Linked" if result["link_mode"] in ("symlink", "junction") else "Copied"
+    print(f"{mode_desc}: {result['namespace']}:{result['name']}")
+    if result["link_mode"] in ("symlink", "junction"):
+        print(f"  {result['link_mode']} -> {result['source_path']}")
+    print(f"  Run: dz {result['name']} --help")
+
+    # Register in kit if requested
+    if args.kit:
+        _register_in_kit(project_root, args.kit, result["namespace"],
+                         result["name"])
+
+    return 0
+
+
+def _register_in_kit(project_root, kit_name, namespace, tool_name):
+    """Add a tool reference to a kit's tools array."""
+    kits_dir = os.path.join(project_root, "kits")
+    kit_file = os.path.join(kits_dir, f"{kit_name}.kit.json")
+
+    if not os.path.isfile(kit_file):
+        print(f"  Warning: Kit '{kit_name}' not found at {kit_file}",
+              file=sys.stderr)
+        return
+
+    try:
+        with open(kit_file, "r", encoding="utf-8") as f:
+            kit = json.load(f)
+
+        qualified = f"{namespace}:{tool_name}"
+        if qualified not in kit.get("tools", []):
+            kit.setdefault("tools", []).append(qualified)
+            with open(kit_file, "w", encoding="utf-8") as f:
+                json.dump(kit, f, indent=4)
+                f.write("\n")
+            print(f"  Registered in kit: {kit_name}")
+        else:
+            print(f"  Already in kit: {kit_name}")
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"  Warning: Could not update kit: {exc}", file=sys.stderr)
+
+
+def _cmd_mode_status(args, projects, project_root):
+    """Show mode status for tools."""
+    from dazzlecmd.mode import cmd_status
+    tool_filter = getattr(args, "tool", None)
+    kit_filter = getattr(args, "kit", None)
+    return cmd_status(projects, project_root, tool_filter=tool_filter,
+                      kit_filter=kit_filter)
+
+
+def _cmd_mode_switch(args, projects, project_root):
+    """Toggle a tool between dev and publish mode."""
+    from dazzlecmd.mode import cmd_switch
+
+    force_mode = None
+    if getattr(args, "dev", False):
+        force_mode = "dev"
+    elif getattr(args, "publish", False):
+        force_mode = "publish"
+
+    return cmd_switch(
+        tool_name=args.tool,
+        projects=projects,
+        project_root=project_root,
+        dev_path=getattr(args, "path", None),
+        force_mode=force_mode,
+        dry_run=getattr(args, "dry_run", False),
+        url=getattr(args, "url", None),
+    )
 
 
 def _cmd_new(args, project_root):
@@ -494,7 +647,7 @@ def main():
     command_name = sys.argv[1]
 
     # Check if it's a meta-command
-    meta_commands = {"list", "info", "kit", "new", "version"}
+    meta_commands = {"list", "info", "kit", "new", "version", "add", "mode"}
     if command_name in meta_commands or command_name.startswith("-"):
         args = parser.parse_args()
         if hasattr(args, "_meta"):

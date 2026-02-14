@@ -10,15 +10,13 @@ A unified CLI that aggregates many small standalone tools into a single discover
 
 ## Why DazzleCMD?
 
-Have you ever accumulated a collection of handy scripts and small utilities over the years -- spread across multiple folders, some on network drives, some local, most not on GitHub -- and found yourself constantly forgetting where things live or what they're called?
+Have you ever accumulated a collection of small utilities and handy scripts over the years -- spread across multiple folders, computers, some on network drives, some local, most not on GitHub -- and found yourself constantly forgetting where things live or what they're called?
 
-Or maybe you've written a quick Python script to solve a problem, used it a few times, then couldn't find it six months later when you needed it again?
-
-Or maybe you have tools that are useful but too small to justify their own GitHub repo, but also too valuable to leave scattered and unversioned?
+Or maybe you've written a quick Python script to solve a problem, used it a few times, then couldn't find it six months later when you needed it again? Or you have tools that are useful but too small to justify their own GitHub repo, but also too valuable to leave scattered and unversioned?
 
 Enter `dz`...
 
-DazzleCMD provides a single entry point for all your tools. Each tool keeps its own structure and versioning -- dazzlecmd just provides the discovery and dispatch layer. Tools that grow complex enough can "graduate" to their own repos. Tools that stay small stay organized.
+DazzleCMD provides a single entry point for all your tools. Each tool keeps its own structure and versioning. Dazzlecmd simply provides the discovery and dispatch layer. Tools that grow complex enough can "graduate" to their own repos (which can in turn be nested internal to "dz" as git submodules). Tools that stay small stay organized, easy to find, and simple to track.
 
 ## Features
 
@@ -75,7 +73,7 @@ dz --version
 ## Included Tools
 
 ### Core Kit
-Tools that ship with dazzlecmd -- available everywhere, always active.
+These are the tools that ship with dazzlecmd. They are available everywhere and always active.
 
 | Tool | Description | Platform |
 |------|-------------|----------|
