@@ -1,0 +1,4 @@
+# Optional dependencies for enhanced path handling
+# dz links works without these, but they improve path canonicalization and UNC support
+dazzle-filekit
+unctools

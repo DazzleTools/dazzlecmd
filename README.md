@@ -52,6 +52,8 @@ dz list
 dz dos2unix myfile.txt
 dz rn "(.*)\.bak" "\1.txt" *.bak
 dz delete-nul C:\projects
+dz links -r --type symlink,junction    # Find all symlinks and junctions recursively
+dz links --broken                      # Find broken links in current directory
 
 # Get detailed info about a tool
 dz info dos2unix
@@ -77,6 +79,8 @@ These are the tools that ship with dazzlecmd. They are available everywhere and 
 
 | Tool | Description | Platform |
 |------|-------------|----------|
+| `links` | Detect and display filesystem links (symlinks, junctions, hardlinks, shortcuts) | Cross-platform |
+| `listall` | Flexible directory structure listing with sorting and collection | Cross-platform |
 | `rn` | Rename files using regular expressions | Cross-platform |
 
 ### DazzleTools Kit
@@ -134,11 +138,14 @@ dazzlecmd/
 │   └── templates/            # Scaffolding templates for dz new
 ├── projects/                 # Tool projects by namespace
 │   ├── core/                 # Core tools (ships with dazzlecmd)
+│   │   ├── links/
+│   │   ├── listall/
 │   │   └── rn/
 │   └── dazzletools/          # DazzleTools collection
 │       ├── dos2unix/
 │       ├── delete-nul/
-│       └── ...
+│       ├── split/
+│       └── srch-path/
 ├── kits/                     # Kit definitions (*.kit.json)
 ├── config/                   # JSON schema for manifests
 └── scripts/                  # Version management and git hooks

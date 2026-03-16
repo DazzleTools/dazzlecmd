@@ -1,0 +1,25 @@
+{
+    "name": "links",
+    "version": "0.1.0",
+    "description": "Detect and display filesystem links (symlinks, junctions, hardlinks, dazzlelinks)",
+    "namespace": "core",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "links.py"
+    },
+    "pass_through": false,
+    "dependencies": {
+        "python_optional": ["dazzle-filekit", "unctools"]
+    },
+    "taxonomy": {
+        "category": "file-tools",
+        "tags": ["links", "symlink", "junction", "hardlink", "shortcut", "filesystem"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}
