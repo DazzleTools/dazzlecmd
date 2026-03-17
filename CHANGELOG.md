@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.2.2-alpha] - 2026-03-16
+
+### Added
+- `dazzle-dz` alias package on PyPI (forwarder, depends on `dazzlecmd`)
+- Manual publish trigger (`workflow_dispatch`) in publish workflow
+- Dual-package build: publish.yml builds and publishes both `dazzlecmd` and `dazzle-dz`
+
+### Changed
+- Version bump to 0.2.2-alpha
+
 ## [0.2.1-alpha] - 2026-03-16
 
 ### Added

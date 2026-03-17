@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dazzle-dz"
+version = "0.2.2a0"
+description = "Alias for dazzlecmd -- unified CLI for the DazzleTools collection"
+readme = {text = "This is an alias package. Run `pip install dazzlecmd` or `pip install dazzle-dz` -- both install the same tool. See https://github.com/DazzleTools/dazzlecmd for documentation.", content-type = "text/plain"}
+license = {text = "GPL-3.0-or-later"}
+requires-python = ">=3.8"
+authors = [
+    {name = "Dustin", email = "6962246+djdarcy@users.noreply.github.com"},
+]
+keywords = ["cli", "tools", "utility", "dazzletools", "dazzle", "command-line", "aggregator"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+dependencies = ["dazzlecmd==0.2.2a0"]
+
+[project.urls]
+Homepage = "https://github.com/DazzleTools/dazzlecmd"
+Repository = "https://github.com/DazzleTools/dazzlecmd"
+Issues = "https://github.com/DazzleTools/dazzlecmd/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]

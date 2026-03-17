@@ -3,6 +3,11 @@ name: Publish to PyPI
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type YES to confirm manual publish'
+        required: true
 
 permissions:
   id-token: write
@@ -24,22 +29,30 @@ jobs:
     - name: Install build dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install build
+        pip install build twine
 
-    - name: Build package
-      run: python -m build
+    - name: Build main package (dazzlecmd)
+      run: python -m build --outdir dist/main/
 
-    - name: Check package
+    - name: Build alias package (dazzle-dz)
+      run: python -m build packages/dazzle-dz-alias/ --outdir dist/alias/
+
+    - name: Check packages
       run: |
-        pip install twine
-        twine check dist/*
+        twine check dist/main/*
+        twine check dist/alias/*
 
     - uses: actions/upload-artifact@v7
       with:
-        name: dist
-        path: dist/
+        name: dist-main
+        path: dist/main/
 
-  publish:
+    - uses: actions/upload-artifact@v7
+      with:
+        name: dist-alias
+        path: dist/alias/
+
+  publish-main:
     name: Publish dazzlecmd
     needs: build
     runs-on: ubuntu-latest
@@ -53,7 +66,27 @@ jobs:
     steps:
     - uses: actions/download-artifact@v8
       with:
-        name: dist
+        name: dist-main
+        path: dist/
+
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+
+  publish-alias:
+    name: Publish dazzle-dz
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/dazzle-dz
+
+    permissions:
+      id-token: write
+
+    steps:
+    - uses: actions/download-artifact@v8
+      with:
+        name: dist-alias
         path: dist/
 
     - name: Publish to PyPI
