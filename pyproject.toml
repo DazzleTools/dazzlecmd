@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "dazzle-dz"
+name = "dazzlecmd"
 dynamic = ["version"]
 description = "Unified CLI for the DazzleTools collection - many tools, one command"
 readme = "README.md"

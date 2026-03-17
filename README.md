@@ -1,7 +1,10 @@
 # DazzleCMD (`dz`)
 
-[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-GPL%20v3-green.svg)](https://www.gnu.org/licenses/gpl-3.0.html)
+[![PyPI](https://img.shields.io/pypi/v/dazzlecmd?color=green)](https://pypi.org/project/dazzlecmd/)
+[![Release Date](https://img.shields.io/github/release-date/DazzleTools/dazzlecmd?color=green)](https://github.com/DazzleTools/dazzlecmd/releases)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![License: GPL v3](https://img.shields.io/badge/license-GPL%20v3-green.svg)](https://www.gnu.org/licenses/gpl-3.0.html)
+[![Installs](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/djdarcy/d10d1c2194e7a4842e323a9dacef2e08/raw/installs.json)](https://dazzletools.github.io/dazzlecmd/stats/#installs)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#cross-platform)
 
 > **Many tools, one command.**
@@ -31,7 +34,7 @@ DazzleCMD provides a single entry point for all your tools. Each tool keeps its 
 ## Installation
 
 ```bash
-pip install dazzle-dz
+pip install dazzlecmd
 ```
 
 Or install from source:

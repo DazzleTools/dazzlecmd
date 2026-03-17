@@ -48,9 +48,13 @@ def find_project_root():
 
 def build_parser(projects):
     """Build argparse parser with dynamic subparsers for discovered tools."""
+    # Build categorized epilog for help display
+    epilog = _build_categorized_help(projects)
+
     parser = argparse.ArgumentParser(
         prog="dz",
         description="dazzlecmd - Unified CLI for the DazzleTools collection",
+        epilog=epilog,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
@@ -59,9 +63,11 @@ def build_parser(projects):
         version=f"dazzlecmd {DISPLAY_VERSION} ({__version__})",
     )
 
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    # Suppress default subparser listing — we show our own categorized version
+    subparsers = parser.add_subparsers(dest="command", metavar="<command>",
+                                       help=argparse.SUPPRESS)
 
-    # Register meta-commands
+    # Register meta-commands (hidden from default help, shown in epilog)
     _register_meta_commands(subparsers)
 
     # Register discovered tool commands
@@ -83,6 +89,51 @@ def build_parser(projects):
         sub.set_defaults(_project=project)
 
     return parser
+
+
+def _build_categorized_help(projects):
+    """Build a categorized command listing for the help epilog."""
+    # Meta-commands (builtins)
+    builtins = [
+        ("list", "List available tools"),
+        ("info <tool>", "Show detailed info about a tool"),
+        ("kit", "Manage kits"),
+        ("new <name>", "Create a new tool project"),
+        ("add", "Import an existing tool/repo"),
+        ("mode", "Toggle dev/publish mode"),
+        ("version", "Show version info"),
+    ]
+
+    # Group tools by namespace (kit)
+    namespaces = {}
+    for project in projects:
+        name = project["name"]
+        if name in RESERVED_COMMANDS:
+            continue
+        ns = project.get("namespace", "other")
+        desc = project.get("description", "")
+        namespaces.setdefault(ns, []).append((name, desc))
+
+    # Build output
+    lines = []
+    name_width = 16
+
+    lines.append("commands:")
+    for cmd, desc in builtins:
+        lines.append(f"  {cmd:<{name_width}}  {desc}")
+
+    # Tool categories by namespace
+    for ns in sorted(namespaces.keys()):
+        tools = namespaces[ns]
+        lines.append("")
+        lines.append(f"{ns} tools:")
+        for name, desc in sorted(tools):
+            lines.append(f"  {name:<{name_width}}  {desc}")
+
+    lines.append("")
+    lines.append("Run 'dz <command> --help' for details on a specific command.")
+
+    return "\n".join(lines)
 
 
 def _register_meta_commands(subparsers):
