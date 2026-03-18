@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.3.1] - 2026-03-18
+
+### Added
+- `dz links --depth N`: limit recursive scan depth, powered by dazzle-tree-lib
+  when available (falls back to os.walk with manual depth tracking)
+- `dz new --kit`: auto-register new tools in a kit during scaffolding
+- `dz new` now generates `platforms` and `lifecycle` fields in manifests
+- Terminal-width-aware help: `dz --help` truncates descriptions to fit terminal
+- Registered dazzletools:claude-cleanup in dazzletools kit and docs
+
+### Changed
+- dz links uses dazzle-tree-lib for recursive traversal when available
+- Version bump to 0.3.1
+
 ## [0.3.0] - 2026-03-18
 
 ### Added

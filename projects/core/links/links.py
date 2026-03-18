@@ -608,27 +608,16 @@ def _safe_readlink(path):
 
 # -- Directory scanning --
 
-def scan_directory(directory, recursive=False, type_filter=None, broken_only=False):
-    """Scan a directory for links. Yields LinkInfo objects."""
+def scan_directory(directory, recursive=False, type_filter=None,
+                   broken_only=False, max_depth=None):
+    """Scan a directory for links. Yields LinkInfo objects.
+
+    Uses dazzle-tree-lib for traversal when available (provides depth
+    control and caching). Falls back to os.walk when not installed.
+    """
     directory = os.path.abspath(directory)
 
-    if recursive:
-        for root, dirs, files in os.walk(directory):
-            # Check directories themselves (symlinks/junctions)
-            for d in list(dirs):
-                full = os.path.join(root, d)
-                info = detect_link(full)
-                if info and _matches_filter(info, type_filter, broken_only):
-                    yield info
-                    # Don't recurse into linked directories
-                    if info.link_type in (LINK_SYMLINK, LINK_JUNCTION):
-                        dirs.remove(d)
-            for f in files:
-                full = os.path.join(root, f)
-                info = detect_link(full)
-                if info and _matches_filter(info, type_filter, broken_only):
-                    yield info
-    else:
+    if not recursive:
         try:
             entries = os.listdir(directory)
         except OSError as exc:
@@ -640,6 +629,59 @@ def scan_directory(directory, recursive=False, type_filter=None, broken_only=Fal
             info = detect_link(full)
             if info and _matches_filter(info, type_filter, broken_only):
                 yield info
+        return
+
+    # Recursive scan -- try dazzle-tree-lib first
+    try:
+        yield from _scan_with_treelib(directory, type_filter, broken_only,
+                                      max_depth)
+        return
+    except ImportError:
+        pass
+
+    # Fallback: os.walk with manual depth tracking
+    dir_path = os.path.normpath(directory)
+    base_depth = dir_path.count(os.sep)
+
+    for root, dirs, files in os.walk(directory):
+        current_depth = os.path.normpath(root).count(os.sep) - base_depth
+
+        if max_depth is not None and current_depth >= max_depth:
+            dirs.clear()
+            continue
+
+        # Check directories themselves (symlinks/junctions)
+        for d in list(dirs):
+            full = os.path.join(root, d)
+            info = detect_link(full)
+            if info and _matches_filter(info, type_filter, broken_only):
+                yield info
+                # Don't recurse into linked directories
+                if info.link_type in (LINK_SYMLINK, LINK_JUNCTION):
+                    dirs.remove(d)
+        for f in files:
+            full = os.path.join(root, f)
+            info = detect_link(full)
+            if info and _matches_filter(info, type_filter, broken_only):
+                yield info
+
+
+def _scan_with_treelib(directory, type_filter, broken_only, max_depth):
+    """Scan using dazzle-tree-lib for traversal with depth control."""
+    from pathlib import Path
+    from dazzletreelib.sync.adapters.filesystem import (
+        FileSystemNode, FileSystemAdapter,
+    )
+    from dazzletreelib.sync.api import traverse_tree
+
+    root = FileSystemNode(Path(directory))
+    adapter = FileSystemAdapter(follow_symlinks=False)
+
+    for node in traverse_tree(root, adapter, max_depth=max_depth):
+        full = str(node.path)
+        info = detect_link(full)
+        if info and _matches_filter(info, type_filter, broken_only):
+            yield info
 
 
 def _matches_filter(info, type_filter, broken_only):
@@ -730,6 +772,10 @@ def build_parser():
         help="Scan directories recursively",
     )
     parser.add_argument(
+        "-d", "--depth", type=int, default=None,
+        help="Maximum depth for recursive scan (implies -r)",
+    )
+    parser.add_argument(
         "--type", "-t", dest="link_type",
         help=f"Filter by link type: {', '.join(ALL_LINK_TYPES)} (comma-separated)",
     )
@@ -767,14 +813,18 @@ def main(argv=None):
             return 1
         type_filter = set(requested)
 
+    # --depth implies --recursive
+    recursive = args.recursive or args.depth is not None
+
     # Collect links from all paths
     all_links = []
     for path in args.paths:
         path = canonicalize_path(path)
         if os.path.isdir(path):
             all_links.extend(
-                scan_directory(path, recursive=args.recursive,
-                               type_filter=type_filter, broken_only=args.broken)
+                scan_directory(path, recursive=recursive,
+                               type_filter=type_filter, broken_only=args.broken,
+                               max_depth=args.depth)
             )
         elif os.path.exists(path) or os.path.islink(path):
             info = detect_link(path)

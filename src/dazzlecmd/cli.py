@@ -114,12 +114,19 @@ def _build_categorized_help(projects):
         desc = project.get("description", "")
         namespaces.setdefault(ns, []).append((name, desc))
 
+    # Detect terminal width for description truncation
+    import shutil
+    term_width = shutil.get_terminal_size((80, 24)).columns
+
     # Build output
     lines = []
     name_width = 16
+    desc_width = term_width - name_width - 4  # 2 indent + 2 gap
 
     lines.append("commands:")
     for cmd, desc in builtins:
+        if desc_width > 20 and len(desc) > desc_width:
+            desc = desc[:desc_width - 3] + "..."
         lines.append(f"  {cmd:<{name_width}}  {desc}")
 
     # Tool categories by namespace
@@ -128,6 +135,8 @@ def _build_categorized_help(projects):
         lines.append("")
         lines.append(f"{ns} tools:")
         for name, desc in sorted(tools):
+            if desc_width > 20 and len(desc) > desc_width:
+                desc = desc[:desc_width - 3] + "..."
             lines.append(f"  {name:<{name_width}}  {desc}")
 
     lines.append("")
@@ -165,6 +174,7 @@ def _register_meta_commands(subparsers):
     new_parser = subparsers.add_parser("new", help="Create a new tool project")
     new_parser.add_argument("name", help="Tool name")
     new_parser.add_argument("--namespace", "-n", default="dazzletools", help="Namespace (default: dazzletools)")
+    new_parser.add_argument("--kit", "-k", help="Register in this kit (e.g., core, dazzletools)")
     new_parser.add_argument("--simple", action="store_true", help="Add TODO.md and NOTES.md")
     new_parser.add_argument("--full", action="store_true", help="Add ROADMAP.md, private/claude/, tests/")
     new_parser.add_argument("--description", "-d", default="", help="Tool description")
@@ -545,6 +555,7 @@ def _cmd_new(args, project_root):
         "namespace": namespace,
         "language": language,
         "platform": "cross-platform",
+        "platforms": ["windows", "linux", "macos"],
         "runtime": {
             "type": "python",
             "entry_point": "main",
@@ -554,6 +565,9 @@ def _cmd_new(args, project_root):
         "taxonomy": {
             "category": "",
             "tags": [],
+        },
+        "lifecycle": {
+            "status": "active",
         },
     }
 
@@ -588,6 +602,11 @@ def _cmd_new(args, project_root):
     # Layer on extras if requested
     if args.simple or args.full:
         _layer_extras(tool_dir, name, args)
+
+    # Register in kit if requested
+    kit_name = getattr(args, "kit", None)
+    if kit_name:
+        _register_in_kit(project_root, kit_name, namespace, name)
 
     return 0
 

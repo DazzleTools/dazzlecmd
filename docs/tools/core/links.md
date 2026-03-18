@@ -41,6 +41,7 @@ dz links [-r] [-t TYPE] [-b] [-j] [-v] [paths ...]
 | Flag | Description |
 |------|-------------|
 | `-r`, `--recursive` | Scan directories recursively |
+| `-d`, `--depth N` | Maximum depth for recursive scan (implies `-r`) |
 | `-t`, `--type TYPE` | Filter by link type (comma-separated) |
 | `-b`, `--broken` | Show only broken links |
 | `-j`, `--json` | Output as JSON |
@@ -122,6 +123,7 @@ The `.lnk` binary parser handles the full MS-SHLLINK format:
 | Package | What it adds |
 |---------|-------------|
 | `dazzle-filekit` | Enhanced path normalization |
+| `dazzletreelib` | Tree traversal with depth control for `--depth` |
 | `unctools` | UNC path conversion |
 
 ## See Also

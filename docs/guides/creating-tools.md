@@ -5,11 +5,11 @@ This guide walks you through creating a new tool for dazzlecmd, from scaffolding
 ## Quick Start
 
 ```bash
-# Create a new tool in the dazzletools namespace
-dz new my-tool --namespace dazzletools --description "Does something useful"
+# Create a new tool and register it in a kit
+dz new my-tool --namespace dazzletools --kit dazzletools --description "Does something useful"
 
 # Or in the core namespace (for tools that ship with dazzlecmd)
-dz new my-tool --namespace core --description "A fundamental utility"
+dz new my-tool --namespace core --kit core --description "A fundamental utility"
 ```
 
 This creates:
@@ -106,7 +106,7 @@ Most tools should use `python` with `pass_through: false` for direct import.
 
 ## Kit Registration
 
-After creating your tool, register it in a kit so `dz` can discover it:
+If you used `--kit` with `dz new`, your tool is already registered. Otherwise, add it manually.
 
 Edit `kits/<namespace>.kit.json`:
 

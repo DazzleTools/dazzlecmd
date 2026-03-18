@@ -13,7 +13,7 @@
     },
     "pass_through": false,
     "dependencies": {
-        "python_optional": ["dazzle-filekit", "unctools"]
+        "python_optional": ["dazzle-filekit", "dazzletreelib", "unctools"]
     },
     "taxonomy": {
         "category": "file-tools",
