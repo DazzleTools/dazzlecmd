@@ -1,0 +1,25 @@
+{
+    "name": "fixpath",
+    "version": "0.1.0",
+    "description": "Fix mangled paths and optionally open, copy, or browse files",
+    "namespace": "core",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "fixpath.py"
+    },
+    "pass_through": false,
+    "dependencies": {
+        "python_optional": ["dazzle-filekit", "unctools", "teeclip"]
+    },
+    "taxonomy": {
+        "category": "file-tools",
+        "tags": ["path", "fix", "canonicalize", "open", "clipboard"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

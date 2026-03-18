@@ -1,0 +1,22 @@
+{
+    "name": "claude-cleanup",
+    "version": "0.1.0",
+    "description": "Stage and commit Claude Code transient state files (debug, file-history, cache, telemetry, etc.)",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "claude_cleanup.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "dev-tools",
+        "tags": ["claude-code", "git", "cleanup", "dotclaude"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

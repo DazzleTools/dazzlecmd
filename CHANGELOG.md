@@ -4,6 +4,33 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-03-18
+
+### Added
+- **dz fixpath**: fix mangled paths from terminals, copy-paste, and mixed-OS environments
+  - Handles mixed slashes, cmd.exe `>` artifacts, MSYS/WSL paths, URL encoding, quotes
+  - Action modes: `--open` (default app), `--lister` (file manager), `--copy` (clipboard)
+  - Per-user config: `dz fixpath config default <action>`, `dz fixpath config lister dopus`
+  - File manager presets: Directory Opus, Total Commander, Windows Explorer
+  - Cross-platform clipboard via teeclip (optional) or native tools
+  - Bidirectional path probing: finds files across WSL/MSYS/Windows boundaries
+  - UNC path support: `//server/share` and shell-mangled `\\server\share`,
+    with automatic local drive conversion via unctools when available
+  - Uses dazzle-filekit's `resolve_cross_platform_path()` when available
+- Documentation suite:
+  - Per-tool docs for all core tools (fixpath, links, listall, rn)
+  - Developer guide: Creating Tools (how to build a dz tool)
+  - Kits guide: kit system, recursive architecture, "build your own dz"
+  - Manifest reference: `.dazzlecmd.json` schema
+  - Platform support matrix
+  - DazzleTools kit stub (external ownership)
+- Categorized `dz --help` output: builtins, core tools, and kit tools in separate sections
+
+### Changed
+- README: tool table links to docs, new Documentation section, fixpath in project structure
+- cli.py: custom help epilog replaces flat argparse subparser listing
+- Registered dazzletools:claude-cleanup in dazzletools kit
+
 ## [0.2.2-alpha] - 2026-03-16
 
 ### Added

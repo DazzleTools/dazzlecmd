@@ -82,15 +82,17 @@ These are the tools that ship with dazzlecmd. They are available everywhere and 
 
 | Tool | Description | Platform |
 |------|-------------|----------|
-| `links` | Detect and display filesystem links (symlinks, junctions, hardlinks, shortcuts) | Cross-platform |
-| `listall` | Flexible directory structure listing with sorting and collection | Cross-platform |
-| `rn` | Rename files using regular expressions | Cross-platform |
+| [`fixpath`](docs/tools/core/fixpath.md) | Fix mangled paths and optionally open, copy, or browse files | Cross-platform |
+| [`links`](docs/tools/core/links.md) | Detect and display filesystem links (symlinks, junctions, hardlinks, shortcuts) | Cross-platform |
+| [`listall`](docs/tools/core/listall.md) | Flexible directory structure listing with sorting and collection | Cross-platform |
+| [`rn`](docs/tools/core/rn.md) | Rename files using regular expressions | Cross-platform |
 
 ### DazzleTools Kit
 The default [DazzleTools](https://github.com/DazzleTools) collection.
 
 | Tool | Description | Platform |
 |------|-------------|----------|
+| `claude-cleanup` | Stage and commit Claude Code transient state files | Cross-platform |
 | `dos2unix` | Pure-Python line ending converter (dos2unix/unix2dos) | Cross-platform |
 | `delete-nul` | Delete Windows NUL device files created by accidental `>nul` redirection | Windows |
 | `srch-path` | Search the system PATH for executables | Cross-platform |
@@ -141,10 +143,12 @@ dazzlecmd/
 │   └── templates/            # Scaffolding templates for dz new
 ├── projects/                 # Tool projects by namespace
 │   ├── core/                 # Core tools (ships with dazzlecmd)
+│   │   ├── fixpath/
 │   │   ├── links/
 │   │   ├── listall/
 │   │   └── rn/
 │   └── dazzletools/          # DazzleTools collection
+│       ├── claude-cleanup/
 │       ├── dos2unix/
 │       ├── delete-nul/
 │       ├── split/
@@ -162,7 +166,15 @@ dazzlecmd/
 | Linux    | Supported |
 | macOS    | Supported |
 
-Individual tools may have platform-specific requirements -- check `dz info <tool>` for details.
+Individual tools may have platform-specific requirements -- check `dz info <tool>` for details. See [Platform Support](docs/platform-support.md) for the full matrix.
+
+## Documentation
+
+- **[Core Tool Docs](docs/tools/core/)** -- detailed documentation for each core tool
+- **[Creating Tools](docs/guides/creating-tools.md)** -- build your own dz tool
+- **[Kits Guide](docs/guides/kits.md)** -- how the kit system works, the recursive architecture
+- **[Manifest Reference](docs/guides/manifests.md)** -- `.dazzlecmd.json` schema
+- **[Platform Support](docs/platform-support.md)** -- OS compatibility matrix
 
 ## Related Projects
 

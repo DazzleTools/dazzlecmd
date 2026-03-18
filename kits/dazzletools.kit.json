@@ -8,7 +8,8 @@
         "dazzletools:dos2unix",
         "dazzletools:delete-nul",
         "dazzletools:srch-path",
-        "dazzletools:split"
+        "dazzletools:split",
+        "dazzletools:claude-cleanup"
     ],
     "notes": "The default DazzleTools collection bundled with dazzlecmd. Contains frequently used utilities from the DazzleTools org. Intended to eventually become a git submodule at projects/dazzletools/."
 }
