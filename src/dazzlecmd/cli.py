@@ -91,6 +91,38 @@ def build_parser(projects):
     return parser
 
 
+def _wrap_description(text, width):
+    """Wrap a description string to fit within a given width.
+
+    Returns a list of lines. Wraps at word boundaries when possible,
+    falls back to hard break with hyphen when a single word exceeds
+    the width.
+    """
+    if not text or width < 10:
+        return [text or ""]
+    if len(text) <= width:
+        return [text]
+
+    lines = []
+    remaining = text
+    while remaining:
+        if len(remaining) <= width:
+            lines.append(remaining)
+            break
+
+        # Find the last space within the width
+        break_at = remaining.rfind(" ", 0, width)
+        if break_at > 0:
+            lines.append(remaining[:break_at])
+            remaining = remaining[break_at + 1:]
+        else:
+            # No space found -- hard break with hyphen
+            lines.append(remaining[:width - 1] + "-")
+            remaining = remaining[width - 1:]
+
+    return lines
+
+
 def _build_categorized_help(projects):
     """Build a categorized command listing for the help epilog."""
     # Meta-commands (builtins)
@@ -287,14 +319,23 @@ def _cmd_list(args, projects):
     print(header)
     print("  " + "-" * (len(header) - 2))
 
+    import shutil
+    term_width = shutil.get_terminal_size((80, 24)).columns
+    # Column where description starts
+    desc_col = 2 + name_width + 2 + ns_width + 2  # indent + name + gap + ns + gap
+    desc_max = term_width - desc_col
+
     for project in filtered:
         name = project["name"]
         ns = project.get("namespace", "")
         desc = project.get("description", "")
-        # Truncate description if too long
-        if len(desc) > 60:
-            desc = desc[:57] + "..."
-        print(f"  {name:<{name_width}}  {ns:<{ns_width}}  {desc}")
+        wrapped = _wrap_description(desc, desc_max)
+        # First line includes name and namespace
+        print(f"  {name:<{name_width}}  {ns:<{ns_width}}  {wrapped[0]}")
+        # Continuation lines aligned to description column
+        indent = " " * desc_col
+        for line in wrapped[1:]:
+            print(f"{indent}{line}")
 
     print(f"\n  {len(filtered)} tool(s) found")
     return 0

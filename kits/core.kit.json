@@ -8,7 +8,8 @@
         "core:rn",
         "core:listall",
         "core:links",
-        "core:fixpath"
+        "core:fixpath",
+        "core:find"
     ],
     "notes": "Core tools are the 'coreutils' of dazzlecmd. These are fundamental, universally useful tools that every user gets regardless of kit selection. They live permanently in the dazzlecmd repo under projects/core/."
 }

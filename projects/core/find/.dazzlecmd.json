@@ -1,0 +1,25 @@
+{
+    "name": "find",
+    "version": "0.1.0",
+    "description": "Cross-platform file search powered by fd",
+    "namespace": "core",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos", "bsd"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "find.py"
+    },
+    "pass_through": false,
+    "dependencies": {
+        "system": ["fd (fd-find)"]
+    },
+    "taxonomy": {
+        "category": "file-tools",
+        "tags": ["find", "search", "fd", "glob", "regex", "files"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

@@ -82,7 +82,8 @@ These are the tools that ship with dazzlecmd. They are available everywhere and 
 
 | Tool | Description | Platform |
 |------|-------------|----------|
-| [`fixpath`](docs/tools/core/fixpath.md) | Fix mangled paths and optionally open, copy, or browse files | Cross-platform |
+| [`find`](docs/tools/core/find.md) | Cross-platform file search powered by fd | Cross-platform |
+| [`fixpath`](docs/tools/core/fixpath.md) | Fix mangled paths, search for files, open/copy/browse | Cross-platform |
 | [`links`](docs/tools/core/links.md) | Detect and display filesystem links (symlinks, junctions, hardlinks, shortcuts) | Cross-platform |
 | [`listall`](docs/tools/core/listall.md) | Flexible directory structure listing with sorting and collection | Cross-platform |
 | [`rn`](docs/tools/core/rn.md) | Rename files using regular expressions | Cross-platform |
@@ -143,6 +144,7 @@ dazzlecmd/
 │   └── templates/            # Scaffolding templates for dz new
 ├── projects/                 # Tool projects by namespace
 │   ├── core/                 # Core tools (ships with dazzlecmd)
+│   │   ├── find/
 │   │   ├── fixpath/
 │   │   ├── links/
 │   │   ├── listall/

@@ -4,6 +4,29 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] - 2026-03-20
+
+### Added
+- **dz find**: cross-platform file search powered by fd (sharkdp/fd)
+  - Glob and regex patterns, extension/size/date filters, depth control
+  - Actions: `--open`, `--lister`, `--copy` (same as fixpath)
+  - Auto-detects `fd` / `fdfind` (Debian naming), prints install instructions if missing
+  - Examples in `--help` for quick reference
+- **fixpath --find**: search fallback when path doesn't resolve
+  - Progressive path resolution: walks path left-to-right, finds deepest
+    existing directory, searches from there for the filename portion
+  - Auto-detects bare filenames and glob patterns, searches via fd
+  - `--find` / `-f`: explicit search mode
+  - `--skip` / `-s`: skip path fixing, go straight to search
+  - `--dir`: specify search directories (repeatable)
+  - Configurable `search_dirs` and `search_dirs_mode` in fixpath.json
+- **fixpath -p / --print**: override config default, just print (no open/copy/lister)
+- `dz list` word-wraps descriptions to terminal width with aligned continuation lines
+
+### Changed
+- README: added find to core kit table and project structure
+- Core kit docs: added find.md, updated core README
+
 ## [0.3.1] - 2026-03-18
 
 ### Added

@@ -34,6 +34,8 @@ CONFIG_FILE = os.path.join(CONFIG_DIR, "fixpath.json")
 DEFAULT_CONFIG = {
     "default_action": "print",
     "lister": None,  # None = OS default (explorer/Finder/xdg-open)
+    "search_dirs": None,  # None = CWD only; list of dirs to search
+    "search_dirs_mode": "inclusive",  # "inclusive" = add to CWD, "exclusive" = replace
 }
 
 VALID_ACTIONS = ["print", "open", "lister", "copy"]
@@ -303,6 +305,149 @@ def _probe_alt_platform(path):
     return None
 
 
+def _is_bare_filename(path):
+    """Check if a string looks like a bare filename (no path separators).
+
+    Also returns True for glob patterns (contain * ? [) even with separators,
+    since those are clearly search patterns, not literal paths.
+    """
+    # Glob patterns are always search candidates
+    if any(c in path for c in "*?["):
+        return True
+    if os.sep in path or "/" in path or "\\" in path:
+        return False
+    if len(path) > 1 and path[1] == ":":
+        return False
+    return True
+
+
+def _search_for_file(pattern, search_dirs, config):
+    """Search for a file using fd, with progressive path resolution.
+
+    If the pattern contains path separators (e.g., "some/bad/path/file*.md"),
+    walks the path from left to right to find the deepest existing directory,
+    then searches from there for the filename portion. Falls back to searching
+    configured dirs or CWD.
+
+    Returns list of found paths, or empty list.
+    """
+    search_pattern, search_roots = _resolve_search_context(
+        pattern, search_dirs, config
+    )
+
+    if not search_pattern:
+        return []
+
+    return _run_fd_search(search_pattern, search_roots)
+
+
+def _resolve_search_context(pattern, search_dirs, config):
+    """Determine what to search for and where.
+
+    If the pattern has path separators, progressively walk the path to find
+    the deepest existing directory, then use the remainder as the search
+    pattern. Otherwise, use configured search dirs or CWD.
+
+    Returns (search_pattern, search_dirs_list).
+    """
+    # If explicit --dir flags were given, use those with the full pattern
+    if search_dirs:
+        dirs = [os.path.expanduser(d) for d in search_dirs]
+        mode = config.get("search_dirs_mode", "inclusive")
+        if mode == "inclusive" and "." not in search_dirs:
+            dirs.insert(0, ".")
+        # Extract just the filename if pattern has separators
+        basename = os.path.basename(pattern)
+        return (basename or pattern, dirs)
+
+    # Check if pattern contains path separators
+    has_sep = "/" in pattern or "\\" in pattern
+    if has_sep:
+        # Progressive path resolution: find the deepest existing directory
+        resolved_dir, remainder = _progressive_resolve(pattern)
+        if resolved_dir:
+            # Use just the filename/glob portion for the search pattern,
+            # and search from the deepest valid directory
+            basename = os.path.basename(remainder)
+            return (basename or remainder, [resolved_dir])
+
+        # Nothing resolved -- extract just the filename and search CWD
+        basename = os.path.basename(pattern)
+        if basename:
+            return (basename, _get_default_search_dirs(config))
+        return (pattern, _get_default_search_dirs(config))
+
+    # Bare filename or glob -- search configured dirs
+    return (pattern, _get_default_search_dirs(config))
+
+
+def _progressive_resolve(path):
+    """Walk a path from left to right, find the deepest existing directory.
+
+    Returns (existing_dir, remaining_pattern) or (None, None) if nothing exists.
+
+    Example:
+      "private/claude/badsubdir/postmortem*.md"
+      -> tries ./private/claude/badsubdir/ (no)
+      -> tries ./private/claude/ (yes!)
+      -> returns ("./private/claude", "postmortem*.md")
+    """
+    # Normalize separators
+    normalized = path.replace("\\", "/")
+    parts = normalized.split("/")
+
+    # Try progressively shorter prefixes (deepest first)
+    for i in range(len(parts) - 1, 0, -1):
+        dir_prefix = os.path.join(*parts[:i])
+        # Try as-is
+        if os.path.isdir(dir_prefix):
+            remainder = "/".join(parts[i:])
+            return (os.path.abspath(dir_prefix), remainder)
+        # Try with CWD
+        abs_prefix = os.path.abspath(dir_prefix)
+        if os.path.isdir(abs_prefix):
+            remainder = "/".join(parts[i:])
+            return (abs_prefix, remainder)
+
+    return (None, None)
+
+
+def _get_default_search_dirs(config):
+    """Get the default search directories from config or CWD."""
+    configured_dirs = config.get("search_dirs") or []
+    mode = config.get("search_dirs_mode", "inclusive")
+
+    dirs = []
+    if configured_dirs:
+        dirs.extend(configured_dirs)
+        if mode == "inclusive" and "." not in configured_dirs:
+            dirs.insert(0, ".")
+    else:
+        dirs.append(".")
+
+    return [os.path.expanduser(d) for d in dirs]
+
+
+def _run_fd_search(pattern, dirs):
+    """Run fd to search for a pattern in the given directories."""
+    import shutil as _shutil
+    fd_path = _shutil.which("fd") or _shutil.which("fdfind")
+    if fd_path:
+        cmd = [fd_path, "--glob", "--ignore-case", "--absolute-path",
+               "--follow", "--no-ignore", pattern]
+        for d in dirs:
+            cmd.extend(["--search-path", d])
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            return [l.strip() for l in result.stdout.splitlines() if l.strip()]
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+
+    print("Warning: fd is not installed. Cannot search for files.", file=sys.stderr)
+    print("  Install: https://github.com/sharkdp/fd#installation", file=sys.stderr)
+    return []
+
+
 def verify_path(path):
     """Check if a path exists. Returns (exists, path_type)."""
     if os.path.isfile(path):
@@ -481,6 +626,10 @@ def build_parser():
         help="Paths to fix (reads from stdin if none given)",
     )
     parser.add_argument(
+        "-p", "--print", dest="action_print", action="store_true",
+        help="Print only -- skip default action (overrides config)",
+    )
+    parser.add_argument(
         "-o", "--open", dest="action_open", action="store_true",
         help="Open file in default application",
     )
@@ -491,6 +640,18 @@ def build_parser():
     parser.add_argument(
         "-c", "--copy", dest="action_copy", action="store_true",
         help="Copy fixed path to clipboard",
+    )
+    parser.add_argument(
+        "-f", "--find", dest="find_mode", action="store_true",
+        help="Search for file if path doesn't resolve (uses dz find / fd)",
+    )
+    parser.add_argument(
+        "-s", "--skip", action="store_true",
+        help="Skip path fixing, go straight to search (implies --find)",
+    )
+    parser.add_argument(
+        "--dir", dest="search_dirs", action="append", default=None,
+        help="Directory to search when using --find (repeatable)",
     )
     parser.add_argument(
         "--verify", action="store_true",
@@ -519,7 +680,9 @@ def main(argv=None):
     config = load_config()
 
     # Determine action(s) -- explicit flags override config default
-    explicit_action = args.action_open or args.action_lister or args.action_copy
+    # -p means "just print, ignore my config default"
+    explicit_action = (args.action_print or args.action_open
+                       or args.action_lister or args.action_copy)
     if not explicit_action:
         default = config.get("default_action", "print")
         if default == "open":
@@ -528,6 +691,10 @@ def main(argv=None):
             args.action_lister = True
         elif default == "copy":
             args.action_copy = True
+
+    # --skip implies --find
+    if args.skip:
+        args.find_mode = True
 
     # Collect paths from args or stdin
     paths = args.paths
@@ -541,7 +708,34 @@ def main(argv=None):
     # Process each path
     exit_code = 0
     for raw_path in paths:
-        fixed = fix_path(raw_path)
+        # Skip mode: go straight to search
+        if args.skip:
+            results = _search_for_file(raw_path, args.search_dirs, config)
+            if results:
+                fixed = results[0]
+                if len(results) > 1 and not args.quiet:
+                    print(f"  ({len(results)} matches, using first)",
+                          file=sys.stderr)
+            else:
+                if not args.quiet:
+                    print(f"  No matches for: {raw_path}", file=sys.stderr)
+                exit_code = 1
+                continue
+        else:
+            fixed = fix_path(raw_path)
+
+        exists, _ = verify_path(fixed)
+
+        # Find fallback: if path doesn't exist and looks like a bare
+        # filename (or --find was explicit), search for it
+        if not exists and (args.find_mode or _is_bare_filename(raw_path)):
+            results = _search_for_file(raw_path, args.search_dirs, config)
+            if results:
+                fixed = results[0]
+                exists = True
+                if len(results) > 1 and not args.quiet:
+                    print(f"  ({len(results)} matches, using first)",
+                          file=sys.stderr)
 
         # Always print to stdout
         print(fixed)
@@ -556,9 +750,7 @@ def main(argv=None):
                     print(f"  [not found]", file=sys.stderr)
                 exit_code = 1
 
-        # Check existence for open/lister
-        exists, _ = verify_path(fixed)
-
+        # Execute actions
         if args.action_copy:
             rc = action_copy(fixed)
             if rc != 0:

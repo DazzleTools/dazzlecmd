@@ -6,7 +6,8 @@ The core kit ships with every dazzlecmd installation. These are fundamental, uni
 
 | Tool | Description | Platform |
 |------|-------------|----------|
-| [fixpath](fixpath.md) | Fix mangled paths and optionally open, copy, or browse files | Cross-platform |
+| [find](find.md) | Cross-platform file search powered by fd | Cross-platform |
+| [fixpath](fixpath.md) | Fix mangled paths, search for files, open/copy/browse | Cross-platform |
 | [links](links.md) | Detect and display all filesystem link types | Cross-platform |
 | [listall](listall.md) | Flexible directory structure listing with sorting and output formatting | Cross-platform |
 | [rn](rn.md) | Rename files using regular expressions | Cross-platform |
