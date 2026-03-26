@@ -1,7 +1,7 @@
 {
     "name": "claude-cleanup",
-    "version": "0.1.0",
-    "description": "Stage and commit Claude Code transient state files (debug, file-history, cache, telemetry, etc.)",
+    "version": "0.2.0",
+    "description": "Stage and commit Claude Code state files -- noise (transient) or user (configs, skills, session logs)",
     "namespace": "dazzletools",
     "language": "python",
     "platform": "cross-platform",

@@ -321,7 +321,7 @@ def _is_bare_filename(path):
     return True
 
 
-def _search_for_file(pattern, search_dirs, config):
+def _search_for_file(pattern, search_dirs, config, max_results=None):
     """Search for a file using fd, with progressive path resolution.
 
     If the pattern contains path separators (e.g., "some/bad/path/file*.md"),
@@ -338,7 +338,7 @@ def _search_for_file(pattern, search_dirs, config):
     if not search_pattern:
         return []
 
-    return _run_fd_search(search_pattern, search_roots)
+    return _run_fd_search(search_pattern, search_roots, max_results=max_results)
 
 
 def _resolve_search_context(pattern, search_dirs, config):
@@ -428,13 +428,15 @@ def _get_default_search_dirs(config):
     return [os.path.expanduser(d) for d in dirs]
 
 
-def _run_fd_search(pattern, dirs):
+def _run_fd_search(pattern, dirs, max_results=None):
     """Run fd to search for a pattern in the given directories."""
     import shutil as _shutil
     fd_path = _shutil.which("fd") or _shutil.which("fdfind")
     if fd_path:
         cmd = [fd_path, "--glob", "--ignore-case", "--absolute-path",
                "--follow", "--no-ignore", pattern]
+        if max_results:
+            cmd.extend(["--max-results", str(max_results)])
         for d in dirs:
             cmd.extend(["--search-path", d])
         try:
@@ -446,6 +448,105 @@ def _run_fd_search(pattern, dirs):
     print("Warning: fd is not installed. Cannot search for files.", file=sys.stderr)
     print("  Install: https://github.com/sharkdp/fd#installation", file=sys.stderr)
     return []
+
+
+def _rank_results(results, original_input):
+    """Rank search results by similarity to the original input.
+
+    Scores each result by how many path components from the original
+    input appear (in order) in the result path. The result with the
+    most matching components is the best match.
+
+    Returns results sorted best-first.
+    """
+    if not results or not original_input:
+        return results
+
+    # Normalize the original input into path components (strip globs)
+    orig_parts = original_input.replace("\\", "/").split("/")
+    # Remove empty parts and glob-only segments
+    orig_parts = [p.lower() for p in orig_parts
+                  if p and p not in (".", "..") and "*" not in p and "?" not in p]
+
+    if not orig_parts:
+        return results
+
+    def score(result_path):
+        result_lower = result_path.replace("\\", "/").lower()
+        result_parts = result_lower.split("/")
+
+        # Count how many original parts appear in the result (in order)
+        matches = 0
+        result_idx = 0
+        for orig_part in orig_parts:
+            for i in range(result_idx, len(result_parts)):
+                if result_parts[i] == orig_part:
+                    matches += 1
+                    result_idx = i + 1
+                    break
+
+        # Secondary: prefer shorter paths (less nesting = more direct match)
+        length_penalty = len(result_parts) / 1000.0
+
+        return (-matches, length_penalty)
+
+    return sorted(results, key=score)
+
+
+def _search_and_select(raw_path, args, config):
+    """Search for a file and select the best result.
+
+    Returns:
+      - The best matching path (string) on success
+      - "_all_handled" if --all was used (results already printed/acted on)
+      - None if no matches found
+    """
+    fast = getattr(args, "fast", False)
+    max_results = 1 if fast else None
+
+    results = _search_for_file(raw_path, args.search_dirs, config,
+                               max_results=max_results)
+    if not results:
+        if not args.quiet:
+            print(f"  No matches for: {raw_path}", file=sys.stderr)
+        return None
+
+    # --fast: skip ranking, take what fd gave us
+    if not fast:
+        results = _rank_results(results, raw_path)
+
+    if args.show_all:
+        _handle_all_results(results, args, config)
+        return "_all_handled"
+
+    if len(results) > 1 and not args.quiet:
+        print(f"  ({len(results)} matches, using best (use --all to see all))",
+              file=sys.stderr)
+
+    return results[0]
+
+
+def _handle_all_results(results, args, config):
+    """Handle --all: print all results, but only open/lister the first.
+
+    Copy gets all paths (useful for clipboard). Open/lister would be
+    disruptive with many results, so only the first is acted on.
+    """
+    # Print all results to stdout
+    for r in results:
+        print(r)
+    print(f"\n  {len(results)} match(es)", file=sys.stderr)
+
+    # Copy: all paths (newline-separated)
+    if args.action_copy:
+        action_copy("\n".join(results))
+
+    # Open/lister: first result only
+    if args.action_open:
+        action_open(results[0])
+
+    if args.action_lister:
+        action_lister(results[0], config=config)
 
 
 def verify_path(path):
@@ -650,8 +751,16 @@ def build_parser():
         help="Skip path fixing, go straight to search (implies --find)",
     )
     parser.add_argument(
-        "--dir", dest="search_dirs", action="append", default=None,
+        "-d", "--dir", dest="search_dirs", action="append", default=None,
         help="Directory to search when using --find (repeatable)",
+    )
+    parser.add_argument(
+        "--all", dest="show_all", action="store_true",
+        help="Show all search results (best match first)",
+    )
+    parser.add_argument(
+        "--fast", action="store_true",
+        help="Take first match immediately (skip ranking, fd stops after 1 result)",
     )
     parser.add_argument(
         "--verify", action="store_true",
@@ -692,8 +801,8 @@ def main(argv=None):
         elif default == "copy":
             args.action_copy = True
 
-    # --skip implies --find
-    if args.skip:
+    # --skip and --dir imply --find
+    if args.skip or args.search_dirs:
         args.find_mode = True
 
     # Collect paths from args or stdin
@@ -710,17 +819,13 @@ def main(argv=None):
     for raw_path in paths:
         # Skip mode: go straight to search
         if args.skip:
-            results = _search_for_file(raw_path, args.search_dirs, config)
-            if results:
-                fixed = results[0]
-                if len(results) > 1 and not args.quiet:
-                    print(f"  ({len(results)} matches, using first)",
-                          file=sys.stderr)
-            else:
-                if not args.quiet:
-                    print(f"  No matches for: {raw_path}", file=sys.stderr)
+            result = _search_and_select(raw_path, args, config)
+            if result is None:
                 exit_code = 1
                 continue
+            if result == "_all_handled":
+                continue
+            fixed = result
         else:
             fixed = fix_path(raw_path)
 
@@ -729,13 +834,12 @@ def main(argv=None):
         # Find fallback: if path doesn't exist and looks like a bare
         # filename (or --find was explicit), search for it
         if not exists and (args.find_mode or _is_bare_filename(raw_path)):
-            results = _search_for_file(raw_path, args.search_dirs, config)
-            if results:
-                fixed = results[0]
+            result = _search_and_select(raw_path, args, config)
+            if result == "_all_handled":
+                continue
+            if result is not None:
+                fixed = result
                 exists = True
-                if len(results) > 1 and not args.quiet:
-                    print(f"  ({len(results)} matches, using first)",
-                          file=sys.stderr)
 
         # Always print to stdout
         print(fixed)

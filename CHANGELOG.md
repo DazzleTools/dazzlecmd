@@ -4,6 +4,22 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.4.1] - 2026-03-23
+
+### Added
+- fixpath `--all`: show all search results (best match first, ranked by path similarity)
+- fixpath `--fast`: take first match instantly (fd stops after 1 result, skips ranking)
+- fixpath `-d` shorthand for `--dir`
+- fixpath result ranking: picks the closest match to the original input path, not just fd's first result
+
+### Fixed
+- fixpath `--dir` now implies `--find` (search was silently skipped when passing a relative path with `--dir`)
+
+### Changed
+- fixpath: extracted `_search_and_select()` to eliminate duplicated search/rank/select logic
+- claude-cleanup: v0.2.0 -- added `--user` mode to stage user artifacts
+  (configs, skills, session logs) separately from noise, updated dir/file lists
+
 ## [0.4.0] - 2026-03-20
 
 ### Added
