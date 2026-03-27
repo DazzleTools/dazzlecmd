@@ -4,6 +4,22 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] - 2026-03-27
+
+### Added
+- **dz git-snapshot**: lightweight named checkpoints for git working state
+  - `save`: capture working tree as a named snapshot (uses `git stash create` + custom refs)
+  - `list`: show all snapshots with date, hash, and index
+  - `show`: snapshot details and file change summary
+  - `diff`: compare snapshot against current working state
+  - `apply`: merge-reapply snapshot (preserves local changes)
+  - `restore`: hard replace working tree from snapshot (requires `--force`)
+  - `drop`: delete a snapshot by name or index
+  - `clean`: prune old snapshots (`--older`, `--keep`, `--dry-run`)
+  - Captures untracked files by default, preserves index state
+  - Snapshots stored as `refs/snapshots/` -- stable names, no stash index drift
+- 22 new tests for git-snapshot (save, list, show, diff, apply, restore, drop, clean)
+
 ## [0.4.1] - 2026-03-23
 
 ### Added

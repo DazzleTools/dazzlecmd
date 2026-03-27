@@ -1,0 +1,22 @@
+{
+    "name": "git-snapshot",
+    "version": "0.1.0",
+    "description": "Lightweight named checkpoints for git working state (save, diff, apply, restore)",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "git_snapshot.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "dev-tools",
+        "tags": ["git", "snapshot", "checkpoint", "stash", "backup"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}
