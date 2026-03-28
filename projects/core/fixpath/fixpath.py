@@ -831,9 +831,10 @@ def main(argv=None):
 
         exists, _ = verify_path(fixed)
 
-        # Find fallback: if path doesn't exist and looks like a bare
-        # filename (or --find was explicit), search for it
-        if not exists and (args.find_mode or _is_bare_filename(raw_path)):
+        # Find fallback: if path doesn't exist, search for it.
+        # Progressive resolver extracts the filename from paths with
+        # separators and finds the deepest valid directory to search from.
+        if not exists:
             result = _search_and_select(raw_path, args, config)
             if result == "_all_handled":
                 continue

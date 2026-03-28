@@ -4,6 +4,17 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.5.1] - 2026-03-28
+
+### Fixed
+- fixpath: search fallback now triggers for all non-existent paths, not just bare filenames.
+  Previously `dz fixpath some/path/file.md` would fail with "not found" instead of
+  searching. Progressive resolution extracts the filename and searches from the deepest
+  valid directory.
+
+### Added
+- git-snapshot README.md: storage model, FAQ, subcommand reference
+
 ## [0.5.0] - 2026-03-27
 
 ### Added
