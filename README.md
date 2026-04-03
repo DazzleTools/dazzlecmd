@@ -96,6 +96,7 @@ The default [DazzleTools](https://github.com/DazzleTools) collection.
 | `claude-cleanup` | Stage and commit Claude Code transient state files | Cross-platform |
 | `dos2unix` | Pure-Python line ending converter (dos2unix/unix2dos) | Cross-platform |
 | `delete-nul` | Delete Windows NUL device files created by accidental `>nul` redirection | Windows |
+| `github` | Open GitHub project pages, issues, PRs, and releases from any git repo | Cross-platform |
 | `srch-path` | Search the system PATH for executables | Cross-platform |
 | `split` | Split text by separator with optional token filtering | Cross-platform |
 

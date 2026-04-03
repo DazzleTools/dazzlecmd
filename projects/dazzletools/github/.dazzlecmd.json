@@ -1,0 +1,25 @@
+{
+    "name": "github",
+    "version": "0.1.0",
+    "description": "Open GitHub project pages, issues, PRs, and releases from any git repo",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "github.py"
+    },
+    "pass_through": false,
+    "dependencies": {
+        "system": ["gh (GitHub CLI)", "git"]
+    },
+    "taxonomy": {
+        "category": "dev-tools",
+        "tags": ["github", "browse", "issues", "git", "workflow"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

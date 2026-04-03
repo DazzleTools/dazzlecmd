@@ -10,7 +10,8 @@
         "dazzletools:srch-path",
         "dazzletools:split",
         "dazzletools:claude-cleanup",
-        "dazzletools:git-snapshot"
+        "dazzletools:git-snapshot",
+        "dazzletools:github"
     ],
     "notes": "The default DazzleTools collection bundled with dazzlecmd. Contains frequently used utilities from the DazzleTools org. Intended to eventually become a git submodule at projects/dazzletools/."
 }

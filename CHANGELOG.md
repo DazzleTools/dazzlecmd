@@ -4,6 +4,22 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-04-02
+
+### Added
+- **dz github**: open GitHub project pages, issues, and releases from any git repo
+  - Auto-detects GitHub remote from cwd (no `gh repo set-default` needed)
+  - Page shortcuts: `pr`, `issues`, `release`, `forks`, `projects`, `actions`, `wiki`, `settings`
+  - Issue lookup by number: `dz github 3`
+  - Semantic issue aliases: `dz github isu roadmap`, `isu notes`, `isu epics`
+    (resolves by label first, then title search fallback)
+  - Repo finder: `dz github repo <name>` searches across all user orgs by substring
+  - Implicit repo lookup: `dz github preserve` from any directory finds and opens the repo
+  - Subdirectory scanning: detects git repos in child directories when not in a repo
+  - Repo cache: `~/.cache/dz-github/repos.json` for instant lookups (24h TTL, `--refresh`)
+  - `-n` flag to print URL without opening browser
+  - Safe ASCII output for Windows consoles (no mojibake from Unicode titles)
+
 ## [0.5.1] - 2026-03-28
 
 ### Fixed
