@@ -742,7 +742,7 @@ def main():
     kits_dir = os.path.join(project_root, "kits")
     projects_dir = os.path.join(project_root, "projects")
 
-    kits = discover_kits(kits_dir)
+    kits = discover_kits(kits_dir, projects_dir)
     active_kits = get_active_kits(kits)
     projects = discover_projects(projects_dir, active_kits)
 

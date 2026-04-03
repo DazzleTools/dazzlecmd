@@ -4,6 +4,35 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.0] - 2026-04-02
+
+### Added
+- In-repo kit manifests: kits now carry their own `.kit.json` describing tools,
+  tools_dir, and manifest filename. Source of truth travels with the code.
+- `discover_kits()` hybrid loading: reads in-repo manifests from
+  `projects/<kit>/.kit.json` or `projects/<kit>/kits/*.kit.json`, merges with
+  registry pointers from `kits/` (activation overrides only)
+- `_load_in_repo_kit_manifest()`: scans three locations for kit self-description
+  (root `.kit.json`, kit's own `kits/` dir, fallback to any `.kit.json`)
+- wtf-windows three-tier nesting fully working: dazzlecmd -> wtf-windows (submodule)
+  -> wtf-restarted (nested submodule with `.wtf.json`)
+
+### Changed
+- `kits/core.kit.json` reduced to registry pointer (activation only)
+- `kits/dazzletools.kit.json` reduced to registry pointer (activation only)
+- `kits/wtf.kit.json` reduced to registry pointer (source URL + activation only)
+- Architecture: "each layer describes only itself" principle enforced --
+  aggregator never describes tool structure, kit repo carries its own manifest
+- Architecture: "dazzlecmd is an instance, not the root" -- core kit follows
+  the same discovery path as external kits
+
+### Design
+- 3-round Gemini 2.5 Pro consultation on recursive aggregator architecture
+- Adopted `:` as FQCN separator (not `/`, avoids shell conflicts)
+- Convention-based aggregator detection: `kits/` dir exists = aggregator
+- Ansible Collections studied as reference architecture (FQCN, galaxy.yml)
+- 10 design principles established for the generic engine vision
+
 ## [0.6.0] - 2026-04-02
 
 ### Added

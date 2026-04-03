@@ -1,3 +1,6 @@
 [submodule "projects/core/listall"]
 	path = projects/core/listall
 	url = https://github.com/DazzleTools/listall.git
+[submodule "projects/wtf"]
+	path = projects/wtf
+	url = https://github.com/djdarcy/wtf-windows.git

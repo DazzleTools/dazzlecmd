@@ -1,0 +1,16 @@
+{
+    "name": "core",
+    "version": "0.1.0",
+    "description": "Core tools that ship with dazzlecmd - fundamental utilities available everywhere",
+    "author": "DazzleTools",
+    "tools_dir": ".",
+    "manifest": ".dazzlecmd.json",
+    "tools": [
+        "core:rn",
+        "core:listall",
+        "core:links",
+        "core:fixpath",
+        "core:find"
+    ],
+    "notes": "Core tools are the 'coreutils' of dazzlecmd. Fundamental, universally useful tools that every user benefits from. When this kit migrates to its own repo, this manifest travels with it and becomes the source of truth. The registry pointer in kits/core.kit.json controls activation only."
+}

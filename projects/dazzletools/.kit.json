@@ -1,0 +1,19 @@
+{
+    "name": "dazzletools",
+    "version": "0.1.0",
+    "description": "DazzleTools collection - cross-platform utilities",
+    "author": "DazzleTools",
+    "tools_dir": ".",
+    "manifest": ".dazzlecmd.json",
+    "tools": [
+        "dazzletools:dos2unix",
+        "dazzletools:delete-nul",
+        "dazzletools:srch-path",
+        "dazzletools:split",
+        "dazzletools:claude-cleanup",
+        "dazzletools:git-snapshot",
+        "dazzletools:github"
+    ],
+    "source": "https://github.com/DazzleTools/dazzletools-kit",
+    "notes": "The DazzleTools utility collection. Currently embedded in the dazzlecmd repo but intended to migrate to its own GitHub repo (DazzleTools/dazzletools-kit). This manifest travels with the kit -- when extracted to its own repo, the only change in dazzlecmd is replacing projects/dazzletools/ with a git submodule. The registry pointer in kits/dazzletools.kit.json controls activation only."
+}
