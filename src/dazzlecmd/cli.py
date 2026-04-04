@@ -1,4 +1,10 @@
-"""Main CLI entry point for dazzlecmd."""
+"""Main CLI entry point for dazzlecmd.
+
+This module provides the dazzlecmd-specific configuration and the
+build_parser/dispatch functions that the AggregatorEngine delegates to.
+New aggregator projects should use AggregatorEngine directly rather than
+importing from this module.
+"""
 
 import argparse
 import json
@@ -24,56 +30,53 @@ RESERVED_COMMANDS = {
 def find_project_root():
     """Find the dazzlecmd project root by navigating from __file__.
 
-    Looks for the presence of both projects/ and kits/ directories.
+    Legacy wrapper -- new code should use AggregatorEngine.find_project_root().
     """
-    # Start from the package location and go up
-    current = os.path.dirname(os.path.abspath(__file__))
-
-    # In installed mode: __file__ is in site-packages/dazzlecmd/
-    # In dev mode: __file__ is in src/dazzlecmd/
-    # Either way, we need to find projects/ and kits/ relative to the repo root
-
-    for _ in range(5):  # Don't go more than 5 levels up
-        parent = os.path.dirname(current)
-        if parent == current:
-            break
-        current = parent
-        if os.path.isdir(os.path.join(current, "projects")) and os.path.isdir(
-            os.path.join(current, "kits")
-        ):
-            return current
-
-    return None
+    from dazzlecmd.engine import AggregatorEngine
+    return AggregatorEngine().find_project_root()
 
 
-def build_parser(projects):
+def build_parser(projects, engine=None):
     """Build argparse parser with dynamic subparsers for discovered tools."""
     # Build categorized epilog for help display
+    # Use engine config if available, fall back to dazzlecmd defaults
+    prog = engine.command if engine else "dz"
+    desc = engine.description if engine else "dazzlecmd - Unified CLI for the DazzleTools collection"
+    reserved = engine.reserved_commands if engine else RESERVED_COMMANDS
+
+    if engine and engine.version_info:
+        display_ver, full_ver = engine.version_info
+        version_str = f"{engine.name} {display_ver} ({full_ver})"
+    else:
+        version_str = f"dazzlecmd {DISPLAY_VERSION} ({__version__})"
+
     epilog = _build_categorized_help(projects)
 
     parser = argparse.ArgumentParser(
-        prog="dz",
-        description="dazzlecmd - Unified CLI for the DazzleTools collection",
+        prog=prog,
+        description=desc,
         epilog=epilog,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--version", "-V",
         action="version",
-        version=f"dazzlecmd {DISPLAY_VERSION} ({__version__})",
+        version=version_str,
     )
 
     # Suppress default subparser listing — we show our own categorized version
     subparsers = parser.add_subparsers(dest="command", metavar="<command>",
                                        help=argparse.SUPPRESS)
 
-    # Register meta-commands (hidden from default help, shown in epilog)
-    _register_meta_commands(subparsers)
+    # Register meta-commands (only if root aggregator)
+    is_root = engine.is_root if engine else True
+    if is_root:
+        _register_meta_commands(subparsers)
 
     # Register discovered tool commands
     for project in projects:
         name = project["name"]
-        if name in RESERVED_COMMANDS:
+        if name in reserved:
             print(
                 f"Warning: Tool '{name}' conflicts with reserved command, skipping",
                 file=sys.stderr,
@@ -726,53 +729,22 @@ def dispatch_tool(project, argv):
 
 
 def main():
-    """Main entry point for dazzlecmd CLI."""
-    project_root = find_project_root()
+    """Main entry point for dazzlecmd CLI.
 
-    if project_root is None:
-        # Installed mode without project root — show basic help
-        parser = build_parser([])
-        if len(sys.argv) > 1 and sys.argv[1] in ("--version", "-V"):
-            print(f"dazzlecmd {DISPLAY_VERSION} ({__version__})")
-            return 0
-        parser.print_help()
-        return 0
+    Thin wrapper that creates an AggregatorEngine configured for dazzlecmd
+    and delegates to engine.run().
+    """
+    from dazzlecmd.engine import AggregatorEngine
 
-    # Discover kits and projects
-    kits_dir = os.path.join(project_root, "kits")
-    projects_dir = os.path.join(project_root, "projects")
+    engine = AggregatorEngine(
+        name="dazzlecmd",
+        command="dz",
+        tools_dir="projects",
+        kits_dir="kits",
+        manifest=".dazzlecmd.json",
+        description="dazzlecmd - Unified CLI for the DazzleTools collection",
+        version_info=(DISPLAY_VERSION, __version__),
+        is_root=True,
+    )
 
-    kits = discover_kits(kits_dir, projects_dir)
-    active_kits = get_active_kits(kits)
-    projects = discover_projects(projects_dir, active_kits)
-
-    # Build parser with discovered tools
-    parser = build_parser(projects)
-
-    # Handle no arguments
-    if len(sys.argv) < 2:
-        parser.print_help()
-        return 0
-
-    # For tool commands, we need to separate dz args from tool args
-    command_name = sys.argv[1]
-
-    # Check if it's a meta-command
-    meta_commands = {"list", "info", "kit", "new", "version", "add", "mode"}
-    if command_name in meta_commands or command_name.startswith("-"):
-        args = parser.parse_args()
-        if hasattr(args, "_meta"):
-            return dispatch_meta(args, projects, kits, project_root)
-        return 0
-
-    # Check if it's a tool command
-    tool_matches = [p for p in projects if p["name"] == command_name]
-    if tool_matches:
-        project = tool_matches[0]
-        # Pass remaining args to the tool
-        tool_argv = sys.argv[2:]
-        return dispatch_tool(project, tool_argv)
-
-    # Unknown command — try argparse for error message
-    args = parser.parse_args()
-    return 0
+    return engine.run()

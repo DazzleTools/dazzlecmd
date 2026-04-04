@@ -4,6 +4,21 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.1] - 2026-04-03
+
+### Added
+- `AggregatorEngine` class (`engine.py`): configurable engine that powers any
+  tool aggregator. Parameters: name, command, tools_dir, kits_dir, manifest,
+  description, version_info, is_root
+- Engine importable: `from dazzlecmd.engine import AggregatorEngine`
+- `is_root` flag: suppresses meta-commands for imported aggregators
+- `reserved_commands` property: empty set when is_root=False
+
+### Changed
+- `cli.py:main()` reduced to thin wrapper -- creates engine, calls engine.run()
+- `find_project_root()` delegates to engine (parameterized by tools_dir/kits_dir)
+- `build_parser()` accepts engine parameter for command name, description, version
+
 ## [0.7.0] - 2026-04-02
 
 ### Added
