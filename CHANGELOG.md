@@ -4,6 +4,28 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.2] - 2026-04-07
+
+### Fixed
+- fixpath: trailing-slash paths (e.g., `dir/name/`) no longer produce empty search
+  patterns. `os.path.basename("path/")` returns `""` -- now stripped before extraction.
+- fixpath: search broadening when progressive resolve enters the wrong subtree.
+  When the initial resolved directory doesn't contain the target, walks up parent
+  directories and retries (up to 3 levels).
+
+### Added
+- fixpath: Everything (es.exe) integration as optional search backend. Tries
+  Everything first on indexed drives (instant results), falls back to fd on
+  non-indexed drives. Everything is optional -- not required.
+- fixpath: `--anywhere` flag to include cross-drive search results. Default
+  behavior now filters to same drive as CWD.
+- fixpath: directory-aware search -- trailing slash triggers `--type d` (fd)
+  or `folder:` prefix (Everything) to find directories specifically.
+- fixpath: locality-weighted result ranking -- same-drive bonus and shared
+  base path bonus so local results rank above cross-drive matches.
+- fixpath: UTF-8 subprocess encoding for `gh`/`git` calls on Windows
+  (prevents mojibake from em dashes in API responses).
+
 ## [0.7.1] - 2026-04-03
 
 ### Added
