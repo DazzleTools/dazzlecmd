@@ -4,6 +4,30 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.3] - 2026-04-07
+
+### Changed
+- fixpath: refactored search to a graduated 4-step pipeline:
+  1. Exact path check
+  2. Vicinity search (progressive resolve + walk up N levels)
+  3. CWD-based search (Everything on indexed drives, fd otherwise)
+  4. Scope widening per `--search-on` flags
+- fixpath: Everything is now an accelerator at steps 2-3 (not a replacement
+  for fd). fd handles non-indexed drives; Everything speeds up indexed ones.
+
+### Added
+- fixpath: `--search-on` flag for composable scope control (base-path, broaden,
+  local, drive, anywhere). `base-path` restricts to CWD/`--dir` only; `broaden`
+  limits to vicinity of the resolved path; `local` is the default (vicinity +
+  CWD + nearby parents); `drive` and `anywhere` widen further.
+- fixpath: `--broaden N` flag to control vicinity walk-up depth (default: 3,
+  configurable via `fixpath.json: search_broaden_levels`)
+- fixpath: unquoted path reassembly -- when multiple args are given and none
+  exist individually, joins them as a single space-separated path. Handles
+  the common case of forgetting quotes around paths with spaces.
+- fixpath: `--help` output grouped into logical sections: action (mutually
+  exclusive), search, search scope, and general options
+
 ## [0.7.2] - 2026-04-07
 
 ### Fixed

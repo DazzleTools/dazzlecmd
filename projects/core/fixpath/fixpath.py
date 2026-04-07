@@ -322,142 +322,167 @@ def _is_bare_filename(path):
 
 
 def _search_for_file(pattern, search_dirs, config, max_results=None,
-                     anywhere=False):
-    """Search for a file or directory with locality-aware tool selection.
+                     search_on=None, broaden_levels=None):
+    """Search for a file or directory using a graduated pipeline.
 
-    Search strategy depends on whether Everything indexes the CWD drive:
+    Algorithm:
+    1. Extract the LEAF (last path component) from the pattern
+    2. If input has path separators, try vicinity search: progressive resolve
+       from the input path, walk up N levels (--broaden, default 3)
+    3. Search from CWD using the best available tool
+    4. Broaden based on --search-on flags
+       strongly favoring same-drive results
 
-    If CWD drive IS indexed by Everything:
-      1. Everything (same-drive only) -- instant indexed search
-      2. fd from search roots -- filesystem crawl fallback
-      3. fd broadened (walk up parent dirs) -- catches wrong-subtree cases
-      4. Everything (all drives) -- only with --anywhere
-
-    If CWD drive is NOT indexed by Everything:
-      1. fd from search roots -- only option for local search
-      2. fd broadened (walk up parent dirs) -- catches wrong-subtree cases
-      3. Everything (same-drive filtered) -- fallback
-      4. Everything (all drives) -- only with --anywhere
+    The --search-on flag controls scope:
+      base-path    Search ONLY from CWD / --dir roots, no broadening
+      broaden      Vicinity only: search around the resolved subpath,
+                   walk up N levels (--broaden), skip CWD fallback
+      local        Vicinity + CWD + walk up ~4 levels (default)
+      drive        Search the full CWD drive
+      anywhere     Search all drives
 
     Trailing slashes signal directory intent -- uses --type d with fd or
     folder: prefix with Everything.
 
     Returns list of found paths, or empty list.
     """
+    if search_on is None:
+        search_on = set()
+
     # Detect directory intent from trailing slash
     dir_only = pattern.rstrip(" ").endswith("/") or pattern.rstrip(" ").endswith("\\")
 
-    search_pattern, search_roots = _resolve_search_context(
-        pattern, search_dirs, config
-    )
+    # Step 1: Extract the leaf (last component) to search for
+    pattern_clean = pattern.rstrip("/\\")
+    leaf = os.path.basename(pattern_clean) or pattern_clean
 
-    if not search_pattern:
+    if not leaf:
         return []
 
-    cwd_drive = os.path.splitdrive(os.getcwd())[0].upper()
+    # Determine search scope
+    cwd = os.path.abspath(".")
+    cwd_drive = os.path.splitdrive(cwd)[0].upper()
+
+    # Search roots: explicit --dir flags, or CWD
+    if search_dirs:
+        search_roots = [os.path.expanduser(d) for d in search_dirs]
+        scope_mode = config.get("search_dirs_mode", "inclusive")
+        if scope_mode == "inclusive" and "." not in search_dirs:
+            search_roots.insert(0, ".")
+    elif "drive" in search_on:
+        # Search entire drive
+        search_roots = [cwd_drive + os.sep] if cwd_drive else ["."]
+    else:
+        # Default: search from CWD
+        search_roots = ["."]
+
+    # Check if Everything indexes the CWD drive (used in steps 2 and 3)
     drive_indexed = _everything_indexes_drive(cwd_drive[0]) if cwd_drive else False
 
-    def _filter_es_results(es_results):
-        """Apply drive filtering to Everything results."""
-        if not es_results:
-            return []
-        if anywhere:
-            return es_results
-        same_drive = [r for r in es_results
-                      if os.path.splitdrive(r)[0].upper() == cwd_drive]
-        return same_drive if same_drive else []
+    # Step 2: Vicinity search -- if input had path separators, try progressive
+    # resolve from the input path. Search the deepest valid subtree first,
+    # then walk up N levels (configurable via --broaden, default 3).
+    # Uses Everything when available for instant results on indexed drives.
+    vicinity_levels = broaden_levels if broaden_levels is not None else \
+        config.get("search_broaden_levels", 3)
 
-    if drive_indexed:
-        # Everything indexes this drive -- try it first (fast)
-        es_results = _run_everything_search(search_pattern, search_roots,
+    pattern_clean_full = pattern.rstrip("/\\")
+    has_sep = "/" in pattern_clean_full or "\\" in pattern_clean_full
+    if has_sep:
+        resolved_dir, remainder = _progressive_resolve(pattern_clean_full)
+        if resolved_dir:
+            remainder_leaf = os.path.basename(remainder.rstrip("/\\"))
+            if remainder_leaf:
+                # Try Everything first if drive is indexed
+                if drive_indexed:
+                    es_vicinity = _run_everything_search(
+                        remainder_leaf, [resolved_dir],
+                        max_results=max_results, dir_only=dir_only)
+                    if es_vicinity:
+                        # Filter to same drive
+                        same = [r for r in es_vicinity
+                                if os.path.splitdrive(r)[0].upper() == cwd_drive]
+                        if same:
+                            return same
+
+                # Search in the resolved subtree with fd
+                local_results = _run_fd_search(
+                    remainder_leaf, [resolved_dir],
+                    max_results=max_results, dir_only=dir_only)
+                if local_results:
+                    return local_results
+
+                # Walk up N levels from the resolved dir
+                # (skipped when --search-on base-path restricts scope)
+                if "base-path" not in search_on:
+                    walk_dir = os.path.dirname(os.path.abspath(resolved_dir))
+                    tried = {os.path.abspath(resolved_dir).lower()}
+                    for _ in range(vicinity_levels):
+                        if not walk_dir or walk_dir.lower() in tried:
+                            break
+                        tried.add(walk_dir.lower())
+                        broader = _run_fd_search(
+                            remainder_leaf, [walk_dir],
+                            max_results=max_results, dir_only=dir_only)
+                        if broader:
+                            return broader
+                        walk_dir = os.path.dirname(walk_dir)
+
+    # Step 3: Search from CWD using the best available tool
+    # Skipped when --search-on broaden (vicinity-only mode)
+
+    results = []
+    if "broaden" not in search_on:
+        if drive_indexed:
+            # Everything indexes this drive -- use it first (fast)
+            es_results = _run_everything_search(leaf, search_roots,
+                                                max_results=max_results,
+                                                dir_only=dir_only)
+            if es_results:
+                # Filter to same drive unless searching anywhere
+                if "anywhere" not in search_on:
+                    results = [r for r in es_results
+                               if os.path.splitdrive(r)[0].upper() == cwd_drive]
+                else:
+                    results = es_results
+
+        # If Everything didn't find (or wasn't available), try fd
+        if not results:
+            results = _run_fd_search(leaf, search_roots,
+                                     max_results=max_results, dir_only=dir_only)
+
+    # Progressive broadening: walk up from CWD toward drive root,
+    # trying each parent level. This avoids searching the entire drive
+    # when the target is just one or two levels above CWD.
+    # Skipped when base-path, broaden, drive, or anywhere is set.
+    if not results and "base-path" not in search_on \
+            and "broaden" not in search_on \
+            and "drive" not in search_on and "anywhere" not in search_on:
+        current = os.path.dirname(cwd)
+        drive_root = (cwd_drive + os.sep) if cwd_drive else None
+        tried = {cwd.lower()}
+        for _ in range(4):  # up to 4 levels above CWD
+            if not current or current.lower() in tried:
+                break
+            if drive_root and os.path.normpath(current) == os.path.normpath(drive_root):
+                break
+            tried.add(current.lower())
+            broader = _run_fd_search(leaf, [current],
+                                     max_results=max_results, dir_only=dir_only)
+            if broader:
+                results = broader
+                break
+            current = os.path.dirname(current)
+
+    # If still nothing and --search-on anywhere, try Everything unscoped
+    if not results and "anywhere" in search_on:
+        es_results = _run_everything_search(leaf, ["."],
                                             max_results=max_results,
                                             dir_only=dir_only)
-        filtered = _filter_es_results(es_results)
-        if filtered:
-            return filtered
+        if es_results:
+            results = es_results
 
-        # Everything didn't find same-drive results -- try fd
-        fd_results = _run_fd_search(search_pattern, search_roots,
-                                    max_results=max_results, dir_only=dir_only)
-        if fd_results:
-            return fd_results
-
-        # Broaden fd: walk up parent directories
-        fd_results = _broaden_fd_search(search_pattern, search_roots,
-                                        max_results=max_results, dir_only=dir_only)
-        if fd_results:
-            return fd_results
-
-        # Last resort: cross-drive Everything if --anywhere
-        if anywhere and es_results:
-            return es_results
-    else:
-        # Drive not indexed -- fd first (local search)
-        fd_results = _run_fd_search(search_pattern, search_roots,
-                                    max_results=max_results, dir_only=dir_only)
-        if fd_results:
-            return fd_results
-
-        # Broaden fd: walk up parent directories
-        fd_results = _broaden_fd_search(search_pattern, search_roots,
-                                        max_results=max_results, dir_only=dir_only)
-        if fd_results:
-            return fd_results
-
-        # fd found nothing -- try Everything as fallback
-        es_results = _run_everything_search(search_pattern, search_roots,
-                                            max_results=max_results,
-                                            dir_only=dir_only)
-        filtered = _filter_es_results(es_results)
-        if filtered:
-            return filtered
-
-        # Last resort: cross-drive if --anywhere
-        if anywhere and es_results:
-            return es_results
-
-    return []
-
-
-def _broaden_fd_search(pattern, initial_roots, max_results=None, dir_only=False):
-    """Walk up from initial search roots, retrying fd at each parent level.
-
-    Stops when a result is found or when reaching the drive root / CWD.
-    This handles the case where progressive resolve went too deep into a
-    wrong sibling subtree (e.g., searching for "Taleb" inside
-    "__Famous Economists" when it's actually in "__General and Philosophy").
-
-    Returns results or empty list.
-    """
-    if not initial_roots:
-        return []
-
-    # Only broaden from resolved directories (not CWD or configured dirs)
-    root = initial_roots[0]
-    cwd = os.path.abspath(".")
-    drive_root = os.path.splitdrive(cwd)[0] + os.sep
-
-    # Walk up from the initial root, trying each parent
-    current = os.path.dirname(os.path.abspath(root))
-    tried = {os.path.abspath(root).lower()}
-
-    # Limit walk-up to 3 levels to avoid slow full-drive scans
-    for _ in range(3):
-        if not current or current.lower() in tried:
-            break
-        # Don't go above the drive root
-        if os.path.normpath(current) == os.path.normpath(drive_root):
-            break
-        tried.add(current.lower())
-
-        results = _run_fd_search(pattern, [current],
-                                 max_results=max_results, dir_only=dir_only)
-        if results:
-            return results
-
-        current = os.path.dirname(current)
-
-    return []
+    return results
 
 
 def _resolve_search_context(pattern, search_dirs, config):
@@ -753,9 +778,18 @@ def _search_and_select(raw_path, args, config):
     fast = getattr(args, "fast", False)
     max_results = 1 if fast else None
 
-    anywhere = getattr(args, "anywhere", False)
+    # Build search_on set from flags
+    search_on = set()
+    if getattr(args, "anywhere", False):
+        search_on.add("anywhere")
+    if getattr(args, "search_on", None):
+        for opt in args.search_on.split(","):
+            search_on.add(opt.strip().lower())
+
+    broaden = getattr(args, "broaden", None)
     results = _search_for_file(raw_path, args.search_dirs, config,
-                               max_results=max_results, anywhere=anywhere)
+                               max_results=max_results, search_on=search_on,
+                               broaden_levels=broaden)
     if not results:
         if not args.quiet:
             print(f"  No matches for: {raw_path}", file=sys.stderr)
@@ -976,46 +1010,78 @@ def build_parser():
         "paths", nargs="*", default=[],
         help="Paths to fix (reads from stdin if none given)",
     )
-    parser.add_argument(
+
+    # Action flags -- mutually exclusive output modes
+    action = parser.add_argument_group(
+        "action (mutually exclusive)",
+        "What to do with the fixed path. Default action is configurable "
+        "via 'dz fixpath config default <action>'.")
+    action_mx = action.add_mutually_exclusive_group()
+    action_mx.add_argument(
         "-p", "--print", dest="action_print", action="store_true",
         help="Print only -- skip default action (overrides config)",
     )
-    parser.add_argument(
+    action_mx.add_argument(
         "-o", "--open", dest="action_open", action="store_true",
         help="Open file in default application",
     )
-    parser.add_argument(
+    action_mx.add_argument(
         "-l", "--lister", dest="action_lister", action="store_true",
         help="Open containing folder (select file)",
     )
-    parser.add_argument(
+    action_mx.add_argument(
         "-c", "--copy", dest="action_copy", action="store_true",
         help="Copy fixed path to clipboard",
     )
-    parser.add_argument(
+
+    # Search flags
+    search = parser.add_argument_group(
+        "search",
+        "Search for files when the path doesn't resolve. Uses fd "
+        "with Everything (es.exe) as accelerator on indexed drives.")
+    search.add_argument(
         "-f", "--find", dest="find_mode", action="store_true",
-        help="Search for file if path doesn't resolve (uses dz find / fd)",
+        help="Search for file if path doesn't resolve (uses fd / Everything)",
     )
-    parser.add_argument(
+    search.add_argument(
         "-s", "--skip", action="store_true",
         help="Skip path fixing, go straight to search (implies --find)",
     )
-    parser.add_argument(
+    search.add_argument(
         "-d", "--dir", dest="search_dirs", action="append", default=None,
-        help="Directory to search when using --find (repeatable)",
+        help="Directory to search (repeatable, default: CWD)",
     )
-    parser.add_argument(
+    search.add_argument(
         "--all", dest="show_all", action="store_true",
         help="Show all search results (best match first)",
     )
-    parser.add_argument(
+    search.add_argument(
         "--fast", action="store_true",
-        help="Take first match immediately (skip ranking, fd stops after 1 result)",
+        help="Take first match immediately (skip ranking)",
     )
-    parser.add_argument(
+
+    # Search scope
+    scope = parser.add_argument_group(
+        "search scope",
+        "Default: search CWD then broaden up parent levels.")
+    scope.add_argument(
+        "--search-on", dest="search_on", default=None,
+        help="base-path (CWD/--dir only, no broadening), "
+             "broaden (vicinity of resolved path only), "
+             "local (vicinity + CWD + nearby parents, default), "
+             "drive (full drive), anywhere (all drives). "
+             "Comma-separated.",
+    )
+    scope.add_argument(
         "--anywhere", action="store_true",
-        help="Include cross-drive results (default: same drive as CWD only)",
+        help="Shorthand for --search-on anywhere",
     )
+    scope.add_argument(
+        "--broaden", type=int, default=None, metavar="N",
+        help="Max parent levels to walk up in vicinity search (default: 3)",
+    )
+
+    # General options
     parser.add_argument(
         "--verify", action="store_true",
         help="Verify path exists and show details",
@@ -1067,6 +1133,17 @@ def main(argv=None):
         else:
             parser.print_help()
             return 0
+
+    # Reassemble space-split paths: when multiple args are given and none
+    # exist individually, they're likely a single path that was split by
+    # the shell because the user forgot quotes. Join them back together.
+    if len(paths) > 1:
+        any_exist = any(os.path.exists(fix_path(p)) for p in paths)
+        if not any_exist:
+            joined = " ".join(paths)
+            if not args.quiet:
+                print(f"  Reassembled: {joined}", file=sys.stderr)
+            paths = [joined]
 
     # Process each path
     exit_code = 0
