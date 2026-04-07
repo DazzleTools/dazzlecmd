@@ -4,6 +4,18 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.4] - 2026-04-07
+
+### Fixed
+- CI: GitHub Pages deployment failing due to private submodule (wtf-windows)
+  checkout. Replaced auto-generated `pages-build-deployment` workflow with
+  custom `pages.yml` that skips submodules and deploys only `docs/`.
+  Pages build_type switched from "legacy" to "workflow".
+
+### Changed
+- _version.py: bump to 0.7.4
+- dazzle-dz alias: bump to 0.7.4
+
 ## [0.7.3] - 2026-04-07
 
 ### Changed
