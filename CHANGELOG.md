@@ -4,6 +4,33 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.5] - 2026-04-08
+
+### Added
+- dazzletools: `claude-lost-sessions` (WIP, to be renamed `claude-session-metadata`)
+  -- catalog lost Claude Code sessions with structured per-session folders
+  (summary.md, known-docs/, folders-worked-on/, sesslog symlink, bidirectional
+  junctions). Extracts metadata from sesslog command logs, cross-references
+  authored docs by timeframe, and builds INDEX.md master table.
+- claude-lost-sessions: Win32 symlink timestamp control via ctypes
+  (CreateFileW + SetFileTime with FILE_FLAG_OPEN_REPARSE_POINT). Sets
+  known-docs symlink ctime/mtime/atime independently of target files.
+- claude-lost-sessions: filename-based ctime correction -- when a date-prefixed
+  filename indicates an earlier creation time than the file's actual ctime,
+  uses the filename date for the symlink's ctime.
+- claude-lost-sessions: reverse junctions from sesslog folders back to
+  lost-session catalog folders (appear as real directories in Explorer).
+- dazzletools .kit.json: registered new tools
+
+### Added (source not yet staged -- coming in next commit)
+- dazzletools: `claude-sesslog-datefix` -- fix session log folder timestamps
+- dazzletools: `private-init` -- initialize private/claude/ vault in a project
+- dazzletools: `git` -- git utilities collection
+
+### Changed
+- claude-cleanup: added .claude/projects/ (session transcripts),
+  .claude/session-env/, .claude/history.jsonl to noise tracking
+
 ## [0.7.4] - 2026-04-07
 
 ### Fixed

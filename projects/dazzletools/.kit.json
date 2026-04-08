@@ -12,7 +12,11 @@
         "dazzletools:split",
         "dazzletools:claude-cleanup",
         "dazzletools:git-snapshot",
-        "dazzletools:github"
+        "dazzletools:github",
+        "dazzletools:git",
+        "dazzletools:private-init",
+        "dazzletools:claude-sesslog-datefix",
+        "dazzletools:claude-lost-sessions"
     ],
     "source": "https://github.com/DazzleTools/dazzletools-kit",
     "notes": "The DazzleTools utility collection. Currently embedded in the dazzlecmd repo but intended to migrate to its own GitHub repo (DazzleTools/dazzletools-kit). This manifest travels with the kit -- when extracted to its own repo, the only change in dazzlecmd is replacing projects/dazzletools/ with a git submodule. The registry pointer in kits/dazzletools.kit.json controls activation only."

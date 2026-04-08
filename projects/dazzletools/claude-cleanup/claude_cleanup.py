@@ -22,6 +22,8 @@ NOISE_DIRS = [
     ".claude/debug",
     ".claude/file-history",
     ".claude/paste-cache",
+    ".claude/projects",          # session JSONL transcripts -- the most important data to preserve
+    ".claude/session-env",       # session environment data
     ".claude/session-states",
     ".claude/sessions",
     ".claude/shell-snapshots",
@@ -34,6 +36,7 @@ NOISE_DIRS = [
 NOISE_FILES = [
     ".claude/cache/changelog.md",
     ".claude/.credentials.json",
+    ".claude/history.jsonl",     # global command history
     ".claude/mcp-needs-auth-cache.json",
 ]
 
