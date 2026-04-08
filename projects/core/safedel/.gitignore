@@ -1,0 +1,9 @@
+# Dev-time junction to dazzle-filekit (not committed -- use pip install)
+_lib/dazzle_filekit/
+
+# Nested private repo
+private/
+
+# Python
+__pycache__/
+*.py[cod]

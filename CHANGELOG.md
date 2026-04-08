@@ -4,6 +4,21 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.6] - 2026-04-08
+
+### Added
+- core: `safedel` -- safe file/directory deletion with link-aware classification,
+  metadata-preserving trash store, and time-pattern-based recovery
+  - Detects symlinks, junctions, hardlinks, shortcuts; uses correct delete method per type and platform
+  - Stages files to timestamped trash folders (`YYYY-MM-DD__hh-mm-ss`) with JSON manifests
+  - 4-tier protection zones (A: blocked, B: --force+interactive, C: interactive, D: relaxed)
+    to prevent LLMs from aggressively cleaning up after destructive deletes
+  - Time-pattern matching for recover/list/clean: `last`, `today`, `2026-04-08 10:4*`, `--age ">30d"`
+  - Metadata-only recovery: apply timestamps/permissions without overwriting content
+  - Embedded libraries in `_lib/`: preservelib, help_lib, log_lib, core_lib, ps1
+    (future dazzlelib submodules, copied from preserve and wtf-windows projects)
+  - Junction to dazzle-filekit for `normalize_path_no_resolve()` import (dev-time)
+
 ## [0.7.5] - 2026-04-08
 
 ### Added

@@ -1,0 +1,25 @@
+{
+    "name": "safedel",
+    "version": "0.1.0",
+    "description": "Safe file/directory deletion with link-aware classification, metadata preservation, and recoverable trash store",
+    "namespace": "core",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "safedel.py"
+    },
+    "pass_through": false,
+    "dependencies": {
+        "python_optional": ["dazzle-filekit", "unctools", "dazzletreelib"]
+    },
+    "taxonomy": {
+        "category": "file-tools",
+        "tags": ["delete", "trash", "safe", "symlink", "junction", "hardlink", "recycle", "recovery", "metadata"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}
