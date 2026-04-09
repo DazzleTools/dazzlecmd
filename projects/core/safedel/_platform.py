@@ -389,15 +389,24 @@ def check_disk_space(trash_dir: str, required_bytes: int) -> Optional[str]:
     Returns:
         None if OK, or a warning string if space is low.
     """
-    try:
-        usage = shutil.disk_usage(trash_dir)
-        if usage.free < required_bytes + (500 * 1024 * 1024):  # 500MB buffer
-            free_mb = usage.free / (1024 * 1024)
-            req_mb = required_bytes / (1024 * 1024)
-            return (
-                f"Low disk space at {trash_dir}: "
-                f"{free_mb:.0f}MB free, need {req_mb:.0f}MB + 500MB buffer."
-            )
-    except OSError:
-        pass  # Can't check -- proceed anyway
+    from dazzle_filekit.utils.disk import check_disk_space as fk_check
+    has_space, _, _, message = fk_check(
+        trash_dir, required_bytes, safety_margin=0.1
+    )
+    if not has_space:
+        return message
     return None
+
+
+def calculate_size(paths: List[str]) -> int:
+    """Calculate total size of files/directories for staging estimation.
+
+    Args:
+        paths: list of filesystem paths
+
+    Returns:
+        Total size in bytes.
+    """
+    from dazzle_filekit.utils.disk import calculate_total_size
+    return calculate_total_size(paths, follow_symlinks=False)
+    return total

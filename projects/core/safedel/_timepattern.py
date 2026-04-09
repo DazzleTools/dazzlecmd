@@ -170,7 +170,7 @@ def time_pattern_to_glob(args: List[str]) -> Optional[str]:
         # Date only -- if it's a full date, match all times that day
         # If it has wildcards, match as-is
         if "*" in date_str or "?" in date_str:
-            return f"{date_str}*"
+            return date_str if date_str.endswith("*") else f"{date_str}*"
         return f"{date_str}__*"
 
     # If nothing matched, treat the whole thing as a raw glob

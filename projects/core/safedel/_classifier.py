@@ -86,32 +86,9 @@ class Classification:
 
 
 def _normalize_path_no_resolve(path: str) -> str:
-    """Normalize path format without resolving symlinks/junctions.
-
-    Delegates to dazzle_filekit.paths.normalize_path_no_resolve() when
-    available, with a stdlib fallback.
-    """
-    try:
-        from dazzle_filekit.paths import normalize_path_no_resolve
-        return str(normalize_path_no_resolve(path))
-    except ImportError:
-        pass
-
-    # Fallback: basic normalization without resolving links
-    import re
-    path = str(path).strip()
-    path = os.path.expanduser(path)
-    m = re.match(r"^/([a-zA-Z])/", path)
-    if m:
-        drive = m.group(1).upper()
-        path = drive + ":" + path[2:]
-    path = path.replace("/", os.sep)
-    if sys.platform == "win32" and path.startswith("\\\\?\\"):
-        path = path[4:]
-    path = os.path.normpath(path)
-    if not os.path.isabs(path):
-        path = os.path.normpath(os.path.join(os.getcwd(), path))
-    return path
+    """Normalize path format without resolving symlinks/junctions."""
+    from dazzle_filekit.paths import normalize_path_no_resolve
+    return str(normalize_path_no_resolve(path))
 
 
 def classify(path: str) -> Classification:

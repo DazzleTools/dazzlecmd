@@ -171,10 +171,9 @@ def _recover_entry(
     """
     # Determine recovery target
     if to_path:
-        if os.path.isdir(to_path):
-            target = os.path.join(to_path, entry.original_name)
-        else:
-            target = to_path
+        # --to always acts as a parent directory: recover into it
+        os.makedirs(to_path, exist_ok=True)
+        target = os.path.join(to_path, entry.original_name)
     else:
         target = entry.original_path
 

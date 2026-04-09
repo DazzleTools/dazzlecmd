@@ -27,6 +27,8 @@ from _platform import (
     stage_to_trash,
     safe_delete,
     check_disk_space,
+    calculate_size,
+    is_same_device,
 )
 from _timepattern import (
     generate_unique_folder_name,
@@ -168,6 +170,31 @@ class TrashStore:
         errors = []
         warnings = []
 
+        # Pre-flight: calculate total size and check disk space
+        preservable_paths = [
+            c.path for c in classifications
+            if c.exists and c.content_preservable
+        ]
+        if preservable_paths:
+            total_size = calculate_size(preservable_paths)
+            space_warning = check_disk_space(self.store_path, total_size)
+            if space_warning:
+                warnings.append(space_warning)
+
+            # Cross-device warning for large trees
+            cross_device = not is_same_device(
+                preservable_paths[0], self.store_path
+            )
+            one_gb = 1024 * 1024 * 1024
+            if cross_device and total_size > one_gb:
+                size_gb = total_size / one_gb
+                warnings.append(
+                    f"Cross-device staging: {size_gb:.1f}GB will be copied "
+                    f"(not renamed). This may be slow and some metadata "
+                    f"(creation time, ADS) will not be preserved in the copy. "
+                    f"Original metadata is recorded in the manifest."
+                )
+
         for c in classifications:
             if not c.exists:
                 errors.append(f"Skipping non-existent path: {c.path}")
@@ -176,12 +203,6 @@ class TrashStore:
             # Collect metadata before any changes
             entry = self._build_entry(c, content_dir, collect_meta=True)
             entries.append(entry)
-
-            # Check disk space for content-preservable items
-            if c.content_preservable and c.size > 0:
-                space_warning = check_disk_space(self.store_path, c.size)
-                if space_warning:
-                    warnings.append(space_warning)
 
             # Stage to trash
             sr = stage_to_trash(c.path, content_dir, c)

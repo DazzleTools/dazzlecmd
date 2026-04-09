@@ -29,13 +29,22 @@ Protection zones (for clean):
 """
 
 import argparse
+import os
 import sys
+from pathlib import Path
 from typing import List, Optional
 
 from _classifier import classify, format_classification
 from _store import TrashStore
 from _platform import get_trash_dir
 from _recover import cmd_list, cmd_recover, cmd_clean, cmd_status
+
+# Initialize log_lib from _lib/
+_lib_dir = str(Path(__file__).parent / "_lib")
+if _lib_dir not in sys.path:
+    sys.path.insert(0, _lib_dir)
+
+from log_lib import OutputManager, init_output, get_output
 
 
 SUBCOMMANDS = {"list", "ls", "recover", "restore", "clean", "purge", "status", "info"}
@@ -71,6 +80,10 @@ def _build_delete_parser() -> argparse.ArgumentParser:
                         help="Show what would happen without changes")
     parser.add_argument("--json", "-j", dest="json_output", action="store_true",
                         help="Output in JSON format")
+    parser.add_argument("-v", "--verbose", action="count", default=0,
+                        help="Increase verbosity (-v, -vv)")
+    parser.add_argument("-q", "--quiet", action="count", default=0,
+                        help="Decrease verbosity (-q shortened, -qq minimal)")
     return parser
 
 
@@ -115,6 +128,20 @@ def _build_clean_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _init_output(verbose: int = 0, quiet: int = 0) -> OutputManager:
+    """Initialize the OutputManager singleton with THAC0 verbosity.
+
+    THAC0 mapping:
+        -qq (-2): minimal output (just prompts)
+        -q  (-1): shortened warnings
+         0      : default (full warnings + metadata reminders)
+        -v  (1) : timing and config details
+        -vv (2) : debug output
+    """
+    verbosity = verbose - quiet
+    return init_output(verbosity=verbosity)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Entry point for safedel."""
     if argv is None:
@@ -154,6 +181,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     elif first in ("clean", "purge"):
         args = _build_clean_parser().parse_args(argv[1:])
+        _init_output(quiet=args.quiet)
         return cmd_clean(
             store,
             positional_args=args.time_args,
@@ -169,6 +197,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     else:
         # Default: treat all args as a delete operation
         args = _build_delete_parser().parse_args(argv)
+        _init_output(
+            verbose=getattr(args, "verbose", 0),
+            quiet=getattr(args, "quiet", 0),
+        )
         return _do_delete(store, args)
 
 
@@ -185,13 +217,15 @@ def _do_delete(store: TrashStore, args: argparse.Namespace) -> int:
     # Classify all paths first and show report
     from _classifier import classify, format_classification
 
+    json_output = getattr(args, "json_output", False)
     classifications = [classify(p) for p in paths]
 
-    # Show what we're about to do
-    print("\n  safedel: staging for deletion:\n")
-    for c in classifications:
-        print(format_classification(c))
-        print()
+    # Show what we're about to do (suppress in JSON mode)
+    if not json_output:
+        print("\n  safedel: staging for deletion:\n")
+        for c in classifications:
+            print(format_classification(c))
+            print()
 
     # Check for non-existent paths
     missing = [c for c in classifications if not c.exists]
@@ -208,24 +242,50 @@ def _do_delete(store: TrashStore, args: argparse.Namespace) -> int:
         print("  DRY RUN: No files were modified.")
         return 0
 
-    # Interactive confirmation (unless --yes)
-    if not yes:
-        is_tty = hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
-        if is_tty:
-            try:
-                answer = input("  Proceed with deletion? [y/N]: ").strip().lower()
-                if answer != "y":
-                    print("  Aborted.")
-                    return 0
-            except (EOFError, KeyboardInterrupt):
-                print("\n  Aborted.")
+    # Interactive confirmation (unless --yes or --json)
+    is_tty = hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
+    if json_output or yes:
+        pass  # JSON and --yes: proceed without prompting
+    elif not is_tty:
+        # Non-TTY (LLM environment): proceed -- the safety net is the trash store.
+        print("  [non-interactive mode: files staged to trash, recoverable via 'dz safedel recover last']")
+    elif not yes:
+        try:
+            answer = input("  Proceed with deletion? [y/N]: ").strip().lower()
+            if answer != "y":
+                print("  Aborted.")
                 return 0
-        # Non-TTY without --yes: proceed (the safety is in the trash store)
+        except (EOFError, KeyboardInterrupt):
+            print("\n  Aborted.")
+            return 0
 
     # Execute
     result = store.trash([c.path for c in existing])
 
-    # Report
+    if json_output:
+        import json
+        output = {
+            "success": result.success,
+            "folder_name": result.folder_name,
+            "folder_path": result.folder_path,
+            "entries": [
+                {
+                    "original_path": e.original_path,
+                    "original_name": e.original_name,
+                    "file_type": e.file_type,
+                    "link_target": e.link_target,
+                    "content_preserved": e.content_preserved,
+                }
+                for e in result.entries
+            ],
+            "warnings": result.warnings,
+            "errors": result.errors,
+            "recover_command": "dz safedel recover last",
+        }
+        print(json.dumps(output, indent=2, default=str))
+        return 0 if result.success else 1
+
+    # Human-readable report
     if result.success:
         print(f"\n  Staged to trash: {result.folder_name}")
     else:

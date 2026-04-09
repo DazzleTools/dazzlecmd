@@ -123,8 +123,18 @@ def _collect_windows_metadata(path: Path) -> Dict[str, Any]:
                     windows_metadata['owner_sid'] = str(owner_sid)
                     windows_metadata['group_sid'] = str(group_sid)
                 
-                # Store security descriptor for later use
-                windows_metadata['security_descriptor'] = security_info
+                # Store security descriptor as SDDL string (JSON-serializable)
+                try:
+                    sddl = win32security.ConvertSecurityDescriptorToStringSecurityDescriptor(
+                        security_info,
+                        win32security.SDDL_REVISION_1,
+                        win32security.OWNER_SECURITY_INFORMATION |
+                        win32security.GROUP_SECURITY_INFORMATION |
+                        win32security.DACL_SECURITY_INFORMATION
+                    )
+                    windows_metadata['security_descriptor_sddl'] = sddl
+                except Exception:
+                    windows_metadata['security_descriptor_sddl'] = None
             except Exception as e:
                 logger.debug(f"Error getting security info: {e}")
             
@@ -254,19 +264,35 @@ def _apply_windows_metadata(path: Path, metadata: Dict[str, Any]) -> bool:
                 
                 win32api.SetFileAttributes(str(path), current_attrs)
             
-            # Apply security information if available
-            if 'security_descriptor' in metadata:
+            # Apply security information from SDDL string if available
+            sddl = metadata.get('security_descriptor_sddl')
+            if sddl:
                 try:
+                    sd = win32security.ConvertStringSecurityDescriptorToSecurityDescriptor(
+                        sddl, win32security.SDDL_REVISION_1
+                    )
                     win32security.SetFileSecurity(
                         str(path),
-                        win32security.OWNER_SECURITY_INFORMATION | 
-                        win32security.GROUP_SECURITY_INFORMATION | 
+                        win32security.OWNER_SECURITY_INFORMATION |
+                        win32security.GROUP_SECURITY_INFORMATION |
                         win32security.DACL_SECURITY_INFORMATION,
-                        metadata['security_descriptor']
+                        sd
                     )
                 except Exception as e:
                     logger.warning(f"Error applying security information to {path}: {e}")
                     success = False
+            # Legacy: handle raw security_descriptor objects (pre-SDDL manifests)
+            elif 'security_descriptor' in metadata:
+                try:
+                    win32security.SetFileSecurity(
+                        str(path),
+                        win32security.OWNER_SECURITY_INFORMATION |
+                        win32security.GROUP_SECURITY_INFORMATION |
+                        win32security.DACL_SECURITY_INFORMATION,
+                        metadata['security_descriptor']
+                    )
+                except Exception as e:
+                    logger.debug(f"Legacy security descriptor not applicable: {e}")
         
         except ImportError:
             logger.debug("pywin32 not available, using limited Windows metadata application")
