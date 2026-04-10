@@ -21,9 +21,10 @@ from _platform import detect_platform
 
 
 def _make_test_store():
-    """Create a temporary trash store."""
+    """Create a temporary trash store with isolated registry."""
     tmpdir = tempfile.mkdtemp(prefix="safedel_test_store_")
-    return TrashStore(store_path=tmpdir), tmpdir
+    reg = os.path.join(tmpdir, "volumes.json")
+    return TrashStore(store_path=tmpdir, registry_path=reg), tmpdir
 
 
 def test_regular_file_roundtrip():

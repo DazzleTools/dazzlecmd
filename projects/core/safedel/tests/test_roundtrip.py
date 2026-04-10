@@ -18,8 +18,11 @@ from _recover import cmd_recover
 
 @pytest.fixture
 def store(tmp_path):
-    """Create a TrashStore backed by a temp directory."""
-    return TrashStore(store_path=str(tmp_path / "trash"))
+    """Create a TrashStore backed by a temp directory with isolated registry."""
+    return TrashStore(
+        store_path=str(tmp_path / "trash"),
+        registry_path=str(tmp_path / "volumes.json"),
+    )
 
 
 @pytest.fixture

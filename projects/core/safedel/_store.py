@@ -35,6 +35,7 @@ from _timepattern import (
     parse_folder_datetime,
     match_trash_folders,
 )
+from _volumes import resolve_trash_store, get_all_trash_paths
 
 # Import preservelib from local _lib/
 _lib_dir = str(Path(__file__).parent / "_lib")
@@ -103,8 +104,9 @@ class StoreStats:
 class TrashStore:
     """Manages the safedel trash store."""
 
-    def __init__(self, store_path: Optional[str] = None):
+    def __init__(self, store_path: Optional[str] = None, registry_path: Optional[str] = None):
         self.store_path = store_path or get_trash_dir()
+        self.registry_path = registry_path  # None = global default
         self.platform_info = detect_platform()
 
     def ensure_store_exists(self):
@@ -142,9 +144,23 @@ class TrashStore:
             c = classify(path)
             classifications.append(c)
 
-        # Generate folder name
-        folder_name = generate_unique_folder_name(self.store_path)
-        folder_path = os.path.join(self.store_path, folder_name)
+        # Resolve trash store: try per-volume for zero-copy rename,
+        # fall back to central store.
+        # Skip per-volume routing when registry_path is explicitly set
+        # (test isolation -- tests provide their own store).
+        existing = [c for c in classifications if c.exists]
+        if existing and self.registry_path is None:
+            effective_store, is_per_volume = resolve_trash_store(
+                existing[0].path, self.store_path
+            )
+        else:
+            effective_store, is_per_volume = self.store_path, False
+
+        os.makedirs(effective_store, exist_ok=True)
+
+        # Generate folder name in the chosen store
+        folder_name = generate_unique_folder_name(effective_store)
+        folder_path = os.path.join(effective_store, folder_name)
         content_dir = os.path.join(folder_path, "content")
 
         if dry_run:
@@ -265,70 +281,68 @@ class TrashStore:
         pattern: Optional[str] = None,
         age_filter: Optional[str] = None,
     ) -> List[TrashFolder]:
-        """List trash folders matching a pattern and/or age filter."""
-        folder_names = match_trash_folders(
-            self.store_path, pattern, age_filter
-        )
+        """List trash folders matching a pattern and/or age filter.
 
+        Scans both central and per-volume trash stores.
+        """
         results = []
-        for name in folder_names:
-            folder = self._load_trash_folder(name)
-            if folder:
-                results.append(folder)
+        for store_path in self._all_store_paths():
+            folder_names = match_trash_folders(store_path, pattern, age_filter)
+            for name in folder_names:
+                folder = self._load_trash_folder(name, store_path)
+                if folder:
+                    results.append(folder)
+        # Sort by timestamp across all stores
+        results.sort(key=lambda f: f.deleted_at)
         return results
 
     def get_folder(self, folder_name: str) -> Optional[TrashFolder]:
-        """Load a specific trash folder by name."""
-        return self._load_trash_folder(folder_name)
+        """Load a specific trash folder by name, searching all stores."""
+        for store_path in self._all_store_paths():
+            folder = self._load_trash_folder(folder_name, store_path)
+            if folder:
+                return folder
+        return None
 
     def get_stats(self) -> StoreStats:
-        """Get statistics about the trash store."""
+        """Get statistics about the trash store (all stores combined)."""
         stats = StoreStats(store_path=self.store_path)
 
-        if not os.path.isdir(self.store_path):
-            return stats
+        all_folders = self.list_entries()
+        stats.total_folders = len(all_folders)
 
-        folders = match_trash_folders(self.store_path)
-        stats.total_folders = len(folders)
+        if all_folders:
+            stats.oldest = all_folders[0].folder_name
+            stats.newest = all_folders[-1].folder_name
 
-        if folders:
-            stats.oldest = folders[0]
-            stats.newest = folders[-1]
-
-        # Count entries and approximate size
         total_entries = 0
         total_size = 0
-        for name in folders:
-            manifest_path = os.path.join(
-                self.store_path, name, "manifest.json"
-            )
-            if os.path.isfile(manifest_path):
-                try:
-                    with open(manifest_path, "r", encoding="utf-8") as f:
-                        manifest = json.load(f)
-                    entries = manifest.get("entries", [])
-                    total_entries += len(entries)
-                    for e in entries:
-                        s = e.get("stat", {})
-                        total_size += s.get("st_size", 0)
-                except (json.JSONDecodeError, OSError):
-                    pass
+        for folder in all_folders:
+            total_entries += len(folder.entries)
+            for e in folder.entries:
+                if e.stat:
+                    total_size += e.stat.get("st_size", 0)
 
         stats.total_entries = total_entries
         stats.total_size_bytes = total_size
         return stats
 
     def remove_folder(self, folder_name: str) -> bool:
-        """Permanently remove a trash folder (used by clean)."""
+        """Permanently remove a trash folder, searching all stores."""
         import shutil as _shutil
-        folder_path = os.path.join(self.store_path, folder_name)
-        if not os.path.isdir(folder_path):
-            return False
-        try:
-            _shutil.rmtree(folder_path)
-            return True
-        except OSError:
-            return False
+        for store_path in self._all_store_paths():
+            folder_path = os.path.join(store_path, folder_name)
+            if os.path.isdir(folder_path):
+                try:
+                    _shutil.rmtree(folder_path)
+                    return True
+                except OSError:
+                    return False
+        return False
+
+    def _all_store_paths(self) -> List[str]:
+        """Get all known trash store paths (central + per-volume)."""
+        return get_all_trash_paths(self.store_path, self.registry_path)
 
     # -- Internal methods --
 
@@ -434,9 +448,9 @@ class TrashStore:
             f.write("\n")
         os.replace(tmp_path, path)
 
-    def _load_trash_folder(self, folder_name: str) -> Optional[TrashFolder]:
+    def _load_trash_folder(self, folder_name: str, store_path: Optional[str] = None) -> Optional[TrashFolder]:
         """Load a TrashFolder from disk."""
-        folder_path = os.path.join(self.store_path, folder_name)
+        folder_path = os.path.join(store_path or self.store_path, folder_name)
         manifest_path = os.path.join(folder_path, "manifest.json")
 
         if not os.path.isdir(folder_path):

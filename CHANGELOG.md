@@ -4,6 +4,24 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.7] - 2026-04-10
+
+### Added
+- safedel: per-volume trash store for zero-copy rename staging
+  - `_volumes.py` module with volume detection, per-volume trash path resolution,
+    and JSON registry at `~/.safedel/volumes.json`
+  - Uses `unctools.detector` for drive type detection (local/network/removable)
+  - Uses `dazzle_filekit.utils.disk` for disk utilities
+  - Stable volume identification via serial number (not mount path)
+  - Multi-store discovery: list/recover/clean scan central + all per-volume stores
+  - Test isolation via explicit `registry_path` parameter to TrashStore
+  - Junction to unctools at `_lib/unctools` for dev-time imports
+- safedel: 14 new tests in `test_volumes.py` (104 total, up from 90)
+
+### Fixed
+- safedel: `cmd_list`/`cmd_recover`/`cmd_clean` now scan all trash stores via
+  new `_resolve_folders()` helper (previously only searched central store)
+
 ## [0.7.6] - 2026-04-08
 
 ### Added

@@ -1,5 +1,6 @@
-# Dev-time junction to dazzle-filekit (not committed -- use pip install)
+# Dev-time junctions to library sources (not committed -- use pip install)
 _lib/dazzle_filekit/
+_lib/unctools/
 
 # Nested private repo
 private/

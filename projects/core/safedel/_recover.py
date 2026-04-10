@@ -38,6 +38,49 @@ from preservelib.metadata import apply_file_metadata
 # -- List --
 
 
+def _resolve_folders(
+    store: TrashStore,
+    positional_args: List[str],
+    contains: Optional[str] = None,
+    path_pattern: Optional[str] = None,
+    age_filter: Optional[str] = None,
+) -> List[TrashFolder]:
+    """Resolve user arguments to matching TrashFolder objects across all stores."""
+    from _timepattern import time_pattern_to_glob, get_most_recent_folder
+
+    # --contains and --path search: scan all manifests
+    if contains or path_pattern:
+        all_folders = store.list_entries()
+        results = []
+        for folder in all_folders:
+            for entry in folder.entries:
+                if contains and _fnmatch(entry.original_name, contains):
+                    results.append(folder)
+                    break
+                if path_pattern:
+                    orig = entry.original_path.replace("\\", "/")
+                    if _fnmatch(orig, path_pattern) or _fnmatch(entry.original_path, path_pattern):
+                        results.append(folder)
+                        break
+        return results
+
+    # Time-pattern based matching
+    glob_pattern = time_pattern_to_glob(positional_args)
+
+    if glob_pattern is None:
+        # "last" -- get most recent across all stores
+        all_folders = store.list_entries()
+        return [all_folders[-1]] if all_folders else []
+
+    return store.list_entries(pattern=glob_pattern, age_filter=age_filter)
+
+
+def _fnmatch(name: str, pattern: str) -> bool:
+    """Filename match helper."""
+    import fnmatch
+    return fnmatch.fnmatch(name, pattern)
+
+
 def cmd_list(
     store: TrashStore,
     positional_args: List[str],
@@ -47,11 +90,12 @@ def cmd_list(
     json_output: bool = False,
 ) -> int:
     """List trash contents matching the given pattern."""
-    folder_names = resolve_time_args(
-        store.store_path, positional_args,
+    folders = _resolve_folders(
+        store, positional_args,
         contains=contains, path_pattern=path_pattern,
         age_filter=age_filter,
     )
+    folder_names = [f.folder_name for f in folders]
 
     if not folder_names:
         if not json_output:
@@ -114,20 +158,19 @@ def cmd_recover(
     dry_run: bool = False,
 ) -> int:
     """Recover files from trash."""
-    folder_names = resolve_time_args(
-        store.store_path, positional_args,
+    folders = _resolve_folders(
+        store, positional_args,
         contains=contains, path_pattern=path_pattern,
     )
 
-    if not folder_names:
+    if not folders:
         print("  No matching entries to recover.", file=sys.stderr)
         return 1
 
     total_recovered = 0
     total_errors = 0
 
-    for name in folder_names:
-        folder = store.get_folder(name)
+    for folder in folders:
         if not folder:
             continue
 
@@ -145,7 +188,7 @@ def cmd_recover(
 
         # If all entries recovered and not dry-run, remove the trash folder
         if not dry_run and total_errors == 0:
-            store.remove_folder(name)
+            store.remove_folder(folder.folder_name)
 
     if dry_run:
         print(f"\n  DRY RUN: Would recover {total_recovered} item(s).")
@@ -309,12 +352,12 @@ def cmd_clean(
     verbosity: int = 0,
 ) -> int:
     """Permanently delete trash entries with zone-based protection."""
-    folder_names = resolve_time_args(
-        store.store_path, positional_args,
+    folders = _resolve_folders(
+        store, positional_args,
         age_filter=age_filter,
     )
 
-    if not folder_names:
+    if not folders:
         print("  No matching entries to clean.")
         return 0
 
@@ -325,10 +368,8 @@ def cmd_clean(
     cleaned = 0
     skipped = 0
 
-    for name in folder_names:
-        folder = store.get_folder(name)
-        if not folder:
-            continue
+    for folder in folders:
+        name = folder.folder_name
 
         zone = determine_zone(folder.deleted_at, config, now)
 
