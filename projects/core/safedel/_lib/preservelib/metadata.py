@@ -62,7 +62,11 @@ def collect_file_metadata(path: Union[str, Path]) -> Dict[str, Any]:
                 'uid': file_stat.st_uid,
                 'gid': file_stat.st_gid
             }
-        
+            # Extended attributes (xattrs) on Linux/macOS
+            xattrs = _collect_unix_xattrs(path_obj)
+            if xattrs:
+                metadata['xattrs'] = xattrs
+
         return metadata
     except Exception as e:
         logger.error(f"Error collecting metadata for {path}: {e}")
@@ -185,7 +189,7 @@ def apply_file_metadata(path: Union[str, Path], metadata: Dict[str, Any]) -> boo
                 logger.warning(f"Error applying permissions to {path}: {e}")
                 success = False
         
-        # Apply timestamps
+        # Apply timestamps (mtime and atime via os.utime)
         if 'timestamps' in metadata:
             timestamps = metadata['timestamps']
             try:
@@ -196,13 +200,23 @@ def apply_file_metadata(path: Union[str, Path], metadata: Dict[str, Any]) -> boo
             except Exception as e:
                 logger.warning(f"Error applying timestamps to {path}: {e}")
                 success = False
-        
+
+            # On Windows, also restore creation time via pywin32
+            if platform.system() == 'Windows' and 'created' in timestamps:
+                if not restore_windows_creation_time(path_obj, timestamps['created']):
+                    # Non-fatal -- ctime restoration is best-effort
+                    pass
+
         # Apply platform-specific metadata
         if platform.system() == 'Windows' and 'windows' in metadata:
             success = success and _apply_windows_metadata(path_obj, metadata['windows'])
         elif platform.system() != 'Windows' and 'unix' in metadata:
             success = success and _apply_unix_metadata(path_obj, metadata['unix'])
-        
+
+        # Apply extended attributes (Linux/macOS)
+        if platform.system() != 'Windows' and 'xattrs' in metadata:
+            success = success and _apply_unix_xattrs(path_obj, metadata['xattrs'])
+
         return success
     except Exception as e:
         logger.error(f"Error applying metadata to {path}: {e}")
@@ -323,6 +337,64 @@ def _apply_windows_metadata(path: Path, metadata: Dict[str, Any]) -> bool:
     except Exception as e:
         logger.error(f"Error applying Windows metadata to {path}: {e}")
         return False
+
+def _collect_unix_xattrs(path: Path) -> Dict[str, str]:
+    """Capture extended attributes on Linux/macOS as a dict of name -> base64.
+
+    Uses os.listxattr / os.getxattr (stdlib, Python 3.3+). Handles macOS
+    resource forks (which appear as com.apple.* xattrs on APFS/HFS+),
+    Linux user.* xattrs, and security.* xattrs.
+
+    Values are base64-encoded since they can contain arbitrary binary data
+    and the manifest is JSON.
+    """
+    if platform.system() == 'Windows':
+        return {}
+
+    import base64
+    result = {}
+
+    try:
+        names = os.listxattr(path, follow_symlinks=False)
+    except (OSError, AttributeError):
+        return {}
+
+    for name in names:
+        try:
+            value = os.getxattr(path, name, follow_symlinks=False)
+            result[name] = base64.b64encode(value).decode('ascii')
+        except (OSError, AttributeError):
+            continue
+
+    return result
+
+
+def _apply_unix_xattrs(path: Path, xattrs: Dict[str, str]) -> bool:
+    """Apply extended attributes from a dict of name -> base64.
+
+    Best effort -- failures are logged but don't block recovery.
+    Skips com.apple.quarantine to avoid security surprises on restore.
+    """
+    if platform.system() == 'Windows' or not xattrs:
+        return True
+
+    import base64
+    success = True
+
+    for name, b64_value in xattrs.items():
+        # Skip com.apple.quarantine -- it's sticky and re-evaluated by
+        # Gatekeeper, restoring it could change security posture unexpectedly
+        if name == 'com.apple.quarantine':
+            continue
+        try:
+            value = base64.b64decode(b64_value)
+            os.setxattr(path, name, value, follow_symlinks=False)
+        except (OSError, AttributeError) as e:
+            logger.debug(f"Could not restore xattr {name} on {path}: {e}")
+            success = False
+
+    return success
+
 
 def _apply_unix_metadata(path: Path, metadata: Dict[str, Any]) -> bool:
     """
@@ -685,7 +757,127 @@ def apply_timestamp_strategy(path: Union[str, Path], strategy: str, link_timesta
         else:
             logger.warning(f"Unknown timestamp strategy: {strategy}")
             return False
-            
+
     except Exception as e:
         logger.error(f"Error applying timestamps to {path}: {e}")
+        return False
+
+
+# -- Windows Creation Time Restoration --
+#
+# Pattern learned from claude-sesslog-datefix session:
+# - Use pywin32, not raw ctypes (ctypes approach silently failed)
+# - FILE_WRITE_ATTRIBUTES = 0x100 is not always in win32con, use raw value
+# - Directories need FILE_FLAG_BACKUP_SEMANTICS, not FILE_ATTRIBUTE_NORMAL
+# - pywintypes.Time(dt) accepts a datetime or epoch float directly
+
+_WIN32_AVAILABLE = None  # Lazy check
+
+
+def is_win32_available() -> bool:
+    """Check if pywin32 is available for ctime restoration."""
+    global _WIN32_AVAILABLE
+    if _WIN32_AVAILABLE is not None:
+        return _WIN32_AVAILABLE
+    try:
+        import win32file  # noqa: F401
+        import win32con  # noqa: F401
+        import pywintypes  # noqa: F401
+        _WIN32_AVAILABLE = True
+    except ImportError:
+        _WIN32_AVAILABLE = False
+    return _WIN32_AVAILABLE
+
+
+def restore_windows_creation_time(
+    path: Union[str, Path],
+    created: Union[float, datetime.datetime],
+) -> bool:
+    """Restore the Windows creation time (ctime) of a file or directory.
+
+    Windows NTFS stores three timestamps: creation, last-modified, last-accessed.
+    Python's os.utime() can set modified and accessed but NOT creation time.
+    This function uses pywin32 SetFileTime() to restore the creation time
+    captured in the manifest.
+
+    Args:
+        path: File or directory path
+        created: Creation time as epoch float or datetime object
+
+    Returns:
+        True on success, False on any failure (pywin32 missing, permission
+        denied, etc.). This is best-effort -- failure should not block recovery.
+    """
+    if platform.system() != 'Windows':
+        return False
+
+    if not is_win32_available():
+        return False
+
+    try:
+        import win32file
+        import win32con
+        import pywintypes
+
+        path_obj = Path(path)
+        path_str = str(path_obj)
+
+        # Raw value for FILE_WRITE_ATTRIBUTES (0x100) -- not always in win32con
+        FILE_WRITE_ATTRIBUTES = 0x100
+
+        # Directories require FILE_FLAG_BACKUP_SEMANTICS to open
+        if path_obj.is_dir():
+            flags = win32con.FILE_FLAG_BACKUP_SEMANTICS
+        else:
+            flags = win32con.FILE_ATTRIBUTE_NORMAL
+
+        # Handle readonly files: clear attribute, set time, restore attribute
+        readonly_cleared = False
+        try:
+            attrs = win32file.GetFileAttributes(path_str)
+            if attrs & win32con.FILE_ATTRIBUTE_READONLY:
+                win32file.SetFileAttributes(
+                    path_str, attrs & ~win32con.FILE_ATTRIBUTE_READONLY
+                )
+                readonly_cleared = True
+        except Exception:
+            pass  # Best-effort
+
+        try:
+            handle = win32file.CreateFile(
+                path_str,
+                FILE_WRITE_ATTRIBUTES,
+                win32con.FILE_SHARE_READ | win32con.FILE_SHARE_WRITE,
+                None,
+                win32con.OPEN_EXISTING,
+                flags,
+                None,
+            )
+            try:
+                # Convert epoch float to datetime if needed
+                if isinstance(created, (int, float)):
+                    dt = datetime.datetime.fromtimestamp(created)
+                else:
+                    dt = created
+                wintime = pywintypes.Time(dt)
+                # SetFileTime(handle, creation, access, write) -- None leaves unchanged
+                win32file.SetFileTime(handle, wintime, None, None)
+            finally:
+                handle.close()
+
+            return True
+
+        finally:
+            # Restore readonly attribute if we cleared it
+            if readonly_cleared:
+                try:
+                    attrs = win32file.GetFileAttributes(path_str)
+                    win32file.SetFileAttributes(
+                        path_str, attrs | win32con.FILE_ATTRIBUTE_READONLY
+                    )
+                except Exception:
+                    pass
+
+    except Exception as e:
+        logger.debug(f"Failed to restore creation time for {path}: {e}")
         return False

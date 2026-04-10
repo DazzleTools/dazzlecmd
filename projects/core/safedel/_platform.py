@@ -409,4 +409,98 @@ def calculate_size(paths: List[str]) -> int:
     """
     from dazzle_filekit.utils.disk import calculate_total_size
     return calculate_total_size(paths, follow_symlinks=False)
-    return total
+
+
+# -- NTFS Alternate Data Stream Detection --
+#
+# ADS are Windows-specific metadata streams attached to files. The default
+# data stream is ::$DATA (the file's main content). Extra streams contain
+# metadata like :Zone.Identifier (download marker) or custom application
+# data. ADS are lost on cross-device copy or when moving to non-NTFS
+# filesystems. safedel warns about non-default streams during classification
+# so the user knows what's at risk.
+
+# Streams to ignore when warning about ADS (pre-filter to reduce alert fatigue)
+_ADS_IGNORE_STREAMS = {
+    "::$DATA",              # Default data stream (not really ADS)
+    ":Zone.Identifier:$DATA",  # Browser download marker (nearly universal)
+}
+
+
+def detect_alternate_streams(path: str) -> List[str]:
+    """Enumerate NTFS alternate data streams on a file.
+
+    Returns a list of non-default stream names found on the file.
+    Filters out ::$DATA (the main data stream) and :Zone.Identifier
+    (the browser download marker, which is nearly universal and would
+    cause alert fatigue).
+
+    Returns an empty list on non-Windows platforms, on errors, or when
+    only the default stream exists.
+
+    Uses ctypes to call FindFirstStreamW/FindNextStreamW since pywin32
+    doesn't expose these.
+    """
+    if sys.platform != "win32":
+        return []
+
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except ImportError:
+        return []
+
+    kernel32 = ctypes.windll.kernel32
+
+    class WIN32_FIND_STREAM_DATA(ctypes.Structure):
+        _fields_ = [
+            ("StreamSize", ctypes.c_longlong),
+            ("cStreamName", ctypes.c_wchar * 296),
+        ]
+
+    try:
+        kernel32.FindFirstStreamW.argtypes = [
+            wintypes.LPCWSTR, ctypes.c_int,
+            ctypes.POINTER(WIN32_FIND_STREAM_DATA), wintypes.DWORD,
+        ]
+        kernel32.FindFirstStreamW.restype = wintypes.HANDLE
+        kernel32.FindNextStreamW.argtypes = [
+            wintypes.HANDLE, ctypes.POINTER(WIN32_FIND_STREAM_DATA),
+        ]
+        kernel32.FindNextStreamW.restype = wintypes.BOOL
+        kernel32.FindClose.argtypes = [wintypes.HANDLE]
+    except (AttributeError, OSError):
+        return []
+
+    INVALID_HANDLE_VALUE = wintypes.HANDLE(-1).value
+
+    streams: List[str] = []
+    data = WIN32_FIND_STREAM_DATA()
+
+    try:
+        handle = kernel32.FindFirstStreamW(str(path), 0, ctypes.byref(data), 0)
+        if handle == INVALID_HANDLE_VALUE:
+            return []
+
+        try:
+            while True:
+                name = data.cStreamName
+                if name and name not in _ADS_IGNORE_STREAMS:
+                    streams.append(name)
+                if not kernel32.FindNextStreamW(handle, ctypes.byref(data)):
+                    break
+        finally:
+            kernel32.FindClose(handle)
+    except Exception:
+        return []
+
+    return streams
+
+
+def has_significant_ads(path: str) -> bool:
+    """Return True if a file has non-default, non-Zone.Identifier streams.
+
+    Useful for staging warnings: if the file has significant ADS and we're
+    about to do a cross-device copy, the ADS will be lost.
+    """
+    return len(detect_alternate_streams(path)) > 0

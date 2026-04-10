@@ -45,9 +45,27 @@ if _lib_dir not in sys.path:
     sys.path.insert(0, _lib_dir)
 
 from log_lib import OutputManager, init_output, get_output
+from preservelib.metadata import is_win32_available
 
 
 SUBCOMMANDS = {"list", "ls", "recover", "restore", "clean", "purge", "status", "info"}
+
+
+def _check_pywin32_startup_warning():
+    """Emit a warning on Windows if pywin32 is missing.
+
+    Without pywin32, safedel cannot restore creation time (ctime) on
+    recovery, and security descriptor (ACL) restoration falls back to
+    attrib-command parsing. Timestamps, file data, and permissions still
+    work via stdlib, but advanced metadata is degraded.
+    """
+    if sys.platform == "win32" and not is_win32_available():
+        print(
+            "  [notice] pywin32 not installed -- creation time and ACL "
+            "restoration will be skipped.\n"
+            "           Install with: pip install pywin32",
+            file=sys.stderr,
+        )
 
 
 def _build_delete_parser() -> argparse.ArgumentParser:

@@ -29,6 +29,7 @@ from _platform import (
     check_disk_space,
     calculate_size,
     is_same_device,
+    detect_alternate_streams,
 )
 from _timepattern import (
     generate_unique_folder_name,
@@ -45,10 +46,48 @@ if _lib_dir not in sys.path:
 from preservelib.metadata import collect_file_metadata, metadata_to_json
 
 
+def _compute_alt_path(path: str) -> Optional[str]:
+    """Compute the alternate-platform form of a path for cross-runtime recovery.
+
+    On Windows: C:\\Users\\foo -> /mnt/c/Users/foo (WSL form)
+    On Linux/WSL: /mnt/c/Users/foo -> C:\\Users\\foo (Windows form)
+
+    Uses filekit's normalize_cross_platform_path which handles the conversion.
+    Returns None if no sensible alternate form exists (e.g., a Linux path on
+    Linux with no Windows equivalent, or a VolFs path inside WSL2).
+    """
+    try:
+        from dazzle_filekit.utils.compat import is_windows
+        import re
+
+        if is_windows():
+            # Native form is C:\..., compute WSL form /mnt/c/...
+            m = re.match(r"^([a-zA-Z]):[\\/](.*)$", path)
+            if m:
+                drive = m.group(1).lower()
+                rest = m.group(2).replace("\\", "/")
+                return f"/mnt/{drive}/{rest}"
+        else:
+            # Native form might be /mnt/c/... or /c/..., compute Windows form
+            m = re.match(r"^/mnt/([a-zA-Z])(/.*)?$", path)
+            if m:
+                drive = m.group(1).upper()
+                rest = (m.group(2) or "").replace("/", "\\")
+                return f"{drive}:{rest}"
+            m = re.match(r"^/([a-zA-Z])(/.*)?$", path)
+            if m and len(m.group(1)) == 1:
+                drive = m.group(1).upper()
+                rest = (m.group(2) or "").replace("/", "\\")
+                return f"{drive}:{rest}"
+    except Exception:
+        pass
+    return None
+
+
 @dataclass
 class TrashEntry:
     """A single file/dir entry within a trash folder."""
-    original_path: str
+    original_path: str                          # Native path for current platform
     original_name: str
     file_type: str
     link_target: Optional[str] = None
@@ -61,6 +100,11 @@ class TrashEntry:
     stat: Optional[Dict[str, Any]] = None
     metadata: Optional[Dict[str, Any]] = None
     warnings: List[str] = field(default_factory=list)
+    # WSL dual-path support: original_path_alt holds the other platform's form
+    # (e.g., /mnt/c/... when original_path is C:\..., or vice versa).
+    # Populated when operating on WSL DrvFs paths so recovery works from
+    # either runtime.
+    original_path_alt: Optional[str] = None
 
 
 @dataclass
@@ -197,9 +241,9 @@ class TrashStore:
             if space_warning:
                 warnings.append(space_warning)
 
-            # Cross-device warning for large trees
+            # Cross-device detection for warning triggers
             cross_device = not is_same_device(
-                preservable_paths[0], self.store_path
+                preservable_paths[0], effective_store
             )
             one_gb = 1024 * 1024 * 1024
             if cross_device and total_size > one_gb:
@@ -210,6 +254,31 @@ class TrashStore:
                     f"(creation time, ADS) will not be preserved in the copy. "
                     f"Original metadata is recorded in the manifest."
                 )
+
+            # NTFS ADS warning: if cross-device AND files have significant
+            # alternate data streams, the streams will be lost in the copy.
+            if cross_device and sys.platform == "win32":
+                ads_files = []
+                for p in preservable_paths:
+                    try:
+                        streams = detect_alternate_streams(p)
+                        if streams:
+                            ads_files.append((p, streams))
+                    except Exception:
+                        pass
+                if ads_files:
+                    names = ", ".join(
+                        f"{os.path.basename(p)}({len(s)} streams)"
+                        for p, s in ads_files[:3]
+                    )
+                    if len(ads_files) > 3:
+                        names += f", and {len(ads_files) - 3} more"
+                    warnings.append(
+                        f"NTFS alternate data streams detected on "
+                        f"cross-device staging: {names}. These streams will "
+                        f"NOT be preserved in the copy (stream names are "
+                        f"recorded in the manifest)."
+                    )
 
         for c in classifications:
             if not c.exists:
@@ -384,8 +453,13 @@ class TrashStore:
             except OSError:
                 stat_dict = None
 
+        # Compute alternate-platform path form for cross-runtime recovery
+        # (WSL <-> Windows). Uses filekit's normalize_cross_platform_path.
+        alt_path = _compute_alt_path(c.path)
+
         return TrashEntry(
             original_path=c.path,
+            original_path_alt=alt_path,
             original_name=os.path.basename(c.path),
             file_type=c.file_type.value,
             link_target=c.link_target,
@@ -424,6 +498,7 @@ class TrashStore:
         """Convert a TrashEntry to a JSON-serializable dict."""
         return {
             "original_path": entry.original_path,
+            "original_path_alt": entry.original_path_alt,
             "original_name": entry.original_name,
             "file_type": entry.file_type,
             "link_target": entry.link_target,
@@ -470,6 +545,7 @@ class TrashStore:
                 for e_dict in manifest.get("entries", []):
                     entries.append(TrashEntry(
                         original_path=e_dict.get("original_path", ""),
+                        original_path_alt=e_dict.get("original_path_alt"),
                         original_name=e_dict.get("original_name", ""),
                         file_type=e_dict.get("file_type", "unknown"),
                         link_target=e_dict.get("link_target"),

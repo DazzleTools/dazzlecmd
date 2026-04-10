@@ -4,6 +4,46 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.8] - 2026-04-10
+
+### Added
+- safedel phase 3b: Windows creation time (ctime) restoration
+  - `preservelib.metadata.restore_windows_creation_time()` using pywin32
+    with `FILE_WRITE_ATTRIBUTES=0x100`, `FILE_FLAG_BACKUP_SEMANTICS` for
+    directories, and readonly clear/restore handling
+  - Auto-invoked by `apply_file_metadata()` on Windows recovery
+  - `is_win32_available()` helper with startup warning in safedel.py when
+    pywin32 is missing
+- safedel phase 3b: WSL dual-path manifest storage
+  - `TrashEntry.original_path_alt` field stores the cross-runtime path form
+    (e.g., `/mnt/c/...` for Windows `C:\...` and vice versa)
+  - `_compute_alt_path()` in _store.py converts between Windows and WSL forms
+  - Recovery falls back to alt path when native path parent is unreachable
+- safedel phase 3c: NTFS Alternate Data Stream detection
+  - `_platform.detect_alternate_streams()` via ctypes `FindFirstStreamW`/
+    `FindNextStreamW` (pywin32 doesn't expose these)
+  - Filters `::$DATA` and `:Zone.Identifier` to reduce alert fatigue
+  - Warns during cross-device staging when significant ADS are present
+- safedel phase 3c: Linux/macOS extended attribute (xattr) preservation
+  - `_collect_unix_xattrs()` captures xattrs as base64 in manifest
+  - `_apply_unix_xattrs()` restores via `os.setxattr`
+  - Skips `com.apple.quarantine` to avoid Gatekeeper security surprises
+- safedel: 29 new tests (127 total on Windows, 107 on WSL)
+  - `test_ctime.py` (6 Windows-only)
+  - `test_wsl_dual_paths.py` (10 cross-platform)
+  - `test_ads.py` (8 Windows-only)
+  - `test_xattr.py` (5 Unix-only)
+- safedel: `run_tests.py` uses `sys.executable` for cross-platform test runs
+- safedel: `TODO.md` and `ROADMAP.md` for project planning (short-term tasks
+  and long-term phase strategy). Will migrate to standalone repo when safedel
+  extracts from dazzlecmd.
+- safedel: `docs/USAGE.md` -- quick reference, recipes for common scenarios,
+  trash store locations, protection zone behavior, platform capability matrix,
+  configuration reference, and the "oh shit" first-response guide
+- safedel: `docs/MANIFEST_SCHEMA.md` -- complete JSON manifest schema with
+  field-by-field reference, file type values, stat + preservelib metadata
+  structures, jq inspection examples, and schema evolution policy
+
 ## [0.7.7] - 2026-04-10
 
 ### Added

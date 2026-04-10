@@ -81,6 +81,22 @@ def _fnmatch(name: str, pattern: str) -> bool:
     return fnmatch.fnmatch(name, pattern)
 
 
+def _path_parent_accessible(path: str) -> bool:
+    """Check if a path's parent directory exists and is accessible.
+
+    Used for WSL dual-path fallback: a path is "usable" if its parent
+    dir exists so we can recover into it. The path itself may not exist
+    yet (we're recovering into it).
+    """
+    if not path:
+        return False
+    try:
+        parent = os.path.dirname(path) or "."
+        return os.path.isdir(parent)
+    except (OSError, ValueError):
+        return False
+
+
 def cmd_list(
     store: TrashStore,
     positional_args: List[str],
@@ -219,6 +235,14 @@ def _recover_entry(
         target = os.path.join(to_path, entry.original_name)
     else:
         target = entry.original_path
+        # WSL dual-path fallback: if the native original_path can't be used
+        # (e.g., manifest written by WSL Python with /mnt/c/ paths, now
+        # recovering from Windows Python), try the alternate form.
+        if target and not _path_parent_accessible(target) and entry.original_path_alt:
+            alt = entry.original_path_alt
+            if _path_parent_accessible(alt):
+                target = alt
+                print(f"  [using alternate path form: {alt}]")
 
     # Metadata-only recovery
     if metadata_only:
