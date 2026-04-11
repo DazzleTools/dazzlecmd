@@ -4,6 +4,54 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.10] - 2026-04-11
+
+### Changed
+- **safedel Phase 8**: migrated to filekit v0.2.4 primitives, eliminating
+  ~514 lines of duplicated code (commit `d5a56b3`). Pure refactor with
+  zero user-visible behavior change.
+  - `_save_manifest` and `save_registry` now use
+    `dazzle_filekit.operations.atomic_write_json` (removes two copies of
+    the tmp-write + `os.replace` idiom).
+  - `_stage_regular` and `_recover_entry` directory branches now use
+    `dazzle_filekit.operations.copy_tree_preserving_links` in place of
+    `shutil.copytree(..., symlinks=True)`. Filekit's wrapper enforces
+    `symlinks=True` and rejects reparse-point roots as defense-in-depth.
+  - `_lib/preservelib/metadata.py` replaced with a 74-line re-export shim
+    pointing at `dazzle_filekit.metadata` (was 883 lines of duplicated
+    metadata capture/apply code). Existing
+    `from preservelib.metadata import ...` call sites continue to work;
+    the canonical code now lives once, in filekit.
+
+### Added
+- **safedel golden invariant test suite**
+  (`tests/test_golden_invariants.py`): 17 behavioral invariant tests
+  capturing safedel's end-state guarantees as a permanent regression
+  safety net. Covers classification determinism, roundtrip metadata
+  preservation, manifest schema stability, folder naming convention,
+  dry-run invariants, list/status consistency, and platform detection.
+- **safedel TODO.md and ROADMAP.md**: short-term task list and long-term
+  phase strategy committed to the tool's folder. ROADMAP.md adds two new
+  Design Principles:
+  - Principle 8: Golden invariants over text-based goldens -- capture
+    end-state properties rather than text fixtures that drift.
+  - Principle 9: Defense in depth, even against our own code -- e.g.,
+    `safe_delete` checks for reparse points even when the classifier
+    said it's a regular directory.
+
+### Architectural outcome
+safedel now has a clean one-way dependency on filekit for primitives
+and a minimal dependency on preservelib (shim only). The layering rule
+documented in the integration analysis
+(`2026-04-10__20-31-07__preservelib-filekit-integration.md`) is now
+enforced in practice, not just on paper: filekit = primitives,
+preservelib = workflow, safedel = tool.
+
+### Test counts
+- Windows: 144 passed, 7 skipped (127 pre-Phase-8 + 17 new golden
+  invariants)
+- WSL Ubuntu-22.04: 124 passed, 27 skipped
+
 ## [0.7.9] - 2026-04-10
 
 ### Added

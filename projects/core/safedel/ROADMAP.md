@@ -48,6 +48,35 @@ Multi-store list/recover/clean. Test isolation via explicit `registry_path`.
   stored as base64 in manifest. Skips `com.apple.quarantine`.
 - 29 new tests (127 Windows, 107 WSL).
 
+### Phase 8 -- filekit v0.2.4 primitives migration (commit d5a56b3, no version bump)
+
+Internal refactor to use dazzle-filekit v0.2.4 primitives instead of
+duplicated code. No user-visible behavior change; pure cleanup.
+
+- `_save_manifest` and `save_registry` replaced with
+  `dazzle_filekit.operations.atomic_write_json`. Removes two separate
+  copies of the tmp-write + os.replace dance.
+- `shutil.copytree(..., symlinks=True)` replaced with
+  `dazzle_filekit.operations.copy_tree_preserving_links` in both
+  `_stage_regular` and `_recover_entry` dir branches. Filekit's wrapper
+  enforces `symlinks=True` and rejects reparse-point roots as a defense-
+  in-depth safety net.
+- `_lib/preservelib/metadata.py` replaced with a 74-line re-export shim
+  pointing at `dazzle_filekit.metadata`. safedel's existing
+  `from preservelib.metadata import ...` imports continue to work; the
+  actual code now lives once, in filekit. Net -514 lines of duplicated
+  code eliminated.
+- 17 new golden invariant tests added as a permanent regression safety
+  net, capturing safedel's end-state guarantees (classification
+  determinism, roundtrip metadata preservation, manifest schema stability,
+  folder naming, dry-run invariants).
+
+Architectural outcome: safedel now has a clean one-way dependency on
+filekit for primitives and a minimal dependency on preservelib (shim).
+The layering rule documented in the integration analysis
+(`2026-04-10__20-31-07__preservelib-filekit-integration.md`) is now
+enforced in practice, not just on paper.
+
 ## Candidate Future Phases
 
 These are not formally planned. They're captured here so the ideas aren't lost.
@@ -141,8 +170,10 @@ These should guide any future work:
 3. **Platform parity where possible**. Same conceptual model on Windows, Mac,
    Linux, WSL, even when the underlying APIs differ.
 4. **Prefer platform libraries over reimplementation**. Use dazzle-filekit
-   for path/disk operations, unctools for drive detection, preservelib for
-   manifest/metadata. Don't reinvent.
+   for path/disk operations, metadata capture/apply, atomic writes, and
+   link-safe tree copy; unctools for Windows drive detection; preservelib
+   for manifest format. When you spot duplicated code between safedel and
+   a shared library, the shared library wins -- migrate safedel to use it.
 5. **Metadata fidelity proportional to staging path**. Same-device rename
    preserves everything; cross-device copy preserves what the platform allows
    and records what it can't in the manifest.
@@ -150,3 +181,12 @@ These should guide any future work:
    what they should check before cleaning up, rather than just blocking them.
 7. **Test isolation**. The tool's own test suite must be isolated from user
    data and from other test runs.
+8. **Golden invariants over text-based goldens**. When we need to prove
+   "no behavior change across a refactor", we capture end-state properties
+   (classification determinism, roundtrip metadata preservation, manifest
+   schema stability) rather than text fixtures that drift with timestamps
+   and paths. See `tests/test_golden_invariants.py` for the model.
+9. **Defense in depth, even against our own code**. `safe_delete` checks
+   for reparse points even when the classifier said it's a regular
+   directory -- because the cost of a wrong `shutil.rmtree` on a junction
+   is catastrophic. Apply the same rule to any safety-critical code path.
