@@ -139,15 +139,15 @@ def _build_categorized_help(projects):
         ("version", "Show version info"),
     ]
 
-    # Group tools by namespace (kit)
+    # Group tools by kit import name (the top-level kit a tool belongs to)
     namespaces = {}
     for project in projects:
         name = project["name"]
         if name in RESERVED_COMMANDS:
             continue
-        ns = project.get("namespace", "other")
+        kit = project.get("_kit_import_name") or project.get("namespace", "other")
         desc = project.get("description", "")
-        namespaces.setdefault(ns, []).append((name, desc))
+        namespaces.setdefault(kit, []).append((name, desc))
 
     # Detect terminal width for description truncation
     import shutil
@@ -305,10 +305,11 @@ def _cmd_list(args, projects):
             if args.tag in p.get("taxonomy", {}).get("tags", [])
         ]
     if args.kit:
-        # Filter by kit name — find tools in that kit
-        kit_tools = set()
-        # We'd need access to kits here; for now filter by namespace as proxy
-        filtered = [p for p in filtered if p.get("namespace") == args.kit]
+        # Filter by kit import name (the top-level kit a tool belongs to)
+        filtered = [
+            p for p in filtered
+            if p.get("_kit_import_name") == args.kit
+        ]
 
     if not filtered:
         print("No tools found.")
@@ -316,26 +317,24 @@ def _cmd_list(args, projects):
 
     # Table output
     name_width = max(len(p["name"]) for p in filtered)
-    ns_width = max(len(p.get("namespace", "")) for p in filtered)
+    kit_width = max(len(p.get("_kit_import_name", "")) for p in filtered)
+    kit_width = max(kit_width, len("Kit"))
 
-    header = f"  {'Name':<{name_width}}  {'Namespace':<{ns_width}}  Description"
+    header = f"  {'Name':<{name_width}}  {'Kit':<{kit_width}}  Description"
     print(header)
     print("  " + "-" * (len(header) - 2))
 
     import shutil
     term_width = shutil.get_terminal_size((80, 24)).columns
-    # Column where description starts
-    desc_col = 2 + name_width + 2 + ns_width + 2  # indent + name + gap + ns + gap
+    desc_col = 2 + name_width + 2 + kit_width + 2
     desc_max = term_width - desc_col
 
     for project in filtered:
         name = project["name"]
-        ns = project.get("namespace", "")
+        kit = project.get("_kit_import_name", "")
         desc = project.get("description", "")
         wrapped = _wrap_description(desc, desc_max)
-        # First line includes name and namespace
-        print(f"  {name:<{name_width}}  {ns:<{ns_width}}  {wrapped[0]}")
-        # Continuation lines aligned to description column
+        print(f"  {name:<{name_width}}  {kit:<{kit_width}}  {wrapped[0]}")
         indent = " " * desc_col
         for line in wrapped[1:]:
             print(f"{indent}{line}")
@@ -347,7 +346,12 @@ def _cmd_list(args, projects):
 def _cmd_info(args, projects):
     """Show detailed info about a tool."""
     tool_name = args.tool
-    matches = [p for p in projects if p["name"] == tool_name]
+
+    # Accept FQCN input (e.g., 'wtf:core:locked') as well as short name
+    if ":" in tool_name:
+        matches = [p for p in projects if p.get("_fqcn") == tool_name]
+    else:
+        matches = [p for p in projects if p["name"] == tool_name]
 
     if not matches:
         print(f"Tool '{tool_name}' not found. Use 'dz list' to see available tools.")
@@ -356,12 +360,14 @@ def _cmd_info(args, projects):
     if len(matches) > 1:
         print(f"Multiple tools named '{tool_name}':")
         for p in matches:
-            print(f"  {p['namespace']}:{p['name']}")
-        print(f"Use 'dz info namespace:{tool_name}' to be specific.")
+            print(f"  {p.get('_fqcn', p['name'])}")
+        print(f"Use 'dz info <fqcn>' to be specific.")
         return 1
 
     project = matches[0]
     print(f"Name:        {project['name']}")
+    print(f"FQCN:        {project.get('_fqcn', 'unknown')}")
+    print(f"Kit:         {project.get('_kit_import_name', 'unknown')}")
     print(f"Namespace:   {project.get('namespace', 'unknown')}")
     print(f"Version:     {project.get('version', 'unknown')}")
     print(f"Description: {project.get('description', '')}")

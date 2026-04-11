@@ -1,5 +1,8 @@
 {
     "name": "wtf",
     "always_active": false,
-    "source": "https://github.com/djdarcy/wtf-windows.git"
+    "source": "https://github.com/djdarcy/wtf-windows.git",
+    "_override_tools_dir": "tools",
+    "_override_manifest": ".wtf.json",
+    "_override_note": "Temporary override while wtf-windows upstream adds tools_dir and manifest to its own kits/core.kit.json. Remove once upstream commits the fields."
 }

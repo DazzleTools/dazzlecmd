@@ -4,6 +4,91 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.9] - 2026-04-10
+
+### Added
+- **Recursive aggregator discovery** (Phase 2): kits whose directory contains
+  a `kits/` subdirectory are now treated as nested aggregators. The engine
+  instantiates a child `AggregatorEngine(is_root=False)` for each, discovers
+  its structure independently, namespace-remaps the returned tools, and
+  merges them into the parent's project list.
+- **FQCN dispatch**: every tool is addressable by its fully qualified
+  collection name (`kit:namespace:tool`, e.g., `wtf:core:restarted`). Short
+  names still work when unambiguous.
+- **Precedence-aware resolution**: when a short name resolves to multiple
+  tools, the engine picks by precedence (core wins by default) and prints
+  a stderr notification showing the picked tool and alternatives. Users
+  can override precedence via `~/.dazzlecmd/config.json` `kit_precedence`
+  list. Silenceable via `DZ_QUIET=1`.
+- `FQCNIndex` class (`engine.py`): dual-index data structure with
+  `fqcn_index` (exact match) and `short_index` (candidate lookup for
+  precedence resolution).
+- `CircularDependencyError`: loading-stack cycle detection via
+  `os.path.realpath()` keys prevents infinite recursion when an aggregator
+  tree contains a cycle.
+- **Rerooting hint**: nesting depth is unlimited, but when discovery
+  surfaces a tool with 4+ FQCN segments the engine prints a one-time
+  hint suggesting the user consider extracting that subtree as a
+  standalone install (PyPI package, separate `dz`-pattern aggregator).
+  This implements the *primacy* principle: any tool or aggregator can
+  become its own root based on how the user wants to access it. Example:
+  `dz safedel` today, `safedel` tomorrow once safedel ships standalone --
+  both paths coexist. Hint is silenceable via `DZ_QUIET=1`. Per-tool
+  silencing and tool shadowing deferred to #26 (Phase 3).
+- `is_root=False` propagation: imported aggregators suppress meta-commands
+  (`list`, `info`, `kit`, etc.) and expose only their tools.
+- `_fqcn`, `_short_name`, `_kit_import_name` fields on every project dict
+  for traceability and correct display.
+- `dz info` now shows `FQCN` and `Kit` fields. Accepts FQCN input:
+  `dz info wtf:core:locked`.
+- `dz list` column changed from "Namespace" to "Kit" -- shows the actual
+  import-level kit a tool came from, not the raw internal namespace.
+- `dz list --kit wtf` now filters by kit import name, not raw namespace.
+- Tests: 15 new recursive discovery tests (`test_engine_recursive.py`),
+  24 new FQCN index/resolver tests (`test_engine_fqcn.py`), 11 one-off
+  prototype tests (`tests/one-offs/test_fqcn_prototype.py`).
+
+### Changed
+- `loader.py:_scan_tool_dirs` dedupes by `(namespace, tool_name)` tuple
+  instead of bare short name, preventing silent drops when recursive
+  discovery introduces tools with colliding short names.
+- `loader.py:discover_projects` namespace extraction uses `rsplit(":", 1)`
+  to handle 3-part FQCNs like `wtf:core:restarted` (was `split(":")[0]`).
+- `loader.py:discover_projects` accepts a `default_manifest` parameter so
+  child engines with custom manifest names (e.g., `.wtf.json`) work.
+- `loader.py:discover_kits` propagates `_override_tools_dir` and
+  `_override_manifest` from registry pointers, enabling temporary
+  parent-level overrides when a nested aggregator's in-repo manifest is
+  missing tools_dir/manifest declarations.
+- `engine.run()` dispatches tools through `resolve_command()` instead of
+  `p["name"] == command_name`, enabling both FQCN and precedence-aware
+  short-name dispatch.
+- `kits/wtf.kit.json` temporarily declares `_override_tools_dir: "tools"`
+  and `_override_manifest: ".wtf.json"` until the wtf-windows upstream
+  commits these fields into its own `kits/core.kit.json` (see #28).
+
+### Forward pointers
+- Phase 3 work: kit management UI, per-tool silencing (#26),
+  `dz kit enable/disable/shadow` commands, config write path.
+- Phase 4 work: `dazzlecmd-lib` engine extraction as importable library
+  (#27), wtf-windows full integration experiment (#28), ecosystem
+  scaffolding.
+
+### Versioning note
+Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's
+convention of treating architectural-phase work as incremental within
+the current MINOR. Phase 1 (AggregatorEngine, v0.7.1) set this precedent.
+The MINOR/MAJOR bump is reserved for the completion milestone of the
+architectural refactor -- likely when `dazzlecmd-lib` extracts (#27) and
+wtf-windows validates the library layering (#28).
+
+### Design
+- 9-axis DEV WORKFLOW PROCESS analysis
+  (`2026-04-10__12-15-00__dev-workflow-process_phase2-recursive-fqcn-dispatch.md`)
+- Oracle agent trace of architectural history and existing dispatch code
+- FQCN prototype in `tests/one-offs/` validated data structure before
+  engine integration
+
 ## [0.7.8] - 2026-04-10
 
 ### Added

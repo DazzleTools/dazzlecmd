@@ -44,12 +44,18 @@ def discover_kits(kits_dir, projects_dir=None):
 
         if in_repo:
             # In-repo manifest is the base; registry overrides activation
+            # and carries any explicit parent-level overrides.
             kit = dict(in_repo)
             # Registry overrides these fields only
             if "always_active" in registry:
                 kit["always_active"] = registry["always_active"]
             if "source" in registry:
                 kit["source"] = registry["source"]
+            # Parent-level overrides (used when a nested aggregator's
+            # in-repo manifest is missing tools_dir/manifest declarations)
+            for override_key in ("_override_tools_dir", "_override_manifest"):
+                if override_key in registry:
+                    kit[override_key] = registry[override_key]
         else:
             # No in-repo manifest -- registry IS the full definition (legacy mode)
             kit = dict(registry)
@@ -145,18 +151,23 @@ def get_active_kits(kits):
     return list(kits)
 
 
-def discover_projects(projects_dir, active_kits=None):
+def discover_projects(projects_dir, active_kits=None, default_manifest=".dazzlecmd.json"):
     """Walk projects/<namespace>/<tool>/ directories for tool manifests.
 
     Scans the default projects/ directory, plus any kit-specific tools_dir
     paths declared by active kits. Kits can declare a custom manifest
-    filename via the "manifest" field (default: ".dazzlecmd.json").
+    filename via the "manifest" field (default: ``default_manifest``).
+
+    Args:
+        projects_dir: The base directory to scan.
+        active_kits: If provided, only projects listed in active kits are
+                     returned. If None, all discovered projects are returned.
+        default_manifest: Manifest filename to try when a kit does not
+                          declare one. Child engines pass their own default
+                          (e.g., ``.wtf.json``) instead of ``.dazzlecmd.json``.
 
     Returns a list of project dicts with resolved metadata.
     Each project dict has at minimum: name, namespace, description, runtime, _dir.
-
-    If active_kits is provided, only projects listed in active kits are returned.
-    If active_kits is None, all discovered projects are returned.
     """
     projects = []
     if not os.path.isdir(projects_dir):
@@ -172,12 +183,15 @@ def discover_projects(projects_dir, active_kits=None):
     if active_kits is not None:
         kit_tools = set()
         for kit in active_kits:
-            manifest_name = kit.get("manifest", ".dazzlecmd.json")
+            manifest_name = kit.get("manifest", default_manifest)
             for tool_ref in kit.get("tools", []):
                 kit_tools.add(tool_ref)
-                # Track manifest name per namespace
+                # Track manifest name per namespace. FQCNs may have 2+
+                # segments (``core:rn`` or ``wtf:core:restarted``); the
+                # namespace for flat scanning is the LAST segment before
+                # the tool name.
                 if ":" in tool_ref:
-                    ns = tool_ref.split(":")[0]
+                    ns = tool_ref.rsplit(":", 1)[0].split(":")[-1]
                     kit_manifest_names[ns] = manifest_name
 
             # If kit declares a tools_dir, queue it for scanning
@@ -188,7 +202,7 @@ def discover_projects(projects_dir, active_kits=None):
                     extra_tool_dirs.append((abs_tools_dir, manifest_name))
 
     # Scan default projects/<namespace>/<tool>/
-    _scan_tool_dirs(projects_dir, ".dazzlecmd.json", kit_tools,
+    _scan_tool_dirs(projects_dir, default_manifest, kit_tools,
                     kit_manifest_names, projects)
 
     # Scan kit-specific tools_dir paths
@@ -207,9 +221,10 @@ def _scan_tool_dirs(base_dir, default_manifest, kit_tools,
     declared manifest name if available, otherwise falls back to
     default_manifest.
     """
-    # Track already-discovered tool names to avoid duplicates from
-    # multiple scan paths
-    seen = {p["name"] for p in projects}
+    # Track already-discovered tool identities. Dedup by (namespace, tool_name)
+    # to preserve distinct tools that share a short name across kits
+    # (e.g., core:find and wtf:core:find).
+    seen = {(p.get("namespace", ""), p["name"]) for p in projects}
 
     for namespace in sorted(os.listdir(base_dir)):
         ns_dir = os.path.join(base_dir, namespace)
@@ -224,7 +239,8 @@ def _scan_tool_dirs(base_dir, default_manifest, kit_tools,
             if not os.path.isdir(tool_dir) or tool_name.startswith("."):
                 continue
 
-            if tool_name in seen:
+            key = (namespace, tool_name)
+            if key in seen:
                 continue
 
             manifest_path = os.path.join(tool_dir, manifest_name)
@@ -259,7 +275,7 @@ def _scan_tool_dirs(base_dir, default_manifest, kit_tools,
                     continue
 
                 projects.append(project)
-                seen.add(tool_name)
+                seen.add(key)
             except Exception as exc:
                 print(
                     f"Warning: Could not load project {namespace}/{tool_name}: {exc}",
