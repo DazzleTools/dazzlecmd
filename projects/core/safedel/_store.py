@@ -516,12 +516,9 @@ class TrashStore:
     def _save_manifest(
         self, manifest: Dict[str, Any], path: str
     ) -> None:
-        """Save manifest atomically (write .tmp then rename)."""
-        tmp_path = path + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(manifest, f, indent=2, default=str)
-            f.write("\n")
-        os.replace(tmp_path, path)
+        """Save manifest atomically via dazzle_filekit.operations.atomic_write_json."""
+        from dazzle_filekit.operations import atomic_write_json
+        atomic_write_json(path, manifest, indent=2, default=str)
 
     def _load_trash_folder(self, folder_name: str, store_path: Optional[str] = None) -> Optional[TrashFolder]:
         """Load a TrashFolder from disk."""

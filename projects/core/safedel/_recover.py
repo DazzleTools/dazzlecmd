@@ -335,7 +335,8 @@ def _recover_entry(
         elif content_path and os.path.exists(content_path):
             # Move content back
             if os.path.isdir(content_path):
-                shutil.copytree(content_path, target, symlinks=True)
+                from dazzle_filekit.operations import copy_tree_preserving_links
+                copy_tree_preserving_links(content_path, target)
                 shutil.rmtree(content_path)
             else:
                 shutil.copy2(content_path, target)

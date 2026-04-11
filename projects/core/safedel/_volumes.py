@@ -331,11 +331,11 @@ def save_registry(
     registry: Dict[str, VolumeTrashInfo],
     registry_path: Optional[str] = None,
 ) -> None:
-    """Save the volume registry atomically."""
+    """Save the volume registry atomically via dazzle_filekit.operations.atomic_write_json."""
+    from dazzle_filekit.operations import atomic_write_json
+
     if registry_path is None:
         registry_path = get_registry_path()
-
-    os.makedirs(os.path.dirname(registry_path), exist_ok=True)
 
     data = {
         serial: {
@@ -349,11 +349,7 @@ def save_registry(
         for serial, info in registry.items()
     }
 
-    tmp_path = registry_path + ".tmp"
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-        f.write("\n")
-    os.replace(tmp_path, registry_path)
+    atomic_write_json(registry_path, data, indent=2)
 
 
 def register_volume(

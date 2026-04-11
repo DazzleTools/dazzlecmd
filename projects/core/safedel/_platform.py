@@ -222,11 +222,13 @@ def _stage_regular(
     warnings = []
     try:
         if classification.is_dir:
-            shutil.copytree(
-                source_path, dest_path,
-                symlinks=True,  # CRITICAL: never follow symlinks in trees
-                copy_function=shutil.copy2,  # Preserve metadata
-            )
+            from dazzle_filekit.operations import copy_tree_preserving_links
+            # filekit's copy_tree_preserving_links enforces symlinks=True and
+            # rejects reparse-point roots for defense-in-depth. safedel's
+            # classifier has already verified this is a REGULAR directory
+            # (symlinks and junctions go through _stage_link), so passing
+            # here should succeed.
+            copy_tree_preserving_links(source_path, dest_path)
         else:
             shutil.copy2(source_path, dest_path)
 
