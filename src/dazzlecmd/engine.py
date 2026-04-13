@@ -83,7 +83,7 @@ class FQCNIndex:
         if kit not in self.kit_order:
             self.kit_order.append(kit)
 
-    def resolve(self, name, precedence=None):
+    def resolve(self, name, precedence=None, favorites=None):
         """Resolve a command name to a (project, notification) tuple.
 
         Args:
@@ -91,28 +91,94 @@ class FQCNIndex:
                   or a short name.
             precedence: Optional ordered list of kit names that overrides the
                         default precedence order for short-name resolution.
+            favorites: Optional dict of ``{short_name: fqcn}`` mapping. If a
+                       short name is in favorites, the favorite's FQCN is
+                       looked up directly, bypassing precedence resolution.
+                       Stale favorites (FQCN not in index) produce a warning
+                       notification and fall through to precedence.
 
         Returns:
             ``(project, notification)`` on success, where ``notification`` is
-            a stderr-ready string if the resolution was ambiguous, or ``None``
-            if unambiguous. Returns ``(None, None)`` if no project matches.
+            a stderr-ready string if the resolution was ambiguous or stale,
+            or ``None`` if unambiguous. Returns ``(None, None)`` if no
+            project matches.
         """
-        # Exact FQCN match
+        # Exact FQCN match -- always wins, bypasses favorites and precedence
         if ":" in name:
             project = self.fqcn_index.get(name)
             if project is not None:
                 return project, None
+
+            # Kit-qualified shortcut: "wtf:locked" means "search within
+            # the wtf kit for a tool named locked." This handles the
+            # common case where "core" (or any internal namespace) is
+            # omitted. Split on the first ":" to get (kit_prefix, tool).
+            kit_prefix, _, tool_suffix = name.partition(":")
+            if tool_suffix and ":" not in tool_suffix:
+                # Only applies to 2-segment names (kit:tool), not to
+                # malformed 3+ segment names that didn't exact-match.
+                matches = [
+                    fqcn for fqcn in self.fqcn_index
+                    if fqcn.startswith(kit_prefix + ":")
+                    and fqcn.rsplit(":", 1)[-1] == tool_suffix
+                ]
+                if len(matches) == 1:
+                    return self.fqcn_index[matches[0]], None
+                if len(matches) > 1:
+                    display = ", ".join(matches)
+                    notification = (
+                        f"dz: '{name}' is ambiguous within kit "
+                        f"'{kit_prefix}': {display}. "
+                        f"Use the full FQCN to be explicit."
+                    )
+                    # Pick the first alphabetically (stable)
+                    return self.fqcn_index[sorted(matches)[0]], notification
+
             return None, None
 
-        # Short name
+        # Short name path
         candidates = self.short_index.get(name, [])
+
+        # Favorite short-circuit: if a favorite is set for this name, use it
+        # unconditionally (before checking candidates count). Stale favorites
+        # fall through to precedence with a warning.
+        if favorites and name in favorites:
+            favorite_fqcn = favorites[name]
+            favorite_project = self.fqcn_index.get(favorite_fqcn)
+            if favorite_project is not None:
+                return favorite_project, None
+            # Stale favorite -- fall through with a warning
+            stale_note = (
+                f"dz: warning: favorite '{name}' -> '{favorite_fqcn}' "
+                f"not found (tool may have been removed, renamed, or "
+                f"shadowed). Falling through to precedence."
+            )
+            if not candidates:
+                return None, stale_note
+            if len(candidates) == 1:
+                return self.fqcn_index[candidates[0]], stale_note
+            # Stale + ambiguous: combine the stale note with the resolution note
+            order = self._effective_precedence(precedence)
+            ranked = self._rank_by_precedence(candidates, order)
+            picked_fqcn = ranked[0]
+            other_fqcns = ranked[1:]
+            project = self.fqcn_index[picked_fqcn]
+            others_display = ", ".join(self._kit_of(f) for f in other_fqcns)
+            combined = (
+                stale_note
+                + f"\ndz: '{name}' resolved to {picked_fqcn} "
+                f"(also in: {others_display}). "
+                f"Use 'dz {picked_fqcn}' to be explicit."
+            )
+            return project, combined
+
         if not candidates:
             return None, None
 
         if len(candidates) == 1:
             return self.fqcn_index[candidates[0]], None
 
-        # Multiple candidates — apply precedence
+        # Multiple candidates -- apply precedence
         order = self._effective_precedence(precedence)
         ranked = self._rank_by_precedence(candidates, order)
 
@@ -214,6 +280,7 @@ class AggregatorEngine:
         self.projects = []
         self.fqcn_index = FQCNIndex()
         self._precedence_cache = None
+        self._config_cache = None
 
     def find_project_root(self, start_path=None):
         """Find the project root by looking for tools_dir/ and kits_dir/.
@@ -257,9 +324,17 @@ class AggregatorEngine:
             return
 
         loading_stack = frozenset()
-        self.projects = self._discover_aggregator(
+        all_discovered = self._discover_aggregator(
             self.project_root, loading_stack, depth=0, kit_prefix=None
         )
+
+        # Partition: all_projects has everything (for display commands like
+        # `dz tree --show-disabled`); projects has active-only (for dispatch
+        # and the FQCN index). Shadowing is already applied to `all_discovered`
+        # at the top level of _discover_aggregator.
+        self.all_projects = all_discovered
+        self.projects = [p for p in all_discovered if p.get("_kit_active", True)]
+
         self._build_fqcn_index()
         self._maybe_emit_reroot_hint()
 
@@ -298,7 +373,15 @@ class AggregatorEngine:
         tools_path = os.path.join(project_root, self.tools_dir)
 
         kits = discover_kits(kits_path, tools_path)
-        active_kits = get_active_kits(kits)
+        # At the top level, compute which kits are active so we can tag
+        # projects with _kit_active. We discover ALL kits (not just active)
+        # so that display commands like `dz tree --show-disabled` can show
+        # disabled kits with their full tool trees.
+        user_config = self._get_user_config() if (depth == 0 and self.is_root) else None
+        active_kits = get_active_kits(kits, user_config=user_config)
+        active_kit_names = {
+            k.get("_kit_name") or k.get("name") for k in active_kits
+        }
 
         # Expose discovered kits at the top level (for meta-commands like
         # `dz kit list` and `dz kit status`)
@@ -306,10 +389,10 @@ class AggregatorEngine:
             self.kits = kits
             self.active_kits = active_kits
 
-        # Partition kits into flat vs. nested-aggregator kits
+        # Partition ALL kits (not just active) into flat vs. nested
         flat_kits = []
         nested = []  # list of (kit_dict, candidate_root_dir)
-        for kit in active_kits:
+        for kit in kits:
             kit_name = kit.get("_kit_name") or kit.get("name")
             candidate_root = os.path.join(tools_path, kit_name)
             if os.path.isdir(os.path.join(candidate_root, "kits")):
@@ -323,16 +406,24 @@ class AggregatorEngine:
             tools_path, flat_kits, default_manifest=self.manifest
         )
 
-        # Annotate flat projects with FQCN metadata
+        # Annotate flat projects with FQCN metadata and active status
         for project in projects:
             self._annotate_project_fqcn(project, kit_prefix)
+            kit = project.get("_kit_import_name", "")
+            project["_kit_active"] = kit in active_kit_names
 
         # Recursive discovery for nested aggregators
         for kit, nested_root in nested:
+            kit_name = kit.get("_kit_name") or kit.get("name")
             try:
                 nested_projects = self._recurse_into_nested(
                     kit, nested_root, new_stack, depth, kit_prefix
                 )
+                # Tag nested projects with active status based on the
+                # parent's view of whether this kit is active
+                kit_is_active = kit_name in active_kit_names
+                for p in nested_projects:
+                    p["_kit_active"] = kit_is_active
                 projects.extend(nested_projects)
             except CircularDependencyError:
                 # Propagate cycle errors — these are unrecoverable
@@ -344,6 +435,23 @@ class AggregatorEngine:
                     f"'{kit_name}' at {nested_root}: {exc}",
                     file=sys.stderr,
                 )
+
+        # Shadowing: at the top level, filter out projects whose FQCN is
+        # listed in the user's shadowed_tools config. This removes them from
+        # engine.projects before the FQCN index is built, so they don't
+        # appear in dz list, aren't dispatchable, and their short names are
+        # freed for other tools with the same short name.
+        #
+        # Applied only at depth == 0 so the user's shadow list is consulted
+        # once for the entire aggregator tree.
+        if depth == 0:
+            shadowed = self._get_config_list("shadowed_tools", default=[]) or []
+            if shadowed:
+                shadowed_set = set(shadowed)
+                projects = [
+                    p for p in projects
+                    if p.get("_fqcn", "") not in shadowed_set
+                ]
 
         return projects
 
@@ -450,8 +558,9 @@ class AggregatorEngine:
         chooses primacy based on usage.
 
         The hint fires once per top-level discovery, only when at least one
-        tool's FQCN has 3+ colons (4+ segments). Silenceable via
-        ``DZ_QUIET=1``.
+        non-silenced tool's FQCN has 3+ colons (4+ segments). Silenceable
+        globally via ``DZ_QUIET=1``, or per-tool/per-kit via the config keys
+        ``silenced_hints.tools`` and ``silenced_hints.kits``.
         """
         if not self.is_root:
             return
@@ -460,12 +569,27 @@ class AggregatorEngine:
         if os.environ.get("DZ_QUIET"):
             return
 
-        max_colons = max(p.get("_fqcn", "").count(":") for p in self.projects)
+        # Consult silenced_hints to filter out tools the user has acknowledged.
+        # A tool is silenced if its FQCN is in silenced_hints.tools OR its
+        # top-level kit (_kit_import_name) is in silenced_hints.kits.
+        silenced = self._get_config_dict("silenced_hints", default={})
+        silenced_tool_set = set(silenced.get("tools", []) or [])
+        silenced_kit_set = set(silenced.get("kits", []) or [])
+
+        candidates = [
+            p for p in self.projects
+            if p.get("_fqcn", "") not in silenced_tool_set
+            and p.get("_kit_import_name", "") not in silenced_kit_set
+        ]
+        if not candidates:
+            return
+
+        max_colons = max(p.get("_fqcn", "").count(":") for p in candidates)
         if max_colons < 3:
             return
 
         deepest = max(
-            self.projects, key=lambda p: p.get("_fqcn", "").count(":")
+            candidates, key=lambda p: p.get("_fqcn", "").count(":")
         )
         fqcn = deepest["_fqcn"]
         segments = max_colons + 1
@@ -473,63 +597,208 @@ class AggregatorEngine:
             f"dz: hint: deeply nested tool '{fqcn}' ({segments} segments). "
             f"If used often, consider rerooting -- extract this subtree as a "
             f"standalone install so it can be invoked directly. Set DZ_QUIET=1 "
-            f"to silence.",
+            f"or 'dz kit silence {fqcn}' to silence.",
             file=sys.stderr,
         )
 
-    def get_kit_precedence(self):
-        """Return the user's kit_precedence list from config, or None.
+    # ----------------------------------------------------------------
+    # User config read/write path
+    # ----------------------------------------------------------------
+    #
+    # Config file: ~/.dazzlecmd/config.json
+    #
+    # Schema (Phase 3):
+    #     {
+    #         "_schema_version": 1,
+    #         "kit_precedence": [...],
+    #         "active_kits": [...],
+    #         "disabled_kits": [...],
+    #         "favorites": {"short": "fqcn", ...},
+    #         "silenced_hints": {"tools": [...], "kits": [...]},
+    #         "shadowed_tools": [...],
+    #         "kit_discovery": "auto"
+    #     }
+    #
+    # All keys are optional. Missing keys fall back to sensible defaults.
+    # Malformed entries (wrong type, bad JSON) are tolerated with a stderr
+    # warning and the malformed key is treated as absent.
 
-        Reads ``~/.dazzlecmd/config.json`` looking for a ``kit_precedence``
-        key. Returns ``None`` if the file doesn't exist or the key is absent,
-        in which case ``FQCNIndex.resolve()`` falls back to the default
-        precedence (core first, dazzletools second, then discovery order).
+    _SCHEMA_VERSION = 1
 
-        Cached on first call.
+    def _config_path(self):
+        """Return the active config file path.
+
+        Computed lazily via ``os.path.expanduser("~/.dazzlecmd/config.json")``
+        so that tests that monkey-patch ``HOME`` / ``USERPROFILE`` after
+        import see the right path. Overridable entirely via the
+        ``DAZZLECMD_CONFIG`` environment variable.
         """
-        if self._precedence_cache is not None:
-            return self._precedence_cache
+        override = os.environ.get("DAZZLECMD_CONFIG")
+        if override:
+            return override
+        return os.path.expanduser("~/.dazzlecmd/config.json")
 
-        # Sentinel -- we want to cache the None result too, but distinguish
-        # "not yet looked up" from "looked up and absent"
-        self._precedence_cache = []
+    def _config_dir(self):
+        """Return the directory containing the active config file."""
+        return os.path.dirname(self._config_path())
 
-        config_path = os.path.expanduser("~/.dazzlecmd/config.json")
-        if not os.path.isfile(config_path):
-            return None
+    def _get_user_config(self):
+        """Return the parsed ``~/.dazzlecmd/config.json`` as a dict.
+
+        Reads the file once and caches. Tolerates:
+
+        - Missing file (returns empty dict)
+        - Malformed JSON (warns on stderr, returns empty dict)
+        - Missing keys (callers apply their own defaults)
+
+        Individual key type validation is the caller's responsibility --
+        e.g., ``_get_config_list("kit_precedence")`` validates that the
+        value is a list before returning it.
+        """
+        if self._config_cache is not None:
+            return self._config_cache
+
+        path = self._config_path()
+        if not os.path.isfile(path):
+            self._config_cache = {}
+            return self._config_cache
 
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(path, "r", encoding="utf-8") as f:
                 config = json.load(f)
         except (json.JSONDecodeError, OSError) as exc:
-            print(f"Warning: could not read {config_path}: {exc}", file=sys.stderr)
-            return None
-
-        precedence = config.get("kit_precedence")
-        if not precedence:
-            return None
-
-        if not isinstance(precedence, list):
             print(
-                f"Warning: kit_precedence in {config_path} is not a list, "
-                f"ignoring",
+                f"Warning: could not read {path}: {exc}",
                 file=sys.stderr,
             )
-            return None
+            self._config_cache = {}
+            return self._config_cache
 
-        self._precedence_cache = precedence
-        return precedence
+        if not isinstance(config, dict):
+            print(
+                f"Warning: {path} is not a JSON object, ignoring",
+                file=sys.stderr,
+            )
+            self._config_cache = {}
+            return self._config_cache
+
+        self._config_cache = config
+        return self._config_cache
+
+    def _get_config_list(self, key, default=None):
+        """Return a list-valued config key, validated.
+
+        Returns ``default`` (or ``None``) if the key is absent or malformed.
+        Emits a stderr warning on malformed values.
+        """
+        config = self._get_user_config()
+        value = config.get(key)
+        if value is None:
+            return default
+        if not isinstance(value, list):
+            print(
+                f"Warning: config key '{key}' is not a list, ignoring",
+                file=sys.stderr,
+            )
+            return default
+        return value
+
+    def _get_config_dict(self, key, default=None):
+        """Return a dict-valued config key, validated."""
+        config = self._get_user_config()
+        value = config.get(key)
+        if value is None:
+            return default if default is not None else {}
+        if not isinstance(value, dict):
+            print(
+                f"Warning: config key '{key}' is not a dict, ignoring",
+                file=sys.stderr,
+            )
+            return default if default is not None else {}
+        return value
+
+    def _write_user_config(self, updates):
+        """Merge ``updates`` into the user config and write atomically.
+
+        ``updates`` is a dict of top-level keys to set. Keys not mentioned
+        in ``updates`` are preserved (merge semantics). The write is atomic:
+        data is written to a temp file in the same directory, then
+        ``os.replace()`` moves it into place. Creates the config directory
+        on first write.
+
+        Schema version field is injected if missing. The config cache is
+        invalidated so subsequent reads see the new state.
+
+        Example:
+            engine._write_user_config({"active_kits": ["core", "wtf"]})
+        """
+        path = self._config_path()
+        dir_ = self._config_dir()
+
+        # Read existing config so we can merge (tolerant of missing/malformed)
+        existing = {}
+        if os.path.isfile(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    existing = loaded
+            except (json.JSONDecodeError, OSError):
+                # Malformed existing config -- start fresh rather than
+                # propagate the corruption. User's explicit write intent
+                # takes precedence over unreadable old state.
+                existing = {}
+
+        existing.setdefault("_schema_version", self._SCHEMA_VERSION)
+        existing.update(updates)
+
+        os.makedirs(dir_, exist_ok=True)
+
+        # Atomic write: temp file in same dir, then os.replace().
+        # tempfile.NamedTemporaryFile's delete=False gives us a stable path.
+        import tempfile
+        fd, tmp_path = tempfile.mkstemp(
+            prefix=".config.json.", suffix=".tmp", dir=dir_
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(existing, f, indent=4, sort_keys=False)
+                f.write("\n")
+            os.replace(tmp_path, path)
+        except Exception:
+            # Clean up temp file on any error before it lands
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
+        # Invalidate cache so subsequent _get_user_config reads see the write
+        self._config_cache = None
+        self._precedence_cache = None
+
+    def get_kit_precedence(self):
+        """Return the user's ``kit_precedence`` list from config, or None.
+
+        Thin backwards-compat wrapper over ``_get_config_list("kit_precedence")``.
+        Kept for callers that exist from Phase 2 (v0.7.9).
+        """
+        return self._get_config_list("kit_precedence")
 
     def resolve_command(self, name):
         """Resolve a command name to a (project, notification) tuple.
 
-        Thin wrapper over ``FQCNIndex.resolve()`` that applies the user's
-        kit precedence from config.
+        Applies user-configured favorites first (if ``name`` is a favorite,
+        return the favorite's target), then falls through to
+        ``FQCNIndex.resolve()`` with the user's ``kit_precedence``.
 
         Returns ``(None, None)`` if no project matches.
         """
+        favorites = self._get_config_dict("favorites")
         precedence = self.get_kit_precedence()
-        return self.fqcn_index.resolve(name, precedence=precedence)
+        return self.fqcn_index.resolve(
+            name, precedence=precedence, favorites=favorites
+        )
 
     def run(self, argv=None):
         """Run the aggregator: discover, parse, dispatch.
@@ -571,7 +840,10 @@ class AggregatorEngine:
         # and take precedence over tool dispatch to prevent collision
         # notifications on routine meta-command invocations.
         if self.is_root:
-            meta_commands = {"list", "info", "kit", "new", "version", "add", "mode"}
+            meta_commands = {
+                "list", "info", "kit", "new", "version", "add", "mode",
+                "tree",
+            }
             if command_name in meta_commands or command_name.startswith("-"):
                 sys_argv_backup = sys.argv
                 sys.argv = [self.command] + list(argv)
@@ -579,7 +851,8 @@ class AggregatorEngine:
                     args = parser.parse_args()
                     if hasattr(args, "_meta"):
                         return dispatch_meta(
-                            args, self.projects, self.kits, self.project_root
+                            args, self.projects, self.kits, self.project_root,
+                            engine=self,
                         )
                 finally:
                     sys.argv = sys_argv_backup

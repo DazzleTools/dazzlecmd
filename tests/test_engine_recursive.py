@@ -545,3 +545,193 @@ class TestCollisionWithNotification:
         project, note = engine.fqcn_index.resolve("toolA", precedence=["extra", "core"])
         assert project is not None
         assert project["_fqcn"] == "extra:core:toolA"
+
+
+class TestPhase3SilencingAndShadowing:
+    """Phase 3: silenced_hints and shadowed_tools config keys filter
+    discovery output and gate the rerooting hint."""
+
+    def _build_deep_tree(self, tmp_path):
+        """Build an aggregator where at least one tool has 4+ FQCN segments,
+        so the rerooting hint would fire by default."""
+        build_nested_aggregator(str(tmp_path))
+        return str(tmp_path)
+
+    def test_shadowed_tool_removed_from_projects(self, tmp_path, monkeypatch):
+        build_flat_aggregator(str(tmp_path))
+        config_path = tmp_path / "dz-config.json"
+        config_path.write_text(
+            json.dumps({"shadowed_tools": ["core:toolA"]}),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DAZZLECMD_CONFIG", str(config_path))
+
+        engine = AggregatorEngine(
+            tools_dir="projects", kits_dir="kits",
+            manifest=".dazzlecmd.json",
+        )
+        engine.discover(project_root=str(tmp_path))
+
+        fqcns = {p["_fqcn"] for p in engine.projects}
+        assert "core:toolA" not in fqcns
+        assert "core:toolB" in fqcns
+
+    def test_shadowed_tool_not_in_fqcn_index(self, tmp_path, monkeypatch):
+        build_flat_aggregator(str(tmp_path))
+        config_path = tmp_path / "dz-config.json"
+        config_path.write_text(
+            json.dumps({"shadowed_tools": ["core:toolA"]}),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DAZZLECMD_CONFIG", str(config_path))
+
+        engine = AggregatorEngine(
+            tools_dir="projects", kits_dir="kits",
+            manifest=".dazzlecmd.json",
+        )
+        engine.discover(project_root=str(tmp_path))
+
+        project, _ = engine.fqcn_index.resolve("core:toolA")
+        assert project is None
+
+    def test_shadowed_tool_short_name_freed(self, tmp_path, monkeypatch):
+        """When a shadowed tool's short name is the only collision source,
+        the remaining tool resolves unambiguously (no notification)."""
+        root = str(tmp_path)
+        # Set up two tools with the same short name in different kits
+        _write_json(
+            os.path.join(root, "kits", "core.kit.json"),
+            {"name": "core", "always_active": True},
+        )
+        _write_json(
+            os.path.join(root, "projects", "core", ".kit.json"),
+            {
+                "name": "core",
+                "tools_dir": ".",
+                "tools": ["core:shared"],
+            },
+        )
+        _write_tool(os.path.join(root, "projects", "core", "shared"), "shared")
+
+        _write_json(
+            os.path.join(root, "kits", "other.kit.json"),
+            {
+                "name": "other",
+                "always_active": True,
+                "_override_tools_dir": "tools",
+                "_override_manifest": ".dazzlecmd.json",
+            },
+        )
+        other_root = os.path.join(root, "projects", "other")
+        _write_json(
+            os.path.join(other_root, "kits", "core.kit.json"),
+            {"name": "core", "always_active": True, "tools": ["core:shared"]},
+        )
+        _write_tool(
+            os.path.join(other_root, "tools", "core", "shared"), "shared"
+        )
+
+        config_path = tmp_path / "dz-config.json"
+        config_path.write_text(
+            json.dumps({"shadowed_tools": ["core:shared"]}),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DAZZLECMD_CONFIG", str(config_path))
+
+        engine = AggregatorEngine(
+            tools_dir="projects", kits_dir="kits",
+            manifest=".dazzlecmd.json",
+        )
+        engine.discover(project_root=str(tmp_path))
+
+        # "shared" now resolves unambiguously to other:core:shared
+        project, note = engine.resolve_command("shared")
+        assert project is not None
+        assert project["_fqcn"] == "other:core:shared"
+        assert note is None  # no collision anymore
+
+    def test_silenced_tool_suppresses_reroot_hint(self, tmp_path, monkeypatch, capsys):
+        """When the only deeply-nested tool is silenced, no hint fires."""
+        engine = AggregatorEngine(is_root=True)
+        engine.projects = [
+            {
+                "name": "leaf",
+                "_fqcn": "a:b:c:d:leaf",
+                "_short_name": "leaf",
+                "_kit_import_name": "a",
+                "_dir": "/fake",
+                "description": "deep tool",
+            }
+        ]
+        config_path = tmp_path / "dz-config.json"
+        config_path.write_text(
+            json.dumps({"silenced_hints": {"tools": ["a:b:c:d:leaf"]}}),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DAZZLECMD_CONFIG", str(config_path))
+        # Recreate engine to pick up the config
+        engine2 = AggregatorEngine(is_root=True)
+        engine2.projects = engine.projects
+        engine2._maybe_emit_reroot_hint()
+        captured = capsys.readouterr()
+        assert "deeply nested" not in captured.err
+
+    def test_silenced_kit_suppresses_reroot_hint_for_all_its_tools(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """silenced_hints.kits silences all tools whose _kit_import_name matches."""
+        config_path = tmp_path / "dz-config.json"
+        config_path.write_text(
+            json.dumps({"silenced_hints": {"kits": ["deepkit"]}}),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DAZZLECMD_CONFIG", str(config_path))
+        engine = AggregatorEngine(is_root=True)
+        engine.projects = [
+            {
+                "name": "leaf",
+                "_fqcn": "deepkit:sub:core:leaf",
+                "_short_name": "leaf",
+                "_kit_import_name": "deepkit",
+                "_dir": "/fake",
+                "description": "deep tool",
+            }
+        ]
+        engine._maybe_emit_reroot_hint()
+        captured = capsys.readouterr()
+        assert "deeply nested" not in captured.err
+
+    def test_silenced_tool_does_not_suppress_other_deep_tools(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """Silencing one tool still lets hints fire for other deep tools."""
+        config_path = tmp_path / "dz-config.json"
+        config_path.write_text(
+            json.dumps({"silenced_hints": {"tools": ["a:b:c:d:silenced"]}}),
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("DAZZLECMD_CONFIG", str(config_path))
+        engine = AggregatorEngine(is_root=True)
+        engine.projects = [
+            {
+                "name": "silenced",
+                "_fqcn": "a:b:c:d:silenced",
+                "_short_name": "silenced",
+                "_kit_import_name": "a",
+                "_dir": "/fake",
+                "description": "silenced tool",
+            },
+            {
+                "name": "notsilenced",
+                "_fqcn": "x:y:z:w:notsilenced",
+                "_short_name": "notsilenced",
+                "_kit_import_name": "x",
+                "_dir": "/fake",
+                "description": "other deep tool",
+            },
+        ]
+        engine._maybe_emit_reroot_hint()
+        captured = capsys.readouterr()
+        assert "deeply nested" in captured.err
+        assert "notsilenced" in captured.err
+        assert "silenced" not in captured.err.split("notsilenced")[0]

@@ -4,6 +4,131 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.11] - 2026-04-11
+
+### Added
+- **Phase 3 of the architectural epoch**: kit management UX and user
+  config write path. The engine now has a complete read + write config
+  story, and users have CLI commands for kit enable/disable/focus/reset,
+  favorite tool disambiguation, per-tool hint silencing, tool shadowing,
+  kit import via git submodule, and aggregator tree visualization.
+- **`engine._get_user_config()` / `_write_user_config()`**: the config
+  infrastructure foundation. Reads ``~/.dazzlecmd/config.json`` with
+  per-key defaults and caching; writes atomically via temp-file +
+  ``os.replace()`` with merge semantics (preserves unknown user-added
+  keys). ``DAZZLECMD_CONFIG`` env var overrides the path (test isolation).
+  Injects ``_schema_version: 1`` on first write; reserved for future
+  migration tooling.
+- **`_get_config_list()` / `_get_config_dict()`**: type-validated helpers
+  that return a default (or warn to stderr) on malformed values.
+- **`loader.get_active_kits(kits, user_config=None)`**: now consults the
+  user config for ``active_kits``/``disabled_kits`` filtering. Legacy
+  callers (no config) get all kits. Overlap rule: ``disabled_kits`` wins
+  with a stderr warning.
+- **`DZ_KITS` environment variable**: comma-separated kit list that
+  fully overrides the config's ``active_kits``/``disabled_kits``. Empty
+  string means "no kits" (meta-commands only). Distinct from unset.
+- **`FQCNIndex.resolve(..., favorites=...)`**: favorites bypass precedence
+  when the short name is in the favorites dict and the target FQCN exists.
+  Stale favorites (target not in index) emit a warning notification and
+  fall through to precedence resolution.
+- **`engine._maybe_emit_reroot_hint()`** now consults
+  ``silenced_hints.tools`` and ``silenced_hints.kits``. Silenced tools
+  are filtered out before computing the deepest FQCN, so users can
+  acknowledge individual deep tools without disabling the hint globally.
+- **`engine._discover_aggregator()`** filters ``shadowed_tools`` at the
+  top level after recursive merge. Shadowed tools are removed from
+  ``engine.projects`` entirely — they don't appear in ``dz list``, aren't
+  dispatchable, and their short names are freed for other tools.
+- **`dz kit enable <name>`** / **`dz kit disable <name>`**: add/remove a
+  kit from the user's active/disabled lists. Warns if the named kit is
+  not among the discovered kits.
+- **`dz kit focus <name>`**: shorthand for "enable this kit, disable all
+  non-always_active kits except the named one." ``always_active: true``
+  kits are preserved automatically.
+- **`dz kit reset`**: wipes ``~/.dazzlecmd/config.json`` after confirmation.
+  ``-y/--yes`` flag skips the prompt.
+- **`dz kit favorite <short> <fqcn>`** / **`dz kit unfavorite <short>`**:
+  pin a favorite to win short-name resolution on collision. Rejects
+  reserved command names at set time. Warns if the target FQCN isn't in
+  the current discovery (saves anyway; may be stale).
+- **`dz kit silence <fqcn>`** / **`dz kit unsilence <fqcn>`**: per-tool
+  rerooting hint silencing.
+- **`dz kit shadow <fqcn>`** / **`dz kit unshadow <fqcn>`**: hide a tool
+  entirely from ``dz`` dispatch. Useful when the tool exists standalone
+  (e.g., ``safedel`` installed via PyPI).
+- **`dz kit silenced`**: show all silenced hints, shadowed tools, and
+  favorites in one view.
+- **`dz kit add <url>`**: wraps ``git submodule add`` into
+  ``projects/<name>`` and creates a registry pointer at
+  ``kits/<name>.kit.json``. Detects nested aggregator structure and
+  informs the user. Flags: ``--name``, ``--branch``, ``--shallow``.
+- **`dz tree`**: visualize the aggregator tree. ASCII output by default
+  (using ``+--``/``|``/``\--`` characters, no Unicode box-drawing for
+  Windows codepage safety). Flags: ``--json`` for machine-readable
+  structured output, ``--depth N`` to limit depth, ``--kit NAME`` to show
+  only one subtree, ``--show-disabled`` to include disabled kits.
+- **`dz list`** now marks tools with short-name collisions using
+  ``[*]`` after the name, with a footer note explaining how to
+  disambiguate.
+- **`dz kit list`** now shows enabled/disabled/always_active status per
+  kit in the output.
+- Tests: 75 new Phase 3 tests across ``test_engine_config.py`` (28),
+  ``test_cli_kit.py`` (23), ``test_cli_tree.py`` (11), plus favorites
+  extension in ``test_engine_fqcn.py`` (+7) and silence/shadow extension
+  in ``test_engine_recursive.py`` (+6). Full suite: 190 passing.
+
+### Changed
+- `engine.resolve_command()` now applies ``favorites`` before precedence,
+  so favorites take precedence over the default kit ordering when a
+  collision exists.
+- `engine._discover_aggregator()` passes the user config into
+  ``get_active_kits()`` only at the top level (depth 0 and ``is_root``).
+  Imported child aggregators are not filtered by the parent's user
+  config — they honor their own kit selection.
+- Config read path is lazy: ``_config_path()`` calls ``os.path.expanduser``
+  at invocation time (not module import time) so test fixtures that
+  monkeypatch ``HOME`` / ``USERPROFILE`` work correctly.
+
+### Config schema (new as of v0.7.11)
+
+```json
+{
+    "_schema_version": 1,
+    "kit_precedence": ["core", "dazzletools", "wtf"],
+    "active_kits": ["core", "wtf"],
+    "disabled_kits": ["dazzletools"],
+    "favorites": {"status": "core:status"},
+    "silenced_hints": {"tools": [], "kits": []},
+    "shadowed_tools": [],
+    "kit_discovery": "auto"
+}
+```
+
+All keys optional; missing keys fall back to defaults. Malformed values
+are tolerated with a stderr warning. Unknown user-added keys are preserved
+across writes.
+
+### Design
+- `private/claude/2026-04-11__07-02-02__dev-workflow-process_phase3-kit-management-and-config-write.md`
+  — focused 5-axis dev-workflow analysis (config schema, command surface,
+  sub-feature ordering, Phase 3/4 boundary, acceptance criteria consolidation)
+- `private/claude/2026-04-11__07-15-11__phase3-decisions-and-command-surface.md`
+  — user Q&A resolving the open decisions from the dev-workflow
+
+### Versioning note
+Phase 3 ships as a PATCH bump (0.7.10 -> 0.7.11) following the project
+convention of treating architectural-phase work as incremental within
+the current MINOR. MAJOR/MINOR bump is reserved for the completion
+milestone of the architectural refactor — when `dazzlecmd-lib` extracts
+(#27) and wtf-windows validates the library layering (#28).
+
+Refs #9 (collision detection + favorites landed)
+Refs #18 (kit focus/enable/disable + rerooting principle all landed)
+Refs #26 (per-tool silencing and tool shadowing landed)
+Related: #27 (forward pointer -- dazzlecmd-lib extraction, Phase 4)
+Related: #28 (forward pointer -- wtf-windows full integration, Phase 4)
+
 ## [0.7.10] - 2026-04-11
 
 ### Changed

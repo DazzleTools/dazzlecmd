@@ -142,13 +142,84 @@ def _load_in_repo_kit_manifest(projects_dir, kit_name):
     return None
 
 
-def get_active_kits(kits):
+def get_active_kits(kits, user_config=None):
     """Return kits that should be active.
 
-    Phase 1: all kits are active.
-    Future: respect user config for kit selection.
+    Resolution precedence (highest to lowest):
+
+    1. ``DZ_KITS`` environment variable (if set): full override. Format is a
+       comma-separated list of kit names; empty string means "no kits
+       active" (meta-commands only). Ignores config entirely.
+    2. ``user_config["disabled_kits"]``: any kit here is excluded.
+    3. ``user_config["active_kits"]``: if set and non-empty, only these
+       kits are considered active (except always_active kits, which remain
+       active unless explicitly disabled).
+    4. Default: all discovered kits are active (legacy Phase 1 behavior).
+
+    Overlap rule: if a kit appears in both ``active_kits`` and
+    ``disabled_kits``, ``disabled_kits`` wins and a stderr warning is
+    emitted.
+
+    Args:
+        kits: List of kit dicts from ``discover_kits``.
+        user_config: Optional dict from ``engine._get_user_config()``. If
+                     None, defaults to all kits active (legacy behavior).
+
+    Returns:
+        Filtered list of active kit dicts.
     """
-    return list(kits)
+    all_kits = list(kits)
+
+    # Layer 1: DZ_KITS env var (full override, ignores config entirely)
+    env_kits = os.environ.get("DZ_KITS")
+    if env_kits is not None:
+        requested = {k.strip() for k in env_kits.split(",") if k.strip()}
+        return [
+            k for k in all_kits
+            if (k.get("_kit_name") or k.get("name")) in requested
+        ]
+
+    if user_config is None:
+        # Legacy path: no config, all kits active
+        return all_kits
+
+    active_list = user_config.get("active_kits")
+    disabled_list = user_config.get("disabled_kits") or []
+
+    if not isinstance(active_list, list):
+        active_list = None
+    if not isinstance(disabled_list, list):
+        disabled_list = []
+
+    active_set = set(active_list) if active_list else None
+    disabled_set = set(disabled_list)
+
+    # Warn about overlap (disabled wins)
+    if active_set and disabled_set:
+        overlap = active_set & disabled_set
+        if overlap:
+            print(
+                f"Warning: kits in both active_kits and disabled_kits "
+                f"(disabled wins): {sorted(overlap)}",
+                file=sys.stderr,
+            )
+
+    result = []
+    for kit in all_kits:
+        name = kit.get("_kit_name") or kit.get("name")
+        if name in disabled_set:
+            # Explicitly disabled: always wins, even for always_active kits
+            continue
+        if active_set is None:
+            # No active_kits filter: include everything not disabled
+            result.append(kit)
+            continue
+        # active_kits is set: include only listed kits, but always_active
+        # kits remain active unless explicitly disabled
+        if name in active_set or kit.get("always_active"):
+            result.append(kit)
+
+    return result
 
 
 def discover_projects(projects_dir, active_kits=None, default_manifest=".dazzlecmd.json"):
