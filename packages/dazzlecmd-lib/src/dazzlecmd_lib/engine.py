@@ -744,7 +744,7 @@ class AggregatorEngine:
         if self.is_root:
             meta_commands = self._meta_commands or {
                 "list", "info", "kit", "new", "version", "add", "mode",
-                "tree",
+                "tree", "setup",
             }
             if command_name in meta_commands or command_name.startswith("-"):
                 sys_argv_backup = sys.argv

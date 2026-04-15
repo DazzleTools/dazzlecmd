@@ -4,6 +4,34 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.14] - 2026-04-15
+
+### Added
+- **`dz setup <tool>`** command: runs a tool's declared setup script.
+  Platform-aware (reads `setup.platforms` for cross-platform variants).
+  `dz setup` without a tool lists tools with setup commands. `dz info`
+  now surfaces setup notes when declared. The engine never installs
+  dependencies -- it dispatches what the tool author declares.
+- `lifecycle` field in `dz new` scaffolding now includes `type: "tool"`
+  and `created_as: "tool"` alongside `status`, for Phase 5 entity
+  promotion tracking. The library JSON template mirrors this.
+- Human test checklist:
+  `tests/checklists/v0.8.0__Phase4b-addendum__templates-setup-lifecycle.md`
+
+### Changed
+- Tool scaffolding templates moved from `src/dazzlecmd/templates/` to
+  the library at `packages/dazzlecmd-lib/src/dazzlecmd_lib/templates/`.
+  The CLI resolver prefers the library location and falls back to the
+  local path if the library is not installed. `package_data` in the
+  library's `pyproject.toml` ensures the templates ship with the wheel.
+- `dz --help` commands section now lists `tree` and `setup` alongside
+  the other meta-commands (`_build_categorized_help` was out of sync
+  with the actual subparser registration).
+
+Refs #27 (dazzlecmd-lib extraction -- templates + dz setup landed; PyPI, tutorial, examples, wtf adoption still open)
+Refs #33 (dz setup core implemented; first-run detection, automated tests, docs deferred)
+Refs #30 (Phase 4b Step 3 complete; interpreter field and multi-language templates still open under 4b)
+
 ## [0.7.13] - 2026-04-15
 
 ### Added
@@ -38,9 +66,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
   the registry. Legacy `_make_*` aliases preserved in the loader shim
   for test compatibility.
 
-Refs #27 (dazzlecmd-lib extraction — core modules extracted, templates + dz setup remain)
+Refs #27 (dazzlecmd-lib extraction -- core modules extracted)
 Refs #32 (runner registry implemented)
-Refs #30 (Phase 4b in progress)
+Refs #30 (Phase 4b Step 1+2)
 
 ## [0.7.12] - 2026-04-15
 

@@ -136,6 +136,8 @@ def _build_categorized_help(projects):
         ("new <name>", "Create a new tool project"),
         ("add", "Import an existing tool/repo"),
         ("mode", "Toggle dev/publish mode"),
+        ("tree", "Show the aggregator tree"),
+        ("setup <tool>", "Run a tool's declared setup script"),
         ("version", "Show version info"),
     ]
 
@@ -310,6 +312,17 @@ def _register_meta_commands(subparsers):
                              help="Include disabled kits in the output")
     tree_parser.set_defaults(_meta="tree")
 
+    # dz setup <tool>
+    setup_parser = subparsers.add_parser(
+        "setup",
+        help="Run a tool's declared setup script (install deps, build, etc.)",
+    )
+    setup_parser.add_argument(
+        "tool", nargs="?", default=None,
+        help="Tool name (or FQCN). Omit to list tools with setup commands.",
+    )
+    setup_parser.set_defaults(_meta="setup")
+
     # dz new <name>
     new_parser = subparsers.add_parser("new", help="Create a new tool project")
     new_parser.add_argument("name", help="Tool name")
@@ -411,6 +424,8 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
         return _cmd_kit_add(args, project_root, engine)
     elif meta == "tree":
         return _cmd_tree(args, engine)
+    elif meta == "setup":
+        return _cmd_setup(args, engine)
     # Legacy paths
     elif meta == "new":
         return _cmd_new(args, project_root)
@@ -547,6 +562,12 @@ def _cmd_info(args, projects):
     deps = project.get("dependencies", {})
     if deps.get("python"):
         print(f"Python deps: {', '.join(deps['python'])}")
+
+    # Show setup info if declared
+    setup = project.get("setup")
+    if setup:
+        print(f"Setup:       {setup.get('note', setup.get('command', 'available'))}")
+        print(f"             Run: dz setup {project.get('_fqcn', project['name'])}")
 
     # Show link status
     from dazzlecmd.importer import is_linked_project, get_link_target
@@ -804,7 +825,9 @@ def _cmd_new(args, project_root):
             "tags": [],
         },
         "lifecycle": {
+            "type": "tool",
             "status": "active",
+            "created_as": "tool",
         },
     }
 
@@ -817,7 +840,12 @@ def _cmd_new(args, project_root):
     script_name = f"{name.replace('-', '_')}.py"
     script_path = os.path.join(tool_dir, script_name)
 
-    template_dir = os.path.join(os.path.dirname(__file__), "templates")
+    # Templates live in dazzlecmd-lib; fall back to local templates dir
+    import dazzlecmd_lib
+    lib_dir = os.path.dirname(dazzlecmd_lib.__file__)
+    template_dir = os.path.join(lib_dir, "templates")
+    if not os.path.isdir(template_dir):
+        template_dir = os.path.join(os.path.dirname(__file__), "templates")
     tmpl_path = os.path.join(template_dir, "python_tool.py.tmpl")
 
     if os.path.isfile(tmpl_path):
@@ -1473,6 +1501,92 @@ def _cmd_tree(args, engine):
     print()
     print(f"{total_tools} tools across {len(kit_names)} kit(s)")
     return 0
+
+
+def _cmd_setup(args, engine):
+    """Run a tool's declared setup script.
+
+    The engine doesn't install dependencies itself — it dispatches the
+    tool's own ``setup.command`` (or platform-specific variant). The tool
+    author writes the setup script; the engine runs it when the user asks.
+    """
+    if engine is None:
+        print("Error: engine unavailable", file=sys.stderr)
+        return 1
+
+    tool_name = getattr(args, "tool", None)
+
+    # No tool specified: list tools that have setup commands
+    if not tool_name:
+        source = getattr(engine, "all_projects", engine.projects)
+        has_setup = [
+            p for p in source
+            if p.get("setup") and p["setup"].get("command")
+        ]
+        if not has_setup:
+            print("No tools have setup commands declared.")
+            return 0
+        print("Tools with setup commands:")
+        for p in has_setup:
+            fqcn = p.get("_fqcn", p.get("name", "?"))
+            note = p.get("setup", {}).get("note", "")
+            print(f"  {fqcn:30}  {note}")
+        print(f"\nRun: dz setup <tool> to execute a tool's setup.")
+        return 0
+
+    # Resolve the tool name (supports FQCN, kit-qualified, short name)
+    project, notification = engine.resolve_command(tool_name)
+    if project is None:
+        # Try all_projects for disabled-kit tools
+        source = getattr(engine, "all_projects", engine.projects)
+        matches = [p for p in source if p.get("name") == tool_name or p.get("_fqcn") == tool_name]
+        if matches:
+            project = matches[0]
+        else:
+            print(f"Tool '{tool_name}' not found.", file=sys.stderr)
+            return 1
+
+    setup = project.get("setup")
+    if not setup:
+        print(f"Tool '{project.get('_fqcn', tool_name)}' has no setup command declared.")
+        print("Add a 'setup' block to the tool's manifest to enable this.")
+        return 0
+
+    # Determine the command to run (platform-specific or generic)
+    import platform as _platform
+    platforms = setup.get("platforms", {})
+    system = _platform.system().lower()
+
+    if system == "windows" and "windows" in platforms:
+        cmd_str = platforms["windows"]
+    elif system == "linux" and "linux" in platforms:
+        cmd_str = platforms["linux"]
+    elif system == "darwin" and ("macos" in platforms or "darwin" in platforms):
+        cmd_str = platforms.get("macos") or platforms.get("darwin")
+    else:
+        cmd_str = setup.get("command")
+
+    if not cmd_str:
+        print(f"No setup command available for platform '{system}'.", file=sys.stderr)
+        return 1
+
+    tool_dir = project.get("_dir", ".")
+    fqcn = project.get("_fqcn", tool_name)
+
+    print(f"Running setup for {fqcn}...")
+    if setup.get("note"):
+        print(f"  Note: {setup['note']}")
+    print(f"  Command: {cmd_str}")
+    print(f"  Working dir: {tool_dir}")
+    print()
+
+    import subprocess as _subprocess
+    result = _subprocess.run(cmd_str, shell=True, cwd=tool_dir)
+    if result.returncode == 0:
+        print(f"\nSetup for {fqcn} completed successfully.")
+    else:
+        print(f"\nSetup for {fqcn} failed with exit code {result.returncode}.", file=sys.stderr)
+    return result.returncode
 
 
 def dispatch_tool(project, argv):
