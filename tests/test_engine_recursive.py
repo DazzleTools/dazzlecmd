@@ -735,3 +735,123 @@ class TestPhase3SilencingAndShadowing:
         assert "deeply nested" in captured.err
         assert "notsilenced" in captured.err
         assert "silenced" not in captured.err.split("notsilenced")[0]
+
+
+class TestModuleDispatch:
+    """#29: package-structured tools with relative imports need module-mode
+    dispatch (python -m module.path) instead of script-mode (python script.py).
+
+    Tests both _make_subprocess_runner (pass_through) and _make_python_runner
+    (direct import) module detection paths.
+    """
+
+    def _build_package_tool(self, tool_dir, pkg_name="my_pkg"):
+        """Create a minimal Python package tool with a relative import."""
+        pkg_dir = os.path.join(tool_dir, pkg_name)
+        os.makedirs(pkg_dir, exist_ok=True)
+
+        # __init__.py makes it a package
+        with open(os.path.join(pkg_dir, "__init__.py"), "w") as f:
+            f.write("")
+
+        # _version.py — the module that gets relatively-imported
+        with open(os.path.join(pkg_dir, "_version.py"), "w") as f:
+            f.write("__version__ = '0.1.0'\n")
+
+        # cli.py — uses a relative import (the thing that breaks without -m)
+        with open(os.path.join(pkg_dir, "cli.py"), "w") as f:
+            f.write(
+                "from ._version import __version__\n"
+                "def main(argv=None):\n"
+                "    print(f'version={__version__}')\n"
+                "    return 0\n"
+            )
+
+        return pkg_name
+
+    def test_subprocess_runner_detects_package_via_init(self, tmp_path):
+        """_make_subprocess_runner uses python -m when __init__.py is present."""
+        from dazzlecmd.loader import _make_subprocess_runner
+
+        tool_dir = str(tmp_path / "tool")
+        os.makedirs(tool_dir)
+        pkg = self._build_package_tool(tool_dir)
+
+        project = {
+            "name": "test-tool",
+            "runtime": {"type": "python", "script_path": f"{pkg}/cli.py"},
+            "pass_through": True,
+            "_dir": tool_dir,
+        }
+
+        runner = _make_subprocess_runner(project)
+        result = runner(["--version"])  # arbitrary args
+        # If module mode works, the script runs without ImportError
+        assert result == 0
+
+    def test_subprocess_runner_uses_explicit_module_field(self, tmp_path):
+        """runtime.module takes precedence over __init__.py heuristic."""
+        from dazzlecmd.loader import _make_subprocess_runner
+
+        tool_dir = str(tmp_path / "tool")
+        os.makedirs(tool_dir)
+        pkg = self._build_package_tool(tool_dir)
+
+        project = {
+            "name": "test-tool",
+            "runtime": {
+                "type": "python",
+                "script_path": f"{pkg}/cli.py",
+                "module": f"{pkg}.cli",
+            },
+            "pass_through": True,
+            "_dir": tool_dir,
+        }
+
+        runner = _make_subprocess_runner(project)
+        result = runner([])
+        assert result == 0
+
+    def test_subprocess_runner_flat_script_still_works(self, tmp_path):
+        """Tools without __init__.py still use script-mode dispatch."""
+        from dazzlecmd.loader import _make_subprocess_runner
+
+        tool_dir = str(tmp_path / "tool")
+        os.makedirs(tool_dir)
+
+        # A flat script (no package, no __init__.py)
+        with open(os.path.join(tool_dir, "flat_tool.py"), "w") as f:
+            f.write("import sys\nprint('flat works')\nsys.exit(0)\n")
+
+        project = {
+            "name": "flat-tool",
+            "runtime": {"type": "python", "script_path": "flat_tool.py"},
+            "pass_through": True,
+            "_dir": tool_dir,
+        }
+
+        runner = _make_subprocess_runner(project)
+        result = runner([])
+        assert result == 0
+
+    def test_python_runner_detects_package_via_init(self, tmp_path):
+        """_make_python_runner uses package import when __init__.py detected."""
+        from dazzlecmd.loader import _make_python_runner
+
+        tool_dir = str(tmp_path / "tool")
+        os.makedirs(tool_dir)
+        pkg = self._build_package_tool(tool_dir)
+
+        project = {
+            "name": "test-tool",
+            "runtime": {
+                "type": "python",
+                "script_path": f"{pkg}/cli.py",
+                "entry_point": "main",
+            },
+            "_dir": tool_dir,
+        }
+
+        runner = _make_python_runner(project)
+        result = runner([])
+        assert result == 0

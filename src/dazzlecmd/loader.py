@@ -447,31 +447,73 @@ def resolve_entry_point(project):
 
 
 def _make_python_runner(project):
-    """Create a runner that imports and calls a Python entry point."""
+    """Create a runner that imports and calls a Python entry point.
+
+    Supports two import modes:
+
+    1. **Package mode** (``runtime.module`` set, or ``__init__.py`` detected):
+       imports the module as a dotted package path (e.g.,
+       ``wtf_restarted.cli``) with the tool directory on ``sys.path``.
+       Enables relative imports within the package.
+
+    2. **Flat mode** (default): imports just the script basename (e.g.,
+       ``cli``) with the script's parent directory on ``sys.path``.
+       Works for single-file tools without package structure.
+    """
     runtime = project.get("runtime", {})
     entry_point = runtime.get("entry_point", "main")
     script_path = runtime.get("script_path")
+    module_path = runtime.get("module")
     tool_dir = project["_dir"]
 
     def runner(argv):
         if script_path:
             full_path = os.path.join(tool_dir, script_path)
-            module_dir = os.path.dirname(full_path)
-            module_name = os.path.splitext(os.path.basename(full_path))[0]
 
-            if module_dir not in sys.path:
-                sys.path.insert(0, module_dir)
+            # Determine import mode: explicit module > __init__.py heuristic > flat
+            use_module = module_path
+            if not use_module:
+                parent_dir = os.path.dirname(full_path)
+                if os.path.isfile(os.path.join(parent_dir, "__init__.py")):
+                    rel_path = script_path.replace("\\", "/")
+                    if rel_path.endswith(".py"):
+                        rel_path = rel_path[:-3]
+                    use_module = rel_path.replace("/", ".")
 
-            try:
-                mod = importlib.import_module(module_name)
-            except ImportError as exc:
-                print(f"Error: Could not import {module_name}: {exc}", file=sys.stderr)
-                return 1
+            if use_module:
+                # Package mode: add tool_dir to sys.path so the package is importable
+                if tool_dir not in sys.path:
+                    sys.path.insert(0, tool_dir)
+
+                # If module is a package name (e.g., "wtf_restarted"), append
+                # the entry point script name to get the full import path
+                if "." not in use_module and script_path and "/" in script_path.replace("\\", "/"):
+                    script_basename = os.path.splitext(os.path.basename(script_path))[0]
+                    use_module = f"{use_module}.{script_basename}"
+
+                try:
+                    mod = importlib.import_module(use_module)
+                except ImportError as exc:
+                    print(f"Error: Could not import {use_module}: {exc}", file=sys.stderr)
+                    return 1
+            else:
+                # Flat mode: import just the script basename
+                module_dir = os.path.dirname(full_path)
+                module_name = os.path.splitext(os.path.basename(full_path))[0]
+
+                if module_dir not in sys.path:
+                    sys.path.insert(0, module_dir)
+
+                try:
+                    mod = importlib.import_module(module_name)
+                except ImportError as exc:
+                    print(f"Error: Could not import {module_name}: {exc}", file=sys.stderr)
+                    return 1
 
             func = getattr(mod, entry_point, None)
             if func is None:
                 print(
-                    f"Error: {module_name} has no '{entry_point}' function",
+                    f"Error: {mod.__name__} has no '{entry_point}' function",
                     file=sys.stderr,
                 )
                 return 1
@@ -490,12 +532,49 @@ def _make_python_runner(project):
 
 
 def _make_subprocess_runner(project):
-    """Create a runner that calls a Python script via subprocess."""
+    """Create a runner that calls a Python script via subprocess.
+
+    Supports two dispatch modes:
+
+    1. **Module mode** (``runtime.module`` set, or ``__init__.py`` detected):
+       runs ``python -m module.path`` from the tool directory. This gives
+       the script a proper package context, enabling relative imports.
+
+    2. **Script mode** (default): runs ``python script.py`` directly.
+       Works for flat scripts without relative imports.
+
+    Module mode is preferred for package-structured tools (those whose
+    ``script_path`` points into a directory containing ``__init__.py``).
+    """
     runtime = project.get("runtime", {})
     script_path = runtime.get("script_path")
+    module_path = runtime.get("module")
     tool_dir = project["_dir"]
 
     def runner(argv):
+        # Determine whether to use module mode or script mode.
+        # Priority: explicit runtime.module > __init__.py heuristic > script mode.
+        use_module = module_path
+        if not use_module and script_path:
+            # Heuristic: if the script's parent directory has __init__.py,
+            # it's a package — derive the module path automatically.
+            full_path = os.path.join(tool_dir, script_path)
+            parent_dir = os.path.dirname(full_path)
+            if os.path.isfile(os.path.join(parent_dir, "__init__.py")):
+                # Convert path to module: "wtf_restarted/cli.py" -> "wtf_restarted.cli"
+                rel_path = script_path.replace("\\", "/")
+                if rel_path.endswith(".py"):
+                    rel_path = rel_path[:-3]
+                use_module = rel_path.replace("/", ".")
+
+        if use_module:
+            result = subprocess.run(
+                [sys.executable, "-m", use_module] + list(argv),
+                cwd=tool_dir,
+            )
+            return result.returncode
+
+        # Script mode fallback
         if not script_path:
             print(f"Error: No script_path for pass-through tool {project['name']}", file=sys.stderr)
             return 1

@@ -1495,7 +1495,9 @@ def main():
     """Main entry point for dazzlecmd CLI.
 
     Thin wrapper that creates an AggregatorEngine configured for dazzlecmd
-    and delegates to engine.run().
+    and delegates to engine.run(). The CLI functions (build_parser,
+    dispatch_meta, dispatch_tool) are passed as callbacks so the engine
+    never imports from cli.py — enabling clean library extraction (#27).
     """
     from dazzlecmd.engine import AggregatorEngine
 
@@ -1508,6 +1510,9 @@ def main():
         description="dazzlecmd - Unified CLI for the DazzleTools collection",
         version_info=(DISPLAY_VERSION, __version__),
         is_root=True,
+        parser_builder=build_parser,
+        meta_dispatcher=dispatch_meta,
+        tool_dispatcher=dispatch_tool,
     )
 
     return engine.run()

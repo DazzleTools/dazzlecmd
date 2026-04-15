@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dazzle-dz"
-version = "0.7.11"
+version = "0.7.12"
 description = "Alias for dazzlecmd -- unified CLI for the DazzleTools collection"
 readme = {text = "This is an alias package. Run `pip install dazzlecmd` or `pip install dazzle-dz` -- both install the same tool. See https://github.com/DazzleTools/dazzlecmd for documentation.", content-type = "text/plain"}
 license = {text = "GPL-3.0-or-later"}
@@ -27,7 +27,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 
-dependencies = ["dazzlecmd>=0.7.11"]
+dependencies = ["dazzlecmd>=0.7.12"]
 
 [project.urls]
 Homepage = "https://github.com/DazzleTools/dazzlecmd"

@@ -250,6 +250,9 @@ class AggregatorEngine:
         description=None,
         version_info=None,
         is_root=True,
+        parser_builder=None,
+        meta_dispatcher=None,
+        tool_dispatcher=None,
     ):
         """Initialize the aggregator engine.
 
@@ -263,6 +266,13 @@ class AggregatorEngine:
             version_info: Tuple of (display_version, full_version) or None
             is_root: If True, register meta-commands (list, info, kit, etc.).
                      If False (imported as kit), suppress meta-commands.
+            parser_builder: Callable ``(projects, engine) -> argparse.ArgumentParser``.
+                            If None, the engine cannot parse arguments (child engines
+                            used only for discovery don't need this).
+            meta_dispatcher: Callable ``(args, projects, kits, project_root, engine) -> int``.
+                             Handles meta-commands (list, info, kit, etc.).
+            tool_dispatcher: Callable ``(project, argv) -> int``.
+                             Dispatches to a tool's entry point.
         """
         self.name = name
         self.command = command
@@ -272,6 +282,14 @@ class AggregatorEngine:
         self.description = description or f"{name} - tool aggregator"
         self.version_info = version_info
         self.is_root = is_root
+
+        # CLI callbacks — injected by the reference implementation (cli.py).
+        # The engine never imports cli.py directly; instead, cli.py passes
+        # its functions here. This enables clean library extraction (#27):
+        # dazzlecmd-lib contains the engine, cli.py stays in dazzlecmd.
+        self._build_parser = parser_builder
+        self._dispatch_meta = meta_dispatcher
+        self._dispatch_tool = tool_dispatcher
 
         # Resolved at run time
         self.project_root = None
@@ -803,15 +821,23 @@ class AggregatorEngine:
     def run(self, argv=None):
         """Run the aggregator: discover, parse, dispatch.
 
-        This is the main entry point for the CLI. Equivalent to cli.py:main().
+        This is the main entry point for the CLI. Requires that
+        ``parser_builder``, ``meta_dispatcher``, and ``tool_dispatcher``
+        were provided at construction time (they are NOT imported from
+        cli.py — the engine has no dependency on the CLI layer).
         """
-        # Import here to avoid circular imports -- cli.py uses the engine,
-        # and the engine delegates display/dispatch back to cli functions
-        from dazzlecmd.cli import (
-            build_parser,
-            dispatch_meta,
-            dispatch_tool,
-        )
+        build_parser = self._build_parser
+        dispatch_meta = self._dispatch_meta
+        dispatch_tool = self._dispatch_tool
+
+        if build_parser is None or dispatch_tool is None:
+            print(
+                f"Error: {self.name} engine was not configured with CLI "
+                f"callbacks (parser_builder, tool_dispatcher). "
+                f"Pass them at construction time.",
+                file=sys.stderr,
+            )
+            return 1
 
         if argv is None:
             argv = sys.argv[1:]
@@ -820,7 +846,7 @@ class AggregatorEngine:
 
         if self.project_root is None:
             # No project root found -- show basic help
-            parser = build_parser([], engine=self)
+            parser = build_parser(self.projects if self.projects else [], engine=self)
             if argv and argv[0] in ("--version", "-V") and self.version_info:
                 display, full = self.version_info
                 print(f"{self.name} {display} ({full})")
@@ -887,5 +913,6 @@ class AggregatorEngine:
             return {
                 "new", "add", "list", "info", "kit", "search",
                 "build", "tree", "version", "enhance", "graduate", "mode",
+                "promote", "demote", "migrate", "setup",
             }
         return set()

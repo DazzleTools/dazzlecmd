@@ -4,6 +4,34 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.12] - 2026-04-15
+
+### Fixed
+- **#29 wtf dispatch ImportError**: `_make_subprocess_runner` now detects
+  package-structured tools (via `runtime.module` manifest field or
+  `__init__.py` heuristic) and uses `python -m module.path` instead of
+  `python script.py`. Fixes `ImportError: attempted relative import with
+  no known parent package` for wtf-restarted and wtf-locked.
+
+### Changed
+- **#31 engine->cli layering violation resolved**: `engine.run()` no
+  longer imports from `cli.py`. The engine accepts `parser_builder`,
+  `meta_dispatcher`, and `tool_dispatcher` as callbacks injected at
+  construction time. `cli.py:main()` passes its functions. This enables
+  clean library extraction (#27) — `dazzlecmd-lib` can contain the
+  engine without depending on the CLI package.
+- Reserved commands: added `promote`, `demote`, `migrate` (Phase 5, #36)
+  and `setup` (Phase 4b, #33) to prevent tool name collisions.
+
+### Housekeeping
+- Closed stale issues: #12 (terminal-aware help, shipped v0.3.1),
+  #15 (fixpath --find, shipped v0.4.0), #16 (dz find, shipped v0.4.0)
+
+Closes #29
+Closes #31
+Refs #30 (Phase 4a tactical fixes)
+Related: #36 (Phase 5 reserved commands)
+
 ## [0.7.11] - 2026-04-11
 
 ### Added
