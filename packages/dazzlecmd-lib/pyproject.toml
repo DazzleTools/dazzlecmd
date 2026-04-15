@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dazzlecmd-lib"
+version = "0.1.0"
+description = "Engine library for dazzlecmd-pattern tool aggregators"
+readme = "README.md"
+license = {text = "GPL-3.0-or-later"}
+requires-python = ">=3.8"
+authors = [
+    {name = "Dustin", email = "6962246+djdarcy@users.noreply.github.com"},
+]
+keywords = ["cli", "tools", "aggregator", "engine", "dispatch", "dazzletools"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+
+[project.urls]
+Homepage = "https://github.com/DazzleTools/dazzlecmd"
+Repository = "https://github.com/DazzleTools/dazzlecmd"
+Issues = "https://github.com/DazzleTools/dazzlecmd/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]

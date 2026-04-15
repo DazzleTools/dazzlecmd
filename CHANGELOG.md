@@ -4,6 +4,44 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.13] - 2026-04-15
+
+### Added
+- **`dazzlecmd-lib` package** at `packages/dazzlecmd-lib/` (v0.1.0):
+  the engine, loader, config, and runner registry extracted as an
+  independently-importable library. Third-party aggregators can
+  `pip install dazzlecmd-lib` and `from dazzlecmd_lib.engine import
+  AggregatorEngine` without depending on the full dazzlecmd CLI.
+- `dazzlecmd_lib.config.ConfigManager`: standalone config read/write
+  with atomic writes, caching, and merge semantics. Extracted from
+  engine.py's inline config methods.
+- `dazzlecmd_lib.registry.RunnerRegistry`: extensible dispatch registry
+  replacing the `if/elif` chain in `resolve_entry_point()`. Built-in
+  types (python, shell, script, binary) registered at import time.
+  Runner factories are now public API (`make_python_runner`, etc.).
+- `dazzlecmd_lib.loader.set_manifest_cache_fn()`: callback hook for
+  manifest caching. The library starts with no cache; dazzlecmd's
+  loader shim injects `mode.get_cached_manifest` at import time.
+- `meta_commands` constructor parameter on `AggregatorEngine`: allows
+  non-dazzlecmd aggregators to specify their own meta-command set.
+- 28 new library tests (`tests/test_library.py`): direct imports, class
+  identity, RunnerRegistry standalone, ConfigManager standalone, manifest
+  cache hook, meta_commands configurable, library isolation check.
+- Human test checklist:
+  `tests/checklists/v0.8.0__Phase4b__dazzlecmd-lib-extraction.md`
+
+### Changed
+- `src/dazzlecmd/engine.py` and `src/dazzlecmd/loader.py` replaced with
+  backwards-compat shims that re-export from `dazzlecmd_lib`. Existing
+  `from dazzlecmd.engine import AggregatorEngine` paths continue to work.
+- `_make_*_runner` private functions renamed to public `make_*_runner` in
+  the registry. Legacy `_make_*` aliases preserved in the loader shim
+  for test compatibility.
+
+Refs #27 (dazzlecmd-lib extraction — core modules extracted, templates + dz setup remain)
+Refs #32 (runner registry implemented)
+Refs #30 (Phase 4b in progress)
+
 ## [0.7.12] - 2026-04-15
 
 ### Fixed
