@@ -259,10 +259,28 @@ def make_script_runner(project):
 
 
 def make_binary_runner(project):
-    """Create a runner for binary executables.
+    """Create a runner for compiled binary executables.
 
-    Supports a ``dev_command`` fallback for development mode (e.g.,
-    ``cargo run --`` when the release binary doesn't exist yet).
+    Dispatch precedence:
+
+    1. If ``DAZZLECMD_FORCE_DEV=1`` and ``dev_command`` is set, always
+       use ``dev_command`` regardless of whether the binary exists.
+       Useful during active development (``cargo run``, ``go run``, etc.).
+    2. If ``runtime.script_path`` (the binary path) exists on disk, run it.
+    3. If the binary does NOT exist but ``dev_command`` is set, fall back
+       to ``dev_command``.  This handles the "hasn't been compiled yet"
+       case for Rust/C/Go workflows.
+    4. Otherwise, error with "Binary not found".
+
+    Manifest example::
+
+        {
+            "runtime": {
+                "type": "binary",
+                "script_path": "target/release/my-tool",
+                "dev_command": "cargo run --"
+            }
+        }
     """
     runtime = project.get("runtime", {})
     script_path = runtime.get("script_path")
@@ -274,6 +292,14 @@ def make_binary_runner(project):
             print(f"Error: No binary path for {project['name']}", file=sys.stderr)
             return 1
         full_path = os.path.join(tool_dir, script_path)
+
+        # Force dev mode via env var (active development override)
+        force_dev = os.environ.get("DAZZLECMD_FORCE_DEV", "").strip() == "1"
+        if force_dev and dev_command:
+            import shlex
+            cmd = shlex.split(dev_command) + list(argv)
+            result = subprocess.run(cmd, cwd=tool_dir)
+            return result.returncode
 
         if os.path.isfile(full_path):
             result = subprocess.run(

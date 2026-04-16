@@ -547,9 +547,15 @@ def _cmd_info(args, projects):
     print(f"Language:    {project.get('language', 'unknown')}")
 
     runtime = project.get("runtime", {})
-    print(f"Runtime:     {runtime.get('type', 'python')}")
+    runtime_type = runtime.get("type", "python")
+    print(f"Runtime:     {runtime_type}")
     if runtime.get("script_path"):
-        print(f"Script:      {runtime['script_path']}")
+        label = "Binary:" if runtime_type == "binary" else "Script:"
+        print(f"{label:13}{runtime['script_path']}")
+    if runtime.get("dev_command"):
+        print(f"Dev command:  {runtime['dev_command']}")
+    if runtime.get("interpreter"):
+        print(f"Interpreter: {runtime['interpreter']}")
     if project.get("pass_through"):
         print(f"Pass-through: yes")
 

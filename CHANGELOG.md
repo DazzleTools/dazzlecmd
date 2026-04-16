@@ -4,6 +4,25 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.15] - 2026-04-15
+
+### Changed
+- **Binary runner `dev_command` polish**: documented dispatch precedence
+  (binary exists -> run it; binary missing + dev_command -> fallback;
+  FORCE_DEV -> always dev_command). Added `DAZZLECMD_FORCE_DEV=1` env
+  var override for active development workflows (e.g., always use
+  `cargo run` even when the release binary exists).
+- `dz info` now shows `Binary:` (instead of `Script:`) for binary
+  runtime tools, plus `Dev command:` and `Interpreter:` fields when
+  declared in the manifest.
+
+### Added
+- 11 new registry tests (`tests/test_registry.py`): binary runner
+  dispatch precedence, FORCE_DEV override, arg forwarding, registry
+  resolution.
+
+Refs #30 (Phase 4c.1 -- binary runner polish)
+
 ## [0.7.14] - 2026-04-15
 
 ### Added
