@@ -4,6 +4,61 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.16] - 2026-04-16
+
+### Added
+- **Phase 4c.2 shell runner enhancements** — per-shell dispatch profile
+  table (`SHELL_PROFILES` in `registry.py`) supporting 7 shells: `cmd`,
+  `bash`, `sh`, `zsh`, `csh`, `pwsh`, `powershell`. Replaces the
+  previous 3-branch `if/elif` in `make_shell_runner`.
+
+  Scripting-language interpreters (perl, ruby, lua, etc.) are
+  deliberately NOT in the shell profile table — they lack shell
+  semantics (no chain operators, no source syntax, no interactive
+  keep-open). Use `runtime.type: "script"` with `interpreter: "perl"`
+  (or ruby/lua/etc.) for those. The shell runner errors loudly with
+  a pointer to the correct runtime type when a non-shell interpreter
+  is declared as `shell:`.
+- New manifest fields under `runtime` for shell-type tools:
+  - **`shell_args`** (list): flags inserted between shell and script.
+    Replaces default flags when present. Supports patterns like
+    `["/E:ON", "/V:ON", "/c"]` for cmd extensions + delayed expansion,
+    `["-NoProfile", "-ExecutionPolicy", "Bypass"]` for pwsh, or
+    `["--login"]` for bash.
+  - **`shell_env`** (dict `{script, args}`): environment-setup script
+    chained before the tool via the shell's canonical source syntax
+    (`source` for bash/zsh, `.` for sh/pwsh/powershell, direct
+    invocation for cmd/csh). Covers patterns like `dazzle_env.cmd`
+    that require VS vcvarsall, PATH setup, etc. Fails loudly for
+    shells that don't support env chaining (e.g., `perl`).
+  - **`interactive`** (bool or `"exec"`, default `false`): keeps the
+    shell open after the tool runs (cmd `/k`, pwsh `-NoExit`). Value
+    `"exec"` uses `os.execvp` to fully hand off the dz process to the
+    shell — enables agentic-task scenarios where dz spawns a shell
+    environment for continued interaction. Shells without interactive
+    support (`sh`, `csh`, `perl`) error loudly when requested.
+- `dz info` displays shell-type fields (`Shell:`, `Shell args:`,
+  `Shell env:`, `Interactive:`) when declared in the manifest.
+- 19 new shell runner tests in `tests/test_registry.py` covering
+  profile dispatch, shell_args replacement, env chaining semantics,
+  interactive modes (including exec handoff via mocked `os.execvp`),
+  and per-shell edge cases (perl rejection, sh/csh interactive rejection).
+- Real-subprocess integration tests with auto-skip markers:
+  `shell_cmd`, `shell_bash`, `shell_pwsh`, `shell_zsh`, `shell_csh`,
+  `shell_perl`, `shell_env`, `shell_interactive`, `shell_exec`.
+  `tests/conftest.py` provides per-runner auto-skip via `shutil.which`.
+- Shell test fixtures in `tests/fixtures/shells/`:
+  `hello.{sh,bat,ps1}`, `env_setup.{sh,cmd,ps1}`, `check_env.{sh,bat,ps1}`.
+
+### Changed
+- `make_shell_runner` in `dazzlecmd_lib/registry.py` rewritten from 27
+  lines of hardcoded if/elif branching to ~120 lines of profile-driven
+  dispatch. Zero existing shell-type tools in the repo were affected
+  (grep confirmed pre-migration). No backward-compat shim needed.
+
+Refs #30 (Phase 4c.2 -- shell runner enhancements)
+Refs #22 (runtime shell fields align with interpreter dispatch model)
+
 ## [0.7.15] - 2026-04-15
 
 ### Changed

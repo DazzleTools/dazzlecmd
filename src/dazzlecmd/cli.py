@@ -556,6 +556,20 @@ def _cmd_info(args, projects):
         print(f"Dev command:  {runtime['dev_command']}")
     if runtime.get("interpreter"):
         print(f"Interpreter: {runtime['interpreter']}")
+    if runtime.get("shell"):
+        print(f"Shell:       {runtime['shell']}")
+    if runtime.get("shell_args"):
+        print(f"Shell args:  {' '.join(runtime['shell_args'])}")
+    if runtime.get("shell_env"):
+        env = runtime["shell_env"]
+        env_script = env.get("script", "")
+        env_args = env.get("args", [])
+        env_str = env_script + ((" " + " ".join(env_args)) if env_args else "")
+        print(f"Shell env:   {env_str}")
+    interactive = runtime.get("interactive")
+    if interactive:
+        label = "exec (hand-off)" if interactive == "exec" else "keep open"
+        print(f"Interactive: {label}")
     if project.get("pass_through"):
         print(f"Pass-through: yes")
 

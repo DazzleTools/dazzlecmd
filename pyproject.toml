@@ -42,3 +42,15 @@ include = ["dazzlecmd*"]
 
 [tool.setuptools.package-data]
 "dazzlecmd" = ["templates/*"]
+
+[tool.pytest.ini_options]
+markers = [
+    "shell_cmd: tests requiring Windows cmd.exe",
+    "shell_bash: tests requiring bash in PATH",
+    "shell_pwsh: tests requiring PowerShell Core (pwsh) in PATH",
+    "shell_zsh: tests requiring zsh in PATH",
+    "shell_csh: tests requiring csh/tcsh in PATH",
+    "shell_env: tests exercising the shell_env chain feature",
+    "shell_interactive: tests exercising interactive mode (slow; may need TTY)",
+    "shell_exec: tests exercising os.execvp hand-off (cannot assert post-exec)",
+]

@@ -124,6 +124,12 @@ These names cannot be used as tool names (they're dazzlecmd built-in commands):
 ```
 
 ### Shell script tool
+
+The `shell` runtime type supports 7 shells: `cmd`, `bash`, `sh`, `zsh`, `csh`, `pwsh`, `powershell`. Each has a dispatch profile that knows its canonical invocation syntax.
+
+**For scripting-language interpreters** (perl, ruby, lua, php, R, etc.), use `runtime.type: "script"` with `interpreter: "<name>"` instead — those aren't shells (no chain operators, no source/dot-source syntax, no interactive keep-open semantics) and don't belong in the shell profile table.
+
+Basic form:
 ```json
 {
     "name": "deploy",
@@ -136,6 +142,61 @@ These names cannot be used as tool names (they're dazzlecmd built-in commands):
     "platform": "linux"
 }
 ```
+
+#### Optional `runtime.shell_args`
+
+List of flags inserted between shell and script. **Replaces** default flags entirely when present.
+
+```json
+"runtime": {
+    "type": "shell",
+    "shell": "cmd",
+    "shell_args": ["/E:ON", "/V:ON", "/c"],
+    "script_path": "build.bat"
+}
+```
+
+Other patterns:
+- bash with login shell: `"shell_args": ["--login"]`
+- pwsh with strict policy: `"shell_args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"]`
+
+#### Optional `runtime.shell_env`
+
+Environment-setup script chained before the tool script. Uses the shell's canonical source syntax (`source` for bash/zsh, `.` for sh/pwsh, direct invocation for cmd/csh).
+
+```json
+"runtime": {
+    "type": "shell",
+    "shell": "cmd",
+    "shell_args": ["/E:ON", "/V:ON"],
+    "shell_env": {
+        "script": "C:\\path\\to\\setenv.cmd",
+        "args": ["HOMEBOX", "PLZWORK"]
+    },
+    "script_path": "build.bat"
+}
+```
+
+Produces `cmd /E:ON /V:ON /c "setenv.cmd HOMEBOX PLZWORK && build.bat ..."` at dispatch. Not supported for `perl` (errors loudly).
+
+#### Optional `runtime.interactive`
+
+Keeps the sub-shell open after the tool runs. Values:
+
+- `false` (default): normal dispatch; shell exits after tool completes
+- `true`: uses interactive flag (cmd `/k`, pwsh `-NoExit`, bash/zsh `-i`); user types `exit` to return to dz
+- `"exec"`: hand off via `os.execvp` — dz process is replaced by the shell (true hand-off; enables agentic-task scenarios where dz spawns a managed shell environment)
+
+```json
+"runtime": {
+    "type": "shell",
+    "shell": "bash",
+    "script_path": "setup_dev_env.sh",
+    "interactive": "exec"
+}
+```
+
+Not all shells support interactive mode. `sh`, `csh`, and `perl` error loudly if `interactive: true` or `"exec"` is requested — use bash, zsh, cmd, pwsh, or powershell instead.
 
 ### Binary tool
 ```json
