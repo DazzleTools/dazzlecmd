@@ -397,7 +397,12 @@ class TestShellEnvChaining:
             assert "source /path/to/env.sh ARG1 ARG2" in combined
             assert " && " in combined
 
-    def test_cmd_env_chain_uses_shell_true(self, tmp_path):
+    def test_cmd_env_chain_uses_list_argv_not_shell_true(self, tmp_path):
+        """Regression for v0.7.18: cmd env-chain dispatch uses list-argv form
+        with an explicit /c flag interpreting the combined string. Using
+        shell=True would double-wrap in an outer cmd /c, breaking the
+        dispatch. Both the inner shell's exec flag AND list-argv invocation
+        are required for env-chain to work correctly on Windows cmd."""
         from unittest.mock import patch
         project = _make_shell_project(
             tmp_path, "cmd", "hello.bat",
@@ -409,8 +414,17 @@ class TestShellEnvChaining:
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
             runner = make_shell_runner(project)
             runner([])
-            # cmd needs_shell_true=True for && chaining
-            assert mock_run.call_args.kwargs.get("shell") is True
+            # Must NOT use shell=True — we invoke cmd.exe directly with its
+            # own /c (or /k) interpreting the combined command string.
+            assert mock_run.call_args.kwargs.get("shell") is not True
+            # Argv should be list form: [cmd, /c, "CALL env.cmd HOMEBOX && hello.bat"]
+            call_args = mock_run.call_args[0][0]
+            assert isinstance(call_args, list)
+            assert call_args[0] == "cmd"
+            assert "/c" in call_args
+            # The combined command string should be the final arg
+            assert "CALL" in call_args[-1]
+            assert "&&" in call_args[-1]
 
     def test_pwsh_uses_dot_source_and_semicolon(self, tmp_path):
         from unittest.mock import patch
@@ -427,6 +441,131 @@ class TestShellEnvChaining:
             combined = mock_run.call_args[0][0][-1]
             assert ". env.ps1" in combined
             assert "; " in combined
+
+    def test_cmd_shell_env_uses_CALL_prefix(self, tmp_path):
+        """Regression for v0.7.18 Bug 1: env vars set in env.cmd propagate to
+        the tool script only when CALL precedes the env-script invocation.
+        Verified via the combined command string in the list-argv invocation."""
+        from unittest.mock import patch
+        project = _make_shell_project(
+            tmp_path, "cmd", "hello.bat",
+            runtime_overrides={
+                "shell_env": {"script": "env_setup.cmd", "args": []},
+            },
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_shell_runner(project)
+            runner([])
+            call_args = mock_run.call_args[0][0]
+            assert isinstance(call_args, list)
+            # Combined string is the last argv entry: "CALL env_setup.cmd && hello.bat"
+            assert "CALL" in call_args[-1]
+
+    def test_cmd_shell_args_plus_shell_env_has_exec_flag(self, tmp_path):
+        """Regression for v0.7.18: when both shell_args and shell_env are
+        declared, engine must still inject the exec-style flag (/c) between
+        shell_args and the combined command. Without it, cmd invocation
+        lacks /c and blocks or errors. Example: cmd /E:ON /V:ON /c "CALL env.cmd && tool.bat"."""
+        from unittest.mock import patch
+        project = _make_shell_project(
+            tmp_path, "cmd", "hello.bat",
+            runtime_overrides={
+                "shell_args": ["/E:ON", "/V:ON"],
+                "shell_env": {"script": "env.cmd", "args": []},
+            },
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_shell_runner(project)
+            runner([])
+            call_args = mock_run.call_args[0][0]
+            # [cmd, /E:ON, /V:ON, /c, "CALL env.cmd && hello.bat"]
+            assert call_args[0] == "cmd"
+            assert call_args[1:3] == ["/E:ON", "/V:ON"]
+            assert call_args[3] == "/c"
+            assert "CALL" in call_args[4]
+            assert "&&" in call_args[4]
+
+    def test_cmd_interactive_plus_shell_env_uses_k_flag(self, tmp_path):
+        """Interactive-mode with shell_env should use /k (keep-open) instead
+        of /c for the exec flag."""
+        from unittest.mock import patch
+        project = _make_shell_project(
+            tmp_path, "cmd", "hello.bat",
+            runtime_overrides={
+                "shell_args": ["/E:ON", "/V:ON"],
+                "shell_env": {"script": "env.cmd", "args": []},
+                "interactive": True,
+            },
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_shell_runner(project)
+            runner([])
+            call_args = mock_run.call_args[0][0]
+            assert "/k" in call_args
+            assert "/c" not in call_args
+
+    def test_shell_env_relative_path_resolved_to_tool_dir(self, tmp_path):
+        """Regression for v0.7.18 Review item: relative shell_env.script paths
+        resolve against tool_dir (consistent with script_path semantics)."""
+        from unittest.mock import patch
+        # Create env_setup.cmd in tool_dir so the relative-path resolution hits
+        (tmp_path / "env_setup.cmd").write_text("@set FROM_ENV=yes\n")
+        project = _make_shell_project(
+            tmp_path, "cmd", "hello.bat",
+            runtime_overrides={
+                "shell_env": {"script": "env_setup.cmd", "args": []},
+            },
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_shell_runner(project)
+            runner([])
+            combined = mock_run.call_args[0][0]
+            combined_str = combined if isinstance(combined, str) else " ".join(combined)
+            # The env_script should have been resolved to tool_dir's absolute path
+            assert str(tmp_path) in combined_str
+
+    def test_shell_env_absolute_path_unchanged(self, tmp_path):
+        """Absolute paths pass through unmodified (don't prepend tool_dir)."""
+        from unittest.mock import patch
+        abs_path = "/tmp/my_env.sh" if not sys.platform == "win32" else r"C:\tmp\my_env.cmd"
+        project = _make_shell_project(
+            tmp_path, "cmd" if sys.platform == "win32" else "bash",
+            "hello.bat" if sys.platform == "win32" else "hello.sh",
+            runtime_overrides={
+                "shell_env": {"script": abs_path, "args": []},
+            },
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_shell_runner(project)
+            runner([])
+            combined = mock_run.call_args[0][0]
+            combined_str = combined if isinstance(combined, str) else " ".join(combined)
+            assert abs_path in combined_str
+
+    def test_shell_env_env_var_path_unchanged(self, tmp_path):
+        """Env-var-prefixed paths (%USERPROFILE%, $HOME) pass through so the
+        shell expands them."""
+        from unittest.mock import patch
+        project = _make_shell_project(
+            tmp_path, "cmd", "hello.bat",
+            runtime_overrides={
+                "shell_env": {"script": "%USERPROFILE%\\setup.cmd", "args": []},
+            },
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_shell_runner(project)
+            runner([])
+            combined = mock_run.call_args[0][0]
+            combined_str = combined if isinstance(combined, str) else " ".join(combined)
+            # %USERPROFILE% preserved; not prefixed with tool_dir
+            assert "%USERPROFILE%" in combined_str
+            assert f"{str(tmp_path)}\\%USERPROFILE%" not in combined_str
 
     def test_perl_rejected_as_unknown_shell(self, tmp_path):
         """perl is not a shell — runner errors with pointer to script type."""
@@ -805,6 +944,25 @@ class TestNodeTypeScriptRejectsWithoutInterpreter:
         runner = make_node_runner(project)
         result = runner([])
         assert result == 1
+
+    def test_ts_check_fires_before_file_existence(self, tmp_path, capsys):
+        """Regression for v0.7.18 Bug 2: TS-without-interpreter error must
+        fire even when the .ts file doesn't exist yet (tool authoring case)."""
+        project = {
+            "name": "test-node-tool",
+            "_dir": str(tmp_path),
+            "_fqcn": "test:test-node-tool",
+            # hello.ts deliberately NOT created
+            "runtime": {"type": "node", "script_path": "hello.ts"},
+        }
+        runner = make_node_runner(project)
+        result = runner([])
+        assert result == 1
+        captured = capsys.readouterr()
+        # The TS error should fire, NOT the "Script not found" error
+        assert "TypeScript file" in captured.err
+        assert "requires an explicit interpreter" in captured.err
+        assert "Script not found" not in captured.err
 
 
 class TestNpmScriptDispatch:

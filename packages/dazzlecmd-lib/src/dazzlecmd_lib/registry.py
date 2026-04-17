@@ -234,7 +234,11 @@ SHELL_PROFILES = {
         "script_flag": "/c",
         "string_flag": "/c",
         "interactive_flag": "/k",
-        "source_template": "{script}{args_space}",
+        # CALL prefix is required for env vars set in the env script to
+        # propagate to the tool script that follows. Without CALL, cmd
+        # invokes the .cmd/.bat as a child process and its environment
+        # changes never reach the next step of the && chain.
+        "source_template": "CALL {script}{args_space}",
         "chain_sep": " && ",
         "needs_shell_true": True,
     },
@@ -390,17 +394,46 @@ def make_shell_runner(project):
                     file=sys.stderr,
                 )
                 return 1
+            # Resolve relative shell_env.script paths against tool_dir (consistent
+            # with runtime.script_path). Absolute paths and anything starting with
+            # an env-var expansion (e.g. %USERPROFILE%, $HOME) pass through
+            # unchanged so the shell can interpret them.
+            if not os.path.isabs(env_script) and not env_script.startswith(("%", "$")):
+                candidate = os.path.join(tool_dir, env_script)
+                if os.path.isfile(candidate):
+                    env_script = candidate
             env_cmd = _format_source(profile["source_template"], env_script, env_args)
             tool_cmd = " ".join([full_path] + [str(a) for a in argv])
             combined = env_cmd + profile["chain_sep"] + tool_cmd
-            if shell_args is not None:
-                # User-provided flags; append combined command as final arg
-                cmd = [shell] + list(shell_args) + [combined]
-            elif interactive is True or interactive == "exec":
-                cmd = [shell, profile["interactive_flag"], combined]
+
+            # In env-chain mode, the shell must interpret the combined command
+            # string, which requires the string_flag (e.g. cmd /c, bash -c,
+            # pwsh -Command) -- OR the interactive_flag (cmd /k, pwsh -NoExit)
+            # if keep-open is requested. `shell_args` (user-supplied pre-exec
+            # shell configuration like /E:ON /V:ON) goes BEFORE the exec-style
+            # flag, not in place of it. The combined string is the final arg;
+            # && / ; chaining is interpreted by the invoked shell itself, not
+            # by subprocess -- so no shell=True wrapping.
+            if interactive is True or interactive == "exec":
+                if profile["interactive_flag"] is None:
+                    # Already validated earlier, but belt-and-braces
+                    print(
+                        f"Error: interactive mode not supported for shell '{shell}'",
+                        file=sys.stderr,
+                    )
+                    return 1
+                exec_style_flag = profile["interactive_flag"]
             else:
-                cmd = [shell, profile["string_flag"], combined]
-            use_shell_true = profile["needs_shell_true"]
+                exec_style_flag = profile["string_flag"]
+
+            if shell_args is not None:
+                # Pre-exec shell config (e.g. /E:ON /V:ON) followed by the
+                # exec-style flag and the combined command string. Convention:
+                # author should NOT include /c or /k in shell_args when
+                # shell_env is declared; engine appends one automatically.
+                cmd = [shell] + list(shell_args) + [exec_style_flag, combined]
+            else:
+                cmd = [shell, exec_style_flag, combined]
         else:
             # No env chain: run script directly
             if shell_args is not None:
@@ -412,7 +445,6 @@ def make_shell_runner(project):
             else:
                 # Shells where invoking a script takes no flag (bash, sh, zsh, csh, perl)
                 cmd = [shell, full_path] + list(argv)
-            use_shell_true = False
 
         # Hand off via os.execvp (interactive=="exec"): dz process is replaced
         if interactive == "exec":
@@ -423,12 +455,11 @@ def make_shell_runner(project):
                 print(f"Error: execvp failed: {exc}", file=sys.stderr)
                 return 1
 
-        # Normal dispatch (interactive=False) or blocking keep-open (interactive=True)
-        if use_shell_true:
-            # cmd.exe && chaining requires shell=True to interpret the operator
-            result = subprocess.run(" ".join(cmd), shell=True, cwd=os.getcwd())
-        else:
-            result = subprocess.run(cmd, cwd=os.getcwd())
+        # subprocess.run with list argv: the invoked shell (via its -c / /c /
+        # -Command / etc.) interprets && / ; chaining natively. No shell=True
+        # wrapping required -- and using shell=True on Windows would double-wrap
+        # cmd.exe in an outer cmd /c, breaking env-chain dispatch.
+        result = subprocess.run(cmd, cwd=os.getcwd())
         return result.returncode
 
     return runner
@@ -634,13 +665,13 @@ def make_node_runner(project):
             result = subprocess.run(cmd, cwd=tool_dir)
             return result.returncode
 
-        # script_path mode
-        full_path = os.path.join(tool_dir, script_path)
-        if not os.path.isfile(full_path):
-            print(f"Error: Script not found: {full_path}", file=sys.stderr)
-            return 1
-
-        # TypeScript files require an explicit interpreter
+        # script_path mode.
+        #
+        # TypeScript detection runs BEFORE file-existence check: declaring a
+        # .ts file without an interpreter is a configuration error regardless
+        # of whether the script exists yet. Authors writing a new tool get the
+        # actionable error ("set runtime.interpreter") instead of the generic
+        # "script not found" that would appear if the file check ran first.
         is_typescript = script_path.lower().endswith((".ts", ".tsx", ".mts", ".cts"))
         effective_interpreter = interpreter
         if effective_interpreter is None:
@@ -653,6 +684,11 @@ def make_node_runner(project):
                 )
                 return 1
             effective_interpreter = "node"
+
+        full_path = os.path.join(tool_dir, script_path)
+        if not os.path.isfile(full_path):
+            print(f"Error: Script not found: {full_path}", file=sys.stderr)
+            return 1
 
         # Build argv using the interpreter profile
         profile = NODE_INTERPRETERS.get(effective_interpreter)

@@ -4,6 +4,49 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.18] - 2026-04-17
+
+### Fixed
+- **Bug 1 (shell runner cmd `shell_env` env propagation)**: cmd's
+  `source_template` now prefixes invoked env scripts with `CALL`. Without
+  it, chaining `env.cmd && tool.bat` with cmd's `&&` runs each as a
+  separate child process and env vars set in `env.cmd` never reach
+  `tool.bat`. This silently broke the advertised `dazzle_env.cmd`
+  pattern. Change: one-line update to `SHELL_PROFILES["cmd"]
+  ["source_template"]`.
+- **Bug 2 (node runner TS-without-interpreter error ordering)**: the
+  `.ts`-requires-explicit-interpreter check in `make_node_runner` now
+  fires before the file-existence check. Previously, declaring a `.ts`
+  `script_path` without an `interpreter` field would produce the generic
+  "Script not found" error when the file didn't exist yet (common during
+  tool authoring), instead of the actionable TypeScript-specific message.
+- **Shell runner `shell_env.script` path resolution**: relative paths in
+  `shell_env.script` now resolve against the tool directory (consistent
+  with `runtime.script_path` semantics). Absolute paths and
+  env-var-prefixed paths (`%USERPROFILE%`, `$HOME`) pass through
+  unchanged so the shell handles expansion. Previously, relative paths
+  were resolved against the caller's cwd, which failed for most real
+  invocations.
+
+### Added
+- 5 new regression tests in `tests/test_registry.py` covering:
+  - `TestShellEnvChaining::test_cmd_shell_env_uses_CALL_prefix`
+  - `TestShellEnvChaining::test_shell_env_relative_path_resolved_to_tool_dir`
+  - `TestShellEnvChaining::test_shell_env_absolute_path_unchanged`
+  - `TestShellEnvChaining::test_shell_env_env_var_path_unchanged`
+  - `TestNodeTypeScriptRejectsWithoutInterpreter::test_ts_check_fires_before_file_existence`
+
+### Notes
+- Fixes identified by tester agent run against the v0.7.15-v0.7.17
+  checklists after those commits landed. No functional regressions found
+  in the binary polish (v0.7.15) or node runtime (v0.7.17); all three
+  issues in this patch are in the shell runner (v0.7.16) and node runner
+  (v0.7.17).
+- Conditional dispatch (originally planned as v0.7.18) shifts to v0.7.19
+  to keep bug fixes segregated from new features.
+
+Refs #30 (Phase 4c polish)
+
 ## [0.7.17] - 2026-04-16
 
 ### Added
