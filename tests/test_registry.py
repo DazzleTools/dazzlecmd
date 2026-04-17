@@ -13,14 +13,18 @@ import textwrap
 import pytest
 
 from dazzlecmd_lib.registry import (
+    NODE_INTERPRETERS,
     RunnerRegistry,
     SHELL_PROFILES,
     make_binary_runner,
+    make_node_runner,
+    make_script_runner,
     make_shell_runner,
 )
 
 
 FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "shells")
+NODE_FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "node")
 
 
 # ---------------------------------------------------------------------------
@@ -604,3 +608,441 @@ class TestShellRealEnvChain:
         assert exit_code == 0
         assert "ENV_OK" in captured["stdout"]
         assert "marker=setup_ran" in captured["stdout"]
+
+
+# ===========================================================================
+# Phase 4c.3 — Node runner + script runner interpreter_args
+# ===========================================================================
+
+
+def _make_node_project(tool_dir, script_name=None, **runtime_fields):
+    """Build a node-type project dict; optionally copy fixture script into tool_dir."""
+    if script_name:
+        fixture = os.path.join(NODE_FIXTURE_DIR, script_name)
+        if os.path.isfile(fixture):
+            import shutil as _sh
+            _sh.copy(fixture, str(tool_dir))
+    project = {
+        "name": "test-node-tool",
+        "_dir": str(tool_dir),
+        "_fqcn": "test:test-node-tool",
+        "runtime": {
+            "type": "node",
+        },
+    }
+    if script_name:
+        project["runtime"]["script_path"] = script_name
+    project["runtime"].update(runtime_fields)
+    return project
+
+
+class TestNodeInterpreterProfiles:
+    """NODE_INTERPRETERS table sanity checks."""
+
+    def test_all_expected_interpreters_registered(self):
+        expected = {"node", "tsx", "ts-node", "bun", "deno"}
+        assert expected == set(NODE_INTERPRETERS.keys())
+
+    def test_profile_has_subcommand_field(self):
+        for interp, profile in NODE_INTERPRETERS.items():
+            assert "subcommand" in profile, f"{interp} missing subcommand"
+
+    def test_bun_and_deno_use_run_subcommand(self):
+        assert NODE_INTERPRETERS["bun"]["subcommand"] == "run"
+        assert NODE_INTERPRETERS["deno"]["subcommand"] == "run"
+
+    def test_node_tsx_tsnode_have_no_subcommand(self):
+        assert NODE_INTERPRETERS["node"]["subcommand"] is None
+        assert NODE_INTERPRETERS["tsx"]["subcommand"] is None
+        assert NODE_INTERPRETERS["ts-node"]["subcommand"] is None
+
+
+class TestNodeScriptDispatch:
+    """script_path mode: per-interpreter argv construction."""
+
+    def test_node_default_interpreter(self, tmp_path):
+        from unittest.mock import patch
+        project = _make_node_project(tmp_path, script_name="hello.js")
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_node_runner(project)
+            runner(["a", "b"])
+            call_args = mock_run.call_args[0][0]
+            # [node, script, a, b] — no subcommand
+            assert call_args[0] == "node"
+            assert call_args[1].endswith("hello.js")
+            assert call_args[-2:] == ["a", "b"]
+
+    def test_node_default_for_js_when_no_interpreter(self, tmp_path):
+        from unittest.mock import patch
+        project = _make_node_project(tmp_path, script_name="hello.js")
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_node_runner(project)
+            runner([])
+            assert mock_run.call_args[0][0][0] == "node"
+
+    def test_bun_inserts_run_subcommand(self, tmp_path):
+        from unittest.mock import patch
+        project = _make_node_project(
+            tmp_path, script_name="hello.js", interpreter="bun",
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_node_runner(project)
+            runner([])
+            call_args = mock_run.call_args[0][0]
+            # [bun, run, script]
+            assert call_args[0] == "bun"
+            assert call_args[1] == "run"
+
+    def test_deno_inserts_run_subcommand(self, tmp_path):
+        from unittest.mock import patch
+        project = _make_node_project(
+            tmp_path, script_name="hello.js", interpreter="deno",
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_node_runner(project)
+            runner([])
+            call_args = mock_run.call_args[0][0]
+            assert call_args[0] == "deno"
+            assert call_args[1] == "run"
+
+    def test_tsx_no_subcommand(self, tmp_path):
+        from unittest.mock import patch
+        project = _make_node_project(
+            tmp_path, script_name="hello.ts", interpreter="tsx",
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_node_runner(project)
+            runner([])
+            call_args = mock_run.call_args[0][0]
+            # [tsx, script] — no subcommand
+            assert call_args[0] == "tsx"
+            assert call_args[1].endswith("hello.ts")
+
+    def test_unknown_interpreter_warns_and_dispatches(self, tmp_path):
+        """Unknown interpreter falls through with a stderr warning."""
+        from unittest.mock import patch
+        project = _make_node_project(
+            tmp_path, script_name="hello.js", interpreter="custom-js-runtime",
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_node_runner(project)
+            runner([])
+            call_args = mock_run.call_args[0][0]
+            assert call_args[0] == "custom-js-runtime"
+
+
+class TestNodeInterpreterArgs:
+    """interpreter_args are placed between interpreter (+subcommand) and script."""
+
+    def test_deno_with_permission_flags(self, tmp_path):
+        from unittest.mock import patch
+        project = _make_node_project(
+            tmp_path, script_name="hello.ts",
+            interpreter="deno",
+            interpreter_args=["--allow-read", "--allow-net"],
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_node_runner(project)
+            runner([])
+            call_args = mock_run.call_args[0][0]
+            # [deno, run, --allow-read, --allow-net, script]
+            assert call_args[:4] == ["deno", "run", "--allow-read", "--allow-net"]
+            assert call_args[4].endswith("hello.ts")
+
+    def test_node_with_memory_flag(self, tmp_path):
+        from unittest.mock import patch
+        project = _make_node_project(
+            tmp_path, script_name="hello.js",
+            interpreter="node",
+            interpreter_args=["--max-old-space-size=4096"],
+        )
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_node_runner(project)
+            runner([])
+            call_args = mock_run.call_args[0][0]
+            # [node, --max-old-space-size=4096, script] — no subcommand, then flags, then script
+            assert call_args[:2] == ["node", "--max-old-space-size=4096"]
+
+
+class TestNodeTypeScriptRejectsWithoutInterpreter:
+    """TypeScript files require an explicit interpreter — fail loudly otherwise."""
+
+    def test_ts_file_without_interpreter_errors(self, tmp_path):
+        project = _make_node_project(tmp_path, script_name="hello.ts")
+        runner = make_node_runner(project)
+        result = runner([])
+        assert result == 1
+
+    def test_tsx_file_without_interpreter_errors(self, tmp_path):
+        import shutil as _sh
+        (tmp_path / "hello.tsx").write_text("")
+        project = {
+            "name": "test-node-tool",
+            "_dir": str(tmp_path),
+            "_fqcn": "test:test-node-tool",
+            "runtime": {"type": "node", "script_path": "hello.tsx"},
+        }
+        runner = make_node_runner(project)
+        result = runner([])
+        assert result == 1
+
+    def test_mts_extension_requires_interpreter(self, tmp_path):
+        (tmp_path / "tool.mts").write_text("")
+        project = {
+            "name": "test-node-tool",
+            "_dir": str(tmp_path),
+            "_fqcn": "test:test-node-tool",
+            "runtime": {"type": "node", "script_path": "tool.mts"},
+        }
+        runner = make_node_runner(project)
+        result = runner([])
+        assert result == 1
+
+
+class TestNpmScriptDispatch:
+    """npm_script mode: dispatches `npm run <script> -- <argv>`."""
+
+    def test_npm_script_argv_shape(self, tmp_path):
+        from unittest.mock import patch
+        project = {
+            "name": "test-node-tool",
+            "_dir": str(tmp_path),
+            "_fqcn": "test:test-node-tool",
+            "runtime": {"type": "node", "npm_script": "build"},
+        }
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_node_runner(project)
+            runner(["--watch"])
+            call_args = mock_run.call_args[0][0]
+            assert call_args == ["npm", "run", "build", "--", "--watch"]
+
+    def test_npm_script_cwd_is_tool_dir(self, tmp_path):
+        from unittest.mock import patch
+        project = {
+            "name": "test-node-tool",
+            "_dir": str(tmp_path),
+            "_fqcn": "test:test-node-tool",
+            "runtime": {"type": "node", "npm_script": "start"},
+        }
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_node_runner(project)
+            runner([])
+            assert mock_run.call_args.kwargs.get("cwd") == str(tmp_path)
+
+
+class TestNpxDispatch:
+    """npx mode: dispatches `npx <package> <argv>`."""
+
+    def test_npx_argv_shape(self, tmp_path):
+        from unittest.mock import patch
+        project = {
+            "name": "test-node-tool",
+            "_dir": str(tmp_path),
+            "_fqcn": "test:test-node-tool",
+            "runtime": {"type": "node", "npx": "@org/toolpkg"},
+        }
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_node_runner(project)
+            runner(["--flag", "value"])
+            call_args = mock_run.call_args[0][0]
+            assert call_args == ["npx", "@org/toolpkg", "--flag", "value"]
+
+
+class TestNodeMutualExclusion:
+    """Exactly one dispatch mode must be declared."""
+
+    def test_none_declared_errors(self, tmp_path):
+        project = {
+            "name": "test-node-tool",
+            "_dir": str(tmp_path),
+            "_fqcn": "test:test-node-tool",
+            "runtime": {"type": "node"},
+        }
+        runner = make_node_runner(project)
+        result = runner([])
+        assert result == 1
+
+    def test_script_path_and_npm_script_errors(self, tmp_path):
+        project = {
+            "name": "test-node-tool",
+            "_dir": str(tmp_path),
+            "_fqcn": "test:test-node-tool",
+            "runtime": {
+                "type": "node",
+                "script_path": "tool.js",
+                "npm_script": "build",
+            },
+        }
+        runner = make_node_runner(project)
+        result = runner([])
+        assert result == 1
+
+    def test_npm_script_and_npx_errors(self, tmp_path):
+        project = {
+            "name": "test-node-tool",
+            "_dir": str(tmp_path),
+            "_fqcn": "test:test-node-tool",
+            "runtime": {
+                "type": "node",
+                "npm_script": "build",
+                "npx": "@org/pkg",
+            },
+        }
+        runner = make_node_runner(project)
+        result = runner([])
+        assert result == 1
+
+    def test_all_three_declared_errors(self, tmp_path):
+        project = {
+            "name": "test-node-tool",
+            "_dir": str(tmp_path),
+            "_fqcn": "test:test-node-tool",
+            "runtime": {
+                "type": "node",
+                "script_path": "tool.js",
+                "npm_script": "build",
+                "npx": "@org/pkg",
+            },
+        }
+        runner = make_node_runner(project)
+        result = runner([])
+        assert result == 1
+
+
+class TestRunnerRegistryNodeResolution:
+    def test_node_type_registered(self):
+        assert "node" in RunnerRegistry.registered_types()
+
+    def test_resolve_node_project(self, tmp_path):
+        project = _make_node_project(tmp_path, script_name="hello.js")
+        runner = RunnerRegistry.resolve(project)
+        assert runner is not None
+        assert callable(runner)
+
+
+# -------------------------------------------------------------
+# Script runner interpreter_args addition (Q7 fold-in)
+# -------------------------------------------------------------
+
+
+class TestScriptRunnerInterpreterArgs:
+    """make_script_runner now supports interpreter_args between interp and script."""
+
+    def test_cscript_style_flags(self, tmp_path):
+        """JScript via cscript //Nologo //B tool.js"""
+        from unittest.mock import patch
+        (tmp_path / "tool.js").write_text("")
+        project = {
+            "name": "test-script-tool",
+            "_dir": str(tmp_path),
+            "_fqcn": "test:test-script-tool",
+            "runtime": {
+                "type": "script",
+                "interpreter": "cscript",
+                "interpreter_args": ["//Nologo", "//B"],
+                "script_path": "tool.js",
+            },
+        }
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_script_runner(project)
+            runner([])
+            call_args = mock_run.call_args[0][0]
+            # [cscript, //Nologo, //B, tool.js]
+            assert call_args[:3] == ["cscript", "//Nologo", "//B"]
+            assert call_args[3].endswith("tool.js")
+
+    def test_perl_with_taint_mode(self, tmp_path):
+        """perl -w -T tool.pl"""
+        from unittest.mock import patch
+        (tmp_path / "tool.pl").write_text("")
+        project = {
+            "name": "test-script-tool",
+            "_dir": str(tmp_path),
+            "_fqcn": "test:test-script-tool",
+            "runtime": {
+                "type": "script",
+                "interpreter": "perl",
+                "interpreter_args": ["-w", "-T"],
+                "script_path": "tool.pl",
+            },
+        }
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_script_runner(project)
+            runner([])
+            call_args = mock_run.call_args[0][0]
+            assert call_args[:3] == ["perl", "-w", "-T"]
+
+    def test_no_interpreter_args_preserves_original_behavior(self, tmp_path):
+        """When interpreter_args is absent, argv is [interpreter, script, argv]."""
+        from unittest.mock import patch
+        (tmp_path / "tool.py").write_text("")
+        project = {
+            "name": "test-script-tool",
+            "_dir": str(tmp_path),
+            "_fqcn": "test:test-script-tool",
+            "runtime": {
+                "type": "script",
+                "interpreter": "python",
+                "script_path": "tool.py",
+            },
+        }
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
+            runner = make_script_runner(project)
+            runner(["arg1"])
+            call_args = mock_run.call_args[0][0]
+            # [python, tool.py, arg1]
+            assert call_args[0] == "python"
+            assert call_args[1].endswith("tool.py")
+            assert call_args[2] == "arg1"
+
+
+# -------------------------------------------------------------
+# Real-subprocess integration tests (auto-skipped via conftest)
+# -------------------------------------------------------------
+
+
+@pytest.mark.node
+class TestNodeRealSubprocess:
+    def test_hello_js_runs(self, tmp_path):
+        project = _make_node_project(tmp_path, script_name="hello.js")
+        runner = make_node_runner(project)
+        result = runner(["world", "foo"])
+        assert result == 0
+
+
+@pytest.mark.bun
+class TestBunRealSubprocess:
+    def test_bun_runs_js(self, tmp_path):
+        project = _make_node_project(
+            tmp_path, script_name="hello.js", interpreter="bun",
+        )
+        runner = make_node_runner(project)
+        result = runner(["world"])
+        assert result == 0
+
+
+@pytest.mark.deno
+class TestDenoRealSubprocess:
+    def test_deno_runs_js_with_permissions(self, tmp_path):
+        project = _make_node_project(
+            tmp_path, script_name="hello.js",
+            interpreter="deno",
+            interpreter_args=["--allow-read"],
+        )
+        runner = make_node_runner(project)
+        result = runner(["world"])
+        assert result == 0

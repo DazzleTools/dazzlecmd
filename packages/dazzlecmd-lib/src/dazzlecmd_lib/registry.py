@@ -435,10 +435,23 @@ def make_shell_runner(project):
 
 
 def make_script_runner(project):
-    """Create a runner for scripts with an explicit interpreter."""
+    """Create a runner for scripts with an explicit interpreter.
+
+    Supports an optional ``interpreter_args`` field (list) that places
+    flags between the interpreter and the script path. Useful for:
+
+    - ``cscript //Nologo //B tool.js`` (Windows JScript/WSH)
+    - ``perl -w -T tool.pl`` (taint mode, warnings)
+    - ``ruby -r require_this tool.rb``
+    - ``lua -E tool.lua``
+
+    When absent, dispatches as ``[interpreter, script, args]`` (original
+    behavior preserved).
+    """
     runtime = project.get("runtime", {})
     script_path = runtime.get("script_path")
     interpreter = runtime.get("interpreter", "python")
+    interpreter_args = runtime.get("interpreter_args", [])
     tool_dir = project["_dir"]
 
     def runner(argv):
@@ -450,7 +463,7 @@ def make_script_runner(project):
             print(f"Error: Script not found: {full_path}", file=sys.stderr)
             return 1
         result = subprocess.run(
-            [interpreter, full_path] + list(argv),
+            [interpreter] + list(interpreter_args) + [full_path] + list(argv),
             cwd=os.getcwd(),
         )
         return result.returncode
@@ -535,6 +548,136 @@ def _accepts_args(func):
 
 
 # ---------------------------------------------------------------------------
+# Node runtime (Node.js, npm, npx, and alternative JS engines)
+# ---------------------------------------------------------------------------
+
+# Node interpreter profiles: per-interpreter dispatch characteristics.
+#
+# Fields:
+#   subcommand - subcommand inserted between interpreter and script
+#                (bun/deno use ``run``; node/tsx/ts-node use None)
+#
+# Unknown interpreters fall through to a generic ``[interp, script, argv]``
+# pattern with a stderr warning. Extend this dict for new JS runtimes.
+NODE_INTERPRETERS = {
+    "node":    {"subcommand": None},
+    "tsx":     {"subcommand": None},
+    "ts-node": {"subcommand": None},
+    "bun":     {"subcommand": "run"},
+    "deno":    {"subcommand": "run"},
+}
+
+
+def make_node_runner(project):
+    """Create a runner for Node.js ecosystem tools.
+
+    Three mutually-exclusive dispatch modes:
+
+    1. ``script_path``: dispatch ``[interpreter, <subcommand?>, args..., script, argv]``.
+       Default interpreter is ``node`` for ``.js``; ``.ts`` files require an
+       explicit ``interpreter`` (tsx, ts-node, bun, or deno).
+    2. ``npm_script``: dispatch ``npm run <script> -- <argv>``. Reads
+       package.json, finds the named script, runs it via shell.
+    3. ``npx``: dispatch ``npx <package> <argv>``. One-shot package
+       invocation; npx downloads the package on first use.
+
+    Exactly one mode must be declared. Multiple → error.
+
+    Optional ``interpreter_args`` list: flags between interpreter (and
+    its subcommand, if any) and the script. Used for deno permissions
+    (``--allow-read``), node memory flags (``--max-old-space-size=4096``),
+    bun options, etc.
+    """
+    runtime = project.get("runtime", {})
+    script_path = runtime.get("script_path")
+    npm_script = runtime.get("npm_script")
+    npx_target = runtime.get("npx")
+    interpreter = runtime.get("interpreter")
+    interpreter_args = runtime.get("interpreter_args", [])
+    tool_dir = project["_dir"]
+
+    # Validate mutual exclusion: exactly one dispatch mode
+    declared = [
+        m for m in ("script_path", "npm_script", "npx")
+        if runtime.get(m)
+    ]
+    if len(declared) == 0:
+        def error_runner(argv):
+            print(
+                f"Error: node runtime for {project['name']} declares no "
+                f"dispatch mode. Set exactly one of: script_path, npm_script, npx.",
+                file=sys.stderr,
+            )
+            return 1
+        return error_runner
+    if len(declared) > 1:
+        def error_runner(argv):
+            print(
+                f"Error: node runtime for {project['name']} declares multiple "
+                f"dispatch modes ({', '.join(declared)}). Set exactly one of: "
+                f"script_path, npm_script, npx.",
+                file=sys.stderr,
+            )
+            return 1
+        return error_runner
+
+    def runner(argv):
+        # npm_script mode
+        if npm_script:
+            cmd = ["npm", "run", npm_script, "--"] + list(argv)
+            result = subprocess.run(cmd, cwd=tool_dir)
+            return result.returncode
+
+        # npx mode
+        if npx_target:
+            cmd = ["npx", npx_target] + list(argv)
+            result = subprocess.run(cmd, cwd=tool_dir)
+            return result.returncode
+
+        # script_path mode
+        full_path = os.path.join(tool_dir, script_path)
+        if not os.path.isfile(full_path):
+            print(f"Error: Script not found: {full_path}", file=sys.stderr)
+            return 1
+
+        # TypeScript files require an explicit interpreter
+        is_typescript = script_path.lower().endswith((".ts", ".tsx", ".mts", ".cts"))
+        effective_interpreter = interpreter
+        if effective_interpreter is None:
+            if is_typescript:
+                print(
+                    f"Error: TypeScript file '{script_path}' requires an "
+                    f"explicit interpreter. Set runtime.interpreter to one of: "
+                    f"tsx, ts-node, bun, deno.",
+                    file=sys.stderr,
+                )
+                return 1
+            effective_interpreter = "node"
+
+        # Build argv using the interpreter profile
+        profile = NODE_INTERPRETERS.get(effective_interpreter)
+        if profile is None:
+            print(
+                f"Warning: Unknown node interpreter '{effective_interpreter}' "
+                f"for {project['name']}. Dispatching as "
+                f"'{effective_interpreter} <args> <script> <argv>'. "
+                f"Known interpreters: {', '.join(sorted(NODE_INTERPRETERS.keys()))}.",
+                file=sys.stderr,
+            )
+            cmd = [effective_interpreter] + list(interpreter_args) + [full_path] + list(argv)
+        else:
+            prefix = [effective_interpreter]
+            if profile["subcommand"]:
+                prefix.append(profile["subcommand"])
+            cmd = prefix + list(interpreter_args) + [full_path] + list(argv)
+
+        result = subprocess.run(cmd, cwd=tool_dir)
+        return result.returncode
+
+    return runner
+
+
+# ---------------------------------------------------------------------------
 # Register built-in types at import time
 # ---------------------------------------------------------------------------
 
@@ -542,3 +685,4 @@ RunnerRegistry.register("python", make_python_runner)
 RunnerRegistry.register("shell", make_shell_runner)
 RunnerRegistry.register("script", make_script_runner)
 RunnerRegistry.register("binary", make_binary_runner)
+RunnerRegistry.register("node", make_node_runner)

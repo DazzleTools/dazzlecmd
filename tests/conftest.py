@@ -18,6 +18,13 @@ _SKIP_CONDITIONS = {
     "shell_pwsh": lambda: shutil.which("pwsh") is None,
     "shell_zsh": lambda: shutil.which("zsh") is None,
     "shell_csh": lambda: shutil.which("csh") is None and shutil.which("tcsh") is None,
+    "node": lambda: shutil.which("node") is None,
+    "bun": lambda: shutil.which("bun") is None,
+    "deno": lambda: shutil.which("deno") is None,
+    "tsx": lambda: shutil.which("tsx") is None,
+    "ts_node": lambda: shutil.which("ts-node") is None,
+    "npm": lambda: shutil.which("npm") is None,
+    "npx": lambda: shutil.which("npx") is None,
 }
 
 

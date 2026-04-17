@@ -53,4 +53,11 @@ markers = [
     "shell_env: tests exercising the shell_env chain feature",
     "shell_interactive: tests exercising interactive mode (slow; may need TTY)",
     "shell_exec: tests exercising os.execvp hand-off (cannot assert post-exec)",
+    "node: tests requiring node in PATH",
+    "bun: tests requiring bun in PATH",
+    "deno: tests requiring deno in PATH",
+    "tsx: tests requiring tsx in PATH",
+    "ts_node: tests requiring ts-node in PATH",
+    "npm: tests requiring npm in PATH",
+    "npx: tests requiring npx in PATH",
 ]

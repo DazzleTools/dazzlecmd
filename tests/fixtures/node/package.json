@@ -1,0 +1,9 @@
+{
+    "name": "dazzle-node-fixture",
+    "version": "0.0.0",
+    "private": true,
+    "scripts": {
+        "hello": "node hello.js",
+        "check-args": "node check_args.js"
+    }
+}

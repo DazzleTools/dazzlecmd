@@ -556,6 +556,12 @@ def _cmd_info(args, projects):
         print(f"Dev command:  {runtime['dev_command']}")
     if runtime.get("interpreter"):
         print(f"Interpreter: {runtime['interpreter']}")
+    if runtime.get("interpreter_args"):
+        print(f"Interp args: {' '.join(runtime['interpreter_args'])}")
+    if runtime.get("npm_script"):
+        print(f"NPM script:  {runtime['npm_script']}")
+    if runtime.get("npx"):
+        print(f"Npx:         {runtime['npx']}")
     if runtime.get("shell"):
         print(f"Shell:       {runtime['shell']}")
     if runtime.get("shell_args"):

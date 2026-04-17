@@ -4,6 +4,61 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.17] - 2026-04-16
+
+### Added
+- **Phase 4c.3 node runtime type** — dedicated `runtime.type: "node"` for
+  the Node.js / npm / TypeScript ecosystem. Three mutually-exclusive
+  dispatch modes:
+  - **`script_path`** — dispatch via `[interpreter, <subcommand?>, args..., script, argv]`
+  - **`npm_script`** — dispatch via `npm run <script> -- <argv>`
+  - **`npx`** — dispatch via `npx <package> <argv>` (downloads package on first use)
+- **`NODE_INTERPRETERS` profile dict** supporting 5 JS interpreters:
+  `node`, `tsx`, `ts-node`, `bun`, `deno`. Bun and deno auto-insert the
+  `run` subcommand; others use no subcommand. Unknown interpreters fall
+  through with a stderr warning.
+- **`runtime.interpreter`** (for `.js`/`.ts`) — pick which interpreter
+  runs the script. Defaults to `node` for `.js`. Required for `.ts`/`.tsx`/
+  `.mts`/`.cts` files (fails loudly if absent — no auto-detection of
+  TypeScript runner preference, user picks).
+- **`runtime.interpreter_args`** — flags placed between interpreter (and
+  its subcommand, if any) and the script. Enables `deno --allow-read`,
+  `node --max-old-space-size=4096`, `bun --watch`, etc.
+- **Script runner `interpreter_args`** — same field added to
+  `runtime.type: "script"`. Unblocks `cscript //Nologo //B tool.js`
+  (Windows JScript/WSH), `perl -w -T tool.pl`, `ruby -r tool.rb`, etc.
+- **Mutual exclusion** for node dispatch modes — declaring multiple
+  (script_path + npm_script, etc.) errors loudly with a list of declared
+  modes. None declared also errors.
+- `dz info` displays `Interp args:`, `NPM script:`, `Npx:` fields when
+  declared on a node-type tool.
+- 28 new tests in `tests/test_registry.py` covering node profile
+  dispatch, interpreter_args placement, TypeScript-rejection-without-
+  interpreter, npm_script argv shape, npx argv shape, mutual exclusion,
+  script runner interpreter_args, and real-subprocess integration
+  (auto-skipped when node/bun/deno absent).
+- New pytest markers: `node`, `bun`, `deno`, `tsx`, `ts_node`, `npm`,
+  `npx`. Auto-skip via conftest `shutil.which` checks.
+- Test fixtures in `tests/fixtures/node/`: `hello.js`, `hello.ts`,
+  `check_args.js`, `package.json`.
+
+### Changed
+- Treatment of npx **aligned with other package-manager invocations**
+  (no special gate or warning). `npx` downloading a package on first
+  use is structurally identical to `pip install` in `setup.command`,
+  `cargo install` in `dev_command`, etc. The security model is
+  "listing is safe; dispatch is user-opted-in" — applies uniformly
+  across all runtimes and package managers.
+
+### Deferred
+- `runtime.platforms` per-platform dispatch override → v0.7.18
+  (micro-commit, ~30 LOC)
+- Platform gating enforcement (`platform: "windows"` filters list/dispatch)
+  → Phase 5
+
+Refs #30 (Phase 4c.3 -- node runtime type: NODE_INTERPRETERS, script_path/npm_script/npx dispatch modes, interpreter_args)
+Related: #39 (trust model — npx treatment reaffirms "no special treatment per runtime; class-level capability metadata deferred")
+
 ## [0.7.16] - 2026-04-16
 
 ### Added

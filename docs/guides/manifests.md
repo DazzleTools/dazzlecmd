@@ -198,6 +198,96 @@ Keeps the sub-shell open after the tool runs. Values:
 
 Not all shells support interactive mode. `sh`, `csh`, and `perl` error loudly if `interactive: true` or `"exec"` is requested — use bash, zsh, cmd, pwsh, or powershell instead.
 
+### Node.js / TypeScript / bun / deno tool
+
+The `node` runtime type supports 5 interpreters (`node`, `tsx`, `ts-node`, `bun`, `deno`) and three mutually-exclusive dispatch modes.
+
+#### Mode 1 — script dispatch
+
+```json
+{
+    "runtime": {
+        "type": "node",
+        "interpreter": "node",
+        "script_path": "tool.js"
+    }
+}
+```
+
+`.js` files default to `interpreter: "node"`. For TypeScript files (`.ts`/`.tsx`/`.mts`/`.cts`), an explicit `interpreter` is **required** — the engine won't guess between tsx, ts-node, bun, and deno.
+
+Bun and deno auto-insert a `run` subcommand: `bun run script.ts`, `deno run script.ts`. Node, tsx, and ts-node don't.
+
+Optional `interpreter_args` (list): flags between interpreter and script.
+
+```json
+"runtime": {
+    "type": "node",
+    "interpreter": "deno",
+    "interpreter_args": ["--allow-read", "--allow-net"],
+    "script_path": "tool.ts"
+}
+```
+
+Produces `deno run --allow-read --allow-net tool.ts <argv>` at dispatch.
+
+#### Mode 2 — npm script
+
+```json
+{
+    "runtime": {
+        "type": "node",
+        "npm_script": "build"
+    }
+}
+```
+
+Produces `npm run build -- <argv>`. npm reads package.json in the tool directory, finds the named script, runs it via shell.
+
+#### Mode 3 — npx package
+
+```json
+{
+    "runtime": {
+        "type": "node",
+        "npx": "@org/toolpkg"
+    }
+}
+```
+
+Produces `npx @org/toolpkg <argv>`. **Note**: npx may download the package on first use. This is structurally identical to `pip install` in a setup command or `cargo install` via `dev_command` — the tool author declared it; the user's choice to run the tool is the trust boundary.
+
+Exactly one of `script_path`, `npm_script`, `npx` must be declared. Multiple → error.
+
+### Script (generic interpreter) tool
+
+For any interpreter not covered by dedicated runtime types (`cscript`, `wscript`, `perl`, `ruby`, `lua`, `php`, `R`, etc.), use `runtime.type: "script"` with an explicit `interpreter`. Supports an optional `interpreter_args` list for flags between interpreter and script.
+
+Windows JScript via WSH:
+```json
+{
+    "runtime": {
+        "type": "script",
+        "interpreter": "cscript",
+        "interpreter_args": ["//Nologo", "//B"],
+        "script_path": "tool.js"
+    },
+    "platform": "windows"
+}
+```
+
+Perl with taint mode and warnings:
+```json
+{
+    "runtime": {
+        "type": "script",
+        "interpreter": "perl",
+        "interpreter_args": ["-w", "-T"],
+        "script_path": "tool.pl"
+    }
+}
+```
+
 ### Binary tool
 ```json
 {
