@@ -105,6 +105,47 @@ Every dazzlecmd tool has a `.dazzlecmd.json` manifest that describes how to disc
 |-------|------|-------------|
 | `lifecycle.status` | string | `active`, `deprecated`, `experimental` |
 
+### Setup
+
+Declares how to install or initialize the tool's dependencies. The engine does
+not install dependencies itself -- it dispatches the tool's own setup command.
+Run via `dz setup <tool>`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `setup.command` | string | Default shell command for platforms not explicitly overridden. |
+| `setup.note` | string | Human-readable description shown by `dz info` and `dz setup` before execution. |
+| `setup.platforms` | object | Per-platform command overrides. Keys: `windows`, `linux`, `macos` (alias `darwin`). Values are shell command strings. |
+
+The setup command runs via `subprocess.run(cmd, shell=True, cwd=tool_dir)`, so
+shell operators (`&&`, `;`, pipes) are interpreted by the host shell.
+
+Platform selection: if `setup.platforms.<current-os>` is set, that command is
+used. Otherwise `setup.command` is the fallback. If neither applies on the
+current host, `dz setup` errors with "No setup command available for platform".
+
+Example:
+```json
+{
+    "name": "my-tool",
+    "setup": {
+        "command": "pip install -r requirements.txt",
+        "note": "Installs Python dependencies into the current environment",
+        "platforms": {
+            "windows": "python -m pip install -r requirements.txt",
+            "linux": "python3 -m pip install -r requirements.txt",
+            "macos": "python3 -m pip install -r requirements.txt"
+        }
+    }
+}
+```
+
+**Future (issue #40)**: the setup schema will gain nested
+`platforms.<os>.<subtype>` keys, multi-step `steps` arrays, structured
+`detect_when` matchers, and user-contributable override files -- matching the
+shape already established for `runtime.platforms` in v0.7.19. The current
+flat-string platform map documented above stays backwards-compatible.
+
 ## Reserved Names
 
 These names cannot be used as tool names (they're dazzlecmd built-in commands):
@@ -300,6 +341,131 @@ Perl with taint mode and warnings:
     "platform": "windows"
 }
 ```
+
+## Conditional Dispatch (v0.7.19+)
+
+A single manifest can express different dispatch behavior per platform and
+offer ordered alternatives when multiple implementations are viable. Two
+features work together:
+
+1. **`runtime.platforms.<os>.<subtype>`** -- per-platform overrides that merge
+   into the base runtime for the matching host.
+2. **`runtime.prefer`** -- an ordered array of dispatch alternatives. The
+   first entry whose preconditions pass is selected.
+
+### `runtime.platforms`
+
+Nested by OS (`linux` / `windows` / `macos` / `bsd` / `other`) and subtype
+(`debian` / `rhel` / `win11` / `macos14` / `freebsd` / `general` / etc.).
+Resolution order for each host:
+
+1. Start with the base `runtime` block (fields declared outside `platforms`).
+2. Merge top-level fields of `platforms.<current_os>` if the OS matches.
+3. Merge `platforms.<current_os>.<current_subtype>` if that subtype dict
+   exists; else merge `platforms.<current_os>.general` if present.
+
+Deep-merge semantics: nested dicts merge recursively, **arrays are replaced**
+(not concatenated), `null` in the override removes the key.
+
+Example:
+```json
+{
+    "name": "my-tool",
+    "runtime": {
+        "type": "node",
+        "script_path": "tool.js",
+        "platforms": {
+            "windows": {
+                "type": "script",
+                "interpreter": "cscript",
+                "interpreter_args": ["//Nologo"],
+                "script_path": "tool_wsh.js"
+            },
+            "linux": {
+                "debian": {"interpreter_args": ["--use-openssl-ca"]},
+                "general": {"interpreter_args": []}
+            }
+        }
+    }
+}
+```
+
+### `runtime.prefer`
+
+Ordered array of dispatch alternatives. Each entry is a dict of runtime
+fields. The engine iterates top-to-bottom and picks the first entry whose
+preconditions pass. Preconditions are **inferred** from declared fields:
+
+| Declared field | Precondition |
+|---|---|
+| `interpreter` | Interpreter must be on PATH (`shutil.which`) |
+| `npx` | `npx` must be on PATH |
+| `npm_script` | `npm` must be on PATH |
+| `script_path` | File must exist (relative to tool directory) |
+
+Optionally an entry may also declare **`detect_when`** -- a structured
+condition evaluated before the inferred preconditions. Both must pass for
+the entry to match.
+
+Example:
+```json
+{
+    "runtime": {
+        "type": "node",
+        "prefer": [
+            {"interpreter": "bun", "script_path": "tool.ts"},
+            {"interpreter": "tsx", "script_path": "tool.ts"},
+            {"npx": "@myorg/tool"}
+        ]
+    }
+}
+```
+
+On a host with `bun` installed: first entry wins. Without `bun` but with
+`tsx`: second. With neither but `npx` available: third.
+
+If no entry matches, `dz <tool>` fails with a full resolution trace showing
+what was tried and why each was rejected.
+
+### Combining platforms + prefer
+
+A `platforms.<os>` or `platforms.<os>.<subtype>` block may itself contain a
+`prefer` array. The platform override runs first (merging fields), then the
+resulting effective block's `prefer` is iterated.
+
+### `detect_when` matchers
+
+The `detect_when` schema (shared with setup resolution) supports these
+matchers:
+
+- `file_exists: <path>` -- path exists and is a regular file
+- `dir_exists: <path>` -- path exists and is a directory
+- `env_var: <name>` -- env var is set AND non-empty (values never logged)
+- `env_var_equals: {name, value}` -- strict string equality (values not logged)
+- `command_available: <name>` -- `shutil.which(name)` resolves
+- `uname_contains: <substring>` -- case-insensitive substring match against
+  a composite platform string (`<os> <subtype> <arch> <version> [wsl]`)
+- `all: [<condition>, ...]` -- AND (`all: []` is vacuously True)
+- `any: [<condition>, ...]` -- OR (`any: []` is vacuously False)
+
+Multiple keys in a single condition dict are AND'd together. Underscore-prefixed
+keys (`_schema_version`, `_comment`) are treated as metadata and ignored.
+
+### Inspecting resolution
+
+- `dz info <tool>` -- default view shows the runtime resolved for the current host.
+- `dz info <tool> --raw` -- shows the manifest as declared (platforms + prefer arrays visible).
+- `dz info <tool> --platform <spec>` -- previews resolution for a specified
+  platform (e.g., `linux.debian`, `windows`, `macos.macos14`). Enumerates
+  `prefer` entries without evaluating preconditions, so you can verify
+  platform-level resolution across hosts you do not own.
+
+### Schema versioning
+
+Manifest blocks may carry a `_schema_version` field. v0.7.19 ships schema
+version `"1"`. Un-versioned blocks default to version 1 for backwards compat.
+Future library versions that introduce breaking changes will bump the
+supported version set and provide migration hooks.
 
 ## See Also
 

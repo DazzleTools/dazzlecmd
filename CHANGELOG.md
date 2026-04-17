@@ -4,6 +4,98 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.19] - 2026-04-17
+
+### Added
+
+- **Conditional dispatch (`runtime.platforms` + `runtime.prefer`).** A single
+  manifest can now express different dispatch behavior per platform and
+  declare ordered alternatives when multiple implementations are viable.
+  `runtime.platforms.<os>.<subtype>` overrides the base runtime for the
+  matching host; `runtime.prefer` is an ordered array of dispatch
+  alternatives whose first viable entry is selected. Inferred preconditions
+  (interpreter on PATH, script file exists, npx/npm available) gate each
+  prefer entry. Optional `detect_when` structured matchers provide explicit
+  gating beyond the inferred preconditions.
+- **Seven shared library modules in `dazzlecmd-lib`** forming the substrate
+  for both runtime conditional dispatch (this release) and multi-platform
+  setup (issue #40, forthcoming):
+  - `platform_detect` -- `PlatformInfo` dataclass + cached `get_platform_info()`
+    with optional `distro` dependency and stdlib fallback via `/etc/os-release`.
+    Detects Linux/Windows/macOS/BSD/WSL with normalized OS names, subtypes,
+    and architectures.
+  - `conditions` -- `detect_when` evaluator with six leaf matchers
+    (`file_exists`, `dir_exists`, `env_var`, `env_var_equals`,
+    `command_available`, `uname_contains`) and two combinators (`all`,
+    `any`). Env var values are never logged. `_`-prefixed keys are metadata.
+  - `platform_resolve` -- `resolve_platform_block` (subtype fallback:
+    `<subtype>` -> `general` -> base) and `deep_merge` (arrays REPLACED, not
+    concatenated).
+  - `resolution_trace` -- `ResolutionAttempt` + `ResolutionTrace` dataclasses
+    used to build structured diagnostic output when a resolution fails.
+  - `paths` -- cross-platform helpers: `resolve_relative_path` (generalizes
+    the v0.7.18 shell_env fix), `ensure_windows_executable_suffix`,
+    `translate_wsl_path`, `which_with_pathext`.
+  - `schema_version` -- `CURRENT_SCHEMA_VERSION`, `SUPPORTED_SCHEMA_VERSIONS`,
+    `get_schema_version`, `check_schema_version`. Un-versioned manifests
+    default to version "1" for backwards compat.
+  - `user_overrides` -- groundwork for per-user override files. Honors
+    `DAZZLECMD_OVERRIDES_DIR`, defaults to `~/.dazzlecmd/overrides/`. FQCN
+    `:` characters translate to `__` on disk. Runtime does not yet call
+    `load_override` at dispatch time; issue #40 becomes the first production
+    caller.
+- **`resolve_runtime()` preprocessor in `registry.py`.** Every
+  `RunnerRegistry.resolve()` call now passes the project through
+  `resolve_runtime` first, applying platforms merge + prefer iteration
+  before the runner factory sees the project. Runners stay dumb; the
+  resolver owns the platform logic. `NoRuntimeResolutionError` surfaces a
+  full trace (platform info, each tried entry, reason for each failure,
+  actionable fix hint) when no entry matches.
+- **`dz info --raw` and `dz info --platform SPEC` flags.**
+  - Default `dz info <tool>` now shows the runtime resolved for the current
+    host. Tools without `platforms`/`prefer` render identically to v0.7.18.
+  - `--raw` shows the manifest as declared, with `platforms` and `prefer`
+    arrays enumerated.
+  - `--platform <spec>` (e.g., `linux.debian`, `windows`, `macos.macos14`)
+    previews platform-level resolution for a host you may not own. `prefer`
+    entries are enumerated without evaluating preconditions (since the
+    current host's PATH isn't the target platform's).
+- **213 new automated tests** across nine test files, organized by module
+  concern. Full suite: 511 passing, 6 platform-skipped (up from 298).
+- `docs/guides/manifests.md` gains a "Conditional Dispatch" section with
+  worked examples for `platforms`, `prefer`, `detect_when`, and the three
+  inspection modes.
+- Human test checklist at
+  `tests/checklists/v0.7.19__Phase4c-5__conditional-dispatch.md`.
+
+### Changed
+
+- `RunnerRegistry.resolve(project)` now runs `resolve_runtime(project)`
+  first. Existing manifests without `platforms`/`prefer` take a fast path
+  and behave identically; manifests that declare conditional dispatch
+  receive the effective block.
+- `_print_runtime_*` helpers extracted from `_cmd_info` for reuse across
+  the three display modes.
+
+### Notes
+
+- Conditional dispatch ships as the first feature built on the shared
+  library substrate. Issue #40 (multi-platform setup) is the second
+  consumer and will reuse `platform_detect`, `conditions`,
+  `platform_resolve`, `resolution_trace`, and `user_overrides` unchanged.
+- The design explicitly preserves the "dumb dispatcher" principle: authors
+  declare intent (what runs where, in what preference order); the engine
+  faithfully evaluates and picks. No auto-detection beyond what the
+  manifest declares.
+- Schema version 1 is the current and only supported version. Future
+  breaking changes to the manifest schema will bump the supported version
+  set and land alongside a migration hook.
+- All error messages preserve the "env var values are never logged"
+  security invariant. Conditions checking secret-bearing env vars surface
+  presence/absence only.
+
+Refs #30 (Phase 4c polish), #40 (setup sibling uses the same shared modules)
+
 ## [0.7.18] - 2026-04-17
 
 ### Fixed

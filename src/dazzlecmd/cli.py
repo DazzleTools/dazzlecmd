@@ -195,6 +195,20 @@ def _register_meta_commands(subparsers):
     # dz info <tool>
     info_parser = subparsers.add_parser("info", help="Show detailed info about a tool")
     info_parser.add_argument("tool", help="Tool name to inspect")
+    info_parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="Show the manifest as declared, without conditional-dispatch resolution.",
+    )
+    info_parser.add_argument(
+        "--platform",
+        metavar="SPEC",
+        help=(
+            "Preview runtime resolution for a specific platform "
+            "(e.g., 'linux.debian', 'windows', 'macos.macos14'). "
+            "Enumerates the prefer array without evaluating preconditions."
+        ),
+    )
     info_parser.set_defaults(_meta="info")
 
     # dz kit
@@ -515,6 +529,150 @@ def _cmd_list(args, projects, engine=None):
     return 0
 
 
+# ---------------------------------------------------------------------------
+# Runtime display helpers for `dz info`
+# ---------------------------------------------------------------------------
+
+
+_RUNTIME_DISPATCH_FIELDS = [
+    # (manifest_key, display_label, render_fn)
+    ("script_path", None, None),  # handled specially (label depends on type)
+    ("dev_command", "Dev command", None),
+    ("interpreter", "Interpreter", None),
+    ("interpreter_args", "Interp args", lambda v: " ".join(v)),
+    ("npm_script", "NPM script", None),
+    ("npx", "Npx", None),
+    ("shell", "Shell", None),
+    ("shell_args", "Shell args", lambda v: " ".join(v)),
+    ("shell_env", "Shell env", lambda v: (
+        v.get("script", "") +
+        ((" " + " ".join(v.get("args", []))) if v.get("args") else "")
+    )),
+]
+
+
+def _print_runtime_dispatch_fields(runtime):
+    """Print the concrete dispatch fields (script_path, interpreter, etc.)."""
+    runtime_type = runtime.get("type", "python")
+    if runtime.get("script_path"):
+        label = "Binary" if runtime_type == "binary" else "Script"
+        print(f"{label + ':':13}{runtime['script_path']}")
+    for key, label, render in _RUNTIME_DISPATCH_FIELDS:
+        if key == "script_path":
+            continue
+        value = runtime.get(key)
+        if not value:
+            continue
+        if render is not None:
+            value = render(value)
+        print(f"{label + ':':13}{value}")
+    interactive = runtime.get("interactive")
+    if interactive:
+        label = "exec (hand-off)" if interactive == "exec" else "keep open"
+        print(f"Interactive: {label}")
+
+
+def _print_runtime_resolved(project):
+    """Default view: show the runtime resolved for the current host."""
+    from dazzlecmd_lib.registry import resolve_runtime, NoRuntimeResolutionError
+    from dazzlecmd_lib.platform_detect import get_platform_info
+
+    raw_runtime = project.get("runtime", {})
+    has_conditional = "platforms" in raw_runtime or "prefer" in raw_runtime
+
+    if not has_conditional:
+        # No conditional dispatch; plain print of the raw runtime.
+        runtime_type = raw_runtime.get("type", "python")
+        print(f"Runtime:     {runtime_type}")
+        _print_runtime_dispatch_fields(raw_runtime)
+        return
+
+    pi = get_platform_info()
+    try:
+        resolved = resolve_runtime(project)
+    except NoRuntimeResolutionError as exc:
+        print(f"Runtime:     <unresolved for this host>")
+        print()
+        for line in str(exc).splitlines():
+            print(f"  {line}")
+        return
+    except Exception as exc:  # UnsupportedSchemaVersionError etc.
+        print(f"Runtime:     <resolution error: {exc}>")
+        return
+
+    runtime = resolved.get("runtime", {})
+    runtime_type = runtime.get("type", "python")
+    platform_tag = pi.os + (f".{pi.subtype}" if pi.subtype else "")
+    print(f"Runtime:     {runtime_type}  (resolved for {platform_tag})")
+    _print_runtime_dispatch_fields(runtime)
+    print(f"             (manifest declares conditional dispatch; use --raw to see the full declaration)")
+
+
+def _print_runtime_raw(project):
+    """--raw view: show the manifest as declared, no resolution."""
+    runtime = project.get("runtime", {})
+    runtime_type = runtime.get("type", "python")
+    print(f"Runtime:     {runtime_type}  (raw, unresolved)")
+    _print_runtime_dispatch_fields(runtime)
+
+    platforms = runtime.get("platforms")
+    if platforms and isinstance(platforms, dict):
+        print(f"Platforms:   {', '.join(sorted(platforms.keys()))}")
+
+    prefer = runtime.get("prefer")
+    if prefer and isinstance(prefer, list):
+        print(f"Prefer:      {len(prefer)} entries (in order)")
+        for i, entry in enumerate(prefer):
+            if not isinstance(entry, dict):
+                print(f"  [{i}] <malformed: {type(entry).__name__}>")
+                continue
+            bits = []
+            for k in ("interpreter", "script_path", "npx", "npm_script", "binary"):
+                if k in entry:
+                    bits.append(f"{k}={entry[k]}")
+            if entry.get("detect_when"):
+                bits.append("detect_when=<set>")
+            print(f"  [{i}] {', '.join(bits) if bits else '<empty>'}")
+
+
+def _print_runtime_platform_preview(project, spec):
+    """--platform SPEC view: preview platform resolution without PATH checks."""
+    from dazzlecmd_lib.platform_detect import PlatformInfo
+    from dazzlecmd_lib.platform_resolve import resolve_platform_block
+
+    parts = spec.split(".", 1)
+    os_name = parts[0]
+    subtype = parts[1] if len(parts) > 1 else None
+    pi = PlatformInfo(
+        os=os_name, subtype=subtype, arch="preview", is_wsl=False, version=None
+    )
+
+    raw_runtime = project.get("runtime", {})
+    base_runtime = {k: v for k, v in raw_runtime.items() if k != "platforms"}
+    platforms = raw_runtime.get("platforms")
+    effective = resolve_platform_block(base_runtime, platforms, pi)
+
+    runtime_type = effective.get("type", "python")
+    platform_tag = os_name + (f".{subtype}" if subtype else "")
+    print(f"Runtime:     {runtime_type}  (preview for {platform_tag})")
+    _print_runtime_dispatch_fields(effective)
+
+    prefer = effective.get("prefer")
+    if prefer and isinstance(prefer, list):
+        print(f"Prefer:      {len(prefer)} entries (preconditions not evaluated in preview)")
+        for i, entry in enumerate(prefer):
+            if not isinstance(entry, dict):
+                print(f"  [{i}] <malformed: {type(entry).__name__}>")
+                continue
+            bits = []
+            for k in ("interpreter", "script_path", "npx", "npm_script", "binary"):
+                if k in entry:
+                    bits.append(f"{k}={entry[k]}")
+            if entry.get("detect_when"):
+                bits.append("detect_when=<set>")
+            print(f"  [{i}] {', '.join(bits) if bits else '<empty>'}")
+
+
 def _cmd_info(args, projects):
     """Show detailed info about a tool."""
     tool_name = args.tool
@@ -546,36 +704,16 @@ def _cmd_info(args, projects):
     print(f"Platform:    {project.get('platform', 'cross-platform')}")
     print(f"Language:    {project.get('language', 'unknown')}")
 
-    runtime = project.get("runtime", {})
-    runtime_type = runtime.get("type", "python")
-    print(f"Runtime:     {runtime_type}")
-    if runtime.get("script_path"):
-        label = "Binary:" if runtime_type == "binary" else "Script:"
-        print(f"{label:13}{runtime['script_path']}")
-    if runtime.get("dev_command"):
-        print(f"Dev command:  {runtime['dev_command']}")
-    if runtime.get("interpreter"):
-        print(f"Interpreter: {runtime['interpreter']}")
-    if runtime.get("interpreter_args"):
-        print(f"Interp args: {' '.join(runtime['interpreter_args'])}")
-    if runtime.get("npm_script"):
-        print(f"NPM script:  {runtime['npm_script']}")
-    if runtime.get("npx"):
-        print(f"Npx:         {runtime['npx']}")
-    if runtime.get("shell"):
-        print(f"Shell:       {runtime['shell']}")
-    if runtime.get("shell_args"):
-        print(f"Shell args:  {' '.join(runtime['shell_args'])}")
-    if runtime.get("shell_env"):
-        env = runtime["shell_env"]
-        env_script = env.get("script", "")
-        env_args = env.get("args", [])
-        env_str = env_script + ((" " + " ".join(env_args)) if env_args else "")
-        print(f"Shell env:   {env_str}")
-    interactive = runtime.get("interactive")
-    if interactive:
-        label = "exec (hand-off)" if interactive == "exec" else "keep open"
-        print(f"Interactive: {label}")
+    raw_mode = bool(getattr(args, "raw", False))
+    platform_spec = getattr(args, "platform", None)
+
+    if raw_mode:
+        _print_runtime_raw(project)
+    elif platform_spec:
+        _print_runtime_platform_preview(project, platform_spec)
+    else:
+        _print_runtime_resolved(project)
+
     if project.get("pass_through"):
         print(f"Pass-through: yes")
 
@@ -1617,7 +1755,21 @@ def _cmd_setup(args, engine):
 
 def dispatch_tool(project, argv):
     """Dispatch to a tool's entry point."""
-    runner = resolve_entry_point(project)
+    from dazzlecmd_lib.registry import NoRuntimeResolutionError
+    from dazzlecmd_lib.schema_version import UnsupportedSchemaVersionError
+
+    try:
+        runner = resolve_entry_point(project)
+    except NoRuntimeResolutionError as exc:
+        # Clean, actionable trace from the conditional-dispatch resolver.
+        # Print its message as-is (already multi-line with platform info +
+        # tried entries + fix hint); don't bury it behind a Python traceback.
+        print(str(exc), file=sys.stderr)
+        return 1
+    except UnsupportedSchemaVersionError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
     if runner is None:
         print(f"Error: Could not resolve entry point for '{project['name']}'", file=sys.stderr)
         return 1

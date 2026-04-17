@@ -8,13 +8,35 @@ time; extension types can be registered by kits or third-party code.
 Each factory is a **dumb dispatcher**: it reads the manifest, constructs
 the subprocess command, and returns a callable. No build logic, no
 dependency management, no environment setup.
+
+Conditional dispatch (v0.7.19) adds a ``resolve_runtime()`` preprocessor
+that inspects ``runtime.platforms`` and ``runtime.prefer`` to produce an
+effective runtime block for the current host BEFORE any runner factory
+sees the project. Runners stay dumb; the resolver handles platform logic.
 """
 
+import copy
 import importlib
 import inspect
 import os
+import shutil
 import subprocess
 import sys
+
+from dazzlecmd_lib.conditions import evaluate_condition
+from dazzlecmd_lib.platform_detect import PlatformInfo, get_platform_info
+from dazzlecmd_lib.platform_resolve import deep_merge, resolve_platform_block
+from dazzlecmd_lib.resolution_trace import ResolutionTrace
+from dazzlecmd_lib.schema_version import check_schema_version
+
+
+class NoRuntimeResolutionError(RuntimeError):
+    """Raised when conditional dispatch cannot pick a dispatch target.
+
+    The message contains the full resolution trace: platform info, each
+    prefer entry tried, and why each failed. Authors reading the message
+    should see exactly what to add to their manifest to make it work.
+    """
 
 
 class RunnerRegistry:
@@ -47,10 +69,15 @@ class RunnerRegistry:
     def resolve(cls, project):
         """Resolve a project's runtime to a callable runner.
 
-        Reads ``project["runtime"]["type"]`` (default: ``"python"``),
-        looks up the registered factory, and returns a runner callable.
-        Returns ``None`` if no factory is registered for the type.
+        Runs ``resolve_runtime()`` first to apply conditional dispatch
+        (``runtime.platforms`` + ``runtime.prefer``). The resulting effective
+        runtime type is then looked up in the registered factories.
+
+        Returns ``None`` if no factory is registered for the type. Raises
+        ``NoRuntimeResolutionError`` when ``prefer`` is declared but no
+        entry matches the current host.
         """
+        project = resolve_runtime(project)
         runtime = project.get("runtime", {})
         runtime_type = runtime.get("type", "python")
 
@@ -711,6 +738,199 @@ def make_node_runner(project):
         return result.returncode
 
     return runner
+
+
+# ---------------------------------------------------------------------------
+# Conditional dispatch resolver
+# ---------------------------------------------------------------------------
+
+
+def _check_prefer_preconditions(entry, tool_dir):
+    """Infer preconditions from declared fields and check them.
+
+    Returns (passed: bool, reason: str). Reasons are short and actionable;
+    they go into the resolution trace when the entry is rejected.
+
+    Checks (in order):
+        - interpreter declared -> must be on PATH
+        - npx declared         -> `npx` must be on PATH
+        - npm_script declared  -> `npm` must be on PATH
+        - script_path declared -> file must exist at resolved path
+
+    Script paths that are absolute are checked as-is. Relative paths are
+    joined against tool_dir (consistent with every runner's file lookup).
+    """
+    interpreter = entry.get("interpreter")
+    if interpreter:
+        if not shutil.which(interpreter):
+            return False, f"interpreter '{interpreter}' not on PATH"
+
+    if entry.get("npx"):
+        if not shutil.which("npx"):
+            return False, "npx not on PATH"
+
+    if entry.get("npm_script"):
+        if not shutil.which("npm"):
+            return False, "npm not on PATH"
+
+    script_path = entry.get("script_path")
+    if script_path:
+        full = script_path if os.path.isabs(script_path) else os.path.join(
+            tool_dir or "", script_path
+        )
+        if not os.path.isfile(full):
+            return False, f"script_path '{script_path}' not found"
+
+    return True, "preconditions passed"
+
+
+def _format_trace_as_error(trace, project):
+    """Render a failed-resolution ResolutionTrace into a multi-line error message.
+
+    Rendering lives here (runtime layer) per the design decision that trace
+    DATA is shared but RENDERING is per-layer. The setup layer will have its
+    own renderer with install-flavored phrasing.
+    """
+    name = project.get("name", "?")
+    pi = trace.platform_info
+    lines = [
+        f"No runtime dispatch matched for {name!r} on this host.",
+        "",
+        f"Platform:  {pi.os}" + (f".{pi.subtype}" if pi.subtype else "") +
+        f" ({pi.arch})" + (" [wsl]" if pi.is_wsl else ""),
+        "",
+        "Tried:",
+    ]
+    for i, a in enumerate(trace.attempts, 1):
+        status = "MATCH" if a.passed else "fail"
+        lines.append(f"  {i}. [{status}] {a.label} -- {a.reason}")
+    lines.append("")
+    lines.append(
+        "Fix: add a matching `prefer` entry, declare `platforms.<os>.general`, "
+        "or install the missing interpreter/command."
+    )
+    return "\n".join(lines)
+
+
+def resolve_runtime(project, *, platform_info=None):
+    """Preprocess a project's runtime spec for conditional dispatch.
+
+    Returns a project dict whose ``runtime`` key has been replaced with the
+    effective block for the current host. The original project is not
+    mutated; a shallow copy is returned when resolution changes anything.
+
+    Resolution order:
+        1. Validate runtime._schema_version (if declared).
+        2. Merge platform overrides via ``resolve_platform_block``.
+        3. If the effective runtime has a ``prefer`` array, iterate entries;
+           the first entry whose ``detect_when`` (if declared) AND inferred
+           preconditions pass is selected and merged into the effective block.
+        4. Return the shallow-copied project with the new runtime block.
+
+    The mutual-exclusion invariant (one dispatch mode per runtime block)
+    stays the responsibility of each runner factory -- they already enforce
+    it and surface clear errors.
+
+    Backwards compatibility: a runtime without ``platforms`` or ``prefer``
+    is returned unchanged (fast path).
+
+    Args:
+        project: Project dict with ``_dir`` and ``runtime`` keys.
+        platform_info: Override for testing; defaults to ``get_platform_info()``.
+
+    Raises:
+        NoRuntimeResolutionError: when ``prefer`` is declared and no entry
+            matches the current host.
+        UnsupportedSchemaVersionError: when ``_schema_version`` is unsupported.
+    """
+    runtime = project.get("runtime", {})
+    if not isinstance(runtime, dict) or not runtime:
+        return project
+
+    # Schema version check (cheap; runs on every dispatch)
+    check_schema_version(
+        runtime, context=f"runtime for {project.get('name', '?')}"
+    )
+
+    has_platforms = "platforms" in runtime
+    has_prefer = "prefer" in runtime
+
+    if not has_platforms and not has_prefer:
+        return project  # fast path
+
+    if platform_info is None:
+        platform_info = get_platform_info()
+
+    # Step 1: merge platform overrides into the base runtime
+    if has_platforms:
+        base_runtime = {k: v for k, v in runtime.items() if k != "platforms"}
+        effective = resolve_platform_block(
+            base_runtime, runtime["platforms"], platform_info
+        )
+    else:
+        effective = {k: v for k, v in runtime.items() if k != "platforms"}
+
+    # Step 2: prefer iteration (if present in the effective block)
+    prefer = effective.get("prefer")
+    if prefer is not None:
+        if not isinstance(prefer, list):
+            raise ValueError(
+                f"runtime.prefer must be a list, got {type(prefer).__name__}"
+            )
+        tool_dir = project.get("_dir", "")
+        trace = ResolutionTrace(platform_info=platform_info, layer="runtime")
+
+        for i, entry in enumerate(prefer):
+            if not isinstance(entry, dict):
+                trace.record(
+                    f"prefer[{i}]", passed=False,
+                    reason=f"not a dict: {type(entry).__name__}",
+                )
+                continue
+
+            detect_when = entry.get("detect_when")
+            if detect_when is not None:
+                if not evaluate_condition(detect_when, platform_info):
+                    trace.record(
+                        f"prefer[{i}]", passed=False,
+                        reason="detect_when did not match",
+                        detail=entry,
+                    )
+                    continue
+
+            ok, reason = _check_prefer_preconditions(entry, tool_dir)
+            if not ok:
+                trace.record(
+                    f"prefer[{i}]", passed=False, reason=reason, detail=entry,
+                )
+                continue
+
+            label_bits = []
+            for k in ("interpreter", "npx", "npm_script", "script_path"):
+                if k in entry:
+                    label_bits.append(f"{k}={entry[k]}")
+                    break
+            label = f"prefer[{i}]: " + (label_bits[0] if label_bits else "entry")
+            trace.record(label, passed=True, reason="matched", detail=entry)
+            break
+
+        if not trace.has_match():
+            raise NoRuntimeResolutionError(_format_trace_as_error(trace, project))
+
+        # Merge the selected entry over the effective block (minus prefer and
+        # detect_when, which aren't dispatch fields)
+        selected = trace.selected().detail or {}
+        selected_dispatch = {
+            k: v for k, v in selected.items() if k != "detect_when"
+        }
+        effective_without_prefer = {
+            k: v for k, v in effective.items() if k != "prefer"
+        }
+        effective = deep_merge(effective_without_prefer, selected_dispatch)
+
+    resolved_project = dict(project)
+    resolved_project["runtime"] = effective
+    return resolved_project
 
 
 # ---------------------------------------------------------------------------
