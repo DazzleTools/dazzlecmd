@@ -32,6 +32,7 @@ from dazzlecmd_lib.loader import (
 )
 from dazzlecmd_lib.registry import RunnerRegistry
 from dazzlecmd_lib.config import ConfigManager
+from dazzlecmd_lib.meta_command_registry import MetaCommandRegistry
 
 
 class FQCNCollisionError(Exception):
@@ -255,6 +256,9 @@ class AggregatorEngine:
         meta_dispatcher=None,
         tool_dispatcher=None,
         meta_commands=None,
+        include_default_meta_commands=True,
+        extra_reserved_commands=None,
+        config_dir=None,
     ):
         """Initialize the aggregator engine.
 
@@ -268,13 +272,36 @@ class AggregatorEngine:
             version_info: Tuple of (display_version, full_version) or None
             is_root: If True, register meta-commands (list, info, kit, etc.).
                      If False (imported as kit), suppress meta-commands.
-            parser_builder: Callable ``(projects, engine) -> argparse.ArgumentParser``.
-                            If None, the engine cannot parse arguments (child engines
-                            used only for discovery don't need this).
-            meta_dispatcher: Callable ``(args, projects, kits, project_root, engine) -> int``.
-                             Handles meta-commands (list, info, kit, etc.).
-            tool_dispatcher: Callable ``(project, argv) -> int``.
-                             Dispatches to a tool's entry point.
+            parser_builder: Escape-hatch callable
+                ``(projects, engine) -> argparse.ArgumentParser``. When set,
+                bypasses the ``meta_registry`` path entirely — the engine
+                delegates parser construction to this callback. Used by
+                aggregators that need non-argparse CLIs or custom parser
+                structure that the registry doesn't support.
+            meta_dispatcher: Escape-hatch callable
+                ``(args, projects, kits, project_root, engine) -> int``.
+                When ``parser_builder`` is set, this handles meta-command
+                dispatch. When ``parser_builder`` is None, the registry's
+                own dispatch is used and this is ignored.
+            tool_dispatcher: Escape-hatch callable ``(project, argv) -> int``.
+                Dispatches to a tool's entry point. Used regardless of
+                whether the registry path is active.
+            meta_commands: Set of meta-command names (escape-hatch use).
+                When ``parser_builder`` is set, this set determines which
+                args are treated as meta vs tool dispatch. When the registry
+                path is active, derived from ``meta_registry.registered()``.
+            include_default_meta_commands: If True (default) and the registry
+                path is active (``parser_builder`` is None), library defaults
+                (list, info, kit, version, tree, setup) are auto-registered
+                at construction. Set False to start with an empty registry.
+            extra_reserved_commands: Additional names reserved from use as
+                tool names beyond registered meta-commands. Typical use:
+                reserve planned-but-unimplemented future commands.
+            config_dir: Path to the aggregator's config directory. Defaults
+                to ``~/.<command>`` when unset (e.g., ``~/.dz`` for
+                ``command="dz"``). Per-aggregator config isolation means
+                two aggregators in the same environment don't share config.
+                Pass ``str`` or ``pathlib.Path``.
         """
         self.name = name
         self.command = command
@@ -285,17 +312,50 @@ class AggregatorEngine:
         self.version_info = version_info
         self.is_root = is_root
 
-        # CLI callbacks — injected by the reference implementation (cli.py).
-        # The engine never imports cli.py directly; instead, cli.py passes
-        # its functions here. This enables clean library extraction (#27):
-        # dazzlecmd-lib contains the engine, cli.py stays in dazzlecmd.
+        # Escape-hatch CLI callbacks: when parser_builder is set, the
+        # registry path is bypassed and parser construction / meta
+        # dispatch flow through these callbacks. Preserved for backward
+        # compatibility with aggregators that predate the registry
+        # (dazzlecmd's own cli.py uses these today) and for aggregators
+        # that need non-argparse CLIs.
         self._build_parser = parser_builder
         self._dispatch_meta = meta_dispatcher
         self._dispatch_tool = tool_dispatcher
         self._meta_commands = meta_commands
 
-        # Config manager (shared read/write path for user preferences)
-        self.config = ConfigManager()
+        # Per-engine meta-command registry (primary path for new adopters).
+        # Auto-populated with library defaults unless opted out. Aggregators
+        # customize via engine.meta_registry.register / override / unregister.
+        self.meta_registry = MetaCommandRegistry()
+        if is_root and include_default_meta_commands:
+            # Deferred import to avoid circular dep at module load
+            from dazzlecmd_lib import default_meta_commands
+            default_meta_commands.register_all(self.meta_registry)
+
+        # Additional reserved names beyond registry contents.
+        self._extra_reserved = set(extra_reserved_commands or ())
+
+        # Optional epilog builder: callable (projects) -> str. Set as
+        # attribute post-construction for aggregators with custom help text.
+        self.epilog_builder = None
+
+        # Config manager: per-aggregator by default (~/.<command>/config.json).
+        # Aggregators can override by passing config_dir explicitly.
+        if config_dir is None:
+            default_config_dir = os.path.join(
+                os.path.expanduser("~"), f".{command}"
+            )
+            self.config = ConfigManager(config_dir=default_config_dir)
+        else:
+            self.config = ConfigManager(config_dir=str(config_dir))
+
+        # Route user-override file lookup through the same per-aggregator
+        # directory (config_dir/overrides). The DAZZLECMD_OVERRIDES_DIR
+        # env var still takes precedence (test isolation).
+        from dazzlecmd_lib import user_overrides as _user_overrides
+        _user_overrides.set_override_root(
+            os.path.join(self.config.config_dir(), "overrides")
+        )
 
         # Resolved at run time
         self.project_root = None
@@ -697,32 +757,181 @@ class AggregatorEngine:
     def run(self, argv=None):
         """Run the aggregator: discover, parse, dispatch.
 
-        This is the main entry point for the CLI. Requires that
-        ``parser_builder``, ``meta_dispatcher``, and ``tool_dispatcher``
-        were provided at construction time (they are NOT imported from
-        cli.py — the engine has no dependency on the CLI layer).
+        This is the main entry point for the CLI. Two dispatch paths:
+
+        1. **Registry path** (default): when ``parser_builder`` is None,
+           the engine builds the parser from ``meta_registry`` + tool
+           subparsers and dispatches meta-commands via the registry's
+           own ``dispatch()``. Tool dispatch uses ``tool_dispatcher`` if
+           provided, else the library default (``RunnerRegistry.resolve``).
+
+        2. **Escape-hatch path**: when ``parser_builder`` is provided,
+           the engine delegates parser construction and meta-dispatch to
+           the provided callbacks. Used by aggregators with non-argparse
+           CLIs or custom parser structure. Backward-compat with
+           aggregators that predate the registry.
         """
-        build_parser = self._build_parser
-        dispatch_meta = self._dispatch_meta
-        dispatch_tool = self._dispatch_tool
-
-        if build_parser is None or dispatch_tool is None:
-            print(
-                f"Error: {self.name} engine was not configured with CLI "
-                f"callbacks (parser_builder, tool_dispatcher). "
-                f"Pass them at construction time.",
-                file=sys.stderr,
-            )
-            return 1
-
         if argv is None:
             argv = sys.argv[1:]
 
         self.discover()
 
+        # Choose dispatch path based on whether an explicit parser_builder
+        # was passed at construction.
+        if self._build_parser is not None:
+            return self._run_escape_hatch(argv)
+        return self._run_registry(argv)
+
+    def _run_registry(self, argv):
+        """Registry-driven run path (primary).
+
+        Builds the parser from the meta_registry + tool subparsers,
+        locks the registry, and dispatches meta-commands via the
+        registry or tool commands via FQCN resolution.
+        """
+        import argparse as _argparse
+        from dazzlecmd_lib import cli_helpers as _ch
+
+        # Handle --version / -V before any parsing (matches the
+        # behavior of the escape-hatch path).
+        if argv and argv[0] in ("--version", "-V"):
+            if self.version_info:
+                display, full = self.version_info
+                print(f"{self.name} {display} ({full})")
+            else:
+                print(self.name)
+            return 0
+
+        # Build root parser
+        epilog = None
+        if self.epilog_builder is not None:
+            try:
+                epilog = self.epilog_builder(self.projects)
+            except Exception as exc:
+                print(
+                    f"Warning: epilog_builder raised {exc!r}; using default",
+                    file=sys.stderr,
+                )
+
+        parser = _argparse.ArgumentParser(
+            prog=self.command,
+            description=self.description,
+            epilog=epilog,
+            formatter_class=_argparse.RawDescriptionHelpFormatter,
+        )
+        _ch.add_version_flag(parser, self.version_info, app_name=self.name)
+
+        subparsers = parser.add_subparsers(
+            dest="command", metavar="<command>", help=_argparse.SUPPRESS
+        )
+
+        # Register meta-command subparsers from the registry
+        if self.is_root:
+            self.meta_registry.build_parsers(subparsers)
+
+        # Register one subparser per discovered tool (reserved-filtered)
+        reserved = self.reserved_commands
+        _ch.build_tool_subparsers(subparsers, self.projects, reserved)
+
+        # Lock the registry: dispatch has begun, no more registrations.
+        self.meta_registry.lock()
+        try:
+            return self._dispatch_registry_path(parser, argv, reserved)
+        finally:
+            # Unlock so the registry can be reused for another run()
+            # (test scenarios; normally only one run per engine).
+            self.meta_registry.unlock()
+
+    def _dispatch_registry_path(self, parser, argv, reserved):
+        if not argv:
+            parser.print_help()
+            return 0
+
+        command_name = argv[0]
+
+        # Meta-command path (only if is_root)
+        if self.is_root and (
+            command_name in reserved or command_name.startswith("-")
+        ):
+            sys_argv_backup = sys.argv
+            sys.argv = [self.command] + list(argv)
+            try:
+                args = parser.parse_args()
+                if hasattr(args, "_meta"):
+                    return self.meta_registry.dispatch(
+                        args, self, self.projects, self.kits, self.project_root
+                    )
+            finally:
+                sys.argv = sys_argv_backup
+            return 0
+
+        # Tool dispatch
+        project, notification = self.resolve_command(command_name)
+        if project is not None:
+            if notification and not os.environ.get("DZ_QUIET"):
+                print(notification, file=sys.stderr)
+            tool_argv = argv[1:]
+            return self._run_tool(project, tool_argv)
+
+        # Unknown command — let argparse produce its standard error
+        sys_argv_backup = sys.argv
+        sys.argv = [self.command] + list(argv)
+        try:
+            parser.parse_args()
+        finally:
+            sys.argv = sys_argv_backup
+        return 1
+
+    def _run_tool(self, project, argv):
+        """Dispatch a tool via tool_dispatcher or library default.
+
+        If a ``tool_dispatcher`` callback was set, use it. Otherwise, use
+        the library's default via ``RunnerRegistry.resolve(project)``.
+        """
+        if self._dispatch_tool is not None:
+            return self._dispatch_tool(project, argv)
+        # Library default: RunnerRegistry-based dispatch.
+        runner = RunnerRegistry.resolve(project)
+        if runner is None:
+            print(
+                f"Error: could not resolve runtime for {project.get('name', '?')}",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            return runner(argv)
+        except KeyboardInterrupt:
+            return 130
+        except Exception as exc:
+            print(
+                f"Error running {project.get('name', '?')}: {exc}",
+                file=sys.stderr,
+            )
+            return 1
+
+    def _run_escape_hatch(self, argv):
+        """Escape-hatch run path: delegate parser + meta dispatch to callbacks.
+
+        Backward-compat with aggregators that predate the registry
+        (dazzlecmd's own cli.py today).
+        """
+        build_parser = self._build_parser
+        dispatch_meta = self._dispatch_meta
+        dispatch_tool = self._dispatch_tool
+
+        if dispatch_tool is None:
+            print(
+                f"Error: {self.name} engine was configured with parser_builder "
+                f"but no tool_dispatcher. Both callbacks are required on the "
+                f"escape-hatch path.",
+                file=sys.stderr,
+            )
+            return 1
+
         if self.project_root is None:
-            # No project root found -- show basic help
-            parser = build_parser(self.projects if self.projects else [], engine=self)
+            parser = build_parser(
+                self.projects if self.projects else [], engine=self
+            )
             if argv and argv[0] in ("--version", "-V") and self.version_info:
                 display, full = self.version_info
                 print(f"{self.name} {display} ({full})")
@@ -738,9 +947,6 @@ class AggregatorEngine:
 
         command_name = argv[0]
 
-        # Meta-commands (only if is_root). Meta-commands never contain ":"
-        # and take precedence over tool dispatch to prevent collision
-        # notifications on routine meta-command invocations.
         if self.is_root:
             meta_commands = self._meta_commands or {
                 "list", "info", "kit", "new", "version", "add", "mode",
@@ -751,7 +957,7 @@ class AggregatorEngine:
                 sys.argv = [self.command] + list(argv)
                 try:
                     args = parser.parse_args()
-                    if hasattr(args, "_meta"):
+                    if hasattr(args, "_meta") and dispatch_meta is not None:
                         return dispatch_meta(
                             args, self.projects, self.kits, self.project_root,
                             engine=self,
@@ -760,20 +966,15 @@ class AggregatorEngine:
                     sys.argv = sys_argv_backup
                 return 0
 
-        # Tool dispatch via FQCN resolver. This handles both short names
-        # (with precedence-aware resolution) and explicit FQCNs.
         project, notification = self.resolve_command(command_name)
 
         if project is not None:
-            # Emit ambiguity notification to stderr BEFORE running the tool
-            # so the user sees it first. Silenceable via DZ_QUIET=1.
             if notification and not os.environ.get("DZ_QUIET"):
                 print(notification, file=sys.stderr)
 
             tool_argv = argv[1:]
             return dispatch_tool(project, tool_argv)
 
-        # Unknown command -- let argparse produce its standard error
         sys_argv_backup = sys.argv
         sys.argv = [self.command] + list(argv)
         try:
@@ -784,11 +985,19 @@ class AggregatorEngine:
 
     @property
     def reserved_commands(self):
-        """Commands reserved by the engine (not available as tool names)."""
-        if self.is_root:
-            return {
-                "new", "add", "list", "info", "kit", "search",
-                "build", "tree", "version", "enhance", "graduate", "mode",
-                "promote", "demote", "migrate", "setup",
-            }
-        return set()
+        """Commands reserved from use as tool names.
+
+        Returns the union of:
+        - ``meta_registry.registered()`` — all currently-registered meta
+          commands (auto-updates as aggregators register/unregister)
+        - ``extra_reserved_commands`` passed at construction time
+
+        Returns an empty set when ``is_root=False`` (embedded mode, no
+        meta-commands should conflict with kit's tool names).
+
+        Aggregators using the escape-hatch path (``parser_builder=``) may
+        manage their own reserved set independently of this property.
+        """
+        if not self.is_root:
+            return set()
+        return set(self.meta_registry.registered()) | self._extra_reserved

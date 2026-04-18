@@ -30,22 +30,42 @@ SCHEMA_VERSION = 1
 
 
 class ConfigManager:
-    """Reads and writes ``~/.dazzlecmd/config.json`` with caching and
+    """Reads and writes an aggregator's config file with caching and
     atomic writes.
 
-    Instantiate once per engine and reuse. The config path is resolved
-    lazily (respects ``DAZZLECMD_CONFIG`` env var and ``HOME`` /
-    ``USERPROFILE`` monkeypatching in tests).
+    Path resolution order (highest priority first):
+        1. ``DAZZLECMD_CONFIG`` env var (points to full file path;
+           used for test isolation across all aggregators)
+        2. ``config_dir`` constructor argument + ``config.json``
+        3. Default ``~/.dazzlecmd/config.json`` (back-compat)
+
+    Per-aggregator isolation: each ``AggregatorEngine`` passes its own
+    ``config_dir`` (typically ``~/.<command>``) so wtf-windows uses
+    ``~/.wtf/config.json`` while dazzlecmd uses ``~/.dz/config.json``
+    — they don't share kit precedence, favorites, or silencing.
+
+    Instantiate once per engine and reuse.
     """
 
-    def __init__(self):
+    def __init__(self, config_dir=None):
+        """Initialize.
+
+        Args:
+            config_dir: Directory containing ``config.json`` for this
+                aggregator. If None, falls back to ``~/.dazzlecmd``.
+                The ``DAZZLECMD_CONFIG`` env var, if set, overrides
+                both.
+        """
         self._cache = None
+        self._config_dir_override = config_dir
 
     def config_path(self):
         """Return the active config file path (lazy, env-overridable)."""
         override = os.environ.get("DAZZLECMD_CONFIG")
         if override:
             return override
+        if self._config_dir_override:
+            return os.path.join(self._config_dir_override, "config.json")
         return os.path.expanduser("~/.dazzlecmd/config.json")
 
     def config_dir(self):

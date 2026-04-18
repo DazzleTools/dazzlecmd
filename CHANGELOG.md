@@ -4,6 +4,100 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.23] - 2026-04-18
+
+### Added
+
+- **`MetaCommandRegistry`** — per-engine meta-command registry in
+  `dazzlecmd_lib.meta_command_registry`. Replaces the fixed callback
+  signature (`parser_builder=`, `meta_dispatcher=`, etc.) as the blessed
+  API for downstream aggregators. Mirrors the `RunnerRegistry` pattern
+  already shipped for runtime types. Methods: `register`, `override`,
+  `unregister`, `registered`, `resolve`, `build_parsers`, `dispatch`,
+  `lock`/`unlock`/`is_locked`, `clear`. `override` accepts keyword-only
+  `parser=`/`handler=` for partial replacement (keep stock parser,
+  replace only the handler; and vice versa).
+- **`dazzlecmd_lib.default_meta_commands`** — stock `list`, `info`,
+  `kit` (with `kit_list`/`kit_status` subcommands), `version`, `tree`,
+  and `setup` as importable `parser_factory` + `handler` + `render_*()`
+  public functions. Aggregators can call `render_info()` from their own
+  handler to append domain-specific fields (compose rather than replace).
+  `register_all(registry)` bulk-registers all defaults; `register_selected(
+  registry, include=[...])` is the opt-in helper for minimal aggregators.
+- **`dazzlecmd_lib.cli_helpers`** — shared argparse scaffolding helpers
+  for aggregators using the `parser_builder=` escape-hatch path.
+  Functions: `build_tool_subparsers(subparsers, projects, reserved)`,
+  `derive_reserved_from_registry(registry, extras)`, `add_version_flag`,
+  `default_epilog_for(app_name, tool_count, kit_count)`.
+- **`AggregatorEngine` gains**:
+  - `meta_registry: MetaCommandRegistry` attribute (per-engine)
+  - `include_default_meta_commands: bool = True` kwarg — auto-register
+    library defaults at construction (opt out for minimal aggregators)
+  - `extra_reserved_commands: set | None = None` kwarg — reserve names
+    beyond what the registry contains (e.g., planned future commands)
+  - `config_dir: str | Path | None = None` kwarg — per-aggregator config
+    directory (defaults to `~/.<command>`, e.g., `~/.wtf` for wtf)
+  - `epilog_builder` instance attribute — callable `(projects) -> str`
+    for custom help epilog rendering
+  - `reserved_commands` property now derives dynamically from
+    `meta_registry.registered() | extra_reserved_commands`
+  - Internal `_run_registry()` path: when `parser_builder` is None, the
+    engine builds the parser from the registry + tool subparsers and
+    dispatches via `meta_registry.dispatch()`. Registry locks during
+    dispatch to prevent mid-run mutations.
+  - Internal `_run_escape_hatch()` path: preserved for backward compat
+    when `parser_builder` is explicitly passed (dazzlecmd's own `cli.py`
+    continues to use this path).
+- **Per-aggregator user-override paths**. `user_overrides.set_override_root(path)`
+  module-level setter that the engine calls at construction. Each
+  aggregator now reads/writes overrides under its own config_dir
+  (e.g. `~/.wtf/overrides/setup/<fqcn>.json`). The `DAZZLECMD_OVERRIDES_DIR`
+  env var still takes precedence (test-isolation pattern preserved).
+- **Per-aggregator ConfigManager paths**. `ConfigManager(config_dir=...)`
+  kwarg. Previously hardcoded `~/.dazzlecmd/config.json`; now defaults
+  per-command via the engine's construction logic.
+- **153 new tests** across four new test modules:
+  - `tests/test_meta_command_registry.py` — 42 tests
+  - `tests/test_default_meta_commands.py` — 56 tests
+  - `tests/test_cli_helpers.py` — 19 tests
+  - `tests/test_engine_meta_registry.py` — 27 tests
+  - `tests/test_user_overrides_per_aggregator.py` — 9 tests
+
+### Changed
+
+- **`AggregatorEngine.reserved_commands`**: was a hardcoded set; now a
+  dynamic property from `meta_registry.registered() | _extra_reserved`.
+  Dazzlecmd's own `cli.py` uses its own `RESERVED_COMMANDS` constant
+  (unchanged); no regression for dazzlecmd. The property now correctly
+  reflects what's actually registered when aggregators customize the
+  registry.
+- **`ConfigManager.__init__()`**: accepts `config_dir=None` kwarg. When
+  None, falls back to the legacy `~/.dazzlecmd/config.json` default.
+- **`tests/conftest.py`**: adds an autouse `_reset_user_override_root`
+  fixture to reset the module-level override root after each test
+  (prevents cross-test pollution from engine construction).
+
+### Notes
+
+- **Backward compatibility**: dazzlecmd's own `cli.py` was NOT migrated
+  to the registry pattern in this release. It continues to construct
+  `AggregatorEngine` with `parser_builder=`, `meta_dispatcher=`,
+  `tool_dispatcher=` callbacks (the escape-hatch path). The 840 full-
+  suite test count (up from 687) reflects pure additions; zero
+  regressions in existing behavior.
+- **Migration for dazzlecmd's cli.py** remains future work (optional
+  Phase 4e polish). Once migrated, the ~200 LOC of `_cmd_list`,
+  `_cmd_kit_list`, `_cmd_version` etc. can delegate to library defaults.
+- **Next**: Phase 2 — adopt dazzlecmd-lib in wtf-windows repo. wtf's
+  `cli.py` rewritten to construct `AggregatorEngine` with registry-based
+  customization; wtf's `loader.py` (392 LOC) deleted.
+
+Refs #27 (dazzlecmd-lib adoption — primary API stabilized; wtf-windows
+adoption is the next production caller)
+Refs #30 (Phase 4 epic — MetaCommandRegistry is the Phase 4b library
+surface that enables Phase 4d polyglot aggregator ecosystem)
+Design: `2026-04-18__17-15-54__dev-workflow-process_option-c-library-helper-surface-design.md`
+
 ## [0.7.22] - 2026-04-18
 
 ### Added

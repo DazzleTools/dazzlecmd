@@ -44,16 +44,45 @@ DEFAULT_OVERRIDE_SUBPATH = Path(".dazzlecmd") / "overrides"
 FQCN_SEPARATOR_REPLACEMENT = "__"
 
 
+# Module-level override set via set_override_root(). Used when the
+# engine wants per-aggregator override isolation (e.g. wtf-windows
+# uses ~/.wtf/overrides instead of ~/.dazzlecmd/overrides). Tests
+# typically use the env var instead.
+_override_root_override: Optional[Path] = None
+
+
+def set_override_root(path) -> None:
+    """Set the base directory for override file lookup.
+
+    Called by ``AggregatorEngine`` at construction to route overrides
+    through the engine's config_dir (e.g. ``~/.wtf/overrides`` for a
+    wtf-windows engine). Passing ``None`` clears the override; the
+    default ``~/.dazzlecmd/overrides`` is then used.
+
+    Note: this is module-level state. In the typical single-aggregator
+    process (the common case), this is fine. If multiple aggregators
+    run in the same process, the last-constructed engine's root wins.
+    """
+    global _override_root_override
+    _override_root_override = Path(path) if path is not None else None
+
+
 def get_override_root() -> Path:
     """Return the base directory for user override files.
 
-    Order of precedence:
+    Order of precedence (highest first):
         1. os.environ[DAZZLECMD_OVERRIDES_DIR] if set and non-empty.
-        2. Path.home() / ".dazzlecmd" / "overrides"
+           (test-isolation override; works across all aggregators)
+        2. The path passed to ``set_override_root()`` if set.
+           (per-engine override; typically engine's config_dir/overrides)
+        3. Path.home() / ".dazzlecmd" / "overrides"
+           (historical default; used when no aggregator context is set)
     """
     env_value = os.environ.get(OVERRIDE_ENV_VAR)
     if env_value:
         return Path(env_value)
+    if _override_root_override is not None:
+        return _override_root_override
     return Path.home() / DEFAULT_OVERRIDE_SUBPATH
 
 

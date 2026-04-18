@@ -51,6 +51,25 @@ def _reset_runner_registry():
         pass
 
 
+@pytest.fixture(autouse=True)
+def _reset_user_override_root():
+    """Reset per-aggregator user-override root after every test.
+
+    ``AggregatorEngine.__init__`` calls ``user_overrides.set_override_root()``
+    to route overrides through each engine's config_dir. Without this
+    reset, an engine constructed in one test leaves the module-level
+    override root pointing at a tmp_path that's gone in subsequent tests,
+    causing order-dependent failures in tests that assume the default
+    root.
+    """
+    yield
+    try:
+        from dazzlecmd_lib import user_overrides
+        user_overrides.set_override_root(None)
+    except ImportError:
+        pass
+
+
 def pytest_collection_modifyitems(config, items):
     """Auto-skip tests whose shell marker is unavailable on this runner."""
     for item in items:
