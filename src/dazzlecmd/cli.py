@@ -1832,10 +1832,20 @@ def _cmd_setup(args, engine):
     # _schema_version. See dazzlecmd_lib.setup_resolve.
     from dazzlecmd_lib.setup_resolve import resolve_setup_block
     from dazzlecmd_lib.schema_version import UnsupportedSchemaVersionError
+    import json as _json
     try:
         effective = resolve_setup_block(project)
     except UnsupportedSchemaVersionError as exc:
         print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except _json.JSONDecodeError as exc:
+        # Malformed user-override JSON (v0.7.22). Surface clean error with
+        # path + parse position; no Python traceback.
+        print(f"Error: user override file is not valid JSON: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        # Override file exists but can't be read (permissions, etc.).
+        print(f"Error: cannot read user override file: {exc}", file=sys.stderr)
         return 1
 
     cmd_str = effective.get("command") if effective else None
@@ -1884,9 +1894,17 @@ def dispatch_tool(project, argv):
         UnresolvedTemplateVariableError,
         TemplateRecursionError,
     )
+    import json as _json
 
     try:
         runner = resolve_entry_point(project)
+    except _json.JSONDecodeError as exc:
+        # User-override file is malformed (v0.7.22). Surface clean error.
+        print(f"Error: user override file is not valid JSON: {exc}", file=sys.stderr)
+        return 1
+    except OSError as exc:
+        print(f"Error: cannot read user override file: {exc}", file=sys.stderr)
+        return 1
     except NoRuntimeResolutionError as exc:
         # Clean, actionable trace from the conditional-dispatch resolver.
         # Print its message as-is (already multi-line with platform info +

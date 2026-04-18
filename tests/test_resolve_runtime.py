@@ -561,3 +561,28 @@ class TestDispatchToolCatchesResolutionError:
         assert result == 1
         assert "cycle" in captured.err.lower()
         assert "Traceback" not in captured.err
+
+    def test_dispatch_tool_catches_malformed_override_json(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """v0.7.22 BUG-1 regression: malformed override JSON at dispatch time
+        surfaces clean error, not a Python traceback."""
+        from dazzlecmd.cli import dispatch_tool
+
+        monkeypatch.setenv("DAZZLECMD_OVERRIDES_DIR", str(tmp_path))
+        (tmp_path / "runtime").mkdir()
+        (tmp_path / "runtime" / "kit__mytool.json").write_text("{not valid json")
+
+        project = {
+            "name": "mytool",
+            "_fqcn": "kit:mytool",
+            "_dir": str(tmp_path),
+            "runtime": {"type": "python", "script_path": "tool.py"},
+        }
+        result = dispatch_tool(project, [])
+        captured = capsys.readouterr()
+        assert result == 1
+        assert "Error:" in captured.err
+        assert "not valid JSON" in captured.err or "Expecting" in captured.err
+        assert "Traceback" not in captured.err
+        assert "File \"" not in captured.err

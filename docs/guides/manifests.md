@@ -700,6 +700,49 @@ version `"1"`. Un-versioned blocks default to version 1 for backwards compat.
 Future library versions that introduce breaking changes will bump the
 supported version set and provide migration hooks.
 
+### User overrides (v0.7.22+)
+
+Users can place override files on disk to customize a tool's setup or
+runtime behavior without editing the manifest or modifying the kit:
+
+- `~/.dazzlecmd/overrides/setup/<fqcn>.json` -- overrides setup resolution
+- `~/.dazzlecmd/overrides/runtime/<fqcn>.json` -- overrides runtime resolution
+
+FQCN separators (`:`) become `__` in filenames. Example:
+`dazzletools:fixpath` -> `dazzletools__fixpath.json`. Override the root
+location via `DAZZLECMD_OVERRIDES_DIR` env var.
+
+Override files mirror the shape of a manifest's `setup` or `runtime` block.
+They deep-merge OVER the manifest block BEFORE platform resolution + `_vars`
+substitution + prefer iteration. Override wins on collision at every scope
+level; permissive scoping means overrides can introduce new subtype branches
+the manifest didn't declare.
+
+Example override at `~/.dazzlecmd/overrides/runtime/dazzletools__fixpath.json`:
+
+```json
+{
+    "_schema_version": "1",
+    "interpreter": "/opt/my-custom-venv/bin/python",
+    "_vars": {
+        "custom_root": "/opt/my-paths"
+    }
+}
+```
+
+This gives `dazzletools:fixpath` a custom interpreter and adds a `{{custom_root}}`
+variable to the scope chain, ALL without editing the kit's manifest.
+
+**Rules**:
+- Override files are JSON objects (top level); non-objects reject at load time.
+- Missing file = no override; fast path preserved.
+- Schema version checked on load; unsupported versions raise.
+- Cross-layer isolation: setup overrides don't affect runtime and vice versa.
+- Manifest-top `_vars` (project-level) are not touched by per-layer overrides.
+- Arrays REPLACED not concatenated (same as all other deep-merge semantics).
+- No CLI commands yet for managing overrides -- hand-edit JSON files for now;
+  `dz override set/clear/show/export` is future work.
+
 ## See Also
 
 - [Creating Tools](creating-tools.md) -- step-by-step guide

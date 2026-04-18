@@ -4,6 +4,69 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.22] - 2026-04-18
+
+### Added
+
+- **User-override integration (Option B)**. `user_overrides.load_override()`
+  (shipped v0.7.19 as groundwork) is now called at the top of
+  `resolve_setup_block` and `resolve_runtime`. If a file exists at
+  `~/.dazzlecmd/overrides/setup/<fqcn>.json` or
+  `~/.dazzlecmd/overrides/runtime/<fqcn>.json`, it deep-merges OVER the
+  manifest block BEFORE platform resolution, `_vars` substitution, and
+  prefer iteration. Override wins on collision at every scope level;
+  permissive scoping means override can introduce new subtype branches or
+  prefer entries the manifest didn't declare. Override's `_vars` participate
+  in the same scope chain lookup as manifest `_vars`, with override winning
+  on matching keys. Missing override file = no change (fast path preserved
+  for unchanged manifests).
+- **Cross-layer isolation**: `overrides/setup/<fqcn>.json` only affects
+  setup resolution; `overrides/runtime/<fqcn>.json` only affects runtime.
+  Neither crosses the layer boundary. Manifest-top `_vars` (project-level)
+  are unaffected by per-layer overrides.
+- **Permissive scoping**: if an override declares
+  `platforms.linux.gentoo.command` but the manifest has no `gentoo`
+  subtype, deep-merge adds the new branch. Users can extend dispatch
+  coverage for platforms / subtypes the kit author didn't declare, without
+  waiting for an upstream PR.
+- **17 new integration tests** in `tests/test_user_override_integration.py`
+  covering: override file present/absent, override without FQCN skipped,
+  permissive scoping (new subtype + new OS), `_vars` merge + override wins,
+  unsupported schema version, malformed JSON, cross-layer isolation
+  (setup doesn't affect runtime, runtime doesn't affect setup), runtime
+  platform-branch addition, prefer-array replacement (deep-merge array
+  semantics), dual-layer composition (both setup and runtime overridden).
+
+### Changed
+
+- `resolve_setup_block` and `resolve_runtime` now each call
+  `load_override()` as a first step when the project has an `_fqcn`. The
+  override merges over the manifest's layer-specific block before any
+  other resolution logic. Projects without `_fqcn` skip the lookup
+  (back-compat for any programmatic callers building project dicts
+  without a kit context).
+
+### Notes
+
+- **Closes Phase 4b groundwork from v0.7.19**: `user_overrides.py` shipped
+  as groundwork and has been sitting idle; this is the first production
+  caller that exercises the full load -> merge -> resolve flow.
+- **CLI override management** (`dz override set/clear/show/export`) remains
+  deferred. Authors and advanced users can hand-edit override JSON files
+  at `~/.dazzlecmd/overrides/<layer>/<fqcn>.json` today; a dedicated CLI
+  will be revisited at the end of B+C work.
+- **PR-back flow** (export user override as a unified diff for upstream
+  contribution) stays in issue #40's scope.
+- **Next**: Option C wtf-windows adoption experiment, attempted as one
+  monolithic commit; library gaps discovered during C bundle with that
+  commit (not pre-split).
+
+Refs #30 (Phase 4 epic -- Option B closes the user_overrides.py groundwork
+from v0.7.19)
+Refs #27 (dazzlecmd-lib adoption -- wtf-windows experiment next as Option C)
+Refs #40 (multi-platform setup -- user-override integration is the
+groundwork for user-contributable configs + PR-back flow)
+
 ## [0.7.21] - 2026-04-18
 
 ### Added

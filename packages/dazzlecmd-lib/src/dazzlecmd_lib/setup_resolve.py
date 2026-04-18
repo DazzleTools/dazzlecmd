@@ -44,9 +44,10 @@ from __future__ import annotations
 from typing import Optional
 
 from dazzlecmd_lib.platform_detect import PlatformInfo, get_platform_info
-from dazzlecmd_lib.platform_resolve import resolve_platform_block
+from dazzlecmd_lib.platform_resolve import deep_merge, resolve_platform_block
 from dazzlecmd_lib.schema_version import check_schema_version
 from dazzlecmd_lib.templates import has_template_refs, substitute_vars
+from dazzlecmd_lib.user_overrides import load_override
 
 
 def _normalize_platforms(platforms: dict) -> dict:
@@ -92,6 +93,19 @@ def resolve_setup_block(
     setup = project.get("setup")
     if not setup or not isinstance(setup, dict):
         return None
+
+    # User-override integration (v0.7.22, Option B). If the user has dropped a
+    # setup override file at ~/.dazzlecmd/overrides/setup/<fqcn>.json, deep-
+    # merge it OVER the manifest's setup block BEFORE platform resolution.
+    # Override wins on collision at every scope level; permissive scoping
+    # (override can introduce new subtype branches the manifest didn't declare).
+    # Override's `_vars` merge into the setup block's _vars scope via deep-merge.
+    # Missing override file = no change (load_override returns None).
+    fqcn = project.get("_fqcn")
+    if fqcn:
+        override = load_override("setup", fqcn)
+        if override:
+            setup = deep_merge(setup, override)
 
     check_schema_version(
         setup, context=f"setup for {project.get('name', '?')}"

@@ -203,3 +203,30 @@ class TestListingModeV0721:
         cli._cmd_setup(_Args(), engine)
         out = capsys.readouterr().out
         assert "Run: dz setup <tool>" in out
+
+
+class TestMalformedOverrideCleanError:
+    """v0.7.22 BUG-1 regression: malformed override JSON surfaces clean error, no traceback."""
+
+    def test_setup_malformed_override_json_clean_error(self, tmp_path, monkeypatch, capsys):
+        # Isolate override root to tmp, write garbage JSON
+        monkeypatch.setenv("DAZZLECMD_OVERRIDES_DIR", str(tmp_path))
+        (tmp_path / "setup").mkdir()
+        (tmp_path / "setup" / "kit__t.json").write_text("{not valid json")
+
+        project = {
+            "name": "t", "_fqcn": "kit:t", "_dir": "/t",
+            "setup": {"command": "pip install foo"},
+        }
+        engine = _fake_engine([project])
+        engine.resolve_command.return_value = (project, None)
+
+        exit_code = cli._cmd_setup(_Args(tool="kit:t"), engine)
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "Error:" in captured.err
+        assert "not valid JSON" in captured.err or "Expecting" in captured.err
+        # No Python traceback markers
+        assert "Traceback" not in captured.err
+        assert "File \"" not in captured.err
+

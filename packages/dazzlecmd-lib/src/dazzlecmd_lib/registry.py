@@ -30,6 +30,7 @@ from dazzlecmd_lib.platform_resolve import deep_merge, resolve_platform_block
 from dazzlecmd_lib.resolution_trace import ResolutionTrace
 from dazzlecmd_lib.schema_version import check_schema_version
 from dazzlecmd_lib.templates import has_template_refs, substitute_vars
+from dazzlecmd_lib.user_overrides import load_override
 
 
 class NoRuntimeResolutionError(RuntimeError):
@@ -960,6 +961,25 @@ def resolve_runtime(project, *, platform_info=None):
     runtime = project.get("runtime", {})
     if not isinstance(runtime, dict) or not runtime:
         return project
+
+    # User-override integration (v0.7.22, Option B). Load from
+    # ~/.dazzlecmd/overrides/runtime/<fqcn>.json if present; deep-merge OVER
+    # the manifest runtime block BEFORE platform / prefer / _vars resolution.
+    # Override wins on collision; permissive scoping (override can introduce
+    # new subtype branches or prefer entries the manifest didn't declare).
+    # Missing override file = no change.
+    fqcn = project.get("_fqcn")
+    if fqcn:
+        override = load_override("runtime", fqcn)
+        if override:
+            runtime = deep_merge(runtime, override)
+            # The merged runtime may now have content that the fast path below
+            # would skip; preserve a copy so we can rebuild the project if any
+            # resolution actually runs.
+            # We also need to propagate the merged runtime back to project for
+            # downstream consumers.
+            project = dict(project)
+            project["runtime"] = runtime
 
     # Schema version check (cheap; runs on every dispatch)
     check_schema_version(
