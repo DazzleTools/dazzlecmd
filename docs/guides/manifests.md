@@ -115,36 +115,171 @@ Run via `dz setup <tool>`.
 |-------|------|-------------|
 | `setup.command` | string | Default shell command for platforms not explicitly overridden. |
 | `setup.note` | string | Human-readable description shown by `dz info` and `dz setup` before execution. |
-| `setup.platforms` | object | Per-platform command overrides. Keys: `windows`, `linux`, `macos` (alias `darwin`). Values are shell command strings. |
+| `setup.platforms` | object | Per-platform command overrides. Keys: `windows`, `linux`, `macos` (alias `darwin`), `bsd`, `other`. Values are strings (shorthand) or dicts (with `command`, optional `note`, optional subtype sub-dicts). |
+| `setup._schema_version` | string | Schema version. Un-versioned manifests default to `"1"`. |
 
 The setup command runs via `subprocess.run(cmd, shell=True, cwd=tool_dir)`, so
 shell operators (`&&`, `;`, pipes) are interpreted by the host shell.
 
-Platform selection: if `setup.platforms.<current-os>` is set, that command is
-used. Otherwise `setup.command` is the fallback. If neither applies on the
-current host, `dz setup` errors with "No setup command available for platform".
+#### Flat-string shorthand (v0.7.20+)
 
-Example:
+For simple single-command installs per OS, write the command as a **string**:
+
 ```json
 {
-    "name": "my-tool",
     "setup": {
         "command": "pip install -r requirements.txt",
-        "note": "Installs Python dependencies into the current environment",
         "platforms": {
             "windows": "python -m pip install -r requirements.txt",
-            "linux": "python3 -m pip install -r requirements.txt",
-            "macos": "python3 -m pip install -r requirements.txt"
+            "linux": "python3 -m pip install -r requirements.txt"
         }
     }
 }
 ```
 
-**Future (issue #40)**: the setup schema will gain nested
-`platforms.<os>.<subtype>` keys, multi-step `steps` arrays, structured
-`detect_when` matchers, and user-contributable override files -- matching the
-shape already established for `runtime.platforms` in v0.7.19. The current
-flat-string platform map documented above stays backwards-compatible.
+String values are normalized to `{"command": <string>}` at resolution time.
+
+#### Nested-dict form (canonical, v0.7.20+)
+
+When you need subtypes (`debian` vs `rhel`), per-platform notes, or future
+features (multi-step `steps`, structured `detect_when`), use the **dict** form:
+
+```json
+{
+    "setup": {
+        "command": "pip install -r requirements.txt",
+        "platforms": {
+            "linux": {
+                "debian":  {"command": "sudo apt install -y python3-pip && pip3 install -r requirements.txt"},
+                "rhel":    {"command": "sudo dnf install -y python3-pip && pip3 install -r requirements.txt"},
+                "general": {"command": "python3 -m pip install -r requirements.txt"}
+            },
+            "windows": {"command": "python -m pip install -r requirements.txt"},
+            "macos":   {"command": "brew install python3 && python3 -m pip install -r requirements.txt"}
+        }
+    }
+}
+```
+
+Resolution order (identical to `runtime.platforms`):
+
+1. Start with base `setup` fields (`command`, `note`).
+2. Merge `setup.platforms.<current_os>` top-level fields if the OS matches.
+3. Merge `setup.platforms.<current_os>.<current_subtype>` if that subtype dict
+   exists; else merge `setup.platforms.<current_os>.general` if present.
+
+Array fields are **replaced** (not concatenated) when merged.
+
+**Rule**: subtype values (`platforms.<os>.<subtype>`) must be dicts. Strings at
+subtype positions are not recognized and will silently be merged as top-level
+fields. Use the flat-string shorthand only at the `platforms.<os>` level.
+
+#### Template variables (`_vars`, v0.7.20+)
+
+Declare shared command fragments once, reference via `{{name}}`. Useful when
+per-platform commands share substantial prefixes/suffixes (venv creation
+paths, pip flag sets, download URLs).
+
+Declaration sites (lowest-priority to highest-priority during lookup):
+
+| Site | Visibility |
+|---|---|
+| Manifest-top `_vars` | Every block, every platform, every subtype |
+| Block-level (`setup._vars`, `runtime._vars`) | Only within that block and its nested platforms/subtypes |
+| Platform-level (`setup.platforms.linux._vars`) | That platform's subtypes + itself (via merge) |
+| Subtype-level (`setup.platforms.linux.debian._vars`) | That subtype branch only (via merge) |
+
+Lookup order when resolving `{{name}}`:
+
+1. Effective block's merged `_vars` (platform/subtype wins over block-level)
+2. Manifest-top `_vars`
+3. Error: `UnresolvedTemplateVariableError` listing available var names
+
+**Scoping is dynamic**: lookup uses the CURRENT resolution context, not the
+scope where the variable was declared. This lets composite variables respect
+per-platform overrides of their ingredients.
+
+Example:
+```json
+{
+    "_vars": {
+        "venv_dir":    ".venv",
+        "venv_bin":    "{{venv_dir}}/bin",
+        "venv_python": "{{venv_bin}}/python"
+    },
+    "setup": {
+        "platforms": {
+            "linux": {"command": "python3 -m venv {{venv_dir}} && {{venv_bin}}/pip install -r requirements.txt"},
+            "windows": {
+                "_vars": {"venv_bin": "{{venv_dir}}\\Scripts"},
+                "command": "python -m venv {{venv_dir}} && {{venv_bin}}\\pip install -r requirements.txt"
+            }
+        }
+    },
+    "runtime": {
+        "type": "python",
+        "script_path": "tool.py",
+        "platforms": {
+            "linux":   {"interpreter": "{{venv_python}}"},
+            "windows": {
+                "_vars": {"venv_bin": "{{venv_dir}}\\Scripts"},
+                "interpreter": "{{venv_python}}.exe"
+            }
+        }
+    }
+}
+```
+
+Resolution for Windows: `venv_python` (declared at manifest-top as
+`{{venv_bin}}/python`) resolves `venv_bin` in the CURRENT Windows scope, where
+it's overridden to `.venv\Scripts`. Result: `venv_python` becomes
+`.venv\Scripts/python` for Windows, `.venv/bin/python` for Linux.
+
+**Rules**:
+- Syntax: `{{name}}` or `{{ name }}` (whitespace tolerated).
+- Identifier: `[A-Za-z_][A-Za-z0-9_]*` (ASCII letters/digits/underscore, starting with letter or underscore).
+- Case-sensitive: `{{FOO}}` and `{{foo}}` are distinct lookups.
+- Values must be strings in v1. List/dict values rejected with a clear error. Tracking issue: #41.
+- Nesting: a variable's value may reference other variables. Chain tracking detects cycles (`a -> b -> a`); max depth 10 catches pathological non-cyclic chains.
+- `_vars` block is stripped from the resolved output (metadata, not dispatch data).
+- `_vars` at prefer-entry level not supported in v1 -- declare at the containing platform/subtype scope instead.
+- `setup._vars` and `runtime._vars` are scope-isolated; for vars shared between setup AND runtime, declare at manifest-top.
+- `_schema_version` is a protocol field and never substituted.
+
+Escape hatch for literal `{{...}}`: not available in v1. Authors needing a literal `{{foo}}` in a command string should restructure or await v2. See issue #41.
+
+#### Venv-per-tool pattern
+
+Combine a setup command that creates a venv with `runtime.platforms` declaring
+the venv interpreter:
+
+```json
+{
+    "setup": {
+        "platforms": {
+            "windows": {"command": "python -m venv .venv && .venv\\Scripts\\pip install -r requirements.txt"},
+            "linux":   {"command": "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"},
+            "macos":   {"command": "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"}
+        }
+    },
+    "runtime": {
+        "type": "python",
+        "script_path": "mytool.py",
+        "platforms": {
+            "windows": {"interpreter": ".venv\\Scripts\\python.exe"},
+            "linux":   {"interpreter": ".venv/bin/python"},
+            "macos":   {"interpreter": ".venv/bin/python"}
+        }
+    }
+}
+```
+
+The relative `.venv/...` interpreter path resolves against the tool's directory
+at dispatch time. `dz setup` creates the venv; subsequent `dz <tool>` invocations
+dispatch via the venv's Python, fully isolated from the user's ambient install.
+
+See `tests/fixtures/venv_exercise/` in the repo for a working reference with
+heavy dependencies (numpy, pandas, etc.).
 
 ## Reserved Names
 

@@ -180,3 +180,105 @@ class TestPrintRuntimePlatformPreview:
         _print_runtime_platform_preview(project, "linux")
         out = capsys.readouterr().out
         assert "detect_when=<set>" in out
+
+
+class TestBug2RawShowsVars:
+    """Regression for v0.7.20 BUG-2: --raw must surface _vars declarations
+    and per-platform manifest values so authors debugging {{...}} references
+    can see what's declared at each scope."""
+
+    def test_manifest_top_vars_shown_in_raw(self, tmp_path, capsys):
+        project = {
+            "name": "tool",
+            "_dir": str(tmp_path),
+            "_vars": {"venv_dir": ".venv", "venv_bin": "{{venv_dir}}/bin"},
+            "runtime": {"type": "python", "script_path": "tool.py"},
+        }
+        _print_runtime_raw(project)
+        out = capsys.readouterr().out
+        assert "_vars (manifest-top)" in out
+        assert "venv_dir" in out
+        assert ".venv" in out
+        assert "venv_bin" in out
+
+    def test_runtime_block_vars_shown_in_raw(self, tmp_path, capsys):
+        project = {
+            "name": "tool",
+            "_dir": str(tmp_path),
+            "runtime": {
+                "type": "python",
+                "_vars": {"my_var": "foo"},
+                "script_path": "tool.py",
+            },
+        }
+        _print_runtime_raw(project)
+        out = capsys.readouterr().out
+        assert "_vars (runtime block)" in out
+        assert "my_var" in out
+        assert "foo" in out
+
+    def test_platform_overrides_shown_in_raw(self, tmp_path, capsys):
+        project = {
+            "name": "tool",
+            "_dir": str(tmp_path),
+            "runtime": {
+                "type": "python",
+                "platforms": {
+                    "linux": {"interpreter": "{{venv_bin}}/python"},
+                    "windows": "C:\\Python311\\python.exe",
+                },
+            },
+        }
+        _print_runtime_raw(project)
+        out = capsys.readouterr().out
+        # Linux platform's interpreter with unresolved {{...}} visible
+        assert "{{venv_bin}}/python" in out
+        # Windows flat-string shorthand shown
+        assert "C:\\Python311\\python.exe" in out or "Python311" in out
+
+
+class TestBug3InfoCatchesUnresolvedAtInfoTime:
+    """Regression for v0.7.20 BUG-3: `dz info` must catch unresolved {{...}}
+    references at inspection time, not silently pass them through."""
+
+    def test_unresolved_var_shown_as_error(self, tmp_path, capsys):
+        # Manifest with {{undefined_var}} but no _vars anywhere
+        project = {
+            "name": "tool",
+            "_dir": str(tmp_path),
+            "runtime": {
+                "type": "python",
+                "interpreter": "{{undefined_var}}/python",
+            },
+        }
+        _print_runtime_resolved(project)
+        out = capsys.readouterr().out
+        # Should report the resolution error, not silently show the literal string
+        assert "resolution error" in out or "undefined_var" in out
+
+    def test_cycle_shown_as_error(self, tmp_path, capsys):
+        project = {
+            "name": "tool",
+            "_dir": str(tmp_path),
+            "_vars": {"a": "{{b}}", "b": "{{a}}"},
+            "runtime": {
+                "type": "python",
+                "interpreter": "{{a}}/python",
+            },
+        }
+        _print_runtime_resolved(project)
+        out = capsys.readouterr().out
+        assert "resolution error" in out.lower() or "cycle" in out.lower()
+
+    def test_plain_manifest_without_refs_not_affected(self, tmp_path, capsys):
+        # Backwards compat: no refs, no _vars -> still takes the plain path
+        project = {
+            "name": "tool",
+            "_dir": str(tmp_path),
+            "runtime": {"type": "python", "script_path": "tool.py"},
+        }
+        _print_runtime_resolved(project)
+        out = capsys.readouterr().out
+        assert "Runtime:" in out
+        assert "resolution error" not in out
+        assert "resolved for" not in out  # no annotation when no conditional dispatch

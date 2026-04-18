@@ -60,4 +60,5 @@ markers = [
     "ts_node: tests requiring ts-node in PATH",
     "npm: tests requiring npm in PATH",
     "npx: tests requiring npx in PATH",
+    "venv_integration: heavy end-to-end tests that create a venv and pip install (opt-in; slow, needs network)",
 ]

@@ -523,3 +523,41 @@ class TestDispatchToolCatchesResolutionError:
         assert result == 1
         assert "999" in captured.err
         assert "Traceback" not in captured.err
+
+    def test_dispatch_tool_catches_unresolved_template_var(self, tmp_path, capsys):
+        """BUG-4 regression: UnresolvedTemplateVariableError must not escape as traceback."""
+        from dazzlecmd.cli import dispatch_tool
+
+        project = {
+            "name": "broken",
+            "_dir": str(tmp_path),
+            "runtime": {
+                "type": "python",
+                "interpreter": "{{undefined}}/python",
+            },
+        }
+        result = dispatch_tool(project, [])
+        captured = capsys.readouterr()
+        assert result == 1
+        assert "undefined" in captured.err
+        assert "Traceback" not in captured.err
+        assert "File \"" not in captured.err
+
+    def test_dispatch_tool_catches_template_cycle(self, tmp_path, capsys):
+        """BUG-4 regression: TemplateRecursionError must not escape as traceback."""
+        from dazzlecmd.cli import dispatch_tool
+
+        project = {
+            "name": "cyclic",
+            "_dir": str(tmp_path),
+            "_vars": {"a": "{{b}}", "b": "{{a}}"},
+            "runtime": {
+                "type": "python",
+                "interpreter": "{{a}}/python",
+            },
+        }
+        result = dispatch_tool(project, [])
+        captured = capsys.readouterr()
+        assert result == 1
+        assert "cycle" in captured.err.lower()
+        assert "Traceback" not in captured.err

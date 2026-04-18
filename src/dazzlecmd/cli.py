@@ -576,9 +576,20 @@ def _print_runtime_resolved(project):
     """Default view: show the runtime resolved for the current host."""
     from dazzlecmd_lib.registry import resolve_runtime, NoRuntimeResolutionError
     from dazzlecmd_lib.platform_detect import get_platform_info
+    from dazzlecmd_lib.templates import has_template_refs
 
     raw_runtime = project.get("runtime", {})
-    has_conditional = "platforms" in raw_runtime or "prefer" in raw_runtime
+    # BUG-3 fix: also trigger resolution when the manifest contains any
+    # `{{var}}` references -- catching unresolved vars at inspection time
+    # rather than silently passing through. Includes manifest-top _vars
+    # declarations because those make a var-reference-only manifest
+    # "conditional" on those vars being defined.
+    has_conditional = (
+        "platforms" in raw_runtime
+        or "prefer" in raw_runtime
+        or has_template_refs(raw_runtime)
+        or bool(project.get("_vars"))
+    )
 
     if not has_conditional:
         # No conditional dispatch; plain print of the raw runtime.
@@ -596,8 +607,11 @@ def _print_runtime_resolved(project):
         for line in str(exc).splitlines():
             print(f"  {line}")
         return
-    except Exception as exc:  # UnsupportedSchemaVersionError etc.
-        print(f"Runtime:     <resolution error: {exc}>")
+    except Exception as exc:  # UnsupportedSchemaVersionError, UnresolvedTemplateVariableError, TemplateRecursionError etc.
+        print(f"Runtime:     <resolution error>")
+        print()
+        for line in str(exc).splitlines():
+            print(f"  {line}")
         return
 
     runtime = resolved.get("runtime", {})
@@ -615,9 +629,44 @@ def _print_runtime_raw(project):
     print(f"Runtime:     {runtime_type}  (raw, unresolved)")
     _print_runtime_dispatch_fields(runtime)
 
+    # BUG-2 fix: surface manifest-top _vars AND runtime-block _vars so authors
+    # debugging {{...}} references can see what's declared at each scope level.
+    manifest_vars = project.get("_vars")
+    if manifest_vars and isinstance(manifest_vars, dict):
+        print(f"_vars (manifest-top):")
+        for k, v in manifest_vars.items():
+            print(f"  {k} = {v!r}")
+
+    runtime_vars = runtime.get("_vars")
+    if runtime_vars and isinstance(runtime_vars, dict):
+        print(f"_vars (runtime block):")
+        for k, v in runtime_vars.items():
+            print(f"  {k} = {v!r}")
+
     platforms = runtime.get("platforms")
     if platforms and isinstance(platforms, dict):
         print(f"Platforms:   {', '.join(sorted(platforms.keys()))}")
+        # BUG-2 fix: show per-platform overrides so authors see their
+        # unresolved {{...}} references and platform-specific _vars.
+        for os_key in sorted(platforms.keys()):
+            os_block = platforms[os_key]
+            if not isinstance(os_block, (dict, str)):
+                continue
+            if isinstance(os_block, str):
+                print(f"  {os_key}: {os_block}  (flat-string shorthand)")
+                continue
+            # Nested dict: show top-level fields + subtype names
+            top_fields = {k: v for k, v in os_block.items() if not isinstance(v, dict)}
+            subtypes = [k for k, v in os_block.items() if isinstance(v, dict) and not k.startswith("_")]
+            pv = os_block.get("_vars")
+            if pv:
+                print(f"  {os_key}._vars: {pv}")
+            for k, v in top_fields.items():
+                if k.startswith("_"):
+                    continue
+                print(f"  {os_key}.{k}: {v!r}")
+            if subtypes:
+                print(f"  {os_key} subtypes: {', '.join(sorted(subtypes))}")
 
     prefer = runtime.get("prefer")
     if prefer and isinstance(prefer, list):
@@ -1710,39 +1759,50 @@ def _cmd_setup(args, engine):
             print(f"Tool '{tool_name}' not found.", file=sys.stderr)
             return 1
 
-    setup = project.get("setup")
-    if not setup:
+    if not project.get("setup"):
         print(f"Tool '{project.get('_fqcn', tool_name)}' has no setup command declared.")
         print("Add a 'setup' block to the tool's manifest to enable this.")
         return 0
 
-    # Determine the command to run (platform-specific or generic)
-    import platform as _platform
-    platforms = setup.get("platforms", {})
-    system = _platform.system().lower()
+    # Resolve via shared library: applies platforms.<os>.<subtype> fallback,
+    # normalizes flat-string platform values to {"command": <str>}, validates
+    # _schema_version. See dazzlecmd_lib.setup_resolve.
+    from dazzlecmd_lib.setup_resolve import resolve_setup_block
+    from dazzlecmd_lib.schema_version import UnsupportedSchemaVersionError
+    try:
+        effective = resolve_setup_block(project)
+    except UnsupportedSchemaVersionError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
 
-    if system == "windows" and "windows" in platforms:
-        cmd_str = platforms["windows"]
-    elif system == "linux" and "linux" in platforms:
-        cmd_str = platforms["linux"]
-    elif system == "darwin" and ("macos" in platforms or "darwin" in platforms):
-        cmd_str = platforms.get("macos") or platforms.get("darwin")
-    else:
-        cmd_str = setup.get("command")
-
+    cmd_str = effective.get("command") if effective else None
     if not cmd_str:
-        print(f"No setup command available for platform '{system}'.", file=sys.stderr)
+        from dazzlecmd_lib.platform_detect import get_platform_info
+        pi = get_platform_info()
+        tag = pi.os + (f".{pi.subtype}" if pi.subtype else "")
+        print(
+            f"No setup command available for platform '{tag}'. "
+            f"Add setup.command, setup.platforms.{pi.os}, "
+            f"or setup.platforms.{pi.os}.general to the manifest.",
+            file=sys.stderr,
+        )
         return 1
 
     tool_dir = project.get("_dir", ".")
     fqcn = project.get("_fqcn", tool_name)
 
     print(f"Running setup for {fqcn}...")
-    if setup.get("note"):
-        print(f"  Note: {setup['note']}")
+    if effective.get("note"):
+        print(f"  Note: {effective['note']}")
     print(f"  Command: {cmd_str}")
     print(f"  Working dir: {tool_dir}")
     print()
+    # BUG-1 fix: flush the header to the terminal BEFORE the subprocess
+    # starts writing. Without this, Python's line-buffered stdout holds the
+    # header until exit, while the subprocess writes directly to the terminal
+    # -- producing a visually reversed display where pip/install output
+    # appears above the dz framing.
+    sys.stdout.flush()
 
     import subprocess as _subprocess
     result = _subprocess.run(cmd_str, shell=True, cwd=tool_dir)
@@ -1757,6 +1817,10 @@ def dispatch_tool(project, argv):
     """Dispatch to a tool's entry point."""
     from dazzlecmd_lib.registry import NoRuntimeResolutionError
     from dazzlecmd_lib.schema_version import UnsupportedSchemaVersionError
+    from dazzlecmd_lib.templates import (
+        UnresolvedTemplateVariableError,
+        TemplateRecursionError,
+    )
 
     try:
         runner = resolve_entry_point(project)
@@ -1765,6 +1829,16 @@ def dispatch_tool(project, argv):
         # Print its message as-is (already multi-line with platform info +
         # tried entries + fix hint); don't bury it behind a Python traceback.
         print(str(exc), file=sys.stderr)
+        return 1
+    except UnresolvedTemplateVariableError as exc:
+        # BUG-4 fix: surface the already-formatted message cleanly rather
+        # than as a Python traceback. Message includes var name + available
+        # vars list at the error site.
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    except TemplateRecursionError as exc:
+        # BUG-4 fix: same for cycle/max-depth template errors.
+        print(f"Error: {exc}", file=sys.stderr)
         return 1
     except UnsupportedSchemaVersionError as exc:
         print(f"Error: {exc}", file=sys.stderr)

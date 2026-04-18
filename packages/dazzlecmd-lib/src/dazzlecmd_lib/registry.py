@@ -28,6 +28,7 @@ from dazzlecmd_lib.platform_detect import PlatformInfo, get_platform_info
 from dazzlecmd_lib.platform_resolve import deep_merge, resolve_platform_block
 from dazzlecmd_lib.resolution_trace import ResolutionTrace
 from dazzlecmd_lib.schema_version import check_schema_version
+from dazzlecmd_lib.templates import has_template_refs, substitute_vars
 
 
 class NoRuntimeResolutionError(RuntimeError):
@@ -103,24 +104,41 @@ class RunnerRegistry:
 
 
 def make_python_runner(project):
-    """Create a runner for Python tools (direct import or subprocess).
+    """Create a runner for Python tools.
 
-    Supports two import modes:
+    Dispatch precedence:
 
-    1. **Package mode** (``runtime.module`` set, or ``__init__.py`` detected):
-       imports the module as a dotted package path with the tool directory
-       on ``sys.path``. Enables relative imports within the package.
+    1. **Explicit interpreter** (``runtime.interpreter`` declared): subprocess
+       dispatch via ``[interpreter, script, *argv]``. Enables per-tool venvs
+       (``interpreter: ".venv/Scripts/python.exe"``), alternative Pythons
+       (``interpreter: "python3.11"``), or arbitrary python binaries.
+       Relative interpreter paths resolve against the tool directory.
 
-    2. **Flat mode** (default): imports just the script basename with the
-       script's parent directory on ``sys.path``.
+    2. **Pass-through** (``pass_through: true``): subprocess dispatch via
+       ``sys.executable`` (legacy path, pre-v0.7.20). Functionally equivalent
+       to ``runtime.interpreter: "<sys.executable>"`` but with the calling
+       process's Python and without the interpreter field. Preserved for
+       backwards compat.
 
-    For ``pass_through: true`` tools, delegates to
-    ``make_subprocess_runner`` instead.
+    3. **Import modes** (default, no interpreter/pass_through): direct
+       ``importlib`` dispatch.
+
+       a. Package mode (``runtime.module`` set, or ``__init__.py`` detected):
+          dotted package path with the tool directory on ``sys.path``.
+
+       b. Flat mode: import the script basename with its parent directory
+          on ``sys.path``.
     """
+    runtime = project.get("runtime", {})
+    interpreter = runtime.get("interpreter")
+
+    # Explicit interpreter -> subprocess dispatch via that interpreter.
+    if interpreter:
+        return _make_python_interpreter_runner(project, interpreter)
+
     if project.get("pass_through", False):
         return make_subprocess_runner(project)
 
-    runtime = project.get("runtime", {})
     entry_point = runtime.get("entry_point", "main")
     script_path = runtime.get("script_path")
     module_path = runtime.get("module")
@@ -182,6 +200,84 @@ def make_python_runner(project):
             finally:
                 sys.argv = old_argv
         return 1
+
+    return runner
+
+
+def _make_python_interpreter_runner(project, interpreter):
+    """Build a python runner that dispatches via an explicit interpreter.
+
+    The interpreter path resolves as follows:
+      - Absolute paths used as-is.
+      - Paths beginning with an env-var expansion marker ($VAR, %VAR%) pass
+        through unchanged (the shell or os.path.expandvars handles it).
+      - Relative paths with a separator (e.g. ``.venv/Scripts/python.exe``)
+        resolve against the tool directory.
+      - Bare names (e.g. ``python3.11``) pass through; subprocess.run relies
+        on PATH lookup.
+
+    Script path resolution matches runtime.script_path semantics used by the
+    script and node runners: absolute used as-is; relative joined against
+    tool_dir.
+
+    Dispatch: ``subprocess.run([interpreter, script, *argv], cwd=os.getcwd())``.
+    Running in the caller's cwd (not tool_dir) matches pass_through and
+    script-runner conventions: tools receive path arguments relative to where
+    the user ran them.
+
+    Raises nothing directly; the subprocess return code becomes the runner's
+    exit code. Missing interpreter or missing script surface as FileNotFoundError
+    from subprocess -- caught by cli.dispatch_tool's generic handler and
+    printed to stderr.
+    """
+    runtime = project.get("runtime", {})
+    script_path = runtime.get("script_path")
+    module_path = runtime.get("module")
+    tool_dir = project["_dir"]
+
+    def _resolve_interpreter(interp):
+        if not interp:
+            return interp
+        if os.path.isabs(interp):
+            return interp
+        if interp.startswith(("$", "%")):
+            return interp
+        if os.sep in interp or "/" in interp:
+            candidate = os.path.join(tool_dir, interp)
+            if os.path.isfile(candidate):
+                return candidate
+        return interp  # bare name -- let subprocess use PATH
+
+    def runner(argv):
+        resolved_interp = _resolve_interpreter(interpreter)
+
+        # Module-path form: python -m package.module args
+        if module_path:
+            cmd = [resolved_interp, "-m", module_path] + list(argv)
+            result = subprocess.run(cmd, cwd=tool_dir)
+            return result.returncode
+
+        if not script_path:
+            print(
+                f"Error: runtime.interpreter declared without script_path or module "
+                f"for {project.get('name', '?')}",
+                file=sys.stderr,
+            )
+            return 1
+
+        # Script path form
+        if os.path.isabs(script_path):
+            full_script = script_path
+        else:
+            full_script = os.path.join(tool_dir, script_path)
+
+        if not os.path.isfile(full_script):
+            print(f"Error: Script not found: {full_script}", file=sys.stderr)
+            return 1
+
+        cmd = [resolved_interp, full_script] + list(argv)
+        result = subprocess.run(cmd, cwd=os.getcwd())
+        return result.returncode
 
     return runner
 
@@ -854,8 +950,15 @@ def resolve_runtime(project, *, platform_info=None):
 
     has_platforms = "platforms" in runtime
     has_prefer = "prefer" in runtime
+    has_runtime_vars = isinstance(runtime.get("_vars"), dict) and runtime["_vars"]
+    has_manifest_vars = isinstance(project.get("_vars"), dict) and project["_vars"]
+    # Even without _vars declarations anywhere, a stray `{{name}}` reference
+    # in the runtime block must surface as UnresolvedTemplateVariableError at
+    # resolve time -- not as a cryptic "interpreter '{{x}}' not found" at
+    # dispatch time.
+    has_refs = has_template_refs(runtime)
 
-    if not has_platforms and not has_prefer:
+    if not (has_platforms or has_prefer or has_runtime_vars or has_manifest_vars or has_refs):
         return project  # fast path
 
     if platform_info is None:
@@ -869,6 +972,19 @@ def resolve_runtime(project, *, platform_info=None):
         )
     else:
         effective = {k: v for k, v in runtime.items() if k != "platforms"}
+
+    # Step 1.5: _vars substitution (issue #41, v0.7.20).
+    # Substitution runs BEFORE prefer iteration so precondition checks
+    # (shutil.which, os.path.isfile) see substituted interpreter/script_path
+    # values, not literal `{{...}}`. Block-level `_vars` wins over manifest-
+    # top for matching keys; both merged into the lookup map.
+    manifest_vars = project.get("_vars") or {}
+    block_vars = (
+        effective.pop("_vars", {}) if isinstance(effective.get("_vars"), dict) else {}
+    )
+    combined_vars = {**manifest_vars, **block_vars}
+    if combined_vars or has_template_refs(effective):
+        effective = substitute_vars(effective, combined_vars, context="runtime")
 
     # Step 2: prefer iteration (if present in the effective block)
     prefer = effective.get("prefer")

@@ -1,0 +1,52 @@
+{
+    "name": "venv-exercise",
+    "namespace": "test",
+    "description": "Synthetic stress-test tool for venv-per-tool dispatch",
+    "language": "python",
+    "platform": "cross-platform",
+    "runtime": {
+        "_schema_version": "1",
+        "type": "python",
+        "script_path": "venv_exercise.py",
+        "platforms": {
+            "windows": {
+                "interpreter": ".venv\\Scripts\\python.exe"
+            },
+            "linux": {
+                "interpreter": ".venv/bin/python"
+            },
+            "macos": {
+                "interpreter": ".venv/bin/python"
+            }
+        }
+    },
+    "setup": {
+        "_schema_version": "1",
+        "command": "python -m venv .venv && .venv/bin/pip install -r requirements.txt",
+        "note": "Creates an isolated venv and installs heavy deps (numpy, pandas, etc.)",
+        "platforms": {
+            "windows": {
+                "command": "python -m venv .venv && .venv\\Scripts\\pip install -r requirements.txt"
+            },
+            "linux": {
+                "command": "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
+            },
+            "macos": {
+                "command": "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
+            }
+        }
+    },
+    "dependencies": {
+        "python": [
+            "numpy>=1.24", "pandas>=2.0", "requests>=2.31", "rich>=13.0",
+            "pyyaml>=6.0", "click>=8.1", "pydantic>=2.0"
+        ],
+        "note": "Pinned in requirements.txt; installed into .venv by dz setup"
+    },
+    "lifecycle": {
+        "status": "active",
+        "type": "tool",
+        "created_as": "tool",
+        "purpose": "test-fixture"
+    }
+}

@@ -4,6 +4,103 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.20] - 2026-04-17
+
+### Added
+
+- **Template variables (`_vars`) for setup and runtime manifests** (issue #41).
+  Declare shared command fragments at manifest-top, block level (`setup._vars`,
+  `runtime._vars`), platform level, or subtype level; reference via
+  `{{name}}` in any string field. Four-tier scope chain with lexical
+  declaration and dynamic lookup -- enables per-platform override of
+  ingredients in composite variables without redefining the composite.
+  Nested references supported (variable values may contain `{{...}}`) with
+  cycle detection and max-depth guard. Unresolved references raise
+  `UnresolvedTemplateVariableError` with a list of available vars at the
+  error site. Syntax `{{var}}` (whitespace `{{ var }}` tolerated); identifier
+  rule `[A-Za-z_][A-Za-z0-9_]*`; case-sensitive. Values are strings only in
+  v1; list/dict deferred. Implementation in
+  `dazzlecmd_lib.templates` (40 unit tests); integration in
+  `resolve_setup_block` and `resolve_runtime` (18 integration tests).
+  Substitution runs BEFORE prefer iteration so precondition checks
+  (`shutil.which`, `os.path.isfile`) see substituted values.
+- **Setup schema parity with runtime.** `setup.platforms` now accepts the same
+  nested-dict shape that `runtime.platforms` established in v0.7.19:
+  `setup.platforms.<os>.<subtype>` with `general` fallback. Resolution goes
+  through the shared `platform_resolve.resolve_platform_block` helper so subtype
+  chaining behaves identically between setup and runtime.
+- **Flat-string shorthand retained** for simple single-command installs per OS:
+  `"platforms": {"linux": "apt install foo"}` is normalized to
+  `{"command": "apt install foo"}` at resolution time. Canonical dict form is
+  required for subtypes and future features (multi-step, detect_when).
+- **`setup._schema_version`** checked on load via
+  `schema_version.check_schema_version`. Un-versioned blocks default to "1"
+  for backwards compatibility.
+- **New shared library module `setup_resolve.py`** exports
+  `resolve_setup_block(project) -> dict | None`. Mirrors `resolve_runtime()`
+  in registry.py. Issue #40's multi-platform setup work will extend this
+  module with `steps`, `detect_when`, user-override loading, and PR-back
+  without the cli layer changing shape.
+- **Python runner honors `runtime.interpreter`** (closes 4b.3 of #22).
+  When declared, `make_python_runner` dispatches via
+  `subprocess.run([interpreter, script, *argv])` instead of importlib.
+  Enables per-tool venvs (`.venv/Scripts/python.exe`), alternative Pythons
+  (`python3.11`), and arbitrary python binaries. Relative interpreter paths
+  with a separator resolve against the tool directory; bare names rely on
+  subprocess PATH lookup; env-var-prefixed paths (`$VAR`, `%VAR%`) pass
+  through unchanged. `pass_through: true` preserved as legacy path.
+- **Synthetic venv stress-test fixture** at `tests/fixtures/venv_exercise/`
+  with 7 heavy real deps (numpy, pandas, requests, rich, pyyaml, click,
+  pydantic). End-to-end integration test in
+  `tests/test_venv_integration.py` creates the venv, runs setup, dispatches
+  via the venv interpreter, asserts all imports pass and that the reported
+  interpreter is the venv (not the test runner's). Marked
+  `@pytest.mark.venv_integration`.
+- **Documentation**: `docs/guides/manifests.md` Setup section rewritten to
+  cover both flat-string and nested-dict forms, resolution order, subtype
+  rules, and the venv-per-tool pattern.
+- 102 new automated tests (25 in `test_setup_resolve.py`, 15 in
+  `test_python_runner_interpreter.py`, 4 in `test_venv_integration.py`,
+  40 in `test_templates.py`, 18 in `test_vars_integration.py`).
+  Full suite: 616 passing, 6 platform-skipped (up from 514).
+
+### Changed
+
+- `_cmd_setup` now resolves via the shared `resolve_setup_block` preprocessor
+  instead of the hand-rolled platform selection. Error messages include the
+  current `<os>.<subtype>` tag and actionable hints for which manifest keys
+  to add.
+- The "Setup" section in `docs/guides/manifests.md` -- previously a one-line
+  reference plus a "future #40" footnote -- now documents both schemas with
+  worked examples and the venv-per-tool composition pattern. The "future"
+  footnote for nested platforms is removed; #40 retains scope for
+  multi-step, `detect_when` at setup, user-override loading, and PR-back.
+
+### Notes
+
+- **4b.3 (python runner `runtime.interpreter`, #22) closed.** Partial status
+  carried from Phase 4b through Phase 4c; closed this release with the
+  synthetic fixture validating the end-to-end flow. No in-repo tool currently
+  requires venv isolation; the pattern is available for tools that need it.
+- **Ecosystem pilot (real-tool venv migration) deferred.** `claude-sesslog-datefix`
+  was considered but rejected -- its rare-use-fix UX doesn't benefit from
+  forcing `dz setup` friction. Unblock condition: a tool authored with genuine
+  version-isolation needs (ML tooling, Windows COM interop with pinned
+  pywin32, etc.) should migrate first.
+- **v0.7.19 human test checklist gaps fixed** (HV.2 setup instructions use
+  manual kit-file creation rather than `dz kit add <path>` which only accepts
+  git URLs; HV.5 replaced the non-existent `wtf` tool reference with
+  `restarted` and `locked`).
+- **No in-repo tool uses flat-string `setup.platforms.<os>` today**
+  (verified: zero matches of `"setup":` across `projects/` and `kits/`).
+  The shorthand form is retained for author ergonomics; zero-migration-risk
+  promise for third-party kits arriving later.
+
+Refs #30 (Phase 4 epic -- 4b.3 closed, setup parity unlocks #40 groundwork)
+Refs #22 (Python runner interpreter support -- closed)
+Refs #40 (shared setup_resolve.py scaffolds the multi-platform setup expansion)
+Refs #41 (template variables `_vars` base implementation -- extensions tracked for future)
+
 ## [0.7.19] - 2026-04-17
 
 ### Added
