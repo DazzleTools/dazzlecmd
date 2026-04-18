@@ -25,7 +25,30 @@ _SKIP_CONDITIONS = {
     "ts_node": lambda: shutil.which("ts-node") is None,
     "npm": lambda: shutil.which("npm") is None,
     "npx": lambda: shutil.which("npx") is None,
+    "docker_integration": lambda: shutil.which("docker") is None,
 }
+
+
+@pytest.fixture(autouse=True)
+def _reset_runner_registry():
+    """Restore RunnerRegistry built-ins after every test (Phase 4c.6).
+
+    Tests that register extension runtime types, override factories, or
+    clear the registry should see a clean built-in-only registry on every
+    test. Without this fixture, test pollution makes registry-dependent
+    tests order-sensitive and occasionally flaky.
+
+    Imports are deferred so conftest.py is importable without forcing
+    registry construction on pytest's collection pass. The reset is a
+    no-op in the common case where the test did not mutate the registry.
+    """
+    yield
+    try:
+        from dazzlecmd_lib.registry import RunnerRegistry
+        RunnerRegistry.reset()
+    except ImportError:
+        # dazzlecmd-lib not installed; nothing to reset.
+        pass
 
 
 def pytest_collection_modifyitems(config, items):

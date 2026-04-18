@@ -4,6 +4,90 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.21] - 2026-04-18
+
+### Added
+
+- **Docker runtime type (Phase 4c.4)**. New `runtime.type: "docker"` dispatches
+  tools via `docker run`. Manifest fields: `image` (required), `volumes`,
+  `env`, `env_passthrough`, `docker_args`, `inner_runtime` (informational).
+  Pre-flight `docker images -q <image>` check runs before dispatch; on miss,
+  surfaces `Error: Docker image 'X' not found locally. Try: dz setup <fqcn>`
+  with exit 1. Engine NEVER pulls or builds images -- the tool's declared
+  `setup.command` is responsible. `make_docker_runner` in
+  `dazzlecmd_lib.registry`. Closes the last Phase 4c runtime-type gap.
+- **Conditional dispatch + `_vars` compose with Docker for free**: authors
+  can declare `platforms.linux.image: "myimg:amd64"` vs
+  `platforms.darwin.image: "myimg:arm64"`, OR `_vars: {tag: "1.0"}` + `image:
+  "{{registry}}/{{tool}}:{{tag}}"`. The shared substrate established in
+  v0.7.19/v0.7.20 handles both without Docker-specific code.
+- **Docker-compatible engines work without code changes**: any CLI providing
+  a docker-compatible binary (Docker, Podman via alias, Colima, Rancher
+  Desktop, OrbStack, nerdctl) works. Engine abstraction via a dedicated
+  `engine_cmd` field is deferred until demand emerges.
+- **Synthetic Docker fixture at `tests/fixtures/docker_tool/`**: real
+  Dockerfile + Python ENTRYPOINT + manifest using `_vars` + `env_passthrough`.
+  Builds a ~84MB image (`dazzlecmd-test-docker-tool:v1`) on first test run.
+  Integration test suite at `tests/test_docker_integration.py` (marked
+  `@pytest.mark.docker_integration`, opt-in via skip-if-no-docker) creates
+  the image, dispatches via the runner, asserts on a structured report the
+  container emits. 8 tests cover image build, image substitution,
+  runner-captures-output, env dict delivery, env_passthrough forwarding,
+  passthrough-skips-missing-vars, container hostname isolation, exit code
+  propagation.
+- **`RunnerRegistry.reset()` classmethod + autouse conftest fixture**
+  (Phase 4c.6). Reinstalls built-in factories after every test; drops any
+  extension-registered types. Prevents test pollution when tests register
+  custom runtime types. `docker_integration` pytest marker registered in
+  `pyproject.toml` with auto-skip when `docker` binary is absent.
+- **`dz setup` no-arg listing mode polish** (closes issue #33 listing-mode
+  criterion). Detection now catches tools with ONLY `setup.platforms.*`
+  declared (no top-level `setup.command`). Output sorted alphabetically by
+  FQCN; dynamic column width (floor 20, ceiling 50 chars); missing notes
+  show as `-`. 9 tests in `tests/test_cli_setup.py`.
+- **`docs/guides/dz-setup.md`** -- new CLI reference file mirroring
+  `dz-kit.md` / `dz-tree.md` pattern. Covers `dz setup` usage, platform
+  resolution, `_vars` template integration, error cases, and the "what the
+  engine will NOT do" boundary. Satisfies #33's docs criterion.
+- **`docs/guides/manifests.md` Docker Tool section** -- schema, dispatch
+  pattern, pre-flight check, conditional dispatch + `_vars` examples,
+  docker-compatible engines note, NOT-supported list, reference fixture
+  pointer.
+- **43 new automated tests** (+ full suite 668 passing, 6 platform-skipped):
+  - `test_docker_runner.py` (19) -- mocked argv construction, pre-flight,
+    volumes, env, env_passthrough, docker_args, inner_runtime informational,
+    exit code propagation, `_vars` substitution
+  - `test_docker_integration.py` (8) -- real-Docker end-to-end
+  - `test_cli_info.py` (+7) -- Docker field rendering in `--raw` and resolved
+    views
+  - `test_cli_setup.py` (+9) -- listing mode polish
+
+### Changed
+
+- `_cmd_setup` no-arg listing branch replaced with the polished version
+  (sorted, dynamic column width, platforms-only tool detection).
+- `_print_runtime_dispatch_fields` extended with Docker-specific rendering
+  (Image, Volumes, Env, Env passthru, Docker args, Inner runtime).
+
+### Notes
+
+- Issue #30 (Phase 4 epic) advances: Phase 4c.4 complete; Phase 4c.6 (registry
+  test isolation) complete. Phase 4c is now fully shipped.
+- Issue #33 (dz setup) -- listing-mode and docs criteria closed; first-run
+  detection stays deferred.
+- Issue #22 (Per-tool runtime environment) -- already closed v0.7.20 Option
+  B; Option A (`runtime.venv` shorthand) remains parked.
+- Three new tracking issues filed for future phases:
+  - #42 Test matrix / cross-environment testing substrate
+  - #43 VM-based runtime type complementing Docker
+  - #44 Kit sandbox: user-policy-driven container/VM isolation
+
+Refs #30 (Phase 4c.4 + 4c.6 checkboxes flipped in epic)
+Refs #33 (listing mode + docs criteria closed)
+Refs #42 (test matrix -- future; docker substrate reusable)
+Refs #43 (VM runtime -- future; complements this work)
+Refs #44 (kit sandbox -- future; built on this substrate)
+
 ## [0.7.20] - 2026-04-17
 
 ### Added

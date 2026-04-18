@@ -237,6 +237,128 @@ class TestBug2RawShowsVars:
         assert "C:\\Python311\\python.exe" in out or "Python311" in out
 
 
+class TestDockerFieldRendering:
+    """v0.7.21: dz info renders Docker-specific fields."""
+
+    def test_image_field_shown(self, tmp_path, capsys):
+        project = {
+            "name": "t",
+            "_dir": str(tmp_path),
+            "runtime": {"type": "docker", "image": "myorg/mytool:1.0"},
+        }
+        _print_runtime_raw(project)
+        out = capsys.readouterr().out
+        assert "Image:" in out
+        assert "myorg/mytool:1.0" in out
+
+    def test_volumes_rendered(self, tmp_path, capsys):
+        project = {
+            "name": "t",
+            "_dir": str(tmp_path),
+            "runtime": {
+                "type": "docker",
+                "image": "myimg",
+                "volumes": [
+                    {"host": "/a", "container": "/x"},
+                    {"host": "/b", "container": "/y", "mode": "ro"},
+                ],
+            },
+        }
+        _print_runtime_raw(project)
+        out = capsys.readouterr().out
+        assert "Volumes:" in out
+        assert "2 mount(s)" in out
+        assert "/a -> /x" in out
+        assert "/b -> /y (ro)" in out
+
+    def test_env_dict_rendered(self, tmp_path, capsys):
+        project = {
+            "name": "t",
+            "_dir": str(tmp_path),
+            "runtime": {
+                "type": "docker",
+                "image": "myimg",
+                "env": {"LOG_LEVEL": "info", "TZ": "UTC"},
+            },
+        }
+        _print_runtime_raw(project)
+        out = capsys.readouterr().out
+        assert "Env:" in out
+        assert "LOG_LEVEL=info" in out
+        assert "TZ=UTC" in out
+
+    def test_env_passthrough_shows_names_not_values(self, tmp_path, capsys, monkeypatch):
+        # Set a value in the host env -- it should NOT appear in dz info output
+        monkeypatch.setenv("GITHUB_TOKEN", "ghp_secret_token_value")
+        project = {
+            "name": "t",
+            "_dir": str(tmp_path),
+            "runtime": {
+                "type": "docker",
+                "image": "myimg",
+                "env_passthrough": ["GITHUB_TOKEN", "HOME"],
+            },
+        }
+        _print_runtime_raw(project)
+        out = capsys.readouterr().out
+        assert "Env passthru:" in out
+        assert "GITHUB_TOKEN" in out
+        assert "HOME" in out
+        # Value MUST NOT leak
+        assert "ghp_secret_token_value" not in out
+
+    def test_docker_args_rendered(self, tmp_path, capsys):
+        project = {
+            "name": "t",
+            "_dir": str(tmp_path),
+            "runtime": {
+                "type": "docker",
+                "image": "myimg",
+                "docker_args": ["--rm", "--network", "host"],
+            },
+        }
+        _print_runtime_raw(project)
+        out = capsys.readouterr().out
+        assert "Docker args:" in out
+        assert "--rm --network host" in out
+
+    def test_inner_runtime_rendered_as_informational(self, tmp_path, capsys):
+        project = {
+            "name": "t",
+            "_dir": str(tmp_path),
+            "runtime": {
+                "type": "docker",
+                "image": "myimg",
+                "inner_runtime": {
+                    "type": "python",
+                    "script_path": "/app/tool.py",
+                    "interpreter": "python3",
+                },
+            },
+        }
+        _print_runtime_raw(project)
+        out = capsys.readouterr().out
+        assert "Inner runtime:" in out
+        assert "(informational)" in out
+        assert "type=python" in out
+        assert "interpreter=python3" in out
+        assert "script=/app/tool.py" in out
+
+    def test_non_docker_runtime_no_docker_fields(self, tmp_path, capsys):
+        """Non-docker tools should NOT show Docker-specific sections."""
+        project = {
+            "name": "t",
+            "_dir": str(tmp_path),
+            "runtime": {"type": "python", "script_path": "tool.py"},
+        }
+        _print_runtime_raw(project)
+        out = capsys.readouterr().out
+        assert "Image:" not in out
+        assert "Volumes:" not in out
+        assert "Docker args:" not in out
+        assert "Inner runtime:" not in out
+
+
 class TestBug3InfoCatchesUnresolvedAtInfoTime:
     """Regression for v0.7.20 BUG-3: `dz info` must catch unresolved {{...}}
     references at inspection time, not silently pass them through."""

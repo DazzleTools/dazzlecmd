@@ -571,6 +571,48 @@ def _print_runtime_dispatch_fields(runtime):
         label = "exec (hand-off)" if interactive == "exec" else "keep open"
         print(f"Interactive: {label}")
 
+    # Docker-specific fields (Phase 4c.4, v0.7.21). Rendered only when the
+    # runtime type is "docker" AND the field is declared, so non-docker tools
+    # never see a spurious "Image: None" line.
+    if runtime_type == "docker":
+        if runtime.get("image"):
+            print(f"{'Image:':13}{runtime['image']}")
+        volumes = runtime.get("volumes") or []
+        if volumes:
+            print(f"{'Volumes:':13}{len(volumes)} mount(s)")
+            for i, vol in enumerate(volumes):
+                if isinstance(vol, dict):
+                    host = vol.get("host", "?")
+                    container = vol.get("container", "?")
+                    mode = vol.get("mode", "")
+                    mode_str = f" ({mode})" if mode else ""
+                    print(f"             [{i}] {host} -> {container}{mode_str}")
+                else:
+                    print(f"             [{i}] <malformed: {type(vol).__name__}>")
+        env = runtime.get("env") or {}
+        if env:
+            print(f"{'Env:':13}{len(env)} var(s)")
+            for k, v in env.items():
+                print(f"             {k}={v}")
+        passthrough = runtime.get("env_passthrough") or []
+        if passthrough:
+            # Values never shown -- only names. Security.
+            print(f"Env passthru: {', '.join(passthrough)}")
+        docker_args = runtime.get("docker_args") or []
+        if docker_args:
+            print(f"{'Docker args:':13}{' '.join(docker_args)}")
+        inner = runtime.get("inner_runtime")
+        if inner and isinstance(inner, dict):
+            inner_type = inner.get("type", "?")
+            inner_script = inner.get("script_path") or inner.get("module") or ""
+            inner_interp = inner.get("interpreter") or ""
+            bits = [f"type={inner_type}"]
+            if inner_interp:
+                bits.append(f"interpreter={inner_interp}")
+            if inner_script:
+                bits.append(f"script={inner_script}")
+            print(f"Inner runtime: (informational) {', '.join(bits)}")
+
 
 def _print_runtime_resolved(project):
     """Default view: show the runtime resolved for the current host."""
@@ -1729,21 +1771,42 @@ def _cmd_setup(args, engine):
 
     tool_name = getattr(args, "tool", None)
 
-    # No tool specified: list tools that have setup commands
+    # No tool specified: list tools that have setup declared (v0.7.21 polish).
+    # Detection: `setup.command` OR any `setup.platforms.*` present -- catches
+    # tools with ONLY platform-specific setup commands (no top-level default).
     if not tool_name:
         source = getattr(engine, "all_projects", engine.projects)
-        has_setup = [
-            p for p in source
-            if p.get("setup") and p["setup"].get("command")
-        ]
+
+        def _has_setup(p):
+            setup = p.get("setup")
+            if not setup or not isinstance(setup, dict):
+                return False
+            if setup.get("command"):
+                return True
+            platforms = setup.get("platforms")
+            if isinstance(platforms, dict) and platforms:
+                return True
+            return False
+
+        has_setup = [p for p in source if _has_setup(p)]
         if not has_setup:
             print("No tools have setup commands declared.")
             return 0
-        print("Tools with setup commands:")
+
+        # Sort alphabetically by FQCN for stable output
+        has_setup.sort(key=lambda p: p.get("_fqcn", p.get("name", "")))
+
+        # Dynamic column width: longest FQCN, with sane floor/ceiling
+        max_fqcn_width = max(
+            len(p.get("_fqcn", p.get("name", ""))) for p in has_setup
+        )
+        fqcn_width = max(20, min(max_fqcn_width, 50))
+
+        print("Tools with setup declared:")
         for p in has_setup:
             fqcn = p.get("_fqcn", p.get("name", "?"))
-            note = p.get("setup", {}).get("note", "")
-            print(f"  {fqcn:30}  {note}")
+            note = p.get("setup", {}).get("note") or "-"
+            print(f"  {fqcn:<{fqcn_width}}  {note}")
         print(f"\nRun: dz setup <tool> to execute a tool's setup.")
         return 0
 

@@ -24,6 +24,7 @@ import subprocess
 import sys
 
 from dazzlecmd_lib.conditions import evaluate_condition
+from dazzlecmd_lib.paths import resolve_relative_path
 from dazzlecmd_lib.platform_detect import PlatformInfo, get_platform_info
 from dazzlecmd_lib.platform_resolve import deep_merge, resolve_platform_block
 from dazzlecmd_lib.resolution_trace import ResolutionTrace
@@ -96,6 +97,23 @@ class RunnerRegistry:
     def registered_types(cls):
         """Return the set of currently registered runtime type names."""
         return set(cls._factories.keys())
+
+    @classmethod
+    def reset(cls):
+        """Reinstall built-in runner factories; drop any extensions.
+
+        Intended for test isolation (Phase 4c.6). Tests that mutate the registry
+        (e.g., registering a test-only runtime type) should wrap with this call
+        -- or rely on the autouse conftest fixture that calls reset() after
+        each test. Restores the registry to the post-import baseline.
+        """
+        cls._factories = {}
+        # Re-register built-ins. Imports are deferred to the module-level
+        # registration block at end of file, which re-populates via this
+        # dict after reset. Callers should not call reset() until the
+        # module is fully imported.
+        for runtime_type, factory in _BUILTIN_FACTORIES.items():
+            cls._factories[runtime_type] = factory
 
 
 # ---------------------------------------------------------------------------
@@ -1050,11 +1068,164 @@ def resolve_runtime(project, *, platform_info=None):
 
 
 # ---------------------------------------------------------------------------
+# Docker runtime (Phase 4c.4, v0.7.21)
+# ---------------------------------------------------------------------------
+
+
+def make_docker_runner(project):
+    """Create a runner for Docker-containerized tools.
+
+    Dispatches a tool by running its declared image via ``docker run``. The
+    engine never builds or pulls images -- that's the tool's declared setup
+    command's responsibility. On pre-flight miss (image not present locally),
+    the runner surfaces a clean error pointing at ``dz setup <fqcn>``.
+
+    Manifest schema (all under ``runtime``):
+
+    - ``image`` (str, required): local image tag. Pre-flight ``docker images -q
+      <image>`` must return a non-empty id.
+    - ``volumes`` (list of dicts, optional): each entry ``{host, container,
+      mode}``. Host paths resolve relative to the tool directory (via
+      ``paths.resolve_relative_path``). Mode defaults to "rw" when omitted.
+    - ``env`` (dict, optional): explicit env vars set inside the container
+      via ``-e KEY=VALUE``.
+    - ``env_passthrough`` (list, optional): names of host env vars to pass via
+      ``-e NAME`` (value from ``os.environ``). Missing vars are skipped
+      silently. Values never logged.
+    - ``docker_args`` (list, optional): raw docker CLI flags inserted between
+      ``docker run`` and the image. Use for ``--network host``, ``-it``, etc.
+    - ``inner_runtime`` (dict, optional): informational only. Rendered by
+      ``dz info`` to describe what runs inside the container. Does NOT
+      influence dispatch.
+
+    Conditional dispatch (v0.7.19) and ``_vars`` template substitution
+    (v0.7.20) apply as with every runtime type -- the resolver runs before
+    the runner sees the project, so per-platform image selection and
+    parameterized image tags work transparently.
+
+    Dispatch pattern::
+
+        docker run [docker_args...] [-v host:container[:mode]]...
+                                    [-e KEY=VALUE]... [-e NAME]...
+                                    image [argv...]
+
+    Raises nothing directly; the subprocess return code becomes the runner's
+    exit code. Missing ``image`` field, missing docker binary, or unreachable
+    daemon each surface a clean error with exit code 1.
+    """
+    runtime = project.get("runtime", {})
+    image = runtime.get("image")
+    volumes = runtime.get("volumes") or []
+    env = runtime.get("env") or {}
+    env_passthrough = runtime.get("env_passthrough") or []
+    docker_args = runtime.get("docker_args") or []
+    tool_dir = project.get("_dir", "")
+
+    if not image:
+        def error_runner(argv):
+            print(
+                f"Error: runtime.image required for docker runtime "
+                f"({project.get('name', '?')})",
+                file=sys.stderr,
+            )
+            return 1
+        return error_runner
+
+    def runner(argv):
+        # Pre-flight: verify image exists locally. The engine never pulls or
+        # builds -- that's `dz setup <tool>`'s responsibility.
+        try:
+            check = subprocess.run(
+                ["docker", "images", "-q", image],
+                capture_output=True, text=True,
+            )
+        except FileNotFoundError:
+            print(
+                "Error: 'docker' command not found on PATH. "
+                "Install Docker Desktop or the docker CLI, then retry.",
+                file=sys.stderr,
+            )
+            return 1
+        if check.returncode != 0:
+            # Daemon not running, permission denied, etc. Surface docker's
+            # own stderr message.
+            if check.stderr:
+                print(f"Error: {check.stderr.strip()}", file=sys.stderr)
+            else:
+                print(
+                    f"Error: docker images query failed (exit {check.returncode}). "
+                    f"Is the docker daemon running?",
+                    file=sys.stderr,
+                )
+            return 1
+        if not check.stdout.strip():
+            fqcn = project.get("_fqcn", project.get("name", "?"))
+            print(
+                f"Error: Docker image {image!r} not found locally.\n"
+                f"       Try: dz setup {fqcn}",
+                file=sys.stderr,
+            )
+            return 1
+
+        # Build argv for `docker run`.
+        cmd = ["docker", "run"]
+        cmd += list(docker_args)
+
+        for vol in volumes:
+            if not isinstance(vol, dict):
+                print(
+                    f"Error: runtime.volumes entries must be dicts with "
+                    f"'host' and 'container' keys; got {type(vol).__name__}",
+                    file=sys.stderr,
+                )
+                return 1
+            host = vol.get("host")
+            container = vol.get("container")
+            if not host or not container:
+                print(
+                    f"Error: runtime.volumes entry missing 'host' or "
+                    f"'container' ({project.get('name', '?')})",
+                    file=sys.stderr,
+                )
+                return 1
+            # Resolve relative host paths against tool_dir (consistent with
+            # script_path semantics); absolute and env-var-prefixed paths
+            # pass through unchanged.
+            resolved_host = resolve_relative_path(host, tool_dir)
+            spec = f"{resolved_host}:{container}"
+            mode = vol.get("mode")
+            if mode:
+                spec += f":{mode}"
+            cmd += ["-v", spec]
+
+        for k, v in env.items():
+            cmd += ["-e", f"{k}={v}"]
+
+        for name in env_passthrough:
+            if name in os.environ:
+                cmd += ["-e", name]
+
+        cmd.append(image)
+        cmd += list(argv)
+
+        result = subprocess.run(cmd, cwd=os.getcwd())
+        return result.returncode
+
+    return runner
+
+
+# ---------------------------------------------------------------------------
 # Register built-in types at import time
 # ---------------------------------------------------------------------------
 
-RunnerRegistry.register("python", make_python_runner)
-RunnerRegistry.register("shell", make_shell_runner)
-RunnerRegistry.register("script", make_script_runner)
-RunnerRegistry.register("binary", make_binary_runner)
-RunnerRegistry.register("node", make_node_runner)
+_BUILTIN_FACTORIES = {
+    "python": make_python_runner,
+    "shell": make_shell_runner,
+    "script": make_script_runner,
+    "binary": make_binary_runner,
+    "node": make_node_runner,
+    "docker": make_docker_runner,
+}
+
+for _runtime_type, _factory in _BUILTIN_FACTORIES.items():
+    RunnerRegistry.register(_runtime_type, _factory)

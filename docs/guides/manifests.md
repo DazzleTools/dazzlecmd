@@ -477,6 +477,104 @@ Perl with taint mode and warnings:
 }
 ```
 
+### Docker tool (v0.7.21+)
+
+For tools that ship as Docker images (or are distributed as containerized
+environments), `runtime.type: "docker"` dispatches via `docker run`.
+
+```json
+{
+    "name": "my-docker-tool",
+    "runtime": {
+        "type": "docker",
+        "image": "myorg/mytool:1.0",
+        "volumes": [
+            {"host": ".", "container": "/work", "mode": "rw"}
+        ],
+        "env": {"LOG_LEVEL": "info"},
+        "env_passthrough": ["GITHUB_TOKEN"],
+        "docker_args": ["--rm"]
+    },
+    "setup": {
+        "command": "docker build -t myorg/mytool:1.0 ."
+    }
+}
+```
+
+**Required field**:
+- `image` (string) -- the local image tag. Must be present locally; pre-flight check runs `docker images -q <image>` before dispatch and errors with a `dz setup <fqcn>` hint on miss. The engine NEVER pulls or builds images -- the tool's declared `setup.command` is responsible for that.
+
+**Optional fields**:
+- `volumes` (list of dicts) -- each entry is `{host, container, mode}`. Host paths resolve relative to the tool directory via the shared `paths.resolve_relative_path` helper (so relative paths like `"data/"` join against the tool's dir). Mode is optional (`"rw"` / `"ro"`); omitted = docker default.
+- `env` (dict) -- explicit container env vars. Keys and values both appear in argv as `-e KEY=VALUE`.
+- `env_passthrough` (list of strings) -- names of host env vars to forward to the container via `-e NAME` (bare flag; docker picks up the value from the host at run time). Values are NEVER logged to stderr or `dz info` output -- only the names.
+- `docker_args` (list of strings) -- raw docker CLI flags inserted between `docker run` and the image. Use for `--network host`, `--rm`, `-it` (interactive), `--entrypoint`, etc.
+- `inner_runtime` (dict) -- INFORMATIONAL only. Rendered by `dz info` to describe what runs inside the container. Does NOT influence dispatch.
+
+**Dispatch pattern**:
+
+```
+docker run [docker_args...] [-v host:container[:mode]]... [-e KEY=VALUE]... [-e NAME]... image [argv...]
+```
+
+**Pre-flight check**:
+
+```
+$ dz mytool
+Error: Docker image 'myorg/mytool:1.0' not found locally.
+       Try: dz setup mytool
+```
+
+Clean, actionable. Missing `docker` binary, unreachable daemon, etc. each surface dedicated errors.
+
+**Cross-platform image selection** (via conditional dispatch, v0.7.19+):
+
+```json
+"runtime": {
+    "type": "docker",
+    "platforms": {
+        "linux":   {"image": "myorg/mytool:amd64-linux"},
+        "macos":   {"image": "myorg/mytool:arm64-macos"},
+        "windows": {"image": "myorg/mytool:windows-server-core"}
+    }
+}
+```
+
+**Parameterized image tags** (via `_vars`, v0.7.20+):
+
+```json
+{
+    "_vars": {
+        "registry": "docker.io",
+        "org": "myorg",
+        "tag": "1.0"
+    },
+    "runtime": {
+        "type": "docker",
+        "image": "{{registry}}/{{org}}/mytool:{{tag}}"
+    }
+}
+```
+
+**Docker-compatible engines**: the `docker` runtime shells out to the literal
+`docker` command. Any engine providing a docker-compatible CLI works without
+code changes: Docker Desktop, Docker Engine, Podman (via alias/symlink),
+Colima, Rancher Desktop, OrbStack, nerdctl. Users with non-docker CLIs can
+PATH-alias or rename; the runtime honors whatever `docker` resolves to.
+
+**NOT supported in v0.7.21**:
+
+- Automatic image pull/build (author declares `setup.command`; user runs `dz setup`)
+- Docker Compose (`docker compose run`) -- future runtime type
+- Podman/nerdctl first-class field (`engine_cmd`) -- future addition if demand emerges
+- VMware / VirtualBox / QEMU full-VM dispatch -- see issue #43 (separate `vm` runtime type)
+- Windows path translation for volumes (author writes paths Docker Desktop / WSL2 accept; document-only today)
+
+**Reference fixture**: `tests/fixtures/docker_tool/` in the repo has a working
+end-to-end example (Dockerfile + manifest + Python ENTRYPOINT). Integration
+tests live at `tests/test_docker_integration.py`, marked
+`@pytest.mark.docker_integration`.
+
 ## Conditional Dispatch (v0.7.19+)
 
 A single manifest can express different dispatch behavior per platform and

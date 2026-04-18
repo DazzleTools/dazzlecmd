@@ -61,4 +61,5 @@ markers = [
     "npm: tests requiring npm in PATH",
     "npx: tests requiring npx in PATH",
     "venv_integration: heavy end-to-end tests that create a venv and pip install (opt-in; slow, needs network)",
+    "docker_integration: end-to-end tests that build a docker image and run a container (opt-in; requires docker daemon)",
 ]

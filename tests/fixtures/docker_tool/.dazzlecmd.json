@@ -1,0 +1,40 @@
+{
+    "name": "docker-test-tool",
+    "namespace": "test",
+    "description": "Synthetic Docker-based stress-test tool for v0.7.21 integration",
+    "platform": "cross-platform",
+    "language": "python",
+    "_vars": {
+        "image_name": "dazzlecmd-test-docker-tool",
+        "image_tag": "v1"
+    },
+    "runtime": {
+        "_schema_version": "1",
+        "type": "docker",
+        "image": "{{image_name}}:{{image_tag}}",
+        "env_passthrough": [
+            "DAZZLECMD_DOCKER_TEST_ENV1",
+            "DAZZLECMD_DOCKER_TEST_ENV2"
+        ],
+        "env": {
+            "DAZZLECMD_DOCKER_TEST_EXPLICIT_ENV": "from-manifest-env-dict"
+        },
+        "docker_args": ["--rm"],
+        "inner_runtime": {
+            "type": "python",
+            "script_path": "/app/app.py",
+            "interpreter": "python3"
+        }
+    },
+    "setup": {
+        "_schema_version": "1",
+        "command": "docker build -t {{image_name}}:{{image_tag}} .",
+        "note": "Builds the fixture image. Runs on any host with Docker installed."
+    },
+    "lifecycle": {
+        "status": "active",
+        "type": "tool",
+        "created_as": "tool",
+        "purpose": "test-fixture"
+    }
+}
