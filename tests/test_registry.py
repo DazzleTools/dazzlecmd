@@ -1204,3 +1204,93 @@ class TestDenoRealSubprocess:
         runner = make_node_runner(project)
         result = runner(["world"])
         assert result == 0
+
+
+class TestPythonPackageModeRelativeImports:
+    """Regression test for wtf-windows adoption (Phase 2):
+    when a tool directory has __init__.py (making it a Python package),
+    the runner must put the PARENT of tool_dir on sys.path and import
+    as <tool_dir_name>.<script_stem> so relative imports in the script
+    resolve correctly.
+
+    Prior to this fix, the runner put tool_dir on sys.path and imported
+    the script as a flat module, causing relative imports like
+    `from .channels import X` to fail with:
+    'attempted relative import with no known parent package'.
+    """
+
+    def test_package_mode_resolves_relative_imports(self, tmp_path):
+        # Create a package-structured tool:
+        #   tools/core/mypkg/__init__.py
+        #   tools/core/mypkg/helper.py  -- imported via relative import
+        #   tools/core/mypkg/main.py    -- imports .helper and exposes main()
+        from dazzlecmd_lib.registry import make_python_runner
+
+        tool_dir = tmp_path / "tools" / "core" / "mypkg"
+        tool_dir.mkdir(parents=True)
+        (tool_dir / "__init__.py").write_text("")
+        (tool_dir / "helper.py").write_text("VALUE = 42\n")
+        (tool_dir / "main.py").write_text(
+            "from .helper import VALUE\n"
+            "def main(argv=None):\n"
+            "    print(f'VALUE={VALUE}')\n"
+            "    return 0\n"
+        )
+
+        project = {
+            "name": "mypkg",
+            "_dir": str(tool_dir),
+            "runtime": {
+                "type": "python",
+                "entry_point": "main",
+                "script_path": "main.py",
+            },
+        }
+
+        runner = make_python_runner(project)
+        import sys as _sys
+        sys_path_before = list(_sys.path)
+        try:
+            exit_code = runner([])
+        finally:
+            _sys.path[:] = sys_path_before
+            # Clear any lingering module cache so subsequent tests see
+            # a clean state (this is a package import; leave hygiene)
+            for mod_name in list(_sys.modules):
+                if mod_name.startswith("mypkg"):
+                    _sys.modules.pop(mod_name, None)
+
+        assert exit_code == 0
+
+    def test_flat_module_still_works(self, tmp_path, monkeypatch):
+        """Tools without __init__.py continue to use flat-module import
+        (the non-package path). Regression guard to ensure the package-
+        mode fix didn't break non-package tools."""
+        from dazzlecmd_lib.registry import make_python_runner
+
+        tool_dir = tmp_path / "flatmod"
+        tool_dir.mkdir()
+        (tool_dir / "flatmod.py").write_text(
+            "def main(argv=None):\n    return 7\n"
+        )
+
+        project = {
+            "name": "flatmod",
+            "_dir": str(tool_dir),
+            "runtime": {
+                "type": "python",
+                "entry_point": "main",
+                "script_path": "flatmod.py",
+            },
+        }
+
+        runner = make_python_runner(project)
+        import sys as _sys
+        sys_path_before = list(_sys.path)
+        try:
+            exit_code = runner([])
+        finally:
+            _sys.path[:] = sys_path_before
+            _sys.modules.pop("flatmod", None)
+
+        assert exit_code == 7

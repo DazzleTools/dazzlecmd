@@ -4,6 +4,104 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.24] - 2026-04-18
+
+### Added
+
+- **`AggregatorEngine(project_root=...)` kwarg**. Installed aggregators
+  (e.g. wtf-windows via pip) can now pass an explicit project-root hint
+  at construction. The library's default `find_project_root` walks from
+  its own `__file__` which resolves to `site-packages/dazzlecmd_lib/`
+  for pip-installed consumers — useless for locating a consumer's own
+  tools/kits directories. The kwarg precedence is: explicit
+  construction hint -> `engine.discover(project_root=)` override ->
+  `find_project_root()` walk.
+
+### Fixed
+
+- **Python runner package-mode dispatch** (`make_python_runner` in
+  `registry.py`): tools whose directory contains `__init__.py` (package
+  layout, e.g. wtf-windows' `locked` and `restarted`) now dispatch with
+  the PARENT of `tool_dir` on `sys.path` and import as
+  `<package_name>.<script_stem>`. Relative imports inside the tool's
+  own module (e.g. `from .channels import ...`) resolve correctly. Bug
+  surfaced during wtf-windows Phase 2 adoption; previous behavior
+  placed `tool_dir` directly on `sys.path` which imported the script as
+  a flat top-level module and broke its relative imports with
+  "attempted relative import with no known parent package".
+
+- **`dz kit status` shows correct import name for embedded sub-kits**
+  (#45). Previously showed wtf's inner `"core"` kit name (from wtf's
+  `kits/core.kit.json`) instead of the import name `"wtf"` (from
+  `kits/wtf.kit.json` filename). `_cmd_kit_status` now prefers
+  `kit["_kit_name"]` (set from the registry pointer's filename) over
+  `kit["name"]` (set from the in-repo manifest). Affects display only;
+  FQCN dispatch was always correct.
+
+### Changed
+
+- **`kits/wtf.kit.json`**: removed temporary `_override_tools_dir`,
+  `_override_manifest`, and `_override_note` fields. wtf-windows' own
+  `kits/core.kit.json` (shipped in wtf v0.1.4-alpha and earlier)
+  already declares `tools_dir: "tools"` and `manifest: ".wtf.json"`;
+  dazzlecmd's loader picks those up directly via
+  `_load_in_repo_kit_manifest`. Phase 3 coordination of the
+  wtf-windows adoption track.
+
+- **`projects/wtf` submodule bumped**: `dabb30b` (v0.1.1-alpha) -> 
+  `25af04e` (v0.1.4-alpha). The new wtf commit adopts
+  `dazzlecmd-lib` as its engine (Phase 2 of the Option C
+  wtf-windows-adoption work). Validates "dazzlecmd is an instance, not
+  the root" with a real third-party production adopter.
+
+### Tests
+
+- 2 regression tests in `tests/test_registry.py::TestPythonPackageModeRelativeImports`
+  covering the package-mode + flat-module dispatch paths.
+- 2 regression tests in `tests/test_cli_kit.py::TestKitStatusDisplay`
+  covering the `_kit_name` preference and back-compat when `_kit_name`
+  is absent.
+- Full suite: 844 passing, 6 platform-skipped (up from 840 in v0.7.23).
+
+### Notes
+
+- **Phase 4d Phase 2 + Phase 3 both land here.** Phase 2 shipped in
+  the wtf-windows repo (`25af04e`, v0.1.4-alpha) by deleting wtf's
+  duplicated `loader.py` and rewriting `cli.py` to use
+  `AggregatorEngine` + `MetaCommandRegistry`. Phase 3 (this dazzlecmd
+  commit) bumps the submodule pointer and removes the temporary
+  overrides.
+
+- **wtf-windows is the first third-party production adopter of
+  `dazzlecmd-lib`**. Second is sysdiagnose-public (tracked as #46, not
+  yet started). Third will likely require the namespace-flexibility
+  feature tracked as #47.
+
+- **Library docs** (testing strategy, dev-workflow catalogs,
+  human-checklist template) ship alongside in this commit.
+
+- **Tester-agent sweep** for this version reported 15 PASS, 1 REVIEW
+  (design call on standalone vs embedded FQCN display — Option A
+  chosen: each aggregator shows its own perspective), 0 FAIL. Ship
+  recommendation.
+
+Closes #28 (wtf-windows full integration experiment -- Phase 2+3
+delivers what this issue tracked)
+Closes #45 (dz kit status embedded sub-kit label fix)
+Refs #13 (recursive kit PoC -- subsumed by Option C completion; can
+close with this commit's adoption validation)
+Refs #27 (dazzlecmd-lib adoption -- production third-party adopter
+shipping; remaining criteria: PyPI publish, tutorial README, example
+starter aggregator)
+Refs #30 (Phase 4 epic -- 4d Phase 2 + Phase 3 shipped; Phase 4e
+optional polish; 4d's polyglot validation still pending a real
+non-Python tool end-to-end)
+Refs #46 (sysdiagnose-public adoption -- blocked on this; now unblocked)
+Refs #47 (namespace flexibility -- informed by sysdiagnose adoption;
+design-stage)
+
+Design: `2026-04-18__17-15-54__dev-workflow-process_option-c-library-helper-surface-design.md`
+
 ## [0.7.23] - 2026-04-18
 
 ### Added

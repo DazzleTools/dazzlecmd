@@ -169,17 +169,32 @@ def make_python_runner(project):
 
             # Determine import mode
             use_module = module_path
+            path_dir_for_import = None  # what to put on sys.path
+
             if not use_module:
-                parent_dir = os.path.dirname(full_path)
-                if os.path.isfile(os.path.join(parent_dir, "__init__.py")):
+                script_parent = os.path.dirname(full_path)
+                if os.path.isfile(os.path.join(script_parent, "__init__.py")):
+                    # Tool is itself a package (has __init__.py). Import as
+                    # <tool_dir_basename>.<script_stem> with the PARENT of
+                    # tool_dir on sys.path so relative imports in the
+                    # script (e.g. ``from .channels import X``) resolve
+                    # against the package.
+                    package_name = os.path.basename(tool_dir.rstrip(os.sep))
                     rel_path = script_path.replace("\\", "/")
                     if rel_path.endswith(".py"):
                         rel_path = rel_path[:-3]
-                    use_module = rel_path.replace("/", ".")
+                    script_stem = rel_path.replace("/", ".")
+                    use_module = f"{package_name}.{script_stem}"
+                    path_dir_for_import = os.path.dirname(tool_dir.rstrip(os.sep))
 
             if use_module:
-                if tool_dir not in sys.path:
-                    sys.path.insert(0, tool_dir)
+                # If caller specified module_path explicitly (via
+                # runtime.module), honor that and put tool_dir on sys.path
+                # as before.
+                if path_dir_for_import is None:
+                    path_dir_for_import = tool_dir
+                if path_dir_for_import not in sys.path:
+                    sys.path.insert(0, path_dir_for_import)
 
                 if "." not in use_module and script_path and "/" in script_path.replace("\\", "/"):
                     script_basename = os.path.splitext(os.path.basename(script_path))[0]

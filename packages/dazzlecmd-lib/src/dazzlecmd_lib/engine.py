@@ -259,6 +259,7 @@ class AggregatorEngine:
         include_default_meta_commands=True,
         extra_reserved_commands=None,
         config_dir=None,
+        project_root=None,
     ):
         """Initialize the aggregator engine.
 
@@ -357,7 +358,11 @@ class AggregatorEngine:
             os.path.join(self.config.config_dir(), "overrides")
         )
 
-        # Resolved at run time
+        # Resolved at run time. project_root can be set via constructor
+        # (for installed aggregators whose tools live at a known path that
+        # find_project_root's library-__file__ walk can't reach) or
+        # discovered at run() time via find_project_root().
+        self._project_root_hint = project_root
         self.project_root = None
         self.kits = []
         self.active_kits = []
@@ -401,7 +406,11 @@ class AggregatorEngine:
         if project_root:
             self.project_root = project_root
         elif self.project_root is None:
-            self.project_root = self.find_project_root()
+            # Precedence: explicit hint at construction > find_project_root walk
+            if self._project_root_hint is not None:
+                self.project_root = str(self._project_root_hint)
+            else:
+                self.project_root = self.find_project_root()
 
         if self.project_root is None:
             return

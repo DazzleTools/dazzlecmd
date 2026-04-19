@@ -294,3 +294,45 @@ class TestKitSilenced:
         assert "a:b:c:d:leaf" in captured.out
         assert "core:safedel" in captured.out
         assert "foo -> core:fixpath" in captured.out
+
+
+class TestKitStatusDisplay:
+    """Regression test for #45: _cmd_kit_status should use _kit_name when
+    the kit's own 'name' field doesn't match the import name.
+
+    This happens when a kit is imported as "wtf" (registry pointer
+    filename) but its in-repo manifest declares name="core" (wtf's own
+    inner kit name). The import name should win in the display.
+    """
+
+    def test_kit_status_uses_kit_name_for_embedded_sub_kit(self, capsys):
+        from dazzlecmd.cli import _cmd_kit_status
+
+        kits = [
+            # Dazzlecmd's own core kit
+            {"name": "core", "_kit_name": "core", "tools": ["core:a", "core:b"],
+             "always_active": True},
+            # Wtf imported as "wtf" but its in-repo manifest has name="core"
+            {"name": "core", "_kit_name": "wtf",
+             "tools": ["wtf:core:locked", "wtf:core:restarted"],
+             "always_active": True},
+        ]
+        rc = _cmd_kit_status(kits)
+        assert rc == 0
+        out = capsys.readouterr().out
+        # Both "core" and "wtf" should appear -- the second one was previously
+        # shown as "core: 2 tool(s)" instead of "wtf: 2 tool(s)".
+        assert "core: 2 tool(s)" in out  # dazzlecmd's own core
+        assert "wtf: 2 tool(s)" in out   # wtf's import name, not inner "core"
+
+    def test_kit_status_falls_back_to_name_when_kit_name_absent(self, capsys):
+        """If _kit_name isn't set (legacy / direct construction), fall back to
+        kit['name']."""
+        from dazzlecmd.cli import _cmd_kit_status
+
+        kits = [
+            {"name": "legacy", "tools": ["legacy:a"], "always_active": True},
+        ]
+        rc = _cmd_kit_status(kits)
+        assert rc == 0
+        assert "legacy: 1 tool(s)" in capsys.readouterr().out

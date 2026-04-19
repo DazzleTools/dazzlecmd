@@ -929,8 +929,13 @@ def _cmd_kit_status(kits):
     active = get_active_kits(kits)
     print(f"Active kits: {len(active)}")
     for kit in active:
+        # Prefer _kit_name (set from filename in registry pointer) over kit["name"]
+        # (which may reflect an embedded sub-kit's own inner name, e.g. wtf's
+        # own core.kit.json declares name="core" but is imported as "wtf").
+        # See #45.
+        name = kit.get("_kit_name") or kit["name"]
         tool_count = len(kit.get("tools", []))
-        print(f"  {kit['name']}: {tool_count} tool(s)")
+        print(f"  {name}: {tool_count} tool(s)")
     return 0
 
 
