@@ -61,9 +61,12 @@ class FQCNIndex:
     - §9b: an alias FQCN MUST NOT equal any canonical FQCN. A virtual kit
       cannot shadow a real tool. Mirror rule: a canonical added after an
       alias claims the same FQCN is rejected.
-    - Aliases do NOT populate ``short_index``. Aliases exist to provide
-      prettier FQCNs, not to create new short-name competition. Users who
-      want short-name shortcuts use ``favorites``, not virtual kits.
+    - Alias shorts populate ``short_index`` the same as canonical shorts
+      (revised in v0.7.28 — rule 7c relaxed). Virtual kits are first-class
+      kits; their aliases contribute to short-name resolution via the
+      existing precedence mechanism. When an alias short collides with a
+      canonical short (or another alias short), the effective precedence
+      order determines the winner and a notification is emitted.
     - Aliases are single-hop. Transitive aliases (alias -> alias -> ...)
       are rejected at insert time (Phase 4e). Phase 5 adds a single
       exception for ``deprecation.relocated_to_fqcn`` pointers.
@@ -72,7 +75,10 @@ class FQCNIndex:
 
     - ``canonical_index: {fqcn: project}`` — canonical FQCN dispatch
     - ``alias_index: {alias_fqcn: canonical_fqcn}`` — alias -> target
-    - ``short_index: {short_name: [canonical_fqcn, ...]}`` — canonical only
+    - ``short_index: {short_name: [canonical_fqcn, ...]}`` — populated by
+      both ``insert_canonical`` (canonical's short name) and ``insert_alias``
+      (alias's last segment). Values are canonical FQCNs in either case —
+      dispatch always lands on a canonical project.
     - ``shortcut_candidates: {(kit_first, tool_last): [canonical_fqcn, ...]}`` —
       O(1) lookup for 2-segment "kit-qualified shortcut" resolution
       (e.g., ``wtf:locked`` -> ``wtf:core:locked``). Replaces the O(n)
@@ -185,6 +191,22 @@ class FQCNIndex:
             return  # idempotent no-op
 
         self.alias_index[alias_fqcn] = canonical_fqcn
+
+        # Rule 7c (v0.7.28 relaxation): alias shorts populate short_index
+        # the same as canonical shorts. Virtual kits are first-class kits;
+        # their aliases contribute to short-name resolution via the
+        # existing precedence mechanism. This makes `dz cleanup` resolve
+        # to the canonical target when 'claude:cleanup' is aliased with
+        # alias short 'cleanup'. Collisions with canonical shorts (or
+        # other alias shorts) are resolved by _effective_precedence.
+        # The short_index value list stores the CANONICAL FQCN (what
+        # actually dispatches), not the alias — resolution returns the
+        # canonical project with a ResolutionContext reflecting the
+        # alias traversal.
+        alias_short = alias_fqcn.rsplit(":", 1)[-1]
+        short_bucket = self.short_index.setdefault(alias_short, [])
+        if canonical_fqcn not in short_bucket:
+            short_bucket.append(canonical_fqcn)
 
     # -- resolution -------------------------------------------------------
 
@@ -618,6 +640,71 @@ class AggregatorEngine:
         # targets (rule 9b requires canonical_index to be populated first).
         self._apply_virtual_kits(all_virtual_kits)
         self._maybe_emit_reroot_hint()
+        self._maybe_emit_stale_favorites_warning()
+
+    def _maybe_emit_stale_favorites_warning(self):
+        """Scan favorites for references to FQCNs no longer in the index.
+
+        A favorite entry ``short -> fqcn`` is stale when ``fqcn`` is
+        neither a canonical FQCN nor an alias FQCN in the current
+        resolution set. Common causes: a kit was disabled, a tool was
+        removed, or a virtual kit that provided the alias is gone.
+
+        Emits ONE grouped stderr warning (not N individual ones) and
+        respects ``silenced_hints``. Manual remediation via
+        ``dz kit favorite --remove <short>`` or re-pointing the favorite
+        to a live FQCN.
+        """
+        if not self.is_root:
+            return
+        favorites = self._get_config_dict("favorites")
+        if not favorites:
+            return
+
+        idx = self.fqcn_index
+        stale = []
+        for short, fqcn in favorites.items():
+            if not isinstance(fqcn, str) or not fqcn:
+                continue
+            if fqcn in idx.canonical_index or fqcn in idx.alias_index:
+                continue
+            stale.append((short, fqcn))
+
+        if not stale:
+            return
+
+        # Respect silenced_hints: a stale favorite whose target kit is
+        # silenced should not trigger a warning.
+        silenced = self._get_config_dict("silenced_hints", default={}) or {}
+        silenced_tool_set = set(silenced.get("tools", []) or [])
+        silenced_kit_set = set(silenced.get("kits", []) or [])
+
+        reportable = []
+        for short, fqcn in stale:
+            if fqcn in silenced_tool_set:
+                continue
+            kit_prefix = fqcn.split(":", 1)[0]
+            if kit_prefix in silenced_kit_set:
+                continue
+            reportable.append((short, fqcn))
+
+        if not reportable:
+            return
+        if os.environ.get("DZ_QUIET"):
+            return
+
+        count = len(reportable)
+        details = ", ".join(f"'{s}' -> '{f}'" for s, f in reportable[:3])
+        more = f" (+{count - 3} more)" if count > 3 else ""
+        print(
+            f"dz: warning: {count} stale favorite(s) detected: {details}{more}. "
+            f"These point to FQCNs not in the current index (virtual kit "
+            f"removed, tool deleted, or kit disabled). Run "
+            f"'dz kit favorite list' to inspect; remove stale entries "
+            f"with 'dz kit favorite --remove <short>' or re-point them "
+            f"via 'dz kit favorite <short> <new-fqcn>'.",
+            file=sys.stderr,
+        )
 
     def _discover_aggregator(self, project_root, loading_stack, depth, kit_prefix):
         """Recursively discover kits, tools, and virtual-kit manifests.
@@ -1236,7 +1323,7 @@ class AggregatorEngine:
             if context is not None and context.notification and not os.environ.get("DZ_QUIET"):
                 print(context.notification, file=sys.stderr)
             tool_argv = argv[1:]
-            return self._run_tool(project, tool_argv)
+            return self._run_tool(project, tool_argv, context=context)
 
         # Unknown command — let argparse produce its standard error
         sys_argv_backup = sys.argv
@@ -1247,32 +1334,60 @@ class AggregatorEngine:
             sys.argv = sys_argv_backup
         return 1
 
-    def _run_tool(self, project, argv):
+    def _run_tool(self, project, argv, context=None):
         """Dispatch a tool via tool_dispatcher or library default.
 
         If a ``tool_dispatcher`` callback was set, use it. Otherwise, use
         the library's default via ``RunnerRegistry.resolve(project)``.
+
+        When a ``ResolutionContext`` is provided (Phase 4e Commit 4),
+        injects ``DZ_CANONICAL_FQCN`` and ``DZ_INVOKED_FQCN`` into
+        ``os.environ`` for the duration of the call. Tools that write
+        persistent state (caches, logs, checkpoints) MUST key on
+        ``DZ_CANONICAL_FQCN`` to avoid divergent state across invocation
+        paths (alias vs canonical vs short name all converge on the
+        same canonical tool).
         """
-        if self._dispatch_tool is not None:
-            return self._dispatch_tool(project, argv)
-        # Library default: RunnerRegistry-based dispatch.
-        runner = RunnerRegistry.resolve(project)
-        if runner is None:
-            print(
-                f"Error: could not resolve runtime for {project.get('name', '?')}",
-                file=sys.stderr,
-            )
-            return 1
+        env_backup = {}
         try:
-            return runner(argv)
-        except KeyboardInterrupt:
-            return 130
-        except Exception as exc:
-            print(
-                f"Error running {project.get('name', '?')}: {exc}",
-                file=sys.stderr,
-            )
-            return 1
+            if context is not None:
+                # Preserve prior values so nested dispatches don't stomp
+                # each other. In practice dz only runs one tool per
+                # invocation so this is belt-and-suspenders.
+                env_backup["DZ_CANONICAL_FQCN"] = os.environ.get("DZ_CANONICAL_FQCN")
+                env_backup["DZ_INVOKED_FQCN"] = os.environ.get("DZ_INVOKED_FQCN")
+                os.environ["DZ_CANONICAL_FQCN"] = context.canonical_fqcn or ""
+                os.environ["DZ_INVOKED_FQCN"] = context.original_input or context.canonical_fqcn or ""
+
+            if self._dispatch_tool is not None:
+                return self._dispatch_tool(project, argv)
+            # Library default: RunnerRegistry-based dispatch.
+            runner = RunnerRegistry.resolve(project)
+            if runner is None:
+                print(
+                    f"Error: could not resolve runtime for {project.get('name', '?')}",
+                    file=sys.stderr,
+                )
+                return 1
+            try:
+                return runner(argv)
+            except KeyboardInterrupt:
+                return 130
+            except Exception as exc:
+                print(
+                    f"Error running {project.get('name', '?')}: {exc}",
+                    file=sys.stderr,
+                )
+                return 1
+        finally:
+            # Restore env vars to their prior state so dz's own process
+            # environment isn't permanently modified by a tool dispatch.
+            if context is not None:
+                for key, value in env_backup.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
 
     def _run_escape_hatch(self, argv):
         """Escape-hatch run path: delegate parser + meta dispatch to callbacks.
@@ -1338,7 +1453,25 @@ class AggregatorEngine:
                 print(context.notification, file=sys.stderr)
 
             tool_argv = argv[1:]
-            return dispatch_tool(project, tool_argv)
+            # Inject DZ_CANONICAL_FQCN + DZ_INVOKED_FQCN env vars (v0.7.28).
+            # Tools writing persistent state (caches, logs, checkpoints)
+            # MUST key on DZ_CANONICAL_FQCN to avoid divergent state
+            # across invocation paths.
+            env_backup = {}
+            if context is not None:
+                env_backup["DZ_CANONICAL_FQCN"] = os.environ.get("DZ_CANONICAL_FQCN")
+                env_backup["DZ_INVOKED_FQCN"] = os.environ.get("DZ_INVOKED_FQCN")
+                os.environ["DZ_CANONICAL_FQCN"] = context.canonical_fqcn or ""
+                os.environ["DZ_INVOKED_FQCN"] = context.original_input or context.canonical_fqcn or ""
+            try:
+                return dispatch_tool(project, tool_argv)
+            finally:
+                if context is not None:
+                    for key, value in env_backup.items():
+                        if value is None:
+                            os.environ.pop(key, None)
+                        else:
+                            os.environ[key] = value
 
         sys_argv_backup = sys.argv
         sys.argv = [self.command] + list(argv)

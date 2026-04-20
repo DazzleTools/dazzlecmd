@@ -35,13 +35,18 @@ def test_cli_version():
 
 
 def test_cli_list():
-    """Verify dz list runs and finds tools."""
+    """Verify dz list runs and finds tools.
+
+    Under the v0.7.28 --show enum footer, counts are rendered
+    differently depending on mode. Match the common substring
+    ``tool(s)`` which appears in every mode's footer.
+    """
     result = subprocess.run(
         [sys.executable, "-m", "dazzlecmd", "list"],
         capture_output=True, text=True,
     )
     assert result.returncode == 0
-    assert "tool(s) found" in result.stdout
+    assert "tool(s)" in result.stdout
 
 
 def test_cli_kit_list():

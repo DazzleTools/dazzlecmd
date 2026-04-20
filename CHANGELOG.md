@@ -4,6 +4,124 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.27] - 2026-04-20
+
+Phase 4e Commits 3+4 (folded): alias-blindness audit, rule 7c
+relaxation, `dz list --show` enum + Option I default rendering,
+virtual-kit filter on `-k`, `dz kit list` drill-in with alias columns,
+`dz tree` virtual-kit branch with `->` arrows, `dz kit status` "alias(es)"
+label, runtime env-var injection, grouped stale-favorite warning.
+
+Virtual kits are now FIRST-CLASS kits — they contribute to short-name
+resolution (rule 7c), display as distinct branches in the tree, surface
+in `dz list` by default (alias-preferred view), and inject canonical
+identity as env vars for tools to use in cache/state keys.
+
+### Added
+
+- **Rule 7c relaxation: alias shorts populate `short_index`** alongside
+  canonical shorts. A virtual kit declaring `claude:cleanup` with alias
+  short `cleanup` makes `dz cleanup` resolve to the canonical target
+  via the existing short-name precedence mechanism. Users no longer
+  need separate `favorites` to get short-name access to aliased tools —
+  the virtual kit delivers it. Collisions (alias short vs canonical
+  short, or alias-short-vs-alias-short across virtual kits) resolve by
+  precedence + notification, same as canonical collisions.
+
+- **`engine.find_project(name)`**: alias-aware lookup helper is now the
+  canonical lookup path. Replaces raw `[p for p in projects if p.get("_fqcn") == name]`
+  comparisons everywhere in the codebase. `_cmd_info`, `render_info`,
+  `setup_handler` all route through it. `engine` parameter is now
+  REQUIRED on these entry points (the legacy alias-blind fallback
+  was tech debt that's been removed — see commit message).
+
+- **`dz list --show {default,canonical,alias,all}`**: explicit content
+  selector. `default` (alias-preferred) hides canonicals that have
+  aliases; `canonical` is script-stable legacy view; `alias` shows
+  only virtual-kit aliases; `all` shows both. Config key `list_view`
+  overrides the default per-user.
+
+- **Option I default rendering for aliases**: alias short in Name
+  column, `virtual-kit:canonical-kit` hierarchy in Kit column. The
+  shortening that virtual kits promise is now visible at a glance.
+  Short-name collisions marked `[*]` as before (now includes alias
+  shorts per rule 7c).
+
+- **`dz list -k <virtual-kit>`**: surfaces the virtual kit's aliases
+  (previously returned "No tools found" because `render_list` was
+  alias-blind). Canonical-kit filter behavior preserved.
+
+- **`dz kit list <virtual-kit>` drill-in**: new columns for virtual
+  kits — Alias FQCN, `-> Canonical`, Description. Users can see every
+  alias the virtual kit declares and what canonical tool it maps to.
+
+- **`dz tree` virtual-kit branch**: virtual kits render as separate
+  top-level branches marked `[virtual, ...]` with `->` arrows to
+  canonical FQCNs. Footer counts aliases separately from tools:
+  "20 tools across 3 kit(s), 4 alias(es) in 1 virtual kit(s)".
+
+- **`dz kit status` alias terminology**: virtual kits report "N
+  alias(es)" instead of "N tool(s)" — resolves the R3b double-counting
+  confusion.
+
+- **`DZ_CANONICAL_FQCN` / `DZ_INVOKED_FQCN` env vars**: injected into
+  the tool's environment during dispatch. `DZ_CANONICAL_FQCN` is the
+  canonical identity (stable across invocation paths); `DZ_INVOKED_FQCN`
+  is what the user typed (alias FQCN, short name, canonical FQCN, or
+  kit-qualified shortcut). Tools writing persistent state (caches,
+  logs, checkpoints) MUST key on `DZ_CANONICAL_FQCN` to avoid divergent
+  state across invocation surfaces. Parent-process env is restored
+  after dispatch.
+
+- **Grouped stale-favorite warning**: on `discover()`, the engine
+  scans user favorites and emits ONE stderr warning listing up to 3
+  stale FQCNs (plus a "+N more" summary if >3). Respects
+  `silenced_hints` and `DZ_QUIET`. Remediation: manual via
+  `dz kit favorite --remove <short>` or re-pointing.
+
+### Fixed
+
+- `tests/test_library.py::test_library_version` no longer pins a
+  hardcoded `"0.1.0"` string. The brittle assertion failed every
+  release bump and blocked the v0.7.27 pre-push hook. Now asserts the
+  export is a non-empty semver-ish `major.minor[.patch]` string.
+
+- `tests/test_docker_integration.py::docker_image` fixture skips
+  cleanly when the docker daemon is unreachable (Docker Desktop
+  stopped on Windows; missing socket on Linux). Previously the
+  fixture only checked the docker CLI binary and then errored on
+  `docker build` when the daemon was down — which the pre-push hook
+  treats as failure. The fixture now runs `docker info` first and
+  skips on daemon-connectivity errors, with a fallback skip path if
+  the daemon goes down between info and build.
+
+### Changed
+
+- **`render_info` / `setup_handler` signatures now require `engine`**
+  as a positional arg (was optional). Library consumers building their
+  own dispatchers must pass engine context. The legacy alias-blind
+  path has been removed — it was tech debt that silently bypassed
+  virtual-kit resolution.
+
+- **`FQCNIndex.insert_alias` also populates `short_index`** with the
+  alias short, pointing at the canonical FQCN. Short-name dispatch
+  works the same as for canonicals.
+
+### Deferred to follow-ups
+
+- **`dz kit favorite --migrate-stale` subcommand** (interactive
+  remapping). The detection + warning ship in this release; the
+  interactive tooling can land separately if demand emerges.
+- **wtf-windows upstream PR** for its own `_fqcn ==` patterns —
+  deferred per user's "this is still experimental work" direction;
+  revisit once v0.7.27 proves stable in-tree.
+
+### Design references
+
+- `2026-04-19__23-44-05__DISCUSS_Rnd5_FINAL_ASSESSMENT_virtual-kits-graduation-fqcn-semantics.md`
+- `2026-04-20__04-53-20__dev-workflow-process_virtual-kit-display-visibility-modes.md`
+- `notes/cli/2026-04-20__04-39-32__both_virtual-kit-alias-discoverability-gap.md`
+
 ## [0.7.26] - 2026-04-20
 
 Phase 4e Commit 2: virtual-kit loading, `_apply_virtual_kits`, and

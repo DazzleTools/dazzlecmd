@@ -78,6 +78,22 @@ def _args(**kwargs):
     return SimpleNamespace(**defaults)
 
 
+def _engine_with(projects):
+    """Build a minimal AggregatorEngine with projects indexed.
+
+    render_info / setup_handler now require ``engine`` (rule 7c relaxation +
+    alias-blindness audit, v0.7.28). Tests build a real engine with
+    canonical projects inserted; no virtual kits unless explicitly added.
+    """
+    from dazzlecmd_lib.engine import AggregatorEngine
+    engine = AggregatorEngine(is_root=True)
+    engine.projects = list(projects)
+    for p in projects:
+        p.setdefault("_short_name", p["name"])
+    engine._build_fqcn_index()
+    return engine
+
+
 def _engine(command="test", name="test-aggregator", version_info=None, projects=None, kits=None):
     e = MagicMock()
     e.command = command
@@ -189,7 +205,8 @@ class TestListParserFactory:
 
 class TestRenderInfo:
     def test_not_found(self, capsys):
-        rc = dmc.render_info(_args(tool="nonexistent"), [])
+        engine = _engine_with([])
+        rc = dmc.render_info(_args(tool="nonexistent"), [], engine=engine)
         assert rc == 1
         err = capsys.readouterr().err
         assert "not found" in err.lower()
@@ -198,7 +215,8 @@ class TestRenderInfo:
         projects = [
             _project("alpha", description="desc", fqcn="testkit:alpha", version="1.0.0"),
         ]
-        rc = dmc.render_info(_args(tool="alpha"), projects)
+        engine = _engine_with(projects)
+        rc = dmc.render_info(_args(tool="alpha"), projects, engine=engine)
         assert rc == 0
         out = capsys.readouterr().out
         assert "alpha" in out
@@ -206,28 +224,34 @@ class TestRenderInfo:
         assert "1.0.0" in out
         assert "desc" in out
 
-    def test_fqcn_lookup(self, capsys):
+    def test_fqcn_lookup_colliding_short_picks_by_precedence(self, capsys):
+        """Short name 'alpha' collides across two kits. Under the new
+        find_project path, resolution goes through precedence — the
+        default precedence ordering picks a winner (no 'Multiple' error)
+        and may emit a notification. Rule 7c relaxation means alias
+        shorts could also appear in short_index."""
         projects = [
             _project("alpha", fqcn="kit1:alpha"),
-            _project("alpha", fqcn="kit2:alpha"),  # collision on short name
+            _project("alpha", fqcn="kit2:alpha"),
         ]
-        # Short name lookup -- ambiguous
-        rc = dmc.render_info(_args(tool="alpha"), projects)
-        assert rc == 1
+        engine = _engine_with(projects)
+        rc = dmc.render_info(_args(tool="alpha"), projects, engine=engine)
+        # Resolution succeeds via precedence; one of the two is picked
+        assert rc == 0
         out = capsys.readouterr().out
-        assert "Multiple" in out
+        # One of the colliding FQCNs is shown
+        assert ("kit1:alpha" in out) or ("kit2:alpha" in out)
 
     def test_fqcn_unique_lookup(self, capsys):
         projects = [
             _project("alpha", fqcn="kit1:alpha"),
             _project("alpha", fqcn="kit2:alpha"),
         ]
-        rc = dmc.render_info(_args(tool="kit2:alpha"), projects)
+        engine = _engine_with(projects)
+        rc = dmc.render_info(_args(tool="kit2:alpha"), projects, engine=engine)
         assert rc == 0
-        # Should only match one — no ambiguity output
         out = capsys.readouterr().out
         assert "kit2:alpha" in out
-        assert "Multiple" not in out
 
     def test_runtime_fields_printed(self, capsys):
         projects = [
@@ -240,7 +264,8 @@ class TestRenderInfo:
                 },
             )
         ]
-        dmc.render_info(_args(tool="alpha"), projects)
+        engine = _engine_with(projects)
+        dmc.render_info(_args(tool="alpha"), projects, engine=engine)
         out = capsys.readouterr().out
         assert "Runtime:" in out
         assert "python" in out
@@ -254,7 +279,8 @@ class TestRenderInfo:
                 taxonomy={"category": "security", "tags": ["audit", "network"]},
             )
         ]
-        dmc.render_info(_args(tool="alpha"), projects)
+        engine = _engine_with(projects)
+        dmc.render_info(_args(tool="alpha"), projects, engine=engine)
         out = capsys.readouterr().out
         assert "Category" in out
         assert "security" in out
@@ -269,14 +295,16 @@ class TestRenderInfo:
                 setup={"command": "pip install .", "note": "Basic install"},
             )
         ]
-        dmc.render_info(_args(tool="alpha"), projects)
+        engine = _engine_with(projects)
+        dmc.render_info(_args(tool="alpha"), projects, engine=engine)
         out = capsys.readouterr().out
         assert "Setup" in out
         assert "Basic install" in out
 
     def test_info_handler_delegates_to_render(self, capsys):
         projects = [_project("alpha")]
-        rc = dmc.info_handler(_args(tool="alpha"), None, projects, [], None)
+        engine = _engine_with(projects)
+        rc = dmc.info_handler(_args(tool="alpha"), engine, projects, [], None)
         assert rc == 0
 
 
@@ -543,13 +571,15 @@ class TestSetupHandler:
         assert "setup declared" in capsys.readouterr().out.lower()
 
     def test_tool_not_found(self, capsys):
-        rc = dmc.setup_handler(_args(tool="nonexistent"), None, [], [], None)
+        engine = _engine_with([])
+        rc = dmc.setup_handler(_args(tool="nonexistent"), engine, [], [], None)
         assert rc == 1
         assert "not found" in capsys.readouterr().err.lower()
 
     def test_tool_without_setup(self, capsys):
         projects = [_project("a")]
-        rc = dmc.setup_handler(_args(tool="a"), None, projects, [], None)
+        engine = _engine_with(projects)
+        rc = dmc.setup_handler(_args(tool="a"), engine, projects, [], None)
         assert rc == 1
         assert "no setup" in capsys.readouterr().err.lower()
 

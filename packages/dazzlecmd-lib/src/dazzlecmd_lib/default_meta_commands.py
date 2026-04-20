@@ -143,35 +143,39 @@ def info_parser_factory(subparsers):
     p.set_defaults(_meta="info")
 
 
-def render_info(args, projects) -> int:
+def render_info(args, projects, engine) -> int:
     """Print basic info for a tool identified by name or FQCN.
+
+    Lookups route through ``engine.find_project`` so virtual-kit aliases
+    resolve transparently and rule 7c (alias shorts in short_index) is
+    honored. Alias provenance (if any) is printed as a banner line
+    before the tool's metadata.
 
     Aggregators with domain-specific fields (diagnostics, taxonomy,
     custom runtime rendering) should override this via
     ``registry.override("info", handler=...)`` and optionally call
     ``render_info()`` themselves to emit the standard fields first.
+
+    The ``projects`` parameter is preserved for API stability and for
+    potential future use (e.g., rendering the tools list when no
+    specific tool is targeted), but lookup itself uses ``engine``.
+    ``engine`` is required — callers that don't have an engine context
+    should not be calling render_info.
     """
     tool_name = args.tool
-    if ":" in tool_name:
-        matches = [p for p in projects if p.get("_fqcn") == tool_name]
-    else:
-        matches = [p for p in projects if p["name"] == tool_name]
-
-    if not matches:
+    project, ctx = engine.find_project(tool_name)
+    if project is None:
         print(
             f"Tool {tool_name!r} not found. Run 'list' to see available tools.",
             file=_sys.stderr,
         )
         return 1
 
-    if len(matches) > 1:
-        print(f"Multiple tools named {tool_name!r}:")
-        for p in matches:
-            print(f"  {p.get('_fqcn', p['name'])}")
-        print("Use 'info <fqcn>' to disambiguate.")
-        return 1
-
-    project = matches[0]
+    if ctx is not None and ctx.alias_fqcn:
+        print(
+            f"(resolved via virtual-kit alias {ctx.alias_fqcn!r} "
+            f"-> {ctx.canonical_fqcn!r})"
+        )
     print(f"Name:        {project['name']}")
     if project.get("_fqcn"):
         print(f"FQCN:        {project['_fqcn']}")
@@ -211,8 +215,9 @@ def render_info(args, projects) -> int:
 
 
 def info_handler(args, engine, projects, kits, project_root) -> int:
-    """Default handler for ``info``. Delegates to ``render_info``."""
-    return render_info(args, projects)
+    """Default handler for ``info``. Delegates to ``render_info`` with
+    engine context so alias FQCN lookups resolve transparently."""
+    return render_info(args, projects, engine=engine)
 
 
 # ---------------------------------------------------------------------------
@@ -542,15 +547,15 @@ def setup_handler(args, engine, projects, kits, project_root) -> int:
     if not tool_name:
         return render_setup_listing(projects)
 
-    # Resolve the tool
-    if ":" in tool_name:
-        matches = [p for p in projects if p.get("_fqcn") == tool_name]
-    else:
-        matches = [p for p in projects if p["name"] == tool_name]
-
-    if not matches:
+    # Resolve the tool via engine.find_project — supports short name,
+    # canonical FQCN, alias FQCN, and kit-qualified shortcuts uniformly.
+    # engine is mandatory in the registry dispatch path; library
+    # consumers that build their own dispatcher must pass an engine.
+    project, ctx = engine.find_project(tool_name)
+    if project is None:
         print(f"Tool {tool_name!r} not found.", file=_sys.stderr)
         return 1
+    matches = [project]
 
     if len(matches) > 1:
         print(f"Multiple tools named {tool_name!r}:", file=_sys.stderr)

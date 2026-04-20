@@ -38,11 +38,17 @@ FULL_IMAGE = f"{IMAGE_NAME}:{IMAGE_TAG}"
 def docker_image():
     """Build the fixture image once per module; reuse across tests.
 
-    If docker is available, build. If the image already exists locally from
-    a prior run, docker build's layer cache makes this fast (<5s).
+    If docker is available AND the daemon is reachable, build. If the
+    image already exists locally from a prior run, docker build's layer
+    cache makes this fast (<5s).
+
+    Skip cases (environmental, not bugs):
+    - docker binary not on PATH
+    - `docker --version` non-zero exit
+    - docker daemon not running / unreachable (e.g., Docker Desktop is
+      stopped on Windows, or the user lacks docker socket access)
     """
-    # Fail cleanly if docker missing (the marker's auto-skip should catch
-    # this first, but belt-and-braces).
+    # 1. Is the docker CLI available?
     try:
         version = subprocess.run(
             ["docker", "--version"], capture_output=True, text=True, timeout=5
@@ -52,7 +58,28 @@ def docker_image():
     if version.returncode != 0:
         pytest.skip(f"docker --version failed: {version.stderr}")
 
-    # Build
+    # 2. Is the docker daemon reachable? `docker info` contacts the
+    #    daemon; if Docker Desktop is stopped on Windows or the socket
+    #    is missing on Linux, this fails cleanly without leaving a
+    #    confusing build-error trail.
+    info = subprocess.run(
+        ["docker", "info"], capture_output=True, text=True, timeout=10
+    )
+    if info.returncode != 0:
+        # Common patterns when the daemon is down (Windows + Linux)
+        stderr_lc = (info.stderr or "").lower()
+        if any(token in stderr_lc for token in (
+            "cannot connect to the docker daemon",
+            "failed to connect to the docker api",
+            "is the docker daemon running",
+            "pipe/dockerdesktoplinuxengine",
+        )):
+            pytest.skip("docker daemon not reachable (Docker Desktop stopped or socket missing)")
+        # Some other non-zero exit -- still skip rather than fail; the
+        # docker_integration marker exists for opt-in environments.
+        pytest.skip(f"docker info failed: {info.stderr.strip()[:200]}")
+
+    # 3. Build
     build = subprocess.run(
         ["docker", "build", "-t", FULL_IMAGE, str(FIXTURE_DIR)],
         capture_output=True,
@@ -60,6 +87,15 @@ def docker_image():
         timeout=180,
     )
     if build.returncode != 0:
+        # If the build fails for daemon-connectivity reasons (the daemon
+        # went down BETWEEN `docker info` and `docker build`), still skip.
+        stderr_lc = (build.stderr or "").lower()
+        if any(token in stderr_lc for token in (
+            "cannot connect to the docker daemon",
+            "failed to connect to the docker api",
+            "is the docker daemon running",
+        )):
+            pytest.skip("docker daemon became unreachable during build")
         pytest.fail(
             f"docker build failed (exit {build.returncode}):\n"
             f"STDOUT:\n{build.stdout}\n"

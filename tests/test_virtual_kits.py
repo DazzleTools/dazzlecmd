@@ -202,10 +202,12 @@ class TestApplyVirtualKitsSingleLevel:
         assert "v-default:t2" in engine.fqcn_index.alias_index   # defaulted
         assert "v-default:t3" in engine.fqcn_index.alias_index   # defaulted
 
-    def test_virtual_kit_does_not_add_to_short_index(self, tmp_path, monkeypatch):
-        """Rule 7c: aliases never populate short_index. The alias short
-        ('alpha') must NOT be a short-name candidate; only the canonical
-        short ('tool-alpha') is."""
+    def test_virtual_kit_alias_short_populates_short_index(self, tmp_path, monkeypatch):
+        """Rule 7c relaxed (v0.7.28): alias shorts populate short_index
+        the same as canonical shorts. Virtual kits are first-class kits;
+        their aliases compete in short-name resolution via the existing
+        precedence mechanism. Both 'alpha' (alias short from name_rewrite)
+        and 'tool-alpha' (canonical short) are valid entries."""
         monkeypatch.setenv("DAZZLECMD_CONFIG", str(tmp_path / "config.json"))
         root = str(tmp_path / "root")
         os.makedirs(root)
@@ -217,8 +219,12 @@ class TestApplyVirtualKitsSingleLevel:
         )
         engine.discover(project_root=root)
 
-        assert "alpha" not in engine.fqcn_index.short_index
+        # Both alias short AND canonical short are in short_index;
+        # both resolve to the same canonical FQCN via the value list.
+        assert "alpha" in engine.fqcn_index.short_index
         assert "tool-alpha" in engine.fqcn_index.short_index
+        assert engine.fqcn_index.short_index["alpha"] == ["demo:tool-alpha"]
+        assert engine.fqcn_index.short_index["tool-alpha"] == ["demo:tool-alpha"]
 
     def test_inactive_virtual_kit_contributes_no_aliases(self, tmp_path, monkeypatch):
         """A virtual kit disabled via user config does NOT install

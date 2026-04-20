@@ -187,9 +187,21 @@ def _register_meta_commands(subparsers):
     # dz list
     list_parser = subparsers.add_parser("list", help="List available tools")
     list_parser.add_argument("--namespace", "-n", help="Filter by namespace")
-    list_parser.add_argument("--kit", "-k", help="Filter by kit")
+    list_parser.add_argument("--kit", "-k", help="Filter by kit (canonical OR virtual)")
     list_parser.add_argument("--tag", "-t", help="Filter by tag")
     list_parser.add_argument("--platform", "-p", help="Filter by platform")
+    list_parser.add_argument(
+        "--show",
+        choices=["default", "canonical", "alias", "all"],
+        default=None,
+        help=(
+            "Content selector. 'default' (alias-preferred): virtual-kit "
+            "aliases replace their canonical targets. 'canonical': "
+            "canonicals only (script-stable legacy view). 'alias': aliases "
+            "only. 'all': both canonicals and aliases. Falls back to "
+            "config key 'list_view' then to 'default' if unset."
+        ),
+    )
     list_parser.set_defaults(_meta="list")
 
     # dz info <tool>
@@ -403,7 +415,7 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
     if meta == "list":
         return _cmd_list(args, projects, engine=engine)
     elif meta == "info":
-        return _cmd_info(args, projects)
+        return _cmd_info(args, projects, engine=engine)
     elif meta == "kit_list":
         return _cmd_kit_list(args, kits, projects, engine=engine)
     elif meta == "kit_status":
@@ -459,49 +471,68 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
 
 
 def _cmd_list(args, projects, engine=None):
-    """List available tools.
+    """List available tools with --show enum view selection.
 
-    If the engine is provided, tools that share a short name with another
-    tool (collision) are marked with ``[*]`` after the name.
+    Display modes (controlled by ``--show`` flag, then ``list_view``
+    config key, then hardcoded ``"default"``):
+
+    - ``default`` (alias-preferred): virtual-kit aliases replace their
+      canonical targets. Canonicals without aliases still shown.
+      Rendering: Option I — alias short in Name column, virtual-kit
+      hierarchy (``virtual:canonical``) in Kit column.
+    - ``canonical``: canonicals only (script-stable legacy view).
+    - ``alias``: aliases only (virtual-kit entries only).
+    - ``all``: both canonicals and aliases shown separately.
+
+    ``--kit`` filter accepts either a canonical kit name or a virtual
+    kit name — for virtual kits, surface the declared aliases.
+
+    Short-name collisions (from canonicals or from rule 7c relaxation
+    where alias shorts also populate short_index) are marked ``[*]``.
     """
-    filtered = projects
+    # Determine the effective --show mode
+    show_mode = getattr(args, "show", None)
+    if show_mode is None and engine is not None:
+        show_mode = engine._get_user_config().get("list_view")
+    if show_mode not in ("default", "canonical", "alias", "all"):
+        show_mode = "default"
 
+    # Build the display entry list. Each entry is a dict with
+    # name, kit, description, entry_type ("canonical" or "alias"),
+    # namespace (for filtering), platform (for filtering),
+    # taxonomy (for filtering).
+    entries = _build_list_entries(projects, engine, show_mode, getattr(args, "kit", None))
+
+    # Apply remaining filters (namespace, platform, tag)
     if args.namespace:
-        filtered = [p for p in filtered if p.get("namespace") == args.namespace]
+        entries = [e for e in entries if e["namespace"] == args.namespace]
     if args.platform:
-        filtered = [p for p in filtered if p.get("platform", "cross-platform") == args.platform]
+        entries = [e for e in entries if e["platform"] == args.platform]
     if args.tag:
-        filtered = [
-            p for p in filtered
-            if args.tag in p.get("taxonomy", {}).get("tags", [])
-        ]
-    if args.kit:
-        # Filter by kit import name (the top-level kit a tool belongs to)
-        filtered = [
-            p for p in filtered
-            if p.get("_kit_import_name") == args.kit
-        ]
+        entries = [e for e in entries if args.tag in e["tags"]]
 
-    if not filtered:
+    if not entries:
         print("No tools found.")
         return 0
 
-    # Build a set of colliding short names from the FQCN index
+    # Collision markers from short_index (includes both canonical and
+    # alias shorts under rule 7c relaxation).
     colliding = set()
     if engine is not None and hasattr(engine, "fqcn_index"):
         for short, fqcns in engine.fqcn_index.short_index.items():
             if len(fqcns) > 1:
                 colliding.add(short)
 
-    def _label(project):
-        name = project["name"]
+    def _label(entry):
+        name = entry["name"]
         if name in colliding:
             return f"{name} [*]"
         return name
 
     # Table output
-    name_width = max(len(_label(p)) for p in filtered)
-    kit_width = max(len(p.get("_kit_import_name", "")) for p in filtered)
+    name_width = max(len(_label(e)) for e in entries)
+    name_width = max(name_width, len("Name"))
+    kit_width = max(len(e["kit"]) for e in entries)
     kit_width = max(kit_width, len("Kit"))
 
     header = f"  {'Name':<{name_width}}  {'Kit':<{kit_width}}  Description"
@@ -513,10 +544,10 @@ def _cmd_list(args, projects, engine=None):
     desc_col = 2 + name_width + 2 + kit_width + 2
     desc_max = term_width - desc_col
 
-    for project in filtered:
-        label = _label(project)
-        kit = project.get("_kit_import_name", "")
-        desc = project.get("description", "")
+    for entry in entries:
+        label = _label(entry)
+        kit = entry["kit"]
+        desc = entry["description"]
         wrapped = _wrap_description(desc, desc_max)
         print(f"  {label:<{name_width}}  {kit:<{kit_width}}  {wrapped[0]}")
         indent = " " * desc_col
@@ -524,9 +555,136 @@ def _cmd_list(args, projects, engine=None):
             print(f"{indent}{line}")
 
     if colliding:
-        print(f"\n  [*] marks tools with short-name collisions. Use 'dz info <fqcn>' or 'dz kit favorite' to disambiguate.")
-    print(f"\n  {len(filtered)} tool(s) found")
+        print(
+            f"\n  [*] marks tools with short-name collisions. "
+            f"Use 'dz info <fqcn>' or 'dz kit favorite' to disambiguate."
+        )
+
+    # Footer — describe the view and counts
+    canonical_count = sum(1 for e in entries if e["entry_type"] == "canonical")
+    alias_count = sum(1 for e in entries if e["entry_type"] == "alias")
+    if show_mode == "canonical" or alias_count == 0:
+        print(f"\n  {canonical_count} tool(s) found")
+    elif show_mode == "alias":
+        print(f"\n  {alias_count} alias(es) found")
+    elif show_mode == "all":
+        print(
+            f"\n  {canonical_count} tool(s) + {alias_count} alias(es) "
+            f"({len(entries)} rows)"
+        )
+    else:
+        # default — alias-preferred: aliases are shown INSTEAD OF their
+        # canonical targets, so the sum is the unique invocation surface
+        print(
+            f"\n  {len(entries)} tool(s) "
+            f"({canonical_count} canonical + {alias_count} virtual-kit alias(es)). "
+            f"Use --show all to see both; --show canonical for legacy view."
+        )
     return 0
+
+
+def _build_list_entries(projects, engine, show_mode, kit_filter):
+    """Construct display entries for `dz list` based on ``show_mode``.
+
+    Returns a list of entry dicts (each with name, kit, description,
+    entry_type, namespace, platform, tags).
+
+    Kit filter handling is embedded here because a virtual-kit filter
+    requires looking up the virtual kit's alias list, not just
+    comparing ``_kit_import_name``.
+    """
+    entries = []
+
+    # Identify virtual vs canonical kits up front (if engine available)
+    virtual_kit_names = set()
+    if engine is not None:
+        for k in getattr(engine, "kits", []):
+            if k.get("virtual"):
+                virtual_kit_names.add(k.get("_kit_name") or k.get("name"))
+
+    # Resolve kit filter: is it a canonical or virtual kit?
+    kit_filter_is_virtual = kit_filter is not None and kit_filter in virtual_kit_names
+
+    # --- Build canonical entries ---
+    # Skip canonical iteration entirely when the kit filter is a virtual
+    # kit name — that filter asks "what's in the virtual kit" which is
+    # exclusively aliases, not canonicals.
+    if show_mode in ("canonical", "all", "default") and not kit_filter_is_virtual:
+        for p in projects:
+            kit_name = p.get("_kit_import_name", "")
+            if kit_filter is not None:
+                if kit_name != kit_filter:
+                    continue
+            entries.append({
+                "name": p["name"],
+                "kit": kit_name,
+                "description": p.get("description", ""),
+                "entry_type": "canonical",
+                "namespace": p.get("namespace"),
+                "platform": p.get("platform", "cross-platform"),
+                "tags": p.get("taxonomy", {}).get("tags", []),
+                "_fqcn": p.get("_fqcn"),
+                "_canonical_fqcn": p.get("_fqcn"),
+            })
+
+    # --- Build alias entries from virtual kits ---
+    if show_mode in ("alias", "all", "default"):
+        if engine is None or not hasattr(engine, "fqcn_index"):
+            pass  # no engine, no aliases
+        else:
+            # Map canonical FQCN -> project, for description lookup
+            canonical_by_fqcn = {
+                p.get("_fqcn"): p for p in projects if p.get("_fqcn")
+            }
+            # Iterate every alias and build its entry
+            for alias_fqcn, canonical_fqcn in engine.fqcn_index.alias_index.items():
+                # Skip if kit filter excludes
+                vk_name, _, alias_short = alias_fqcn.rpartition(":")
+                if kit_filter is not None and kit_filter_is_virtual:
+                    if vk_name != kit_filter:
+                        continue
+                elif kit_filter is not None and not kit_filter_is_virtual:
+                    # Filter is a canonical kit -- show aliases whose
+                    # TARGET is in that kit (only useful in --show all)
+                    target_project = canonical_by_fqcn.get(canonical_fqcn)
+                    if target_project is None:
+                        continue
+                    if target_project.get("_kit_import_name") != kit_filter:
+                        continue
+
+                target_project = canonical_by_fqcn.get(canonical_fqcn)
+                if target_project is None:
+                    continue  # dangling — should have been caught at load
+
+                canonical_kit = target_project.get("_kit_import_name", "")
+                # Option I layout: virtual:canonical in Kit column
+                kit_display = f"{vk_name}:{canonical_kit}" if canonical_kit else vk_name
+
+                entries.append({
+                    "name": alias_short,
+                    "kit": kit_display,
+                    "description": target_project.get("description", ""),
+                    "entry_type": "alias",
+                    "namespace": target_project.get("namespace"),
+                    "platform": target_project.get("platform", "cross-platform"),
+                    "tags": target_project.get("taxonomy", {}).get("tags", []),
+                    "_fqcn": alias_fqcn,
+                    "_canonical_fqcn": canonical_fqcn,
+                })
+
+    # --- Default mode: alias-preferred. Hide canonicals that have aliases. ---
+    if show_mode == "default":
+        aliased_canonicals = {
+            e["_canonical_fqcn"] for e in entries if e["entry_type"] == "alias"
+        }
+        entries = [
+            e for e in entries
+            if e["entry_type"] == "alias" or e["_fqcn"] not in aliased_canonicals
+        ]
+
+    # Sort: alphabetical by name, with canonical entries first in 'all' mode
+    entries.sort(key=lambda e: (e["entry_type"] == "alias", e["name"]))
+    return entries
 
 
 # ---------------------------------------------------------------------------
@@ -764,28 +922,25 @@ def _print_runtime_platform_preview(project, spec):
             print(f"  [{i}] {', '.join(bits) if bits else '<empty>'}")
 
 
-def _cmd_info(args, projects):
-    """Show detailed info about a tool."""
+def _cmd_info(args, projects, engine):
+    """Show detailed info about a tool.
+
+    Routes FQCN / alias FQCN / kit-shortcut / short-name lookups through
+    ``engine.find_project`` so virtual-kit aliases resolve transparently
+    and rule 7c (alias shorts in short_index) is honored.
+    """
     tool_name = args.tool
-
-    # Accept FQCN input (e.g., 'wtf:core:locked') as well as short name
-    if ":" in tool_name:
-        matches = [p for p in projects if p.get("_fqcn") == tool_name]
-    else:
-        matches = [p for p in projects if p["name"] == tool_name]
-
-    if not matches:
+    project, ctx = engine.find_project(tool_name)
+    if project is None:
         print(f"Tool '{tool_name}' not found. Use 'dz list' to see available tools.")
         return 1
 
-    if len(matches) > 1:
-        print(f"Multiple tools named '{tool_name}':")
-        for p in matches:
-            print(f"  {p.get('_fqcn', p['name'])}")
-        print(f"Use 'dz info <fqcn>' to be specific.")
-        return 1
-
-    project = matches[0]
+    # Surface alias provenance so users see how their input resolved.
+    if ctx is not None and ctx.alias_fqcn:
+        print(
+            f"(resolved via virtual-kit alias '{ctx.alias_fqcn}' "
+            f"-> '{ctx.canonical_fqcn}')"
+        )
     print(f"Name:        {project['name']}")
     print(f"FQCN:        {project.get('_fqcn', 'unknown')}")
     print(f"Kit:         {project.get('_kit_import_name', 'unknown')}")
@@ -879,10 +1034,19 @@ def _cmd_kit_list(args, kits, projects, engine=None):
         kit = matching[0]
         name = kit.get("_kit_name") or kit.get("name")
         status = _kit_status(kit)
-        print(f"Kit: {name} [{status}]")
+        is_virtual = kit.get("virtual") is True
+        label = "virtual, " + status if is_virtual else status
+        print(f"Kit: {name} [{label}]")
         if kit.get("description"):
             print(f"  {kit['description']}")
         print()
+
+        # Virtual-kit drill-in: show alias FQCN + canonical target +
+        # description for each declared alias. Without this, users
+        # see canonical short names and miss the whole point of the
+        # virtual kit (its aliases).
+        if is_virtual:
+            return _render_virtual_kit_aliases(kit, projects, engine)
 
         tool_refs = kit.get("tools", [])
         if not tool_refs:
@@ -924,8 +1088,83 @@ def _cmd_kit_list(args, kits, projects, engine=None):
     return 0
 
 
+def _render_virtual_kit_aliases(kit, projects, engine):
+    """Drill-in rendering for a virtual kit: show each alias FQCN with
+    its canonical target and canonical description.
+
+    Works by iterating ``engine.fqcn_index.alias_index`` and filtering
+    to aliases whose virtual-kit prefix matches this kit's name. Falls
+    back to iterating ``kit["tools"]`` + ``kit["name_rewrite"]`` when
+    no engine is available (which shouldn't happen in practice but
+    makes the code robust).
+    """
+    vk_name = kit.get("_kit_name") or kit.get("name")
+    name_rewrite = kit.get("name_rewrite", {}) or {}
+    tools = kit.get("tools", []) or []
+
+    # Build (alias_fqcn, canonical_fqcn, alias_short) rows
+    rows = []
+    if engine is not None and hasattr(engine, "fqcn_index"):
+        for alias_fqcn, canonical_fqcn in engine.fqcn_index.alias_index.items():
+            prefix = f"{vk_name}:"
+            if not alias_fqcn.startswith(prefix):
+                continue
+            alias_short = alias_fqcn[len(prefix):]
+            rows.append((alias_fqcn, canonical_fqcn, alias_short))
+    else:
+        # Fallback: derive from manifest directly
+        for canonical_fqcn in tools:
+            alias_short = name_rewrite.get(canonical_fqcn) or canonical_fqcn.rsplit(":", 1)[-1]
+            rows.append((f"{vk_name}:{alias_short}", canonical_fqcn, alias_short))
+
+    if not rows:
+        print("  No aliases declared in this virtual kit.")
+        return 0
+
+    rows.sort(key=lambda r: r[2])  # sort by alias short
+
+    # Build project lookup for descriptions
+    by_fqcn = {p.get("_fqcn"): p for p in projects if p.get("_fqcn")}
+
+    # Column widths
+    alias_width = max(len(r[0]) for r in rows)
+    alias_width = max(alias_width, len("Alias FQCN"))
+    target_width = max(len(r[1]) for r in rows)
+    target_width = max(target_width, len("-> Canonical"))
+
+    header = f"  {'Alias FQCN':<{alias_width}}  {'-> Canonical':<{target_width}}  Description"
+    print(header)
+    print("  " + "-" * (len(header) - 2))
+
+    import shutil
+    term_width = shutil.get_terminal_size((80, 24)).columns
+    desc_col = 2 + alias_width + 2 + target_width + 2
+    desc_max = term_width - desc_col
+
+    for alias_fqcn, canonical_fqcn, _alias_short in rows:
+        target_project = by_fqcn.get(canonical_fqcn)
+        desc = target_project.get("description", "") if target_project else "(canonical not discovered)"
+        wrapped = _wrap_description(desc, desc_max)
+        arrow_target = f"-> {canonical_fqcn}"
+        print(f"  {alias_fqcn:<{alias_width}}  {arrow_target:<{target_width}}  {wrapped[0]}")
+        indent = " " * desc_col
+        for line in wrapped[1:]:
+            print(f"{indent}{line}")
+
+    print(f"\n  {len(rows)} alias(es) -> canonical tools")
+    return 0
+
+
 def _cmd_kit_status(kits):
-    """Show active kits summary."""
+    """Show active kits summary.
+
+    Virtual kits report 'alias(es)' instead of 'tool(s)' to reflect
+    the distinct nature of the count — and avoid the double-counting
+    confusion raised by R3b validation (virtual kit with 4 aliases
+    + canonical kit with 12 tools don't sum to 16 unique tools because
+    the 4 aliases REFER TO 4 of those canonical tools). See the
+    'alias discoverability gap' note in private/claude/notes/cli/.
+    """
     active = get_active_kits(kits)
     print(f"Active kits: {len(active)}")
     for kit in active:
@@ -935,7 +1174,8 @@ def _cmd_kit_status(kits):
         # See #45.
         name = kit.get("_kit_name") or kit["name"]
         tool_count = len(kit.get("tools", []))
-        print(f"  {name}: {tool_count} tool(s)")
+        label = "alias(es)" if kit.get("virtual") else "tool(s)"
+        print(f"  {name}: {tool_count} {label}")
     return 0
 
 
@@ -1727,10 +1967,32 @@ def _cmd_tree(args, engine):
         version_str = f" ({engine.name} {display})"
     print(f"{engine.command}{version_str}")
 
+    # Virtual kits appear as separate top-level branches with -> arrows
+    # to their canonical targets. Collect them from engine.kits (which
+    # includes both canonical and virtual after Commit 2's kits merge).
+    virtual_kits = [
+        k for k in engine.kits
+        if k.get("virtual") and (
+            show_disabled or
+            _kit_state(k.get("_kit_name") or k.get("name")) not in ("disabled", "disabled (not in active_kits)")
+        )
+    ]
+    # Respect --kit filter for virtual kits too
+    if kit_filter:
+        virtual_kits = [
+            k for k in virtual_kits
+            if (k.get("_kit_name") or k.get("name")) == kit_filter
+        ]
+
     total_tools = 0
-    for i, kit_name in enumerate(kit_names):
-        is_last_kit = (i == len(kit_names) - 1)
-        kit_prefix = "\\-- " if is_last_kit else "+-- "
+    total_aliases = 0
+    all_branches = len(kit_names) + len(virtual_kits)
+    branch_idx = 0
+
+    for kit_name in kit_names:
+        branch_idx += 1
+        is_last_branch = (branch_idx == all_branches)
+        kit_prefix = "\\-- " if is_last_branch else "+-- "
         info = kit_info.get(kit_name, {})
         state = _kit_state(kit_name)
 
@@ -1753,7 +2015,7 @@ def _cmd_tree(args, engine):
         if depth_limit is not None and depth_limit < 2:
             continue
 
-        branch_indent = "    " if is_last_kit else "|   "
+        branch_indent = "    " if is_last_branch else "|   "
         for j, project in enumerate(tools):
             is_last_tool = (j == len(tools) - 1)
             tool_prefix = "\\-- " if is_last_tool else "+-- "
@@ -1764,8 +2026,47 @@ def _cmd_tree(args, engine):
                 desc = desc[:57] + "..."
             print(f"{branch_indent}{tool_prefix}{fqcn}  {desc}")
 
+    # Virtual-kit branches — rendered as [virtual] with -> arrows to canonicals
+    for vkit in virtual_kits:
+        branch_idx += 1
+        is_last_branch = (branch_idx == all_branches)
+        kit_prefix = "\\-- " if is_last_branch else "+-- "
+        vk_name = vkit.get("_kit_name") or vkit.get("name")
+        state = _kit_state(vk_name)
+
+        markers = ["virtual"]
+        if vkit.get("always_active"):
+            markers.append("always_active")
+        if "disabled" in state:
+            markers.append("disabled")
+        marker_str = f" [{', '.join(markers)}]"
+        print(f"{kit_prefix}{vk_name}{marker_str}")
+
+        if depth_limit is not None and depth_limit < 2:
+            continue
+
+        # Collect this virtual kit's aliases from the FQCN index
+        alias_pairs = []
+        for alias_fqcn, canonical_fqcn in engine.fqcn_index.alias_index.items():
+            if alias_fqcn.startswith(f"{vk_name}:"):
+                alias_pairs.append((alias_fqcn, canonical_fqcn))
+        alias_pairs.sort()
+        total_aliases += len(alias_pairs)
+
+        branch_indent = "    " if is_last_branch else "|   "
+        for j, (alias_fqcn, canonical_fqcn) in enumerate(alias_pairs):
+            is_last = (j == len(alias_pairs) - 1)
+            tool_prefix = "\\-- " if is_last else "+-- "
+            print(f"{branch_indent}{tool_prefix}{alias_fqcn} -> {canonical_fqcn}")
+
     print()
-    print(f"{total_tools} tools across {len(kit_names)} kit(s)")
+    if total_aliases:
+        print(
+            f"{total_tools} tools across {len(kit_names)} kit(s), "
+            f"{total_aliases} alias(es) in {len(virtual_kits)} virtual kit(s)"
+        )
+    else:
+        print(f"{total_tools} tools across {len(kit_names)} kit(s)")
     return 0
 
 

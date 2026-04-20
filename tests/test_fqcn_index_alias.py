@@ -169,21 +169,116 @@ class TestResolveWithAliases:
         assert ctx.resolution_kind == "canonical"
         assert ctx.alias_fqcn is None
 
-    def test_short_name_resolves_canonical_only(self):
-        """§7c: aliases do NOT populate short_index. The alias's short
-        form (e.g., 'cleanup') is NOT a candidate — the canonical's
-        short name ('claude-cleanup') still is."""
+    def test_alias_short_resolves_via_short_index(self):
+        """Rule 7c relaxed (v0.7.28): alias shorts populate short_index
+        the same as canonical shorts. Both 'claude-cleanup' (canonical
+        short) and 'cleanup' (alias short) resolve to the canonical
+        project. Virtual kits are first-class; their aliases contribute
+        to short-name resolution via the existing precedence mechanism."""
         idx = self._build()
+        # Canonical short still works
         project, ctx = idx.resolve("claude-cleanup")
         assert project["_fqcn"] == "dazzletools:claude-cleanup"
-        # "cleanup" is the alias short, should NOT resolve
+        # Alias short ALSO works now
         project, ctx = idx.resolve("cleanup")
-        assert project is None
+        assert project is not None
+        assert project["_fqcn"] == "dazzletools:claude-cleanup"
 
     def test_unknown_alias_fqcn_returns_none(self):
         idx = self._build()
         project, ctx = idx.resolve("claude:nonexistent")
         assert project is None
+
+
+# ---------------------------------------------------------------------------
+# Rule 7c relaxation (v0.7.28): alias shorts populate short_index
+# ---------------------------------------------------------------------------
+
+
+class TestRule7cRelaxation:
+    """Alias shorts populate short_index alongside canonical shorts.
+    Virtual kits are first-class kits; their aliases compete in short-name
+    resolution via the existing precedence mechanism. Collisions with
+    canonical shorts, with other alias shorts, and with favorites all go
+    through the same resolution paths that canonical collisions do."""
+
+    def test_alias_short_added_to_short_index_on_insert(self):
+        idx = FQCNIndex()
+        idx.insert_canonical(_proj("dz:claude-cleanup", "claude-cleanup", "dz"))
+        idx.insert_alias("claude:cleanup", "dz:claude-cleanup")
+        # short_index now has BOTH the canonical short AND the alias short,
+        # each pointing to the canonical FQCN
+        assert "claude-cleanup" in idx.short_index
+        assert "cleanup" in idx.short_index
+        assert idx.short_index["cleanup"] == ["dz:claude-cleanup"]
+
+    def test_alias_short_does_not_duplicate_canonical_target(self):
+        """When the alias short is IDENTICAL to the canonical short (i.e.,
+        the virtual kit author didn't rename via name_rewrite), short_index
+        still has one entry per canonical FQCN, not duplicates."""
+        idx = FQCNIndex()
+        idx.insert_canonical(_proj("dz:dos2unix", "dos2unix", "dz"))
+        idx.insert_alias("virt:dos2unix", "dz:dos2unix")
+        # "dos2unix" short bucket should have only one entry
+        assert idx.short_index["dos2unix"] == ["dz:dos2unix"]
+
+    def test_alias_short_collision_with_canonical_short_uses_precedence(self):
+        """Two entries in short_index under the same short: one canonical,
+        one alias pointing to a different canonical. Resolution picks by
+        precedence + emits ambiguity notification."""
+        idx = FQCNIndex()
+        idx.insert_canonical(_proj("core:cleanup", "cleanup", "core"))
+        idx.insert_canonical(_proj("dz:claude-cleanup", "claude-cleanup", "dz"))
+        idx.insert_alias("claude:cleanup", "dz:claude-cleanup")
+        # short_index["cleanup"] has BOTH core:cleanup (canonical) and
+        # dz:claude-cleanup (via alias short)
+        assert set(idx.short_index["cleanup"]) == {
+            "core:cleanup", "dz:claude-cleanup"
+        }
+        # Resolution: core is higher precedence by default (core > dz)
+        project, ctx = idx.resolve("cleanup")
+        assert project["_fqcn"] == "core:cleanup"
+        assert ctx.notification is not None
+        assert "also in" in ctx.notification
+
+    def test_alias_short_collision_two_virtual_kits_different_targets(self):
+        """Two virtual kits both aliasing with the same short 'view' but
+        targeting different canonicals. Both enter short_index; resolution
+        picks by precedence + notification."""
+        idx = FQCNIndex()
+        idx.insert_canonical(_proj("dz:claudeview", "claudeview", "dz"))
+        idx.insert_canonical(_proj("extra:vscode-view", "vscode-view", "extra"))
+        idx.insert_alias("claude:view", "dz:claudeview")
+        idx.insert_alias("vscode:view", "extra:vscode-view")
+        assert set(idx.short_index["view"]) == {
+            "dz:claudeview", "extra:vscode-view"
+        }
+        project, ctx = idx.resolve("view")
+        assert project is not None
+        assert ctx.notification is not None
+
+    def test_favorite_overrides_alias_short_in_short_index(self):
+        """Favorites are user-scoped and outrank both canonical and alias
+        entries in short_index. User's favorite wins."""
+        idx = FQCNIndex()
+        idx.insert_canonical(_proj("core:cleanup", "cleanup", "core"))
+        idx.insert_canonical(_proj("dz:claude-cleanup", "claude-cleanup", "dz"))
+        idx.insert_alias("claude:cleanup", "dz:claude-cleanup")
+        # User favorites "cleanup" -> dz:claude-cleanup (the alias's target)
+        project, ctx = idx.resolve(
+            "cleanup", favorites={"cleanup": "dz:claude-cleanup"}
+        )
+        assert project["_fqcn"] == "dz:claude-cleanup"
+        assert ctx.resolution_kind == "favorite"
+
+    def test_idempotent_alias_reinsert_does_not_duplicate_short_index(self):
+        """Re-inserting the same alias -> same target (idempotent by 9b
+        semantics) must not append to short_index twice."""
+        idx = FQCNIndex()
+        idx.insert_canonical(_proj("dz:claude-cleanup", "claude-cleanup", "dz"))
+        idx.insert_alias("claude:cleanup", "dz:claude-cleanup")
+        idx.insert_alias("claude:cleanup", "dz:claude-cleanup")  # idempotent
+        assert idx.short_index["cleanup"] == ["dz:claude-cleanup"]
 
 
 # ---------------------------------------------------------------------------

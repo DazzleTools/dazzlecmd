@@ -67,8 +67,27 @@ class TestDirectLibraryImports:
         ])
 
     def test_library_version(self):
+        """Verify dazzlecmd_lib exports a well-formed version string.
+
+        Intentionally does not pin a specific version -- pinning broke
+        every release bump and added pre-push noise without catching any
+        real bug. We assert the export exists and parses as a semver-ish
+        major.minor[.patch] string; the exact value is the canonical
+        source's responsibility.
+        """
         from dazzlecmd_lib import __version__
-        assert __version__ == "0.1.0"
+        assert isinstance(__version__, str), (
+            f"__version__ must be str, got {type(__version__).__name__}"
+        )
+        assert __version__, "__version__ must be non-empty"
+        parts = __version__.split(".")
+        assert len(parts) >= 2, (
+            f"__version__ must be at least major.minor format, got {__version__!r}"
+        )
+        # First two segments must be numeric (major, minor)
+        assert parts[0].isdigit() and parts[1].isdigit(), (
+            f"major.minor segments must be numeric, got {__version__!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
