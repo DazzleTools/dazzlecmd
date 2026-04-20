@@ -47,43 +47,131 @@ class FQCNIndex:
     """Dual-index lookup for Fully Qualified Collection Names.
 
     Maintains:
-        - fqcn_index: {fqcn: project} for exact-match dispatch
-        - short_index: {short_name: [fqcn, ...]} for short-name resolution
+        - canonical_index: {fqcn: project} for real, on-disk tools
+        - alias_index: {alias_fqcn: canonical_fqcn} for virtual-kit overlays
+        - fqcn_index: alias of canonical_index (backward-compat for callers)
+        - short_index: {short_name: [canonical_fqcn, ...]} for short-name
+                       resolution. Only canonical FQCNs populate this -- aliases
+                       don't re-enter short-name competition (that's the whole
+                       point of a virtual kit: prettier FQCN without creating
+                       a new short name).
         - kit_order: ordered list of top-level kit names (discovery order)
 
     FQCN format: ``kit[:subkit...]:tool`` — e.g., ``core:rn``,
     ``wtf:core:restarted``. The top-level kit is the first segment.
+
+    **Experimental (v0.7.25 virtual-kits skeleton)**: separate canonical and
+    alias stores with §9b collision detection. Aliases created by virtual kits
+    (``{"virtual": true}`` manifests) resolve through the alias_index back to
+    a canonical project. §9b rule: an alias FQCN MUST NOT equal any canonical
+    FQCN -- that would let a virtual kit shadow a real tool.
     """
 
     def __init__(self):
-        self.fqcn_index = {}
+        self.canonical_index = {}
+        self.alias_index = {}
+        # Backward-compat view: callers (tests, meta-commands) reach into
+        # engine.fqcn_index.fqcn_index expecting {fqcn: project}. Point it
+        # at the canonical store so the existing behavior is preserved.
+        self.fqcn_index = self.canonical_index
         self.short_index = {}
         self.kit_order = []
 
     def insert(self, project):
-        """Insert a project into the index.
+        """Insert a canonical project into the index.
+
+        Backward-compat: delegates to ``insert_canonical``. Prefer the new
+        name in new code -- it makes the canonical/alias distinction explicit.
+        """
+        return self.insert_canonical(project)
+
+    def insert_canonical(self, project):
+        """Insert a canonical project into the index.
 
         The project dict must carry ``_fqcn``, ``_short_name``, and
         ``_kit_import_name`` fields (set by the engine during discovery).
 
         Raises:
-            FQCNCollisionError: if a project with the same FQCN already exists.
+            FQCNCollisionError: if a project with the same FQCN already
+            exists as either canonical or alias.
         """
         fqcn = project["_fqcn"]
         short = project["_short_name"]
         kit = project["_kit_import_name"]
 
-        if fqcn in self.fqcn_index:
-            existing = self.fqcn_index[fqcn]
+        if fqcn in self.canonical_index:
+            existing = self.canonical_index[fqcn]
             raise FQCNCollisionError(
-                f"Duplicate FQCN '{fqcn}': "
+                f"Duplicate canonical FQCN '{fqcn}': "
                 f"{existing.get('_dir', '?')} vs {project.get('_dir', '?')}"
             )
+        # §9b mirror: a new canonical FQCN must not collide with an existing
+        # alias. In practice canonicals are inserted first, so this path is
+        # rare, but it closes the loop symmetrically.
+        if fqcn in self.alias_index:
+            target = self.alias_index[fqcn]
+            raise FQCNCollisionError(
+                f"Canonical FQCN '{fqcn}' collides with existing alias "
+                f"(-> '{target}'). Remove or rename the alias first."
+            )
 
-        self.fqcn_index[fqcn] = project
+        self.canonical_index[fqcn] = project
         self.short_index.setdefault(short, []).append(fqcn)
         if kit not in self.kit_order:
             self.kit_order.append(kit)
+
+    def insert_alias(self, alias_fqcn, canonical_fqcn, source=None):
+        """Register ``alias_fqcn`` as a pointer to ``canonical_fqcn``.
+
+        Args:
+            alias_fqcn: The new FQCN the user can type (e.g., "claude:cleanup").
+            canonical_fqcn: The existing canonical FQCN it resolves to
+                (e.g., "dazzletools:claude-cleanup"). MUST already be in
+                the canonical_index.
+            source: Optional path to the virtual-kit manifest that declared
+                this alias (for diagnostics).
+
+        Raises:
+            FQCNCollisionError: if ``alias_fqcn`` already exists as a
+                canonical FQCN (§9b: alias cannot shadow a real tool) or
+                as a different alias.
+            KeyError: if ``canonical_fqcn`` is not in the canonical_index.
+        """
+        if canonical_fqcn not in self.canonical_index:
+            raise KeyError(
+                f"Virtual kit alias '{alias_fqcn}' -> '{canonical_fqcn}': "
+                f"target FQCN not found in canonical index. Check the "
+                f"'tools' list in the virtual kit manifest"
+                + (f" ({source})" if source else "")
+                + "."
+            )
+
+        # §9b: alias MUST NOT match an existing canonical FQCN.
+        # This prevents a virtual kit from silently shadowing a real tool.
+        if alias_fqcn in self.canonical_index:
+            raise FQCNCollisionError(
+                f"Virtual kit alias '{alias_fqcn}' collides with a real "
+                f"canonical FQCN. A virtual kit cannot shadow a real tool "
+                f"(rule 9b). "
+                + (f"(declared in {source}) " if source else "")
+                + "Rename the alias or remove the virtual-kit entry."
+            )
+
+        # Different-target collision: two virtual kits both trying to
+        # claim the same alias. Allowed only if they point to the same
+        # canonical target (idempotent).
+        if alias_fqcn in self.alias_index:
+            existing_target = self.alias_index[alias_fqcn]
+            if existing_target != canonical_fqcn:
+                raise FQCNCollisionError(
+                    f"Virtual kit alias '{alias_fqcn}' already maps to "
+                    f"'{existing_target}'; cannot remap to "
+                    f"'{canonical_fqcn}'. "
+                    + (f"(conflicting declaration in {source})" if source else "")
+                )
+            return  # idempotent no-op
+
+        self.alias_index[alias_fqcn] = canonical_fqcn
 
     def resolve(self, name, precedence=None, favorites=None):
         """Resolve a command name to a (project, notification) tuple.
@@ -107,25 +195,42 @@ class FQCNIndex:
         """
         # Exact FQCN match -- always wins, bypasses favorites and precedence
         if ":" in name:
-            project = self.fqcn_index.get(name)
+            # 1. Canonical FQCN direct hit
+            project = self.canonical_index.get(name)
             if project is not None:
                 return project, None
 
-            # Kit-qualified shortcut: "wtf:locked" means "search within
+            # 2. Virtual-kit alias hit (experimental v0.7.25 skeleton).
+            # Alias resolves to a canonical FQCN, which is then looked up
+            # in canonical_index. Invariant: alias targets must exist.
+            if name in self.alias_index:
+                canonical_fqcn = self.alias_index[name]
+                project = self.canonical_index.get(canonical_fqcn)
+                if project is not None:
+                    return project, None
+                # Defensive -- shouldn't happen if insert_alias validated.
+                return None, (
+                    f"dz: alias '{name}' -> '{canonical_fqcn}' points to "
+                    f"a missing canonical entry (index corruption?)."
+                )
+
+            # 3. Kit-qualified shortcut: "wtf:locked" means "search within
             # the wtf kit for a tool named locked." This handles the
             # common case where "core" (or any internal namespace) is
             # omitted. Split on the first ":" to get (kit_prefix, tool).
+            # Search canonical only -- aliases already got their exact-match
+            # chance above, so kit-qualified matching stays on real tools.
             kit_prefix, _, tool_suffix = name.partition(":")
             if tool_suffix and ":" not in tool_suffix:
                 # Only applies to 2-segment names (kit:tool), not to
                 # malformed 3+ segment names that didn't exact-match.
                 matches = [
-                    fqcn for fqcn in self.fqcn_index
+                    fqcn for fqcn in self.canonical_index
                     if fqcn.startswith(kit_prefix + ":")
                     and fqcn.rsplit(":", 1)[-1] == tool_suffix
                 ]
                 if len(matches) == 1:
-                    return self.fqcn_index[matches[0]], None
+                    return self.canonical_index[matches[0]], None
                 if len(matches) > 1:
                     display = ", ".join(matches)
                     notification = (
@@ -134,7 +239,7 @@ class FQCNIndex:
                         f"Use the full FQCN to be explicit."
                     )
                     # Pick the first alphabetically (stable)
-                    return self.fqcn_index[sorted(matches)[0]], notification
+                    return self.canonical_index[sorted(matches)[0]], notification
 
             return None, None
 
@@ -146,7 +251,14 @@ class FQCNIndex:
         # fall through to precedence with a warning.
         if favorites and name in favorites:
             favorite_fqcn = favorites[name]
-            favorite_project = self.fqcn_index.get(favorite_fqcn)
+            # Accept a favorite that points at a canonical FQCN or an alias.
+            # Alias -> follow to canonical (same semantics as direct FQCN
+            # resolution above: aliases are transparent).
+            favorite_project = self.canonical_index.get(favorite_fqcn)
+            if favorite_project is None and favorite_fqcn in self.alias_index:
+                favorite_project = self.canonical_index.get(
+                    self.alias_index[favorite_fqcn]
+                )
             if favorite_project is not None:
                 return favorite_project, None
             # Stale favorite -- fall through with a warning
@@ -481,16 +593,34 @@ class AggregatorEngine:
             self.kits = kits
             self.active_kits = active_kits
 
-        # Partition ALL kits (not just active) into flat vs. nested
+        # Partition ALL kits (not just active) into flat vs. nested vs. virtual.
+        # Virtual kits have no on-disk tools; they are manifest-only overlays
+        # that create alias FQCNs after the canonical index is built. Skip
+        # them during flat/nested discovery and process them post-hoc.
         flat_kits = []
         nested = []  # list of (kit_dict, candidate_root_dir)
+        virtual_kits = []
         for kit in kits:
             kit_name = kit.get("_kit_name") or kit.get("name")
+            if kit.get("virtual") is True:
+                virtual_kits.append(kit)
+                continue
             candidate_root = os.path.join(tools_path, kit_name)
             if os.path.isdir(os.path.join(candidate_root, "kits")):
                 nested.append((kit, candidate_root))
             else:
                 flat_kits.append(kit)
+
+        # Stash virtual kits for post-canonical alias processing. Only the
+        # top-level engine processes them (nested engines don't overlay).
+        # Filter to active virtual kits -- an inactive virtual kit shouldn't
+        # contribute aliases. (Open question for Round 3: should disabled
+        # virtual kits still show aliases in `dz tree --show-disabled`?)
+        if depth == 0:
+            self._virtual_kits = [
+                vk for vk in virtual_kits
+                if (vk.get("_kit_name") or vk.get("name")) in active_kit_names
+            ]
 
         # Flat discovery for non-aggregator kits. Pass self.manifest so
         # child engines with custom manifest names (e.g., .wtf.json) work.
@@ -623,6 +753,10 @@ class AggregatorEngine:
 
         Assumes projects are already annotated with ``_fqcn``, ``_short_name``,
         and ``_kit_import_name`` by ``_discover_aggregator``.
+
+        After canonical insertion, overlays virtual-kit aliases (from
+        ``self._virtual_kits``, set during discovery) on top of the canonical
+        index. Virtual-kit collisions are reported but don't abort the build.
         """
         self.fqcn_index = FQCNIndex()
         for project in self.projects:
@@ -630,9 +764,53 @@ class AggregatorEngine:
             if "_fqcn" not in project:
                 self._annotate_project_fqcn(project, kit_prefix=None)
             try:
-                self.fqcn_index.insert(project)
+                self.fqcn_index.insert_canonical(project)
             except FQCNCollisionError as exc:
                 print(f"Warning: {exc}", file=sys.stderr)
+
+        # Virtual-kit alias overlay (experimental v0.7.25 skeleton).
+        self._apply_virtual_kits(getattr(self, "_virtual_kits", []))
+
+    def _apply_virtual_kits(self, virtual_kits):
+        """Insert alias FQCNs from virtual-kit manifests.
+
+        Each virtual kit declares:
+            - tools: list of canonical FQCNs to include
+            - name_rewrite: optional {canonical_fqcn: alias_short_name} map
+                            that rewrites the LAST segment under the virtual
+                            kit's namespace.
+
+        Alias FQCN construction:
+            alias_fqcn = "<virtual_kit_name>:<alias_short_name>"
+        where alias_short_name is taken from name_rewrite or defaults to
+        the canonical FQCN's last segment (the tool's short name).
+        """
+        if not virtual_kits:
+            return
+
+        for vkit in virtual_kits:
+            vk_name = vkit.get("_kit_name") or vkit.get("name")
+            if not vk_name:
+                continue
+            tools = vkit.get("tools", []) or []
+            rewrites = vkit.get("name_rewrite", {}) or {}
+            source = vkit.get("_source")
+
+            for canonical_fqcn in tools:
+                # Derive alias short name
+                short = rewrites.get(canonical_fqcn)
+                if not short:
+                    short = canonical_fqcn.rsplit(":", 1)[-1]
+                alias_fqcn = f"{vk_name}:{short}"
+                try:
+                    self.fqcn_index.insert_alias(
+                        alias_fqcn, canonical_fqcn, source=source
+                    )
+                except (FQCNCollisionError, KeyError) as exc:
+                    print(
+                        f"Warning: virtual kit '{vk_name}': {exc}",
+                        file=sys.stderr,
+                    )
 
     def _maybe_emit_reroot_hint(self):
         """Hint at rerooting when discovery surfaces deeply-nested tools.

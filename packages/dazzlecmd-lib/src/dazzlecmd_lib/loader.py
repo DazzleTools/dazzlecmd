@@ -41,8 +41,16 @@ def discover_kits(kits_dir, projects_dir=None):
 
         kit_name = registry.get("name", filename.replace(".kit.json", ""))
 
+        # Virtual kits are manifest-only overlays: the registry pointer IS
+        # the full definition. Skip in-repo manifest lookup entirely --
+        # otherwise a virtual kit accidentally named after a real kit would
+        # inherit the real kit's tool list.
+        is_virtual = registry.get("virtual") is True
+
         # Look for in-repo kit manifest (source of truth for tools/structure)
-        in_repo = _load_in_repo_kit_manifest(projects_dir, kit_name)
+        in_repo = None if is_virtual else _load_in_repo_kit_manifest(
+            projects_dir, kit_name
+        )
 
         if in_repo:
             # In-repo manifest is the base; registry overrides activation
@@ -66,6 +74,12 @@ def discover_kits(kits_dir, projects_dir=None):
         kit.setdefault("tools", [])
         kit["_source"] = filepath
         kit["_kit_name"] = kit_name
+        # Virtual kits are manifest-only overlays: no projects on disk, just
+        # a list of canonical FQCNs and optional name_rewrite for alias FQCNs.
+        # The engine processes them after canonical discovery.
+        if registry.get("virtual") is True:
+            kit["virtual"] = True
+            kit.setdefault("name_rewrite", registry.get("name_rewrite", {}))
         kits.append(kit)
 
     return kits
