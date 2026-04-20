@@ -143,27 +143,16 @@ def info_parser_factory(subparsers):
     p.set_defaults(_meta="info")
 
 
-def render_info(args, projects, engine=None) -> int:
+def render_info(args, projects) -> int:
     """Print basic info for a tool identified by name or FQCN.
 
     Aggregators with domain-specific fields (diagnostics, taxonomy,
     custom runtime rendering) should override this via
     ``registry.override("info", handler=...)`` and optionally call
     ``render_info()`` themselves to emit the standard fields first.
-
-    If ``engine`` is provided, FQCN lookups route through ``engine.resolve``
-    so that virtual-kit alias FQCNs resolve to their canonical projects.
     """
     tool_name = args.tool
-    matches = []
-    if ":" in tool_name and engine is not None:
-        # Route through resolve_command() to pick up alias FQCNs from
-        # virtual kits. Falls back to direct comparison if engine lookup
-        # returns nothing.
-        project, _note = engine.resolve_command(tool_name)
-        if project is not None:
-            matches = [project]
-    elif ":" in tool_name:
+    if ":" in tool_name:
         matches = [p for p in projects if p.get("_fqcn") == tool_name]
     else:
         matches = [p for p in projects if p["name"] == tool_name]
@@ -223,7 +212,7 @@ def render_info(args, projects, engine=None) -> int:
 
 def info_handler(args, engine, projects, kits, project_root) -> int:
     """Default handler for ``info``. Delegates to ``render_info``."""
-    return render_info(args, projects, engine=engine)
+    return render_info(args, projects)
 
 
 # ---------------------------------------------------------------------------

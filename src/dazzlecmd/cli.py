@@ -403,7 +403,7 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
     if meta == "list":
         return _cmd_list(args, projects, engine=engine)
     elif meta == "info":
-        return _cmd_info(args, projects, engine=engine)
+        return _cmd_info(args, projects)
     elif meta == "kit_list":
         return _cmd_kit_list(args, kits, projects, engine=engine)
     elif meta == "kit_status":
@@ -764,29 +764,12 @@ def _print_runtime_platform_preview(project, spec):
             print(f"  [{i}] {', '.join(bits) if bits else '<empty>'}")
 
 
-def _cmd_info(args, projects, engine=None):
+def _cmd_info(args, projects):
     """Show detailed info about a tool."""
     tool_name = args.tool
-    alias_note = None
 
     # Accept FQCN input (e.g., 'wtf:core:locked') as well as short name
-    if ":" in tool_name and engine is not None:
-        # Route FQCN lookups through engine.resolve_command so alias FQCNs
-        # from virtual kits resolve correctly. Short names still use the
-        # legacy list comprehension (backwards compat with old behavior).
-        project, _note = engine.resolve_command(tool_name)
-        if project is not None:
-            matches = [project]
-            # Surface that this was an alias hit so the user sees both names.
-            idx = getattr(engine, "fqcn_index", None)
-            if idx is not None and tool_name in getattr(idx, "alias_index", {}):
-                alias_note = (
-                    f"(resolved via virtual-kit alias "
-                    f"'{tool_name}' -> '{project['_fqcn']}')"
-                )
-        else:
-            matches = []
-    elif ":" in tool_name:
+    if ":" in tool_name:
         matches = [p for p in projects if p.get("_fqcn") == tool_name]
     else:
         matches = [p for p in projects if p["name"] == tool_name]
@@ -803,8 +786,6 @@ def _cmd_info(args, projects, engine=None):
         return 1
 
     project = matches[0]
-    if alias_note:
-        print(alias_note)
     print(f"Name:        {project['name']}")
     print(f"FQCN:        {project.get('_fqcn', 'unknown')}")
     print(f"Kit:         {project.get('_kit_import_name', 'unknown')}")
