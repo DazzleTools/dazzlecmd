@@ -33,10 +33,11 @@ from dazzlecmd_lib.loader import (
 from dazzlecmd_lib.registry import RunnerRegistry
 from dazzlecmd_lib.config import ConfigManager
 from dazzlecmd_lib.meta_command_registry import MetaCommandRegistry
+from dazzlecmd_lib.resolution_context import ResolutionContext
 
 
 class FQCNCollisionError(Exception):
-    """Raised when two projects declare the same FQCN during index build."""
+    """Raised when two projects/aliases declare the same FQCN during index build."""
 
 
 class CircularDependencyError(Exception):
@@ -44,161 +45,324 @@ class CircularDependencyError(Exception):
 
 
 class FQCNIndex:
-    """Dual-index lookup for Fully Qualified Collection Names.
+    """Two-tier naming index for Fully Qualified Collection Names.
 
-    Maintains:
-        - fqcn_index: {fqcn: project} for exact-match dispatch
-        - short_index: {short_name: [fqcn, ...]} for short-name resolution
-        - kit_order: ordered list of top-level kit names (discovery order)
+    The engine maintains two distinct kinds of FQCN:
 
-    FQCN format: ``kit[:subkit...]:tool`` — e.g., ``core:rn``,
-    ``wtf:core:restarted``. The top-level kit is the first segment.
+    - **Canonical FQCN**: filesystem-governed. Every on-disk tool has
+      exactly one. Format: ``<kit>[:<sub>]*:<tool>`` — e.g., ``core:rn``,
+      ``wtf:core:restarted``.
+    - **Alias FQCN**: declared by a virtual-kit manifest (a kit with
+      ``"virtual": true``). Points to a canonical. Resolution is
+      transparent: wherever a canonical works, the alias works too.
+
+    Invariants:
+
+    - §9b: an alias FQCN MUST NOT equal any canonical FQCN. A virtual kit
+      cannot shadow a real tool. Mirror rule: a canonical added after an
+      alias claims the same FQCN is rejected.
+    - Aliases do NOT populate ``short_index``. Aliases exist to provide
+      prettier FQCNs, not to create new short-name competition. Users who
+      want short-name shortcuts use ``favorites``, not virtual kits.
+    - Aliases are single-hop. Transitive aliases (alias -> alias -> ...)
+      are rejected at insert time (Phase 4e). Phase 5 adds a single
+      exception for ``deprecation.relocated_to_fqcn`` pointers.
+
+    Data members:
+
+    - ``canonical_index: {fqcn: project}`` — canonical FQCN dispatch
+    - ``alias_index: {alias_fqcn: canonical_fqcn}`` — alias -> target
+    - ``short_index: {short_name: [canonical_fqcn, ...]}`` — canonical only
+    - ``shortcut_candidates: {(kit_first, tool_last): [canonical_fqcn, ...]}`` —
+      O(1) lookup for 2-segment "kit-qualified shortcut" resolution
+      (e.g., ``wtf:locked`` -> ``wtf:core:locked``). Replaces the O(n)
+      list comprehension with a precomputed index, sorted for stable
+      tiebreaks on ambiguity. Populated by ``insert_canonical``.
+    - ``kit_order`` — ordered list of top-level canonical kit names
+      (discovery order), used for precedence rank defaults.
     """
 
     def __init__(self):
-        self.fqcn_index = {}
+        self.canonical_index = {}
+        self.alias_index = {}
         self.short_index = {}
+        self.shortcut_candidates = {}
         self.kit_order = []
 
-    def insert(self, project):
-        """Insert a project into the index.
+    # -- insertion --------------------------------------------------------
+
+    def insert_canonical(self, project):
+        """Register a canonical project.
 
         The project dict must carry ``_fqcn``, ``_short_name``, and
-        ``_kit_import_name`` fields (set by the engine during discovery).
+        ``_kit_import_name`` (set by the engine during discovery).
 
-        Raises:
-            FQCNCollisionError: if a project with the same FQCN already exists.
+        Raises ``FQCNCollisionError`` if the FQCN is already present as
+        canonical OR alias (§9b mirror).
         """
         fqcn = project["_fqcn"]
         short = project["_short_name"]
         kit = project["_kit_import_name"]
 
-        if fqcn in self.fqcn_index:
-            existing = self.fqcn_index[fqcn]
+        if fqcn in self.canonical_index:
+            existing = self.canonical_index[fqcn]
             raise FQCNCollisionError(
-                f"Duplicate FQCN '{fqcn}': "
+                f"Duplicate canonical FQCN '{fqcn}': "
                 f"{existing.get('_dir', '?')} vs {project.get('_dir', '?')}"
             )
+        # §9b mirror: canonicals cannot collide with existing aliases.
+        # (Canonicals typically load first in practice, but this closes
+        # the invariant symmetrically.)
+        if fqcn in self.alias_index:
+            target = self.alias_index[fqcn]
+            raise FQCNCollisionError(
+                f"Canonical FQCN '{fqcn}' collides with existing alias "
+                f"(-> '{target}'). Remove or rename the alias first."
+            )
 
-        self.fqcn_index[fqcn] = project
+        self.canonical_index[fqcn] = project
         self.short_index.setdefault(short, []).append(fqcn)
         if kit not in self.kit_order:
             self.kit_order.append(kit)
 
+        # Populate shortcut_candidates. Every 2+-segment canonical
+        # contributes one (first_segment, last_segment) entry. Multiple
+        # entries under the same key are tracked for ambiguity detection.
+        segments = fqcn.split(":")
+        if len(segments) >= 2:
+            key = (segments[0], segments[-1])
+            bucket = self.shortcut_candidates.setdefault(key, [])
+            bucket.append(fqcn)
+            bucket.sort()  # stable alphabetical tiebreaker
+
+    def insert_alias(self, alias_fqcn, canonical_fqcn, source=None):
+        """Register ``alias_fqcn`` as a pointer to ``canonical_fqcn``.
+
+        The canonical MUST already be in ``canonical_index`` — aliases
+        cannot point to other aliases (single-hop rule) nor to non-existent
+        targets. Virtual-kit processing happens AFTER canonical discovery
+        to satisfy this ordering.
+
+        Idempotent re-registration with the same target is a silent no-op.
+        Different-target conflict is rejected (first virtual kit wins).
+
+        Raises:
+            FQCNCollisionError: when ``alias_fqcn`` equals an existing
+                canonical FQCN (§9b shadowing prevention) or conflicts
+                with an existing alias pointing to a different target.
+            KeyError: when ``canonical_fqcn`` is not in the canonical index.
+        """
+        if canonical_fqcn not in self.canonical_index:
+            raise KeyError(
+                f"Virtual kit alias '{alias_fqcn}' -> '{canonical_fqcn}': "
+                f"target FQCN not found in canonical index. "
+                f"Check the 'tools' list in the virtual kit manifest"
+                + (f" ({source})" if source else "")
+                + "."
+            )
+
+        # §9b: alias MUST NOT shadow a canonical.
+        if alias_fqcn in self.canonical_index:
+            raise FQCNCollisionError(
+                f"Virtual kit alias '{alias_fqcn}' collides with a real "
+                f"canonical FQCN. A virtual kit cannot shadow a real tool "
+                f"(rule 9b). "
+                + (f"(declared in {source}) " if source else "")
+                + "Rename the alias or remove the virtual-kit entry."
+            )
+
+        # Conflict with a different existing alias is rejected; same-target
+        # is idempotent (two virtual kits declaring the same alias to the
+        # same canonical is harmless).
+        if alias_fqcn in self.alias_index:
+            existing = self.alias_index[alias_fqcn]
+            if existing != canonical_fqcn:
+                raise FQCNCollisionError(
+                    f"Virtual kit alias '{alias_fqcn}' already maps to "
+                    f"'{existing}'; cannot remap to '{canonical_fqcn}'. "
+                    + (f"(conflicting declaration in {source})" if source else "")
+                )
+            return  # idempotent no-op
+
+        self.alias_index[alias_fqcn] = canonical_fqcn
+
+    # -- resolution -------------------------------------------------------
+
     def resolve(self, name, precedence=None, favorites=None):
-        """Resolve a command name to a (project, notification) tuple.
+        """Resolve a user-typed name to a ``(project, ResolutionContext)`` tuple.
 
         Args:
-            name: The user-typed command name. May be an FQCN (contains ``:``)
-                  or a short name.
-            precedence: Optional ordered list of kit names that overrides the
-                        default precedence order for short-name resolution.
-            favorites: Optional dict of ``{short_name: fqcn}`` mapping. If a
-                       short name is in favorites, the favorite's FQCN is
-                       looked up directly, bypassing precedence resolution.
-                       Stale favorites (FQCN not in index) produce a warning
-                       notification and fall through to precedence.
+            name: The user-typed command name. May be an FQCN (contains
+                ``:``), an alias FQCN, or a short name.
+            precedence: Optional ordered list of kit names that overrides
+                the default precedence for short-name resolution.
+            favorites: Optional ``{short_name: fqcn}`` mapping. When a
+                favorite is set for the input name, its target is used
+                (unconditionally, bypassing precedence). Stale favorites
+                (target missing from the index) produce a warning
+                notification and fall through to precedence.
 
         Returns:
-            ``(project, notification)`` on success, where ``notification`` is
-            a stderr-ready string if the resolution was ambiguous or stale,
-            or ``None`` if unambiguous. Returns ``(None, None)`` if no
-            project matches.
-        """
-        # Exact FQCN match -- always wins, bypasses favorites and precedence
-        if ":" in name:
-            project = self.fqcn_index.get(name)
-            if project is not None:
-                return project, None
+            ``(project, context)`` on success, where ``context`` is a
+            ``ResolutionContext`` documenting HOW resolution happened.
+            Returns ``(None, None)`` when nothing matches.
 
-            # Kit-qualified shortcut: "wtf:locked" means "search within
-            # the wtf kit for a tool named locked." This handles the
-            # common case where "core" (or any internal namespace) is
-            # omitted. Split on the first ":" to get (kit_prefix, tool).
+        Notes:
+            Favorites can point to either a canonical FQCN or an alias
+            FQCN. In the alias case, the context records both
+            ``alias_fqcn`` AND ``resolution_kind="favorite"`` — the
+            favorite traversed an alias en route to the canonical.
+        """
+        # -- FQCN-shaped input (contains ':') --
+        if ":" in name:
+            # 1. Canonical direct hit
+            project = self.canonical_index.get(name)
+            if project is not None:
+                return project, ResolutionContext(
+                    original_input=name,
+                    canonical_fqcn=name,
+                    resolution_kind="canonical",
+                )
+
+            # 2. Alias direct hit (follow single-hop to canonical)
+            if name in self.alias_index:
+                canonical_fqcn = self.alias_index[name]
+                project = self.canonical_index.get(canonical_fqcn)
+                if project is not None:
+                    return project, ResolutionContext(
+                        original_input=name,
+                        canonical_fqcn=canonical_fqcn,
+                        resolution_kind="alias",
+                        alias_fqcn=name,
+                    )
+                # Defensive: alias_index must always point at a real
+                # canonical. This branch only hits on index corruption.
+                return None, ResolutionContext(
+                    original_input=name,
+                    canonical_fqcn=canonical_fqcn,
+                    resolution_kind="alias",
+                    alias_fqcn=name,
+                    notification=(
+                        f"dz: alias '{name}' -> '{canonical_fqcn}' points "
+                        f"to a missing canonical entry (index corruption?)."
+                    ),
+                )
+
+            # 3. Kit-qualified shortcut (O(1) via shortcut_candidates).
+            # Only applies to 2-segment inputs; 3+ segments that didn't
+            # exact-match are simply unresolved. Shortcuts search
+            # canonical_index only -- aliases had their direct-hit chance
+            # in step 2.
             kit_prefix, _, tool_suffix = name.partition(":")
             if tool_suffix and ":" not in tool_suffix:
-                # Only applies to 2-segment names (kit:tool), not to
-                # malformed 3+ segment names that didn't exact-match.
-                matches = [
-                    fqcn for fqcn in self.fqcn_index
-                    if fqcn.startswith(kit_prefix + ":")
-                    and fqcn.rsplit(":", 1)[-1] == tool_suffix
-                ]
+                matches = self.shortcut_candidates.get(
+                    (kit_prefix, tool_suffix), []
+                )
                 if len(matches) == 1:
-                    return self.fqcn_index[matches[0]], None
-                if len(matches) > 1:
-                    display = ", ".join(matches)
-                    notification = (
-                        f"dz: '{name}' is ambiguous within kit "
-                        f"'{kit_prefix}': {display}. "
-                        f"Use the full FQCN to be explicit."
+                    fqcn = matches[0]
+                    return self.canonical_index[fqcn], ResolutionContext(
+                        original_input=name,
+                        canonical_fqcn=fqcn,
+                        resolution_kind="kit_shortcut",
                     )
-                    # Pick the first alphabetically (stable)
-                    return self.fqcn_index[sorted(matches)[0]], notification
+                if len(matches) > 1:
+                    picked = matches[0]  # already sorted on insert
+                    display = ", ".join(matches)
+                    return self.canonical_index[picked], ResolutionContext(
+                        original_input=name,
+                        canonical_fqcn=picked,
+                        resolution_kind="kit_shortcut",
+                        notification=(
+                            f"dz: '{name}' is ambiguous within kit "
+                            f"'{kit_prefix}': {display}. "
+                            f"Use the full FQCN to be explicit."
+                        ),
+                    )
 
             return None, None
 
-        # Short name path
+        # -- Short-name input --
         candidates = self.short_index.get(name, [])
 
-        # Favorite short-circuit: if a favorite is set for this name, use it
-        # unconditionally (before checking candidates count). Stale favorites
-        # fall through to precedence with a warning.
+        # Favorite short-circuit: an explicit user pin trumps precedence.
+        # Favorites may target a canonical OR an alias; we follow the
+        # alias single-hop if needed. Stale favorites (dead target) fall
+        # through to precedence with a warning.
         if favorites and name in favorites:
             favorite_fqcn = favorites[name]
-            favorite_project = self.fqcn_index.get(favorite_fqcn)
+            favorite_alias = None
+            favorite_project = self.canonical_index.get(favorite_fqcn)
+            if favorite_project is None and favorite_fqcn in self.alias_index:
+                canonical_target = self.alias_index[favorite_fqcn]
+                favorite_project = self.canonical_index.get(canonical_target)
+                if favorite_project is not None:
+                    favorite_alias = favorite_fqcn
+                    favorite_fqcn = canonical_target
             if favorite_project is not None:
-                return favorite_project, None
-            # Stale favorite -- fall through with a warning
+                return favorite_project, ResolutionContext(
+                    original_input=name,
+                    canonical_fqcn=favorite_fqcn,
+                    resolution_kind="favorite",
+                    alias_fqcn=favorite_alias,
+                )
+            # Stale favorite -- warn and fall through to precedence.
             stale_note = (
-                f"dz: warning: favorite '{name}' -> '{favorite_fqcn}' "
+                f"dz: warning: favorite '{name}' -> '{favorites[name]}' "
                 f"not found (tool may have been removed, renamed, or "
                 f"shadowed). Falling through to precedence."
             )
             if not candidates:
-                return None, stale_note
-            if len(candidates) == 1:
-                return self.fqcn_index[candidates[0]], stale_note
-            # Stale + ambiguous: combine the stale note with the resolution note
-            order = self._effective_precedence(precedence)
-            ranked = self._rank_by_precedence(candidates, order)
-            picked_fqcn = ranked[0]
-            other_fqcns = ranked[1:]
-            project = self.fqcn_index[picked_fqcn]
-            others_display = ", ".join(self._kit_of(f) for f in other_fqcns)
-            combined = (
-                stale_note
-                + f"\ndz: '{name}' resolved to {picked_fqcn} "
-                f"(also in: {others_display}). "
-                f"Use 'dz {picked_fqcn}' to be explicit."
-            )
-            return project, combined
+                return None, ResolutionContext(
+                    original_input=name,
+                    canonical_fqcn="",
+                    resolution_kind="favorite",
+                    notification=stale_note,
+                )
+            # Ambiguous or single-candidate fall-through -- let the
+            # precedence/single-match logic below produce the context,
+            # and we'll prepend the stale warning to its notification.
+            _stale_prefix = stale_note
+        else:
+            _stale_prefix = None
 
         if not candidates:
             return None, None
 
         if len(candidates) == 1:
-            return self.fqcn_index[candidates[0]], None
+            fqcn = candidates[0]
+            return self.canonical_index[fqcn], ResolutionContext(
+                original_input=name,
+                canonical_fqcn=fqcn,
+                resolution_kind="precedence",
+                notification=_stale_prefix,
+            )
 
-        # Multiple candidates -- apply precedence
         order = self._effective_precedence(precedence)
         ranked = self._rank_by_precedence(candidates, order)
-
         picked_fqcn = ranked[0]
         other_fqcns = ranked[1:]
-        project = self.fqcn_index[picked_fqcn]
-
         others_display = ", ".join(self._kit_of(f) for f in other_fqcns)
-        notification = (
+
+        precedence_note = (
             f"dz: '{name}' resolved to {picked_fqcn} "
             f"(also in: {others_display}). "
             f"Use 'dz {picked_fqcn}' to be explicit."
         )
-        return project, notification
+        if _stale_prefix:
+            notification = _stale_prefix + "\n" + precedence_note
+        else:
+            notification = precedence_note
+
+        return self.canonical_index[picked_fqcn], ResolutionContext(
+            original_input=name,
+            canonical_fqcn=picked_fqcn,
+            resolution_kind="precedence",
+            notification=notification,
+        )
 
     def all_projects(self):
-        """Return all projects in insertion order (stable)."""
-        return list(self.fqcn_index.values())
+        """Return all canonical projects in insertion order (stable)."""
+        return list(self.canonical_index.values())
 
     def _effective_precedence(self, override):
         """Return the effective kit precedence list.
@@ -621,6 +785,9 @@ class AggregatorEngine:
     def _build_fqcn_index(self):
         """Populate ``self.fqcn_index`` from ``self.projects``.
 
+        Inserts canonical projects only. Virtual-kit aliases are applied
+        in a second pass by ``_apply_virtual_kits`` (Commit 2 — Phase 4e).
+
         Assumes projects are already annotated with ``_fqcn``, ``_short_name``,
         and ``_kit_import_name`` by ``_discover_aggregator``.
         """
@@ -630,7 +797,7 @@ class AggregatorEngine:
             if "_fqcn" not in project:
                 self._annotate_project_fqcn(project, kit_prefix=None)
             try:
-                self.fqcn_index.insert(project)
+                self.fqcn_index.insert_canonical(project)
             except FQCNCollisionError as exc:
                 print(f"Warning: {exc}", file=sys.stderr)
 
@@ -749,11 +916,11 @@ class AggregatorEngine:
         return self._get_config_list("kit_precedence")
 
     def resolve_command(self, name):
-        """Resolve a command name to a (project, notification) tuple.
+        """Resolve a command name to a ``(project, ResolutionContext)`` tuple.
 
-        Applies user-configured favorites first (if ``name`` is a favorite,
-        return the favorite's target), then falls through to
-        ``FQCNIndex.resolve()`` with the user's ``kit_precedence``.
+        Thin wrapper over ``FQCNIndex.resolve()`` that supplies user
+        configuration (``favorites`` and ``kit_precedence``) from the
+        engine's ConfigManager.
 
         Returns ``(None, None)`` if no project matches.
         """
@@ -762,6 +929,26 @@ class AggregatorEngine:
         return self.fqcn_index.resolve(
             name, precedence=precedence, favorites=favorites
         )
+
+    def find_project(self, name):
+        """Alias-aware canonical lookup for a user-typed name.
+
+        Primary entry point for callers that need to resolve a tool name
+        (short name, canonical FQCN, alias FQCN, or kit-qualified
+        shortcut) to a concrete project. Use this in place of raw
+        ``[p for p in projects if p.get("_fqcn") == name]`` comparisons
+        -- those patterns are alias-blind and silently fail on virtual-
+        kit aliases.
+
+        Equivalent to ``resolve_command(name)`` today. Kept as a distinct
+        method name so intent reads clearly at call sites ("I want a
+        project by name") and to give us room to specialise later if
+        engine-level concerns (e.g., permission checks) need to layer in.
+
+        Returns ``(project, context)`` on success, ``(None, None)``
+        on miss.
+        """
+        return self.resolve_command(name)
 
     def run(self, argv=None):
         """Run the aggregator: discover, parse, dispatch.
@@ -875,10 +1062,10 @@ class AggregatorEngine:
             return 0
 
         # Tool dispatch
-        project, notification = self.resolve_command(command_name)
+        project, context = self.resolve_command(command_name)
         if project is not None:
-            if notification and not os.environ.get("DZ_QUIET"):
-                print(notification, file=sys.stderr)
+            if context is not None and context.notification and not os.environ.get("DZ_QUIET"):
+                print(context.notification, file=sys.stderr)
             tool_argv = argv[1:]
             return self._run_tool(project, tool_argv)
 
@@ -975,11 +1162,11 @@ class AggregatorEngine:
                     sys.argv = sys_argv_backup
                 return 0
 
-        project, notification = self.resolve_command(command_name)
+        project, context = self.resolve_command(command_name)
 
         if project is not None:
-            if notification and not os.environ.get("DZ_QUIET"):
-                print(notification, file=sys.stderr)
+            if context is not None and context.notification and not os.environ.get("DZ_QUIET"):
+                print(context.notification, file=sys.stderr)
 
             tool_argv = argv[1:]
             return dispatch_tool(project, tool_argv)

@@ -4,6 +4,78 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.25] - 2026-04-20
+
+Phase 4e Commit 1: FQCN data model refactor for virtual kits.
+
+Foundational change preparing the aggregator engine for virtual-kit
+aliases (Commit 2) and the alias-blindness audit (Commit 3). Ships the
+data structures, collision invariants, and resolve API; virtual-kit
+loading, env-var injection, and display-UX polish arrive in later
+commits. See the locked Phase 4e spec for the full plan.
+
+### Added
+
+- **`ResolutionContext` dataclass** (`dazzlecmd_lib.resolution_context`):
+  Returned alongside the project from `FQCNIndex.resolve` and
+  `AggregatorEngine.find_project`. Records how a name resolved —
+  `resolution_kind` is a single Literal (`canonical`, `alias`,
+  `kit_shortcut`, `favorite`, `precedence`) instead of parallel booleans,
+  making impossible states unrepresentable. Optional `alias_fqcn`
+  surfaces the traversed alias when resolution went through a virtual
+  kit (or a favorite that pointed at an alias).
+
+- **`FQCNIndex.insert_alias(alias_fqcn, canonical_fqcn, source=None)`**:
+  Registers an alias pointer. Enforces §9b (alias FQCN must not equal
+  any canonical FQCN — a virtual kit cannot shadow a real tool),
+  idempotent for same-target re-registration, and fails loud on
+  different-target conflicts (first virtual kit wins). `KeyError` when
+  the target canonical does not exist (dangling pointer).
+
+- **`FQCNIndex.insert_canonical(project)`**: New name for the old
+  `insert(project)`. Enforces §9b mirror (canonical cannot be added
+  after an alias claimed the same FQCN) and populates the precomputed
+  `shortcut_candidates` index.
+
+- **`FQCNIndex.shortcut_candidates`**: Precomputed `{(kit_first,
+  tool_last): [canonical_fqcn, ...]}` index replacing the previous
+  O(n) list comprehension in kit-qualified shortcut resolution
+  (e.g., `wtf:locked` -> `wtf:core:locked`). O(1) lookup; ambiguity
+  resolved by stable alphabetical sort on insert.
+
+- **`FQCNIndex.alias_index`**: New `{alias_fqcn: canonical_fqcn}` store
+  for virtual-kit aliases. Resolution consults aliases after canonical
+  direct-hit and before kit-qualified shortcut fallback. Aliases do NOT
+  populate `short_index` — their purpose is to provide prettier FQCNs,
+  not to create new short-name competition (users who want short-name
+  shortcuts should use `favorites`, not virtual kits).
+
+- **`AggregatorEngine.find_project(name)`**: Alias-aware canonical
+  lookup helper. Intended replacement for raw
+  `[p for p in projects if p["_fqcn"] == name]` comparisons (those
+  are alias-blind). Commit 3 will migrate remaining call sites.
+
+### Changed
+
+- **`FQCNIndex.resolve(name, ...)`** signature: returns
+  `(project, ResolutionContext | None)` instead of `(project, str | None)`.
+  Breaking change authorized during the 0.7.x rearchitecture. The
+  notification string is now `context.notification`. `engine.run()`
+  dispatch path and all meta-command call sites updated to access
+  `.notification` explicitly.
+
+- **`FQCNIndex.fqcn_index` attribute removed**: callers should use
+  `FQCNIndex.canonical_index` for the canonical `{fqcn: project}` store.
+  The `fqcn_index` name previously served as both the attribute AND the
+  outer class name, which made code hard to read once aliases were
+  introduced.
+
+### Design references
+
+- `2026-04-19__23-44-05__DISCUSS_Rnd5_FINAL_ASSESSMENT_virtual-kits-graduation-fqcn-semantics.md`
+- `2026-04-19__23-25-00__experiment-r3b-validation-findings.md`
+- `2026-04-20__01-12-34__full-postmortem_collaborate4-virtual-kits-design-session.md`
+
 ## [0.7.24] - 2026-04-18
 
 ### Added

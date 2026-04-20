@@ -187,7 +187,7 @@ class TestFlatDiscovery:
         project, note = engine.resolve_command("toolA")
         assert project is not None
         assert project["_fqcn"] == "core:toolA"
-        assert note is None
+        assert note is None or note.notification is None
 
 
 class TestRecursiveDiscovery:
@@ -239,7 +239,7 @@ class TestRecursiveDiscovery:
         project, note = engine.resolve_command("child_toolA")
         assert project is not None
         assert project["_fqcn"] == "child:core:child_toolA"
-        assert note is None  # no collision, no notification
+        assert note is None or note.notification is None  # no collision, no notification
 
     def test_recursive_resolve_explicit_fqcn(self, tmp_path):
         build_nested_aggregator(str(tmp_path))
@@ -500,9 +500,9 @@ class TestCollisionWithNotification:
         assert project is not None
         assert project["_fqcn"] == "core:toolA"
         # Notification should mention extra as an alternative
-        assert note is not None
-        assert "extra" in note
-        assert "core:toolA" in note
+        assert note is not None and note.notification is not None
+        assert "extra" in note.notification
+        assert "core:toolA" in note.notification
 
     def test_precedence_override_inverts_resolution(self, tmp_path):
         """User kit_precedence override puts extra before core."""
@@ -648,7 +648,7 @@ class TestPhase3SilencingAndShadowing:
         project, note = engine.resolve_command("shared")
         assert project is not None
         assert project["_fqcn"] == "other:core:shared"
-        assert note is None  # no collision anymore
+        assert note is None or note.notification is None  # no collision anymore
 
     def test_silenced_tool_suppresses_reroot_hint(self, tmp_path, monkeypatch, capsys):
         """When the only deeply-nested tool is silenced, no hint fires."""

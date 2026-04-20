@@ -1357,8 +1357,14 @@ def _cmd_kit_favorite(args, engine):
         )
         return 1
 
-    # Warn if the target FQCN isn't discovered
-    if hasattr(engine, "fqcn_index") and fqcn not in engine.fqcn_index.fqcn_index:
+    # Warn if the target FQCN isn't discovered. Accepts either a
+    # canonical FQCN or a virtual-kit alias FQCN -- both are valid
+    # favorite targets (see FQCNIndex.resolve for favorite-on-alias
+    # semantics).
+    if hasattr(engine, "fqcn_index") and (
+        fqcn not in engine.fqcn_index.canonical_index
+        and fqcn not in engine.fqcn_index.alias_index
+    ):
         print(
             f"Warning: target FQCN '{fqcn}' not found in the current "
             f"discovery. Favorite saved but may be stale.",
@@ -1815,8 +1821,10 @@ def _cmd_setup(args, engine):
         print(f"\nRun: dz setup <tool> to execute a tool's setup.")
         return 0
 
-    # Resolve the tool name (supports FQCN, kit-qualified, short name)
-    project, notification = engine.resolve_command(tool_name)
+    # Resolve the tool name (supports FQCN, kit-qualified, short name,
+    # alias FQCN). Context is unused here; setup doesn't surface
+    # resolution provenance.
+    project, _ctx = engine.resolve_command(tool_name)
     if project is None:
         # Try all_projects for disabled-kit tools
         source = getattr(engine, "all_projects", engine.projects)

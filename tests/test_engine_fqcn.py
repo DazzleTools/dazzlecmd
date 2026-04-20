@@ -45,12 +45,12 @@ class TestFQCNIndex:
 
     def _build(self):
         idx = FQCNIndex()
-        idx.insert(_proj("core:rn", "rn", "core"))
-        idx.insert(_proj("core:fixpath", "fixpath", "core"))
-        idx.insert(_proj("core:find", "find", "core"))
-        idx.insert(_proj("dazzletools:dos2unix", "dos2unix", "dazzletools"))
-        idx.insert(_proj("wtf:core:restarted", "restarted", "wtf"))
-        idx.insert(_proj("wtf:core:find", "find", "wtf"))  # collides with core:find
+        idx.insert_canonical(_proj("core:rn", "rn", "core"))
+        idx.insert_canonical(_proj("core:fixpath", "fixpath", "core"))
+        idx.insert_canonical(_proj("core:find", "find", "core"))
+        idx.insert_canonical(_proj("dazzletools:dos2unix", "dos2unix", "dazzletools"))
+        idx.insert_canonical(_proj("wtf:core:restarted", "restarted", "wtf"))
+        idx.insert_canonical(_proj("wtf:core:find", "find", "wtf"))  # collides with core:find
         return idx
 
     def test_exact_fqcn_match(self):
@@ -58,60 +58,60 @@ class TestFQCNIndex:
         project, note = idx.resolve("core:fixpath")
         assert project is not None
         assert project["_fqcn"] == "core:fixpath"
-        assert note is None
+        assert note is None or note.notification is None
 
     def test_exact_fqcn_three_part(self):
         idx = self._build()
         project, note = idx.resolve("wtf:core:restarted")
         assert project is not None
         assert project["_fqcn"] == "wtf:core:restarted"
-        assert note is None
+        assert note is None or note.notification is None
 
     def test_exact_fqcn_no_match_returns_none(self):
         idx = self._build()
         project, note = idx.resolve("core:ghost")
         assert project is None
-        assert note is None
+        assert note is None or note.notification is None
 
     def test_unambiguous_short_name(self):
         idx = self._build()
         project, note = idx.resolve("fixpath")
         assert project["_fqcn"] == "core:fixpath"
-        assert note is None
+        assert note is None or note.notification is None
 
     def test_unambiguous_short_name_from_imported_kit(self):
         idx = self._build()
         project, note = idx.resolve("restarted")
         assert project["_fqcn"] == "wtf:core:restarted"
-        assert note is None
+        assert note is None or note.notification is None
 
     def test_colliding_short_name_default_precedence_core_wins(self):
         idx = self._build()
         project, note = idx.resolve("find")
         assert project["_fqcn"] == "core:find"
-        assert note is not None
-        assert "core:find" in note
-        assert "wtf" in note
-        assert "Use 'dz core:find'" in note
+        assert note is not None and note.notification is not None
+        assert "core:find" in note.notification
+        assert "wtf" in note.notification
+        assert "Use 'dz core:find'" in note.notification
 
     def test_colliding_short_name_custom_precedence(self):
         idx = self._build()
         project, note = idx.resolve("find", precedence=["wtf", "core"])
         assert project["_fqcn"] == "wtf:core:find"
-        assert note is not None
-        assert "wtf:core:find" in note
+        assert note is not None and note.notification is not None
+        assert "wtf:core:find" in note.notification
 
     def test_short_name_no_match_returns_none(self):
         idx = self._build()
         project, note = idx.resolve("nonexistent")
         assert project is None
-        assert note is None
+        assert note is None or note.notification is None
 
     def test_fqcn_collision_raises(self):
         idx = FQCNIndex()
-        idx.insert(_proj("core:rn", "rn", "core"))
+        idx.insert_canonical(_proj("core:rn", "rn", "core"))
         with pytest.raises(FQCNCollisionError) as exc_info:
-            idx.insert(_proj("core:rn", "rn", "core"))
+            idx.insert_canonical(_proj("core:rn", "rn", "core"))
         assert "core:rn" in str(exc_info.value)
 
     def test_unknown_kit_in_precedence_is_tolerated(self):
@@ -132,14 +132,14 @@ class TestFQCNIndex:
 
     def test_three_way_collision_ordering(self):
         idx = FQCNIndex()
-        idx.insert(_proj("wtf:status", "status", "wtf"))
-        idx.insert(_proj("dazzletools:status", "status", "dazzletools"))
-        idx.insert(_proj("core:status", "status", "core"))
+        idx.insert_canonical(_proj("wtf:status", "status", "wtf"))
+        idx.insert_canonical(_proj("dazzletools:status", "status", "dazzletools"))
+        idx.insert_canonical(_proj("core:status", "status", "core"))
         project, note = idx.resolve("status")
         # Default precedence: core first, then dazzletools, then wtf
         assert project["_fqcn"] == "core:status"
-        assert "dazzletools" in note
-        assert "wtf" in note
+        assert "dazzletools" in note.notification
+        assert "wtf" in note.notification
 
 
 # ---------------------------------------------------------------------------
@@ -153,10 +153,10 @@ class TestKitQualifiedResolution:
 
     def _build(self):
         idx = FQCNIndex()
-        idx.insert(_proj("core:rn", "rn", "core"))
-        idx.insert(_proj("core:fixpath", "fixpath", "core"))
-        idx.insert(_proj("wtf:core:locked", "locked", "wtf"))
-        idx.insert(_proj("wtf:core:restarted", "restarted", "wtf"))
+        idx.insert_canonical(_proj("core:rn", "rn", "core"))
+        idx.insert_canonical(_proj("core:fixpath", "fixpath", "core"))
+        idx.insert_canonical(_proj("wtf:core:locked", "locked", "wtf"))
+        idx.insert_canonical(_proj("wtf:core:restarted", "restarted", "wtf"))
         return idx
 
     def test_kit_qualified_resolves_unambiguous(self):
@@ -164,14 +164,14 @@ class TestKitQualifiedResolution:
         project, note = idx.resolve("wtf:locked")
         assert project is not None
         assert project["_fqcn"] == "wtf:core:locked"
-        assert note is None
+        assert note is None or note.notification is None
 
     def test_kit_qualified_restarted(self):
         idx = self._build()
         project, note = idx.resolve("wtf:restarted")
         assert project is not None
         assert project["_fqcn"] == "wtf:core:restarted"
-        assert note is None
+        assert note is None or note.notification is None
 
     def test_exact_fqcn_still_takes_priority(self):
         """Two-segment exact matches (like core:fixpath) still resolve
@@ -180,7 +180,7 @@ class TestKitQualifiedResolution:
         project, note = idx.resolve("core:fixpath")
         assert project is not None
         assert project["_fqcn"] == "core:fixpath"
-        assert note is None
+        assert note is None or note.notification is None
 
     def test_kit_qualified_not_found(self):
         idx = self._build()
@@ -195,14 +195,14 @@ class TestKitQualifiedResolution:
     def test_kit_qualified_ambiguous(self):
         """Two tools with same name in different namespaces within one kit."""
         idx = FQCNIndex()
-        idx.insert(_proj("mykit:ns1:shared", "shared", "mykit"))
-        idx.insert(_proj("mykit:ns2:shared", "shared", "mykit"))
+        idx.insert_canonical(_proj("mykit:ns1:shared", "shared", "mykit"))
+        idx.insert_canonical(_proj("mykit:ns2:shared", "shared", "mykit"))
         project, note = idx.resolve("mykit:shared")
         assert project is not None  # picks one (first alphabetically)
-        assert note is not None  # notification about ambiguity
-        assert "ambiguous" in note.lower()
-        assert "mykit:ns1:shared" in note
-        assert "mykit:ns2:shared" in note
+        assert note is not None and note.notification is not None  # notification about ambiguity
+        assert "ambiguous" in note.notification.lower()
+        assert "mykit:ns1:shared" in note.notification
+        assert "mykit:ns2:shared" in note.notification
 
     def test_three_segment_mismatch_returns_none(self):
         """A 3-segment name that doesn't match any FQCN is NOT treated
@@ -223,9 +223,9 @@ class TestFavoritesResolution:
 
     def _build(self):
         idx = FQCNIndex()
-        idx.insert(_proj("core:find", "find", "core"))
-        idx.insert(_proj("wtf:core:find", "find", "wtf"))
-        idx.insert(_proj("core:rn", "rn", "core"))
+        idx.insert_canonical(_proj("core:find", "find", "core"))
+        idx.insert_canonical(_proj("wtf:core:find", "find", "wtf"))
+        idx.insert_canonical(_proj("core:rn", "rn", "core"))
         return idx
 
     def test_favorite_wins_over_precedence(self):
@@ -237,7 +237,7 @@ class TestFavoritesResolution:
         # With favorite pointing at wtf: wtf wins, no notification
         project, note = idx.resolve("find", favorites={"find": "wtf:core:find"})
         assert project["_fqcn"] == "wtf:core:find"
-        assert note is None
+        assert note is None or note.notification is None
 
     def test_favorite_no_collision_dispatches_silently(self):
         """If only one tool has the short name, favorite is redundant but
@@ -245,7 +245,7 @@ class TestFavoritesResolution:
         idx = self._build()
         project, note = idx.resolve("rn", favorites={"rn": "core:rn"})
         assert project["_fqcn"] == "core:rn"
-        assert note is None
+        assert note is None or note.notification is None
 
     def test_stale_favorite_falls_through_with_warning(self):
         """Favorite pointing at a non-existent FQCN warns and falls through
@@ -255,16 +255,16 @@ class TestFavoritesResolution:
             "find", favorites={"find": "ghost:find"}
         )
         assert project["_fqcn"] == "core:find"  # fell through to precedence
-        assert note is not None
-        assert "warning" in note.lower()
-        assert "ghost:find" in note
+        assert note is not None and note.notification is not None
+        assert "warning" in note.notification.lower()
+        assert "ghost:find" in note.notification
 
     def test_stale_favorite_with_single_candidate(self):
         idx = self._build()
         project, note = idx.resolve("rn", favorites={"rn": "ghost:rn"})
         assert project["_fqcn"] == "core:rn"
-        assert note is not None
-        assert "warning" in note.lower()
+        assert note is not None and note.notification is not None
+        assert "warning" in note.notification.lower()
 
     def test_stale_favorite_no_match_returns_none(self):
         idx = self._build()
@@ -272,8 +272,8 @@ class TestFavoritesResolution:
             "nonexistent", favorites={"nonexistent": "ghost:nonexistent"}
         )
         assert project is None
-        assert note is not None
-        assert "warning" in note.lower()
+        assert note is not None and note.notification is not None
+        assert "warning" in note.notification.lower()
 
     def test_favorite_not_applied_to_unrelated_short_names(self):
         idx = self._build()
@@ -283,7 +283,7 @@ class TestFavoritesResolution:
         # "find" has no favorite -- normal precedence applies
         assert project["_fqcn"] == "core:find"
         # Notification is the collision notification, not a stale-favorite warning
-        assert "also in" in note
+        assert "also in" in note.notification
 
     def test_favorite_fqcn_match_still_bypasses_favorites(self):
         """Explicit FQCN input always works and is unaffected by favorites."""
@@ -292,7 +292,7 @@ class TestFavoritesResolution:
             "wtf:core:find", favorites={"find": "core:find"}
         )
         assert project["_fqcn"] == "wtf:core:find"
-        assert note is None
+        assert note is None or note.notification is None
 
 
 # ---------------------------------------------------------------------------
@@ -314,27 +314,33 @@ class TestResolveCommand:
 
     def test_resolve_exact_fqcn(self):
         engine = self._engine_with_projects()
-        project, note = engine.resolve_command("core:rn")
+        project, ctx = engine.resolve_command("core:rn")
         assert project["_fqcn"] == "core:rn"
-        assert note is None
+        assert ctx is not None
+        assert ctx.resolution_kind == "canonical"
+        assert ctx.notification is None
 
     def test_resolve_unambiguous_short(self):
         engine = self._engine_with_projects()
-        project, note = engine.resolve_command("rn")
+        project, ctx = engine.resolve_command("rn")
         assert project["_fqcn"] == "core:rn"
-        assert note is None
+        assert ctx is not None
+        assert ctx.resolution_kind == "precedence"
+        assert ctx.notification is None
 
     def test_resolve_colliding_short_default_precedence(self):
         engine = self._engine_with_projects()
-        project, note = engine.resolve_command("find")
+        project, ctx = engine.resolve_command("find")
         assert project["_fqcn"] == "core:find"
-        assert note is not None
+        assert ctx is not None
+        assert ctx.resolution_kind == "precedence"
+        assert ctx.notification is not None
 
     def test_resolve_nonexistent(self):
         engine = self._engine_with_projects()
-        project, note = engine.resolve_command("ghost")
+        project, ctx = engine.resolve_command("ghost")
         assert project is None
-        assert note is None
+        assert ctx is None
 
 
 # ---------------------------------------------------------------------------
