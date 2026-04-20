@@ -562,10 +562,13 @@ class AggregatorEngine:
         Walks the aggregator tree rooted at ``project_root``, descending into
         nested aggregators (kits whose directory contains a ``kits/``
         subdirectory). Populates ``self.kits``, ``self.active_kits``,
-        ``self.projects``, and ``self.fqcn_index``.
+        ``self.projects``, ``self.fqcn_index``, and applies virtual-kit
+        aliases (Phase 4e Commit 2).
 
         Each project is annotated with ``_fqcn``, ``_short_name``, and
-        ``_kit_import_name`` fields during discovery.
+        ``_kit_import_name`` fields during discovery. Virtual kits are
+        collected across all aggregator levels (cross-aggregator Option A)
+        and applied as aliases after the canonical FQCN index is built.
         """
         if project_root:
             self.project_root = project_root
@@ -580,7 +583,7 @@ class AggregatorEngine:
             return
 
         loading_stack = frozenset()
-        all_discovered = self._discover_aggregator(
+        all_discovered, all_virtual_kits = self._discover_aggregator(
             self.project_root, loading_stack, depth=0, kit_prefix=None
         )
 
@@ -590,12 +593,34 @@ class AggregatorEngine:
         # at the top level of _discover_aggregator.
         self.all_projects = all_discovered
         self.projects = [p for p in all_discovered if p.get("_kit_active", True)]
+        self.all_virtual_kits = all_virtual_kits
+
+        # Make cross-aggregator virtual kits visible to `dz kit list` and
+        # `dz kit status`. Root-level virtuals are already in `self.kits`
+        # (populated at depth==0 in _discover_aggregator). Nested virtuals
+        # arrive here in all_virtual_kits with their names already
+        # prefixed by _rewrite_virtual_kit; append them so the display
+        # path sees every virtual kit regardless of where it was declared.
+        root_kit_names = {
+            k.get("_kit_name") or k.get("name") for k in self.kits
+        }
+        for vk in all_virtual_kits:
+            vk_name = vk.get("_kit_name") or vk.get("name")
+            if vk_name and vk_name not in root_kit_names:
+                self.kits.append(vk)
+                if vk.get("_kit_active", True):
+                    self.active_kits.append(vk)
+                root_kit_names.add(vk_name)
 
         self._build_fqcn_index()
+        # Second pass: install alias FQCNs from virtual kits. Runs AFTER
+        # canonical index is complete so aliases can validate their
+        # targets (rule 9b requires canonical_index to be populated first).
+        self._apply_virtual_kits(all_virtual_kits)
         self._maybe_emit_reroot_hint()
 
     def _discover_aggregator(self, project_root, loading_stack, depth, kit_prefix):
-        """Recursively discover kits and tools in an aggregator tree.
+        """Recursively discover kits, tools, and virtual-kit manifests.
 
         Args:
             project_root: Absolute path to the aggregator root being scanned.
@@ -608,9 +633,14 @@ class AggregatorEngine:
                         For a hypothetical third level, ``"wtf:subkit"``.
 
         Returns:
-            List of annotated project dicts from this level and all nested
-            levels. Each project has ``_fqcn``, ``_short_name``, and
-            ``_kit_import_name`` set.
+            ``(projects, virtual_kit_manifests)`` tuple. ``projects`` are
+            annotated project dicts (each with ``_fqcn``, ``_short_name``,
+            ``_kit_import_name``, ``_kit_active``). ``virtual_kit_manifests``
+            are virtual kits (``"virtual": true``) with their ``name``,
+            ``tools``, and ``name_rewrite`` fields rewritten to the root
+            FQCN namespace via ``_rewrite_virtual_kit``. The root engine
+            applies them to the FQCN index after canonical discovery
+            completes.
 
         Raises:
             CircularDependencyError: if ``project_root`` is already in
@@ -645,10 +675,17 @@ class AggregatorEngine:
             self.kits = kits
             self.active_kits = active_kits
 
-        # Partition ALL kits (not just active) into flat vs. nested
+        # Partition ALL kits (not just active) into flat, nested, and
+        # virtual. Virtual kits have no on-disk tools -- they're overlay
+        # manifests processed in a second pass by _apply_virtual_kits
+        # after the canonical FQCN index is built.
         flat_kits = []
         nested = []  # list of (kit_dict, candidate_root_dir)
+        local_virtual_kits = []
         for kit in kits:
+            if kit.get("virtual") is True:
+                local_virtual_kits.append(kit)
+                continue
             kit_name = kit.get("_kit_name") or kit.get("name")
             candidate_root = os.path.join(tools_path, kit_name)
             if os.path.isdir(os.path.join(candidate_root, "kits")):
@@ -668,19 +705,40 @@ class AggregatorEngine:
             kit = project.get("_kit_import_name", "")
             project["_kit_active"] = kit in active_kit_names
 
-        # Recursive discovery for nested aggregators
+        # Rewrite local virtual kits into the root FQCN namespace (adds
+        # kit_prefix to their own name, to each target in `tools`, and to
+        # each key in `name_rewrite`). At depth 0, this is a no-op copy.
+        # At nested levels, rewriting isolates the virtual kit under the
+        # parent aggregator's namespace — e.g., wtf-windows's `claude`
+        # virtual kit becomes `wtf:claude` from the root's perspective,
+        # aliasing `wtf:core:locked` (not `core:locked`).
+        collected_virtuals = []
+        for vk in local_virtual_kits:
+            vk_name = vk.get("_kit_name") or vk.get("name")
+            rewritten = self._rewrite_virtual_kit(vk, kit_prefix)
+            rewritten["_kit_active"] = vk_name in active_kit_names
+            collected_virtuals.append(rewritten)
+
+        # Recursive discovery for nested aggregators. Each nested call
+        # returns both projects and virtual-kit manifests; we collect
+        # both and tag them with the parent's view of active status.
         for kit, nested_root in nested:
             kit_name = kit.get("_kit_name") or kit.get("name")
             try:
-                nested_projects = self._recurse_into_nested(
+                nested_projects, nested_virtuals = self._recurse_into_nested(
                     kit, nested_root, new_stack, depth, kit_prefix
                 )
-                # Tag nested projects with active status based on the
-                # parent's view of whether this kit is active
                 kit_is_active = kit_name in active_kit_names
                 for p in nested_projects:
                     p["_kit_active"] = kit_is_active
                 projects.extend(nested_projects)
+                # A nested virtual kit is active only if its containing
+                # aggregator is active at the parent's level. This
+                # overrides whatever the child determined; the parent's
+                # view of kit activation is authoritative.
+                for vk in nested_virtuals:
+                    vk["_kit_active"] = kit_is_active and vk.get("_kit_active", True)
+                collected_virtuals.extend(nested_virtuals)
             except CircularDependencyError:
                 # Propagate cycle errors — these are unrecoverable
                 raise
@@ -709,7 +767,7 @@ class AggregatorEngine:
                     if p.get("_fqcn", "") not in shadowed_set
                 ]
 
-        return projects
+        return projects, collected_virtuals
 
     def _recurse_into_nested(self, kit, nested_root, loading_stack, depth, kit_prefix):
         """Instantiate a child AggregatorEngine and recurse into it.
@@ -717,6 +775,12 @@ class AggregatorEngine:
         Extracts ``tools_dir`` and ``manifest`` overrides from the parent's
         registry pointer (``_override_tools_dir``, ``_override_manifest``)
         or falls back to the child kit's own declaration or defaults.
+
+        Returns the child's ``(projects, virtual_kit_manifests)`` tuple
+        unchanged — the parent handles active-status tagging. The child's
+        virtual kits are already rewritten with ``nested_prefix`` because
+        the child's own ``_discover_aggregator`` calls ``_rewrite_virtual_kit``
+        during its partition pass.
         """
         kit_name = kit.get("_kit_name") or kit.get("name")
 
@@ -760,6 +824,111 @@ class AggregatorEngine:
         return child._discover_aggregator(
             nested_root, loading_stack, depth + 1, nested_prefix
         )
+
+    def _rewrite_virtual_kit(self, vk, kit_prefix):
+        """Rewrite a virtual-kit manifest into the root FQCN namespace.
+
+        Cross-aggregator Option A: when a virtual kit lives inside a
+        nested aggregator (``kit_prefix`` is non-empty), prefix its own
+        ``name``, its ``tools`` list entries, and its ``name_rewrite`` map
+        keys with ``kit_prefix``. At the top level (``kit_prefix is None``),
+        this is a no-op shallow copy.
+
+        Example: wtf-windows ships ``virtual-claude.kit.json`` with
+        ``name: "claude"``, ``tools: ["core:locked"]``,
+        ``name_rewrite: {"core:locked": "why-locked"}``. When wtf is
+        embedded in dazzlecmd, this rewrite produces
+        ``name: "wtf:claude"``, ``tools: ["wtf:core:locked"]``,
+        ``name_rewrite: {"wtf:core:locked": "why-locked"}``. The eventual
+        alias FQCN becomes ``wtf:claude:why-locked`` — namespaced under
+        wtf, unambiguous from root's perspective, and unable to collide
+        with dazzlecmd's own root-level virtual kits.
+
+        Returns a new dict; does not mutate ``vk``.
+        """
+        rewritten = dict(vk)
+        if not kit_prefix:
+            return rewritten
+
+        prefix = f"{kit_prefix}:"
+        original_name = vk.get("_kit_name") or vk.get("name") or ""
+        rewritten["name"] = f"{prefix}{original_name}"
+        rewritten["_kit_name"] = rewritten["name"]
+        rewritten["_original_name"] = original_name
+
+        rewritten["tools"] = [
+            f"{prefix}{t}" for t in (vk.get("tools") or [])
+        ]
+        rewritten["name_rewrite"] = {
+            f"{prefix}{k}": v for k, v in (vk.get("name_rewrite") or {}).items()
+        }
+        return rewritten
+
+    def _apply_virtual_kits(self, virtual_kits):
+        """Install alias FQCNs from each active virtual-kit manifest.
+
+        Runs once at the root level, AFTER ``_build_fqcn_index`` has
+        populated ``canonical_index``. Alias targets must exist in
+        ``canonical_index`` (single-hop rule); ``insert_alias`` rejects
+        dangling pointers with ``KeyError``.
+
+        Manifest fields consulted:
+
+        - ``tools`` — list of canonical FQCNs the virtual kit overlays
+        - ``name_rewrite`` — optional ``{canonical_fqcn: alias_short}``
+          map. Missing entries default to the canonical FQCN's last
+          segment (the tool's short name).
+
+        Rule 9a (warning, not error): if a virtual kit's name matches a
+        canonical kit's name, emit a stderr warning. The migration use
+        case (replace canonical ``claude`` kit with virtual ``claude``
+        overlay over time) is legitimate — rule 9b still catches
+        per-alias shadowing attempts.
+        """
+        if not virtual_kits:
+            return
+
+        canonical_kit_names = set(self.fqcn_index.kit_order)
+
+        for vk in virtual_kits:
+            if not vk.get("_kit_active", True):
+                continue
+
+            vk_name = vk.get("_kit_name") or vk.get("name")
+            if not vk_name:
+                continue
+
+            if vk_name in canonical_kit_names:
+                original = vk.get("_original_name") or vk_name
+                print(
+                    f"Warning: virtual kit '{vk_name}' shares its name "
+                    f"with a canonical kit. Rule 9b still catches "
+                    f"per-alias shadowing attempts; if this is "
+                    f"intentional (e.g., migrating a canonical kit to a "
+                    f"virtual overlay), you can ignore this warning. "
+                    f"(Original manifest name: '{original}'.)",
+                    file=sys.stderr,
+                )
+
+            tools = vk.get("tools") or []
+            rewrites = vk.get("name_rewrite") or {}
+            source = vk.get("_source")
+
+            for canonical_fqcn in tools:
+                short = rewrites.get(canonical_fqcn)
+                if not short:
+                    short = canonical_fqcn.rsplit(":", 1)[-1]
+                alias_fqcn = f"{vk_name}:{short}"
+
+                try:
+                    self.fqcn_index.insert_alias(
+                        alias_fqcn, canonical_fqcn, source=source
+                    )
+                except (FQCNCollisionError, KeyError) as exc:
+                    print(
+                        f"Warning: virtual kit '{vk_name}': {exc}",
+                        file=sys.stderr,
+                    )
 
     def _annotate_project_fqcn(self, project, kit_prefix):
         """Set ``_fqcn``, ``_short_name``, ``_kit_import_name`` on a project.

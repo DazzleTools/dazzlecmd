@@ -4,6 +4,98 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.26] - 2026-04-20
+
+Phase 4e Commit 2: virtual-kit loading, `_apply_virtual_kits`, and
+cross-aggregator Option A.
+
+Ships the first real virtual kit (`kits/claude.kit.json`): four
+`dazzletools:claude-*` tools become dispatchable as `claude:cleanup`,
+`claude:session-metadata`, `claude:sesslog-datefix`, `claude:view`.
+Canonical FQCNs continue to work; short names continue to work;
+aliases do NOT pollute short-name resolution (rule 7c).
+
+### Added
+
+- **Loader virtual-kit detection** (`loader.py`): registry pointers
+  with `"virtual": true` carry through as virtual kits. The loader
+  skips `_load_in_repo_kit_manifest` for virtual kits so a virtual
+  kit accidentally named after a canonical kit can no longer inherit
+  that canonical's tool list.
+
+- **`AggregatorEngine._apply_virtual_kits(virtual_kits)`**: second pass
+  run after `_build_fqcn_index` has populated `canonical_index`. For
+  each active virtual kit, iterates its `tools` list, derives the
+  alias short from `name_rewrite` (defaulting to the canonical FQCN's
+  last segment when absent), constructs the alias FQCN as
+  `<vk_name>:<alias_short>`, and inserts via `FQCNIndex.insert_alias`.
+  Emits structured stderr warnings for §9a (virtual kit name shadows
+  canonical kit name) and §9b (alias FQCN collides with canonical
+  FQCN). §9a is a warning, not an error — the migration use case
+  (replace a canonical kit with a virtual overlay) is legitimate.
+
+- **Cross-aggregator Option A** (`_discover_aggregator` +
+  `_recurse_into_nested`): virtual kits defined inside a nested
+  aggregator are collected during the recursive discovery walk,
+  rewritten with the parent FQCN prefix via `_rewrite_virtual_kit`,
+  and applied at the root after canonical discovery completes.
+  Fixes the silent-failure gap confirmed by the R3b validation
+  experiment (a virtual kit inside `projects/wtf/kits/` was invisible
+  from root). Example: wtf-windows shipping `virtual-claude.kit.json`
+  with `name: "claude"` and `tools: ["core:locked"]` is now rewritten
+  to `name: "wtf:claude"` and `tools: ["wtf:core:locked"]` when
+  embedded under dazzlecmd — alias FQCN `wtf:claude:<short>`.
+  Rewritten nested virtuals are also merged into `engine.kits` and
+  `engine.active_kits` so `dz kit list` and `dz kit status` surface
+  them (caught by the v0.7.26 tester-agent checklist run; regression
+  guarded by `TestCrossAggregatorOptionA.test_nested_virtual_kit_visible_in_kits_list`).
+
+- **`AggregatorEngine._rewrite_virtual_kit(vk, kit_prefix)`**: pure
+  helper that prefixes a virtual-kit manifest's `name`, `tools`, and
+  `name_rewrite` keys with `kit_prefix`. At depth 0 (`kit_prefix is None`)
+  it's a no-op shallow copy. At nested levels, rewrites into the
+  root namespace for safe application.
+
+- **`kits/claude.kit.json`**: first real virtual kit ships with
+  dazzlecmd. Aliases the four `dazzletools:claude-*` tools under the
+  `claude:*` namespace.
+
+- **`tests/test_virtual_kits.py`** (13 tests): loader detection
+  (including skip-in-repo-manifest for same-name case), single-level
+  alias installation, `name_rewrite` partial/defaulting, short_index
+  isolation (rule 7c), inactive virtual kits contributing no aliases,
+  cross-aggregator discovery + rewrite + dispatch, disabling a nested
+  aggregator disables its virtual kits, rule 9a warning emission,
+  rule 9b alias shadowing rejected even under 9a, end-to-end dispatch
+  via `resolve_command` and `find_project`.
+
+### Changed
+
+- **`_discover_aggregator` return signature**: now returns
+  `(projects, virtual_kit_manifests)` tuple. Virtual kits are
+  collected during the recursive walk and rewritten by the current
+  frame before returning. Internal API; no external callers.
+
+- **`AggregatorEngine.discover()`**: assigns `self.all_virtual_kits`
+  and calls `self._apply_virtual_kits(...)` after `_build_fqcn_index`.
+
+### Known gaps addressed in later commits
+
+- `dz info claude:cleanup` still reports "not found" because
+  `_cmd_info` uses a raw `_fqcn ==` comparison that is alias-blind.
+  Fixed in Commit 3 (v0.7.27) via the alias-blindness audit and
+  migration to `engine.find_project`.
+- `dz tree` does not yet render the virtual `[virtual]` branch or
+  `->` arrows for aliases. Fixed in Commit 4 (v0.7.28).
+- `DZ_CANONICAL_FQCN` / `DZ_INVOKED_FQCN` env vars are not yet
+  injected during tool dispatch. Fixed in Commit 4.
+
+### Design references
+
+- `2026-04-19__23-44-05__DISCUSS_Rnd5_FINAL_ASSESSMENT_virtual-kits-graduation-fqcn-semantics.md`
+- `2026-04-19__23-25-00__experiment-r3b-validation-findings.md`
+- `2026-04-19__23-05-00__DISCUSS_Rnd3b_Gemini25_adversarial-critique.md` (cross-aggregator Option A spec)
+
 ## [0.7.25] - 2026-04-20
 
 Phase 4e Commit 1: FQCN data model refactor for virtual kits.

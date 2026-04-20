@@ -1,0 +1,19 @@
+{
+    "_schema_version": 1,
+    "name": "claude",
+    "virtual": true,
+    "always_active": true,
+    "description": "Virtual kit: Claude Code helpers grouped under a shared prefix. Alias FQCNs like 'claude:cleanup' resolve to the canonical dazzletools tools without physically moving files. See Phase 4e design docs.",
+    "tools": [
+        "dazzletools:claude-cleanup",
+        "dazzletools:claude-session-metadata",
+        "dazzletools:claude-sesslog-datefix",
+        "dazzletools:claudeview"
+    ],
+    "name_rewrite": {
+        "dazzletools:claude-cleanup": "cleanup",
+        "dazzletools:claude-session-metadata": "session-metadata",
+        "dazzletools:claude-sesslog-datefix": "sesslog-datefix",
+        "dazzletools:claudeview": "view"
+    }
+}

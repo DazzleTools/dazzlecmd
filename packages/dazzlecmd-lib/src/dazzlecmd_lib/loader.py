@@ -41,8 +41,16 @@ def discover_kits(kits_dir, projects_dir=None):
 
         kit_name = registry.get("name", filename.replace(".kit.json", ""))
 
-        # Look for in-repo kit manifest (source of truth for tools/structure)
-        in_repo = _load_in_repo_kit_manifest(projects_dir, kit_name)
+        # Virtual kits are manifest-only overlays: the registry pointer IS
+        # the full definition. Skip in-repo manifest lookup entirely --
+        # otherwise a virtual kit accidentally named after a canonical kit
+        # would inherit the canonical's tool list. (The skeleton experiment
+        # surfaced this bug; v0.7.26 fixes it structurally.)
+        is_virtual = registry.get("virtual") is True
+
+        in_repo = None if is_virtual else _load_in_repo_kit_manifest(
+            projects_dir, kit_name
+        )
 
         if in_repo:
             # In-repo manifest is the base; registry overrides activation
@@ -59,13 +67,19 @@ def discover_kits(kits_dir, projects_dir=None):
                 if override_key in registry:
                     kit[override_key] = registry[override_key]
         else:
-            # No in-repo manifest -- registry IS the full definition (legacy mode)
+            # No in-repo manifest OR virtual kit -- registry IS the full definition.
             kit = dict(registry)
 
         kit.setdefault("always_active", False)
         kit.setdefault("tools", [])
         kit["_source"] = filepath
         kit["_kit_name"] = kit_name
+        # Tag virtual kits and preserve their alias-rewrite map so the
+        # engine's _apply_virtual_kits pass can process them after the
+        # canonical FQCN index is built.
+        if is_virtual:
+            kit["virtual"] = True
+            kit.setdefault("name_rewrite", registry.get("name_rewrite", {}))
         kits.append(kit)
 
     return kits
