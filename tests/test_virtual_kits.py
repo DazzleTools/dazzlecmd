@@ -481,6 +481,150 @@ class TestRule9aWarning:
         assert ctx.resolution_kind == "canonical"
 
 
+class TestWarningBatching:
+    """Phase 4e v0.7.28: when virtual-kit alias insertion fails because
+    the target canonical kit is disabled, emit ONE consolidated warning
+    per virtual kit instead of one per alias. Respects
+    ``silenced_hints.kits``."""
+
+    def _build_with_disabled_dazzletools(self, tmp_path, monkeypatch, extra_config=None):
+        config = {"_schema_version": 1, "disabled_kits": ["demo"]}
+        if extra_config:
+            config.update(extra_config)
+        config_path = str(tmp_path / "config.json")
+        _write_json(config_path, config)
+        monkeypatch.setenv("DAZZLECMD_CONFIG", config_path)
+
+        root = str(tmp_path / "root")
+        os.makedirs(root)
+        _build_aggregator_with_virtual(root)
+        engine = AggregatorEngine(
+            tools_dir="projects", kits_dir="kits",
+            manifest=".dazzlecmd.json",
+        )
+        engine.discover(project_root=root)
+        return engine
+
+    def test_disabled_target_kit_consolidates_to_one_warning(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """When all alias targets are in a disabled kit, ONE warning
+        replaces the per-alias spam."""
+        # Configure BEFORE engine.discover() runs so the warning fires.
+        config_path = str(tmp_path / "config.json")
+        _write_json(config_path, {
+            "_schema_version": 1,
+            "disabled_kits": ["demo"],
+        })
+        monkeypatch.setenv("DAZZLECMD_CONFIG", config_path)
+        root = str(tmp_path / "root")
+        os.makedirs(root)
+        _build_aggregator_with_virtual(root)
+
+        engine = AggregatorEngine(
+            tools_dir="projects", kits_dir="kits",
+            manifest=".dazzlecmd.json",
+        )
+        engine.discover(project_root=root)
+
+        captured = capsys.readouterr()
+        warning_lines = [
+            line for line in captured.err.splitlines()
+            if "Warning: virtual kit 'grouped'" in line
+        ]
+        # Exactly ONE warning, not one per alias
+        assert len(warning_lines) == 1, (
+            f"Expected 1 consolidated warning; got {len(warning_lines)}: "
+            f"{warning_lines}"
+        )
+        line = warning_lines[0]
+        assert "alias(es) unavailable" in line
+        assert "'demo'" in line  # disabled kit named in the warning
+        assert "silenced_hints" in line  # remediation hint included
+
+    def test_silenced_hints_kits_suppresses_warnings(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """Adding the virtual-kit name to silenced_hints.kits suppresses
+        all warnings emitted by _apply_virtual_kits for that kit."""
+        config_path = str(tmp_path / "config.json")
+        _write_json(config_path, {
+            "_schema_version": 1,
+            "disabled_kits": ["demo"],
+            "silenced_hints": {"kits": ["grouped"]},
+        })
+        monkeypatch.setenv("DAZZLECMD_CONFIG", config_path)
+        root = str(tmp_path / "root")
+        os.makedirs(root)
+        _build_aggregator_with_virtual(root)
+
+        engine = AggregatorEngine(
+            tools_dir="projects", kits_dir="kits",
+            manifest=".dazzlecmd.json",
+        )
+        engine.discover(project_root=root)
+
+        captured = capsys.readouterr()
+        # No warnings for the silenced virtual kit
+        assert "Warning: virtual kit 'grouped'" not in captured.err
+
+    def test_mixed_failure_causes_lists_each_with_cap(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """When failures don't share a clean root cause (e.g., some
+        targets exist, some don't, some collide), fall back to a
+        per-alias listing capped at 3 entries with '+N more'."""
+        # Build aggregator with 5 demo tools and a virtual kit referencing
+        # 5 mixed targets: 2 valid, 3 missing.
+        config_path = str(tmp_path / "config.json")
+        _write_json(config_path, {"_schema_version": 1})
+        monkeypatch.setenv("DAZZLECMD_CONFIG", config_path)
+        root = str(tmp_path / "root")
+        os.makedirs(root)
+        _write_json(
+            os.path.join(root, "kits", "demo.kit.json"),
+            {"name": "demo", "always_active": True, "tools": [
+                "demo:t1", "demo:t2",  # only these exist on disk
+            ]},
+        )
+        for t in ["t1", "t2"]:
+            _write_tool(os.path.join(root, "projects", "demo", t), t)
+        _write_json(
+            os.path.join(root, "kits", "v.kit.json"),
+            {
+                "_schema_version": 1,
+                "name": "v",
+                "virtual": True,
+                "always_active": True,
+                "tools": [
+                    "demo:t1",          # exists
+                    "demo:t2",          # exists
+                    "demo:missing-a",   # missing (no canonical, no disabled-kit cause)
+                    "demo:missing-b",   # missing
+                    "demo:missing-c",   # missing
+                    "demo:missing-d",   # missing -- pushes to "+N more"
+                ],
+            },
+        )
+        engine = AggregatorEngine(
+            tools_dir="projects", kits_dir="kits",
+            manifest=".dazzlecmd.json",
+        )
+        engine.discover(project_root=root)
+
+        captured = capsys.readouterr()
+        warning_lines = [
+            line for line in captured.err.splitlines()
+            if "Warning: virtual kit 'v'" in line
+        ]
+        # Still consolidated to one line (mixed-cause path)
+        assert len(warning_lines) == 1
+        line = warning_lines[0]
+        assert "4 alias(es) target missing canonicals" in line
+        # First 3 missing aliases listed; 4th compressed
+        assert "+1 more" in line
+
+
 class TestFullDispatchEnd2End:
     """Smoke test: virtual-kit alias dispatches through the full engine
     path (not just the FQCN index)."""

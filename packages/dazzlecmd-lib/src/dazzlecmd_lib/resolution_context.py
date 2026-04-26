@@ -30,11 +30,16 @@ from typing import Literal, Optional
 
 
 ResolutionKind = Literal[
-    "canonical",      # Direct hit on a canonical FQCN (e.g., "core:rn")
-    "alias",          # Direct hit on an alias FQCN (e.g., "claude:cleanup")
-    "kit_shortcut",   # 2-segment shortcut resolved within a kit (e.g., "wtf:locked" -> "wtf:core:locked")
-    "favorite",       # Short name resolved via user favorites config
-    "precedence",     # Short name resolved via kit precedence ordering
+    "canonical",        # Direct hit on a canonical FQCN (e.g., "core:rn")
+    "alias",            # Direct hit on an alias FQCN (e.g., "claude:cleanup")
+    "qualified_alias",  # Qualified-alias dispatch (e.g., "dazzletools:claude:cleanup"
+                        # resolves to alias "claude:cleanup" -> canonical
+                        # "dazzletools:claude-cleanup"). Display sections use the
+                        # qualified form; this resolution path lets users invoke
+                        # the same form they read.
+    "kit_shortcut",     # 2-segment shortcut resolved within a kit (e.g., "wtf:locked" -> "wtf:core:locked")
+    "favorite",         # Short name resolved via user favorites config
+    "precedence",       # Short name resolved via kit precedence ordering
 ]
 
 

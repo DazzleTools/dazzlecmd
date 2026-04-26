@@ -4,6 +4,101 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.28] - 2026-04-25
+
+Phase 4e v0.7.28: sectioned `dz list` (Option O) — virtual kits render
+adjacent to their canonical parent, with section headers replacing the
+flat-table layout that v0.7.27 shipped.
+
+Display revision driven by `2026-04-20__07-13-15__dev-workflow-process_virtual-kit-display-format-headered-sections.md`.
+v0.7.27's flat-table layout (Option I) is preserved as the
+single-section fallback for `--kit <kit>` and similar narrowing
+filters.
+
+### Added
+
+- **Sectioned `dz list` layout (Option O)**: tools render under section
+  headers (`<kit_path>:`); virtual kits get a `(virtual kit '<name>')`
+  annotation. Two columns per section (name + description); the kit
+  info lives in the header so there's no per-row Kit column inside
+  sections. One blank line between sections.
+
+- **Virtual-kit sections render adjacent to their canonical parent**.
+  `dazzletools:claude:` sits immediately after `dazzletools:`, not
+  alphabetically at the bottom — visually preserves the
+  parent-extension relationship.
+
+- **`[+]` marker on aliased canonicals in `--show all`**: distinct
+  from the existing `[*]` collision marker. Footer note explains both
+  when present.
+
+- **Single-section fallback to flat layout**: when `--kit <kit>`,
+  `--show alias` (with one virtual kit), or any filter narrows to one
+  section, render the v0.7.27-style flat table (Name + Kit +
+  Description columns). Headers only add value when there are ≥2
+  sections; this gives `--canonical`-pinned scripts a familiar shape.
+
+- **`show_empty_virtual_kits` config key** (default `true`): when
+  true, virtual kits with zero active aliases (target canonicals
+  disabled) still render an empty section header so users know the
+  virtual kit exists. Set false to suppress.
+
+- **Qualified-alias dispatch**: `dz dazzletools:claude:cleanup` (the
+  qualified form shown in sectioned `dz list` headers) now resolves
+  to the same canonical project as `dz claude:cleanup`. New
+  `resolution_kind = "qualified_alias"` in `ResolutionContext`. The
+  resolver tries this path AFTER canonical-direct-hit, alias-direct-hit,
+  and kit-shortcut have all missed: parses input as
+  `<canonical_kit_path>:<vk_name>:<alias_short>` and looks up the alias.
+  Aligns dispatch with display — every form a user sees in the list
+  output is invocable.
+
+- **`dz info` provenance banner for qualified alias**: shows both the
+  qualified form and the underlying short-alias path
+  (`(qualified alias 'X' = 'Y' -> canonical 'Z')`).
+
+- 14 new pytest modules in `tests/test_cli_list_sections.py` covering:
+  multi-section default/canonical/alias/all rendering, single-section
+  fallback, `[+]` marker logic, virtual-kit header annotation, footer
+  count strings per mode, and section adjacency ordering.
+
+- 14 new pytest modules in `tests/test_path_form_convergence.py`
+  encoding the **convergence invariant**: canonical FQCN, canonical
+  short, alias FQCN, alias short, and qualified alias all resolve to
+  the same canonical project. Plus negative tests for prefix
+  mismatches and direct-hit precedence over qualified resolution.
+
+### Changed
+
+- **Default `dz list` output is sectioned, not flat.** Scripts pinned
+  to `--show canonical` are unaffected; they still see canonical kits
+  but in sectioned form. Scripts that need v0.7.27-style flat output
+  can use `--show canonical -k <kit>` to force single-section flat.
+
+- `_build_list_entries` adds `section_key`, `section_kind`,
+  `section_vk_name`, and `has_aliases` fields to entry dicts. Internal
+  API; no external callers.
+
+### Fixed
+
+- **Virtual-kit warning batching**: `_apply_virtual_kits` now collects
+  alias-insert failures per virtual kit and emits ONE consolidated
+  diagnostic instead of N near-identical lines. Common case
+  (target canonical kit disabled): single `Warning: virtual kit 'X':
+  N alias(es) unavailable -- target kit 'Y' disabled. ...` line that
+  names the cause and remediation. Mixed-cause failures fall back to a
+  capped list (3 + "+N more"). `silenced_hints.kits` lets users opt
+  out per virtual kit. Reduced verbosity from ~1600 chars per `dz`
+  invocation to ~230 chars when a kit is disabled.
+
+### Deferred
+
+- **Library-side `render_list` parity** with the new sectioned layout.
+  v0.7.27 deferred this; v0.7.28 continues the deferral. Library's
+  `render_list` still produces a flat table. No third-party adopter is
+  using it today (wtf-windows has its own custom render path); will
+  fold in when demand emerges.
+
 ## [0.7.27] - 2026-04-20
 
 Phase 4e Commits 3+4 (folded): alias-blindness audit, rule 7c

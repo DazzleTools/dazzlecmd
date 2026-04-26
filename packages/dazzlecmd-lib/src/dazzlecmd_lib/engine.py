@@ -301,6 +301,49 @@ class FQCNIndex:
                         ),
                     )
 
+            # 4. Qualified-alias resolution (Phase 4e v0.7.28).
+            # For 3+ segment inputs that aren't direct canonical/alias
+            # hits, try interpreting as a qualified alias --
+            # ``<canonical_kit_path>:<vk_name>:<alias_short>`` -- which
+            # is the form the sectioned ``dz list`` display uses. This
+            # makes display + dispatch agree: users can invoke any form
+            # they see (canonical FQCN, qualified alias, short alias,
+            # short name) and they all converge on the same canonical.
+            #
+            # Worked example: input ``dazzletools:claude:cleanup``
+            # parses as alias_short=``cleanup``, prefix=``dazzletools:claude``.
+            # The alias ``claude:cleanup`` exists with canonical target
+            # ``dazzletools:claude-cleanup``. The expected qualified
+            # prefix is ``<canonical_kit_path>:<vk_name>`` =
+            # ``dazzletools:claude``, which matches the input's prefix.
+            # Resolved.
+            if name.count(":") >= 2:
+                prefix, _, alias_short = name.rpartition(":")
+                for alias_fqcn, canonical_fqcn in self.alias_index.items():
+                    if not alias_fqcn.endswith(f":{alias_short}"):
+                        continue
+                    if "." in canonical_fqcn or ":" not in canonical_fqcn:
+                        continue
+                    # Skip nested virtual kits (vk_name already has ':').
+                    # Their alias FQCNs are already the qualified form
+                    # (e.g., ``wtf:claude:why-locked``) and would have
+                    # direct-hit matched at step 2.
+                    vk_name = alias_fqcn.rsplit(":", 1)[0]
+                    if ":" in vk_name:
+                        continue
+                    canonical_kit_path = canonical_fqcn.rsplit(":", 1)[0]
+                    expected_prefix = f"{canonical_kit_path}:{vk_name}"
+                    if prefix != expected_prefix:
+                        continue
+                    project = self.canonical_index.get(canonical_fqcn)
+                    if project is not None:
+                        return project, ResolutionContext(
+                            original_input=name,
+                            canonical_fqcn=canonical_fqcn,
+                            resolution_kind="qualified_alias",
+                            alias_fqcn=alias_fqcn,
+                        )
+
             return None, None
 
         # -- Short-name input --
@@ -971,11 +1014,22 @@ class AggregatorEngine:
         case (replace canonical ``claude`` kit with virtual ``claude``
         overlay over time) is legitimate — rule 9b still catches
         per-alias shadowing attempts.
+
+        Warning batching (v0.7.28): rather than emit one ``Warning:``
+        line per failed alias (4 aliases x ~400 chars each = a wall of
+        text), failures are collected per virtual kit and emitted as a
+        single diagnostic. When all failures share an obvious root
+        cause (e.g., the target canonical kit is disabled), the
+        warning names that cause directly. ``silenced_hints.kits`` lets
+        users opt out per virtual kit.
         """
         if not virtual_kits:
             return
 
         canonical_kit_names = set(self.fqcn_index.kit_order)
+        silenced = self._get_config_dict("silenced_hints", default={}) or {}
+        silenced_kit_set = set(silenced.get("kits", []) or [])
+        disabled_kit_set = set(self._get_config_list("disabled_kits", default=[]) or [])
 
         for vk in virtual_kits:
             if not vk.get("_kit_active", True):
@@ -985,7 +1039,9 @@ class AggregatorEngine:
             if not vk_name:
                 continue
 
-            if vk_name in canonical_kit_names:
+            # Rule 9a (kit-name shadow) -- still per-vk and structurally
+            # distinct from per-alias errors.
+            if vk_name in canonical_kit_names and vk_name not in silenced_kit_set:
                 original = vk.get("_original_name") or vk_name
                 print(
                     f"Warning: virtual kit '{vk_name}' shares its name "
@@ -1001,6 +1057,11 @@ class AggregatorEngine:
             rewrites = vk.get("name_rewrite") or {}
             source = vk.get("_source")
 
+            # Collect failures rather than warning per-alias.
+            missing_targets = []  # KeyError -- canonical not in index
+            shadowing_failures = []  # FQCNCollisionError (rule 9b)
+            other_failures = []  # any other error
+
             for canonical_fqcn in tools:
                 short = rewrites.get(canonical_fqcn)
                 if not short:
@@ -1011,11 +1072,71 @@ class AggregatorEngine:
                     self.fqcn_index.insert_alias(
                         alias_fqcn, canonical_fqcn, source=source
                     )
-                except (FQCNCollisionError, KeyError) as exc:
+                except KeyError:
+                    missing_targets.append((alias_fqcn, canonical_fqcn))
+                except FQCNCollisionError as exc:
+                    shadowing_failures.append((alias_fqcn, str(exc)))
+                except Exception as exc:  # pragma: no cover - defensive
+                    other_failures.append((alias_fqcn, str(exc)))
+
+            if vk_name in silenced_kit_set:
+                continue  # user opted out of warnings for this virtual kit
+
+            # Diagnostic for missing-canonical failures: when ALL missing
+            # targets land in disabled canonical kits, one consolidated
+            # warning is more useful than N near-identical lines.
+            if missing_targets:
+                target_kits = {
+                    fqcn.split(":", 1)[0] for _, fqcn in missing_targets
+                }
+                disabled_targets = target_kits & disabled_kit_set
+                if disabled_targets and disabled_targets >= target_kits:
+                    kit_word = (
+                        "kits" if len(disabled_targets) > 1 else "kit"
+                    )
+                    kit_list = ", ".join(f"'{k}'" for k in sorted(disabled_targets))
+                    count = len(missing_targets)
                     print(
-                        f"Warning: virtual kit '{vk_name}': {exc}",
+                        f"Warning: virtual kit '{vk_name}': {count} alias(es) "
+                        f"unavailable -- target {kit_word} {kit_list} "
+                        f"disabled. Re-enable to restore the aliases, or add "
+                        f"'{vk_name}' to silenced_hints.kits to suppress this "
+                        f"warning.",
                         file=sys.stderr,
                     )
+                else:
+                    # Mixed or unrelated cause -- list each failure but
+                    # cap at 3 with "+N more".
+                    shown = missing_targets[:3]
+                    extra = len(missing_targets) - len(shown)
+                    items = ", ".join(
+                        f"'{a}' -> '{c}'" for a, c in shown
+                    )
+                    suffix = f" (+{extra} more)" if extra > 0 else ""
+                    print(
+                        f"Warning: virtual kit '{vk_name}': "
+                        f"{len(missing_targets)} alias(es) target missing "
+                        f"canonicals: {items}{suffix}. Check the kit's "
+                        f"'tools' list "
+                        + (f"({source})" if source else "")
+                        + ".",
+                        file=sys.stderr,
+                    )
+
+            # Shadowing failures (rule 9b) -- emit individually because
+            # each is a distinct policy decision the author made.
+            for _alias_fqcn, message in shadowing_failures:
+                print(
+                    f"Warning: virtual kit '{vk_name}': {message}",
+                    file=sys.stderr,
+                )
+
+            # Truly unexpected errors -- pass through.
+            for _alias_fqcn, message in other_failures:
+                print(
+                    f"Warning: virtual kit '{vk_name}': {message}",
+                    file=sys.stderr,
+                )
 
     def _annotate_project_fqcn(self, project, kit_prefix):
         """Set ``_fqcn``, ``_short_name``, ``_kit_import_name`` on a project.
