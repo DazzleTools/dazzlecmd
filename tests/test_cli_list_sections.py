@@ -361,3 +361,73 @@ class TestVirtualKitAnnotation:
         out = capsys.readouterr().out
         # Section header appears with annotation
         assert "(virtual kit 'claude')" in out
+
+
+class TestShowEmptyVirtualKitsConfig:
+    """`show_empty_virtual_kits` config option: when False, suppress
+    rendering of virtual-kit sections that have no active aliases (e.g.,
+    because the canonical-target kit is disabled). Default is True."""
+
+    def _setup(self, monkeypatch, tmp_path, config_value):
+        """Build engine with a virtual kit whose target kit is INACTIVE.
+        This mimics the 'targets are disabled' scenario where the empty
+        virtual-kit section would normally render."""
+        import json
+        config_path = tmp_path / "config.json"
+        if config_value is None:
+            config_path.write_text("{}")
+        else:
+            config_path.write_text(json.dumps({"show_empty_virtual_kits": config_value}))
+
+        # Project exists but its kit is INACTIVE -- so the alias has no
+        # active target and the virtual-kit section would be empty.
+        projects = [_proj("dz:claude-cleanup", "claude-cleanup", "dz")]
+        # Add a regular section so we get multi-section output
+        projects.append(_proj("core:rn", "rn", "core"))
+
+        from dazzlecmd_lib.engine import AggregatorEngine
+        monkeypatch.setenv("DAZZLECMD_CONFIG", str(config_path))
+        engine = AggregatorEngine(is_root=True)
+        engine.projects = list(projects)
+        engine._build_fqcn_index()
+        # Build kits but mark `dz` kit as INACTIVE so its tools won't surface
+        engine.kits = [
+            {"name": "dz", "_kit_name": "dz", "tools": [],
+             "always_active": False, "_kit_active": False},
+            {"name": "core", "_kit_name": "core", "tools": [],
+             "always_active": True, "_kit_active": True},
+            # Virtual kit -- active itself, but its target kit (dz) is disabled
+            {"_kit_name": "claude", "name": "claude", "virtual": True,
+             "always_active": True, "_kit_active": True,
+             "tools": ["dz:claude-cleanup"],
+             "name_rewrite": {"dz:claude-cleanup": "cleanup"}},
+        ]
+        engine.active_kits = [k for k in engine.kits if k.get("_kit_active", True)]
+        # Filter projects: kit dz is inactive, so claude-cleanup shouldn't surface
+        projects_visible = [p for p in projects if p["_kit_import_name"] != "dz"]
+        return engine, projects_visible
+
+    def test_default_renders_empty_virtual_kit_section(self, monkeypatch, tmp_path, capsys):
+        """Default behavior (no config or True): empty virtual-kit section IS rendered."""
+        engine, projects = self._setup(monkeypatch, tmp_path, config_value=None)
+        _cmd_list(_args(), projects, engine=engine)
+        out = capsys.readouterr().out
+        # The virtual kit annotation should appear even though no aliases are active
+        assert "claude" in out, "default behavior should show empty virtual-kit section"
+
+    def test_false_suppresses_empty_virtual_kit_section(self, monkeypatch, tmp_path, capsys):
+        """show_empty_virtual_kits: false should hide the empty virtual section."""
+        engine, projects = self._setup(monkeypatch, tmp_path, config_value=False)
+        _cmd_list(_args(), projects, engine=engine)
+        out = capsys.readouterr().out
+        # The 'claude' virtual-kit section should NOT appear
+        assert "(virtual kit 'claude')" not in out
+        # But the regular 'core' section should still appear
+        assert "core" in out
+
+    def test_true_explicitly_renders_empty_virtual_kit_section(self, monkeypatch, tmp_path, capsys):
+        """show_empty_virtual_kits: true (explicit) matches default."""
+        engine, projects = self._setup(monkeypatch, tmp_path, config_value=True)
+        _cmd_list(_args(), projects, engine=engine)
+        out = capsys.readouterr().out
+        assert "claude" in out

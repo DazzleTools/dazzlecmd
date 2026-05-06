@@ -71,6 +71,7 @@ class TestSetOverrideRoot:
 class TestEngineConfiguresOverrideRoot:
     def test_engine_with_config_dir_sets_override_root(self, tmp_path, monkeypatch):
         monkeypatch.delenv(user_overrides.OVERRIDE_ENV_VAR, raising=False)
+        monkeypatch.delenv("DAZZLECMD_CONFIG", raising=False)
         engine = AggregatorEngine(
             name="t", command="t", config_dir=str(tmp_path),
         )
@@ -81,6 +82,7 @@ class TestEngineConfiguresOverrideRoot:
     def test_engine_override_file_loaded_from_config_dir(self, tmp_path, monkeypatch):
         """Engine writes to per-aggregator override dir; load_override reads it."""
         monkeypatch.delenv(user_overrides.OVERRIDE_ENV_VAR, raising=False)
+        monkeypatch.delenv("DAZZLECMD_CONFIG", raising=False)
 
         # Create override at the expected per-aggregator location
         overrides_dir = tmp_path / "overrides" / "setup"
@@ -101,6 +103,7 @@ class TestEngineConfiguresOverrideRoot:
     def test_two_engines_have_isolated_override_paths(self, tmp_path, monkeypatch):
         """Last-constructed engine's root wins (module-level state)."""
         monkeypatch.delenv(user_overrides.OVERRIDE_ENV_VAR, raising=False)
+        monkeypatch.delenv("DAZZLECMD_CONFIG", raising=False)
 
         a = tmp_path / "a"
         b = tmp_path / "b"

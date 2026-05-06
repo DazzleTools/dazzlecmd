@@ -137,7 +137,8 @@ class TestReservedCommands:
 
 
 class TestConfigDir:
-    def test_config_dir_argument_routes_config_path(self, tmp_path):
+    def test_config_dir_argument_routes_config_path(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("DAZZLECMD_CONFIG", raising=False)
         engine = AggregatorEngine(
             name="t", command="t", config_dir=str(tmp_path),
         )
@@ -153,7 +154,8 @@ class TestConfigDir:
         # Default is ~/.wtf/config.json on Linux/Mac, similar on Windows
         assert path.endswith(os.path.join(".wtf", "config.json"))
 
-    def test_two_engines_have_isolated_configs(self, tmp_path):
+    def test_two_engines_have_isolated_configs(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("DAZZLECMD_CONFIG", raising=False)
         dir_a = tmp_path / "a"
         dir_b = tmp_path / "b"
         ea = AggregatorEngine(name="A", command="a", config_dir=str(dir_a))

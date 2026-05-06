@@ -4,6 +4,94 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.29] - 2026-05-06
+
+Phase 4e closeout housekeeping. Test infrastructure fixes, backfill of
+the v0.7.25 test checklist that should have shipped with the FQCN data
+model refactor, and new automated coverage for `show_empty_virtual_kits`.
+No production-code behavior change.
+
+This commit is part of the broader 0.7.x closeout effort tracked by the
+master plan and the #30 epic comment summarizing dependency-ordered
+tier sequencing for the remaining Phase 4 / Phase 4e tail / Phase 3.5 /
+Phase 5 work.
+
+**Note on testing**: local `pytest -q --ignore=projects` is green
+(934 passed, 13 skipped). The tester agent has NOT been re-run against
+the patched test files or fixed v0.7.25 checklist text — the prior
+sweep was on the unfixed state. Re-run tester before tagging the next
+release that depends on these tests.
+
+### Added
+
+- **`tests/checklists/v0.7.25__Phase4e_C1__fqcn-data-model-refactor.md`** —
+  backfill checklist for the v0.7.25 FQCN data model refactor (~910 LOC
+  / 9 files / API surface change). Covers FQCNIndex three-index split
+  (canonical / alias / shortcut), `ResolutionContext` returns, rule 9b
+  enforcement, `engine.find_project()` alias-aware behavior,
+  `shortcut_candidates` O(1) correctness, `.fqcn_index` removal
+  regression, CLI integration sanity. 5-test high-value-verification
+  section + 7 detailed sections + cross-shell commands + tester
+  guidance for temp-copy isolation. Closes one of three blockers on
+  Phase 4e clean close (master-plan item 4e-T6).
+
+- **Tester sweep results** in `tests/checklists/results/` for
+  v0.7.25/26/27/28 — SHIP verdict on all four (zero genuine
+  regressions).
+
+- **`TestShowEmptyVirtualKitsConfig`** in `tests/test_cli_list_sections.py` —
+  three new tests covering the `show_empty_virtual_kits` config option:
+  default behavior renders empty virtual-kit sections; `false`
+  suppresses them; `true` (explicit) matches default. Closes the
+  automated-coverage gap surfaced by the v0.7.28 tester sweep.
+
+- **Preserved one-off test artifacts** in `tests/one-offs/`:
+  `test_dz_env_vars.py` (v0.7.27 env-var injection investigation),
+  `test_fixpath_dir_search.py`, `test_fixpath_progressive.py`,
+  `fix_sesslog_timestamps.py`. Per project rule, one-offs are kept
+  for reference; not part of CI regression.
+
+### Fixed
+
+- **Test isolation gap (`DAZZLECMD_CONFIG` env var leak)** — five tests
+  in `test_engine_meta_registry.py::TestConfigDir` and
+  `test_user_overrides_per_aggregator.py::TestEngineConfiguresOverrideRoot`
+  were not clearing the `DAZZLECMD_CONFIG` env var before constructing
+  engines with explicit `config_dir=`. The env var correctly takes
+  precedence in production code, but tests assumed it was unset. Result:
+  the 5 tests passed in the default-no-env-var case but failed when the
+  test runner's parent shell had `DAZZLECMD_CONFIG` set. Fix:
+  `monkeypatch.delenv("DAZZLECMD_CONFIG", raising=False)` added to each
+  affected test. Pre-existing gap (not a v0.7.25-28 regression);
+  surfaced by the tester sweep on 2026-04-29.
+
+- **v0.7.25 checklist text defects** (in the new checklist filed by this
+  commit) — Section 3.1 referenced a non-existent `TestInsertCanonical`
+  class; corrected to `TestInsertAlias::test_alias_shadowing_canonical_raises_9b`
+  which exercises rule 9b in both directions. Section 7.2 had wrong
+  `dz kit favorite` syntax (one-arg form); corrected to the actual
+  two-argument interface (`<short> <fqcn>`) with both canonical-target
+  and alias-target examples.
+
+### Refs
+
+- Refs #50 (Phase 4e retrospective) — backfills the v0.7.25 test
+  checklist (one of 3 close blockers for #50; the others are 4e-T2
+  `dz kit favorite --migrate-stale` interactive subcommand and 4e-T1
+  wtf-windows upstream PR for `_fqcn ==` patterns)
+- Refs #30 (Phase 4 epic) — Tier 0 housekeeping work per the closeout
+  master plan
+
+### Test docs (refs for the work that hasn't been re-tested yet)
+
+- `tests/checklists/v0.7.25__Phase4e_C1__fqcn-data-model-refactor.md`
+  (the new checklist; tester agent run against this fixed text is
+  pending)
+- `tests/checklists/results/v0.7.25__...` and three sibling result
+  files (the prior tester sweep results; were against the unfixed
+  state of v0.7.25 checklist + pre-isolation-fix tests)
+
+
 ## [0.7.28] - 2026-04-25
 
 Phase 4e v0.7.28: sectioned `dz list` (Option O) — virtual kits render
