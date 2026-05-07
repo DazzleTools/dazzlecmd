@@ -73,9 +73,34 @@ def _args(**kwargs):
         "name": None,
         "json": False,
         "depth": None,
+        "show": None,
     }
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
+
+
+def _engine_with_virtual_kit(canonical_projects, vk_name, alias_map):
+    """Build an engine with a virtual kit declared on top of canonical
+    projects. ``alias_map`` is a dict mapping alias-FQCN to canonical-FQCN.
+
+    Used by the parity tests for render_list / build_list_entries /
+    render_tree to cover the virtual-kit code paths without standing up
+    a full kit-manifest fixture.
+    """
+    engine = _engine_with(canonical_projects)
+    # Add a virtual-kit entry to engine.kits so render_tree finds it
+    engine.kits.append({
+        "name": vk_name,
+        "_kit_name": vk_name,
+        "virtual": True,
+        "_kit_active": True,
+        "always_active": False,
+        "tools": list(alias_map.keys()),
+    })
+    # Inject aliases into the FQCN index
+    for alias_fqcn, canonical_fqcn in alias_map.items():
+        engine.fqcn_index.alias_index[alias_fqcn] = canonical_fqcn
+    return engine
 
 
 def _engine_with(projects):
@@ -176,6 +201,246 @@ class TestRenderList:
         rc = dmc.list_handler(_args(), None, projects, [], None)
         assert rc == 0
         assert "a" in capsys.readouterr().out
+
+    # --- 4b-T9 parity surfaces (engine-aware sectioned layout, --show modes) ---
+
+    def test_engine_none_backward_compat_flat_output(self, capsys):
+        """Without engine, render_list emits the legacy flat output.
+
+        Backward-compat: aggregators that haven't migrated to the
+        engine-aware path get unchanged behavior.
+        """
+        projects = [_project("alpha"), _project("beta")]
+        rc = dmc.render_list(_args(), projects)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "alpha" in out
+        assert "beta" in out
+        assert "2 tool(s) found" in out
+        # Backward-compat output uses the "Name | Kit | Description" header
+        assert "Name" in out and "Kit" in out and "Description" in out
+
+    def test_show_canonical_mode_with_engine(self, capsys):
+        """--show canonical lists canonicals only (no aliases)."""
+        projects = [
+            _project("alpha", kit="core", fqcn="core:alpha"),
+            _project("beta", kit="core", fqcn="core:beta"),
+        ]
+        engine = _engine_with(projects)
+        rc = dmc.render_list(_args(show="canonical"), projects, engine=engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "alpha" in out
+        assert "beta" in out
+        assert "tool(s) found" in out
+
+    def test_show_alias_mode_with_virtual_kit(self, capsys):
+        """--show alias lists virtual-kit aliases only."""
+        projects = [_project("alpha", kit="core", fqcn="core:alpha")]
+        engine = _engine_with_virtual_kit(
+            projects, "claude", {"claude:alpha": "core:alpha"}
+        )
+        rc = dmc.render_list(_args(show="alias"), projects, engine=engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        # alias entry shown (alpha as alias under claude)
+        assert "alpha" in out
+        # canonical not shown in alias-only mode
+        assert "alias(es) found" in out
+
+    def test_show_all_marks_aliased_canonicals(self, capsys):
+        """--show all marks canonicals that have aliases with [+]."""
+        projects = [
+            _project("alpha", kit="core", fqcn="core:alpha"),
+            _project("beta", kit="core", fqcn="core:beta"),
+        ]
+        engine = _engine_with_virtual_kit(
+            projects, "claude", {"claude:alpha": "core:alpha"}
+        )
+        rc = dmc.render_list(_args(show="all"), projects, engine=engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        # alpha has an alias → marked with [+]
+        assert "[+]" in out
+        # beta has no alias → no [+] on beta
+        assert "alpha" in out
+        assert "beta" in out
+
+    def test_default_mode_alias_preferred(self, capsys):
+        """Default mode hides canonicals that have aliases (alias-preferred)."""
+        projects = [
+            _project("alpha", kit="core", fqcn="core:alpha"),
+            _project("beta", kit="core", fqcn="core:beta"),
+        ]
+        engine = _engine_with_virtual_kit(
+            projects, "claude", {"claude:alpha": "core:alpha"}
+        )
+        rc = dmc.render_list(_args(show="default"), projects, engine=engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        # alpha-as-alias shown, alpha-as-canonical hidden
+        assert "alpha" in out
+        # beta has no alias → still shown as canonical
+        assert "beta" in out
+        # Footer mentions canonical + virtual-kit alias counts
+        assert "canonical" in out
+        assert "virtual-kit alias" in out
+
+    def test_sectioned_layout_multi_kit(self, capsys):
+        """Multi-kit projects render in sectioned layout (not flat)."""
+        projects = [
+            _project("alpha", kit="kit1", fqcn="kit1:alpha"),
+            _project("beta", kit="kit2", fqcn="kit2:beta"),
+        ]
+        engine = _engine_with(projects)
+        rc = dmc.render_list(_args(show="canonical"), projects, engine=engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        # Section headers (kit:)
+        assert "kit1:" in out
+        assert "kit2:" in out
+        # Tools nested under their kit
+        assert "alpha" in out
+        assert "beta" in out
+
+    def test_virtual_kit_section_annotation(self, capsys):
+        """Virtual-kit sections show a (virtual kit '<name>') annotation."""
+        projects = [_project("alpha", kit="core", fqcn="core:alpha")]
+        engine = _engine_with_virtual_kit(
+            projects, "claude", {"claude:alpha": "core:alpha"}
+        )
+        rc = dmc.render_list(_args(show="all"), projects, engine=engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "(virtual kit 'claude')" in out
+
+
+class TestBuildListEntries:
+    """Tests for the public ``build_list_entries`` data-layer API.
+
+    Aggregators that want to render their own display layer can call
+    this to get the entry list, then iterate however they like.
+    """
+
+    def test_canonical_entries_only_no_engine(self):
+        """Without engine, no FQCN index → no aliases → canonical only."""
+        projects = [_project("alpha", kit="core", fqcn="core:alpha")]
+        entries = dmc.build_list_entries(projects, None, "default", None)
+        assert len(entries) == 1
+        assert entries[0]["entry_type"] == "canonical"
+        assert entries[0]["_fqcn"] == "core:alpha"
+
+    def test_canonical_entries_with_engine(self):
+        """With engine but no virtual kits, all entries are canonical."""
+        projects = [
+            _project("alpha", kit="core", fqcn="core:alpha"),
+            _project("beta", kit="core", fqcn="core:beta"),
+        ]
+        engine = _engine_with(projects)
+        entries = dmc.build_list_entries(projects, engine, "canonical", None)
+        assert len(entries) == 2
+        for e in entries:
+            assert e["entry_type"] == "canonical"
+            assert e["section_kind"] == "canonical"
+            assert e["section_key"] == "core"
+
+    def test_alias_entries_from_virtual_kit(self):
+        """Engine with virtual kit → alias entries included in mode 'alias'."""
+        projects = [_project("alpha", kit="core", fqcn="core:alpha")]
+        engine = _engine_with_virtual_kit(
+            projects, "claude", {"claude:alpha": "core:alpha"}
+        )
+        entries = dmc.build_list_entries(projects, engine, "alias", None)
+        assert len(entries) == 1
+        e = entries[0]
+        assert e["entry_type"] == "alias"
+        assert e["_fqcn"] == "claude:alpha"
+        assert e["_canonical_fqcn"] == "core:alpha"
+        assert e["section_kind"] == "virtual"
+        assert e["name"] == "alpha"
+        # Section key encodes canonical_kit_path:vk_name for root virtual kits
+        assert e["section_key"] == "core:claude"
+
+    def test_has_aliases_marker_on_canonical(self):
+        """Canonicals with aliases get has_aliases=True (for [+] marker)."""
+        projects = [
+            _project("alpha", kit="core", fqcn="core:alpha"),
+            _project("beta", kit="core", fqcn="core:beta"),
+        ]
+        engine = _engine_with_virtual_kit(
+            projects, "claude", {"claude:alpha": "core:alpha"}
+        )
+        entries = dmc.build_list_entries(projects, engine, "all", None)
+        canonical_alpha = [e for e in entries if e["entry_type"] == "canonical" and e["name"] == "alpha"][0]
+        canonical_beta = [e for e in entries if e["entry_type"] == "canonical" and e["name"] == "beta"][0]
+        assert canonical_alpha["has_aliases"] is True
+        assert canonical_beta["has_aliases"] is False
+
+    def test_default_mode_hides_aliased_canonicals(self):
+        """Default mode: canonicals that have aliases are dropped from output."""
+        projects = [
+            _project("alpha", kit="core", fqcn="core:alpha"),
+            _project("beta", kit="core", fqcn="core:beta"),
+        ]
+        engine = _engine_with_virtual_kit(
+            projects, "claude", {"claude:alpha": "core:alpha"}
+        )
+        entries = dmc.build_list_entries(projects, engine, "default", None)
+        # beta canonical present; alpha canonical hidden; alpha alias present
+        names = [(e["name"], e["entry_type"]) for e in entries]
+        assert ("beta", "canonical") in names
+        assert ("alpha", "canonical") not in names
+        assert ("alpha", "alias") in names
+
+    def test_show_all_includes_both(self):
+        """--show all returns canonicals AND aliases."""
+        projects = [_project("alpha", kit="core", fqcn="core:alpha")]
+        engine = _engine_with_virtual_kit(
+            projects, "claude", {"claude:alpha": "core:alpha"}
+        )
+        entries = dmc.build_list_entries(projects, engine, "all", None)
+        types = [e["entry_type"] for e in entries]
+        assert types.count("canonical") == 1
+        assert types.count("alias") == 1
+
+    def test_kit_filter_by_canonical_kit(self):
+        """Filtering by canonical kit name shows only that kit's tools."""
+        projects = [
+            _project("alpha", kit="core", fqcn="core:alpha"),
+            _project("beta", kit="other", fqcn="other:beta"),
+        ]
+        engine = _engine_with(projects)
+        entries = dmc.build_list_entries(projects, engine, "canonical", "core")
+        assert len(entries) == 1
+        assert entries[0]["name"] == "alpha"
+
+    def test_kit_filter_by_virtual_kit(self):
+        """Filtering by virtual-kit name shows only its aliases."""
+        projects = [
+            _project("alpha", kit="core", fqcn="core:alpha"),
+            _project("beta", kit="core", fqcn="core:beta"),
+        ]
+        engine = _engine_with_virtual_kit(
+            projects, "claude", {"claude:alpha": "core:alpha"}
+        )
+        entries = dmc.build_list_entries(projects, engine, "default", "claude")
+        assert len(entries) == 1
+        assert entries[0]["entry_type"] == "alias"
+        assert entries[0]["_fqcn"] == "claude:alpha"
+
+    def test_entry_dict_shape_stable(self):
+        """Each entry has the documented stable keys."""
+        projects = [_project("alpha", kit="core", fqcn="core:alpha")]
+        engine = _engine_with(projects)
+        entries = dmc.build_list_entries(projects, engine, "canonical", None)
+        e = entries[0]
+        # Required keys per the docstring contract
+        for key in (
+            "name", "kit", "description", "entry_type", "namespace",
+            "platform", "tags", "_fqcn", "_canonical_fqcn",
+            "section_key", "section_kind", "has_aliases",
+        ):
+            assert key in e, f"missing key {key!r} in entry"
 
 
 class TestListParserFactory:
@@ -579,6 +844,74 @@ class TestRenderTree:
         assert rc == 0
         out = capsys.readouterr().out
         assert "[shadowed]" not in out
+
+    # --- 4b-T9 virtual-kit branches in render_tree ---
+
+    def test_virtual_kit_branch_renders(self, capsys):
+        """Virtual kits render as a separate branch with [virtual] marker
+        and -> arrows from each alias to its canonical target."""
+        projects = [_project("alpha", kit="core", fqcn="core:alpha")]
+        engine = _engine_with_virtual_kit(
+            projects, "claude", {"claude:alpha": "core:alpha"}
+        )
+        rc = dmc.render_tree(_args(), engine, projects, [], None)
+        assert rc == 0
+        out = capsys.readouterr().out
+        # Canonical kit branch
+        assert "core" in out
+        # Virtual kit branch with [virtual] marker
+        assert "claude [virtual]" in out
+        # Alias arrow line
+        assert "claude:alpha -> core:alpha" in out
+
+    def test_virtual_kit_summary_includes_alias_count(self, capsys):
+        """Tree footer with virtual kits reports alias count in addition
+        to tool/kit counts."""
+        projects = [
+            _project("alpha", kit="core", fqcn="core:alpha"),
+            _project("beta", kit="core", fqcn="core:beta"),
+        ]
+        engine = _engine_with_virtual_kit(
+            projects, "claude",
+            {"claude:alpha": "core:alpha", "claude:beta": "core:beta"},
+        )
+        rc = dmc.render_tree(_args(), engine, projects, [], None)
+        assert rc == 0
+        out = capsys.readouterr().out
+        # Footer includes both canonical and virtual counts
+        assert "2 tools across 1 kit(s)" in out
+        assert "2 alias(es) in 1 virtual kit(s)" in out
+
+    def test_no_virtual_kits_no_alias_summary(self, capsys):
+        """Regression guard: tree footer keeps the simple form when no
+        virtual kits are present (don't add a misleading 0 alias(es))."""
+        projects = [_project("alpha", kit="core", fqcn="core:alpha")]
+        engine = _engine_with(projects)
+        rc = dmc.render_tree(_args(), engine, projects, [], None)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "alias(es)" not in out
+        assert "1 tools across 1 kit(s)" in out
+
+    def test_virtual_kit_filter_with_kit_flag_matches_dazzlecmd_limitation(self, capsys):
+        """Parity note: dazzlecmd's --kit filter only checks canonical kits.
+
+        Filtering --kit by a virtual-kit name fails with "kit not found"
+        because the canonical-kit short-circuit in render_tree fires
+        before virtual-kit collection. This matches dazzlecmd's
+        ``_cmd_tree`` behavior at cli.py:2154-2160. Improving this is a
+        separate enhancement (out of 4b-T9 parity scope).
+        """
+        projects = [_project("alpha", kit="core", fqcn="core:alpha")]
+        engine = _engine_with_virtual_kit(
+            projects, "claude", {"claude:alpha": "core:alpha"}
+        )
+        rc = dmc.render_tree(_args(kit="claude"), engine, projects, [], None)
+        # Current behavior: returns 1 with "kit not found" for virtual-only
+        # match. The library matches dazzlecmd here for parity.
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "not found" in err.lower()
 
 
 # ---------------------------------------------------------------------------
