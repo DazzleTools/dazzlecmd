@@ -606,10 +606,270 @@ def info_parser_factory(subparsers):
 
     Flags:
         tool: tool name or FQCN to inspect
+        --raw: show the manifest as declared, without conditional-dispatch
+            resolution.
+        --platform SPEC: preview runtime resolution for a specific
+            platform (e.g. ``linux``, ``linux.ubuntu``, ``windows``).
     """
     p = subparsers.add_parser("info", help="Show detailed info about a tool")
     p.add_argument("tool", help="Tool name or FQCN to inspect")
+    p.add_argument(
+        "--raw",
+        action="store_true",
+        help="Show the manifest as declared, without conditional-dispatch resolution.",
+    )
+    p.add_argument(
+        "--platform",
+        metavar="SPEC",
+        help=(
+            "Preview runtime resolution for a specific platform "
+            "(e.g. 'linux', 'linux.ubuntu', 'windows'). Does not check "
+            "PATH; uses declared platform block."
+        ),
+    )
     p.set_defaults(_meta="info")
+
+
+# ---------------------------------------------------------------------------
+# Runtime display helpers for `info`
+#
+# Ported verbatim from dazzlecmd cli.py:889-1116 in v0.7.32 (4b-T9 info-parity
+# port). Provides the runtime-resolution display that consumers (amdead,
+# wtf-windows, sysdiagnose, future personal aggregators) need when their
+# users run ``aggregator info <tool>`` against a tool with conditional
+# runtime dispatch (per-platform blocks, prefer ladders, ``{{var}}``
+# template references, Docker fields, etc.).
+# ---------------------------------------------------------------------------
+
+
+_RUNTIME_DISPATCH_FIELDS = [
+    # (manifest_key, display_label, render_fn)
+    ("script_path", None, None),  # handled specially (label depends on type)
+    ("dev_command", "Dev command", None),
+    ("interpreter", "Interpreter", None),
+    ("interpreter_args", "Interp args", lambda v: " ".join(v)),
+    ("npm_script", "NPM script", None),
+    ("npx", "Npx", None),
+    ("shell", "Shell", None),
+    ("shell_args", "Shell args", lambda v: " ".join(v)),
+    ("shell_env", "Shell env", lambda v: (
+        v.get("script", "") +
+        ((" " + " ".join(v.get("args", []))) if v.get("args") else "")
+    )),
+]
+
+
+def _print_runtime_dispatch_fields(runtime):
+    """Print the concrete dispatch fields (script_path, interpreter, etc.)."""
+    runtime_type = runtime.get("type", "python")
+    if runtime.get("script_path"):
+        label = "Binary" if runtime_type == "binary" else "Script"
+        print(f"{label + ':':13}{runtime['script_path']}")
+    for key, label, render in _RUNTIME_DISPATCH_FIELDS:
+        if key == "script_path":
+            continue
+        value = runtime.get(key)
+        if not value:
+            continue
+        if render is not None:
+            value = render(value)
+        print(f"{label + ':':13}{value}")
+    interactive = runtime.get("interactive")
+    if interactive:
+        label = "exec (hand-off)" if interactive == "exec" else "keep open"
+        print(f"Interactive: {label}")
+
+    # Docker-specific fields (Phase 4c.4, v0.7.21). Rendered only when the
+    # runtime type is "docker" AND the field is declared, so non-docker tools
+    # never see a spurious "Image: None" line.
+    if runtime_type == "docker":
+        if runtime.get("image"):
+            print(f"{'Image:':13}{runtime['image']}")
+        volumes = runtime.get("volumes") or []
+        if volumes:
+            print(f"{'Volumes:':13}{len(volumes)} mount(s)")
+            for i, vol in enumerate(volumes):
+                if isinstance(vol, dict):
+                    host = vol.get("host", "?")
+                    container = vol.get("container", "?")
+                    mode = vol.get("mode", "")
+                    mode_str = f" ({mode})" if mode else ""
+                    print(f"             [{i}] {host} -> {container}{mode_str}")
+                else:
+                    print(f"             [{i}] <malformed: {type(vol).__name__}>")
+        env = runtime.get("env") or {}
+        if env:
+            print(f"{'Env:':13}{len(env)} var(s)")
+            for k, v in env.items():
+                print(f"             {k}={v}")
+        passthrough = runtime.get("env_passthrough") or []
+        if passthrough:
+            # Values never shown -- only names. Security.
+            print(f"Env passthru: {', '.join(passthrough)}")
+        docker_args = runtime.get("docker_args") or []
+        if docker_args:
+            print(f"{'Docker args:':13}{' '.join(docker_args)}")
+        inner = runtime.get("inner_runtime")
+        if inner and isinstance(inner, dict):
+            inner_type = inner.get("type", "?")
+            inner_script = inner.get("script_path") or inner.get("module") or ""
+            inner_interp = inner.get("interpreter") or ""
+            bits = [f"type={inner_type}"]
+            if inner_interp:
+                bits.append(f"interpreter={inner_interp}")
+            if inner_script:
+                bits.append(f"script={inner_script}")
+            print(f"Inner runtime: (informational) {', '.join(bits)}")
+
+
+def _print_runtime_resolved(project):
+    """Default view: show the runtime resolved for the current host."""
+    from dazzlecmd_lib.registry import resolve_runtime, NoRuntimeResolutionError
+    from dazzlecmd_lib.platform_detect import get_platform_info
+    from dazzlecmd_lib.templates import has_template_refs
+
+    raw_runtime = project.get("runtime", {})
+    # BUG-3 fix: also trigger resolution when the manifest contains any
+    # `{{var}}` references -- catching unresolved vars at inspection time
+    # rather than silently passing through. Includes manifest-top _vars
+    # declarations because those make a var-reference-only manifest
+    # "conditional" on those vars being defined.
+    has_conditional = (
+        "platforms" in raw_runtime
+        or "prefer" in raw_runtime
+        or has_template_refs(raw_runtime)
+        or bool(project.get("_vars"))
+    )
+
+    if not has_conditional:
+        # No conditional dispatch; plain print of the raw runtime.
+        runtime_type = raw_runtime.get("type", "python")
+        print(f"Runtime:     {runtime_type}")
+        _print_runtime_dispatch_fields(raw_runtime)
+        return
+
+    pi = get_platform_info()
+    try:
+        resolved = resolve_runtime(project)
+    except NoRuntimeResolutionError as exc:
+        print(f"Runtime:     <unresolved for this host>")
+        print()
+        for line in str(exc).splitlines():
+            print(f"  {line}")
+        return
+    except Exception as exc:  # UnsupportedSchemaVersionError, UnresolvedTemplateVariableError, TemplateRecursionError etc.
+        print(f"Runtime:     <resolution error>")
+        print()
+        for line in str(exc).splitlines():
+            print(f"  {line}")
+        return
+
+    runtime = resolved.get("runtime", {})
+    runtime_type = runtime.get("type", "python")
+    platform_tag = pi.os + (f".{pi.subtype}" if pi.subtype else "")
+    print(f"Runtime:     {runtime_type}  (resolved for {platform_tag})")
+    _print_runtime_dispatch_fields(runtime)
+    print(f"             (manifest declares conditional dispatch; use --raw to see the full declaration)")
+
+
+def _print_runtime_raw(project):
+    """--raw view: show the manifest as declared, no resolution."""
+    runtime = project.get("runtime", {})
+    runtime_type = runtime.get("type", "python")
+    print(f"Runtime:     {runtime_type}  (raw, unresolved)")
+    _print_runtime_dispatch_fields(runtime)
+
+    # BUG-2 fix: surface manifest-top _vars AND runtime-block _vars so authors
+    # debugging {{...}} references can see what's declared at each scope level.
+    manifest_vars = project.get("_vars")
+    if manifest_vars and isinstance(manifest_vars, dict):
+        print(f"_vars (manifest-top):")
+        for k, v in manifest_vars.items():
+            print(f"  {k} = {v!r}")
+
+    runtime_vars = runtime.get("_vars")
+    if runtime_vars and isinstance(runtime_vars, dict):
+        print(f"_vars (runtime block):")
+        for k, v in runtime_vars.items():
+            print(f"  {k} = {v!r}")
+
+    platforms = runtime.get("platforms")
+    if platforms and isinstance(platforms, dict):
+        print(f"Platforms:   {', '.join(sorted(platforms.keys()))}")
+        # BUG-2 fix: show per-platform overrides so authors see their
+        # unresolved {{...}} references and platform-specific _vars.
+        for os_key in sorted(platforms.keys()):
+            os_block = platforms[os_key]
+            if not isinstance(os_block, (dict, str)):
+                continue
+            if isinstance(os_block, str):
+                print(f"  {os_key}: {os_block}  (flat-string shorthand)")
+                continue
+            # Nested dict: show top-level fields + subtype names
+            top_fields = {k: v for k, v in os_block.items() if not isinstance(v, dict)}
+            subtypes = [k for k, v in os_block.items() if isinstance(v, dict) and not k.startswith("_")]
+            pv = os_block.get("_vars")
+            if pv:
+                print(f"  {os_key}._vars: {pv}")
+            for k, v in top_fields.items():
+                if k.startswith("_"):
+                    continue
+                print(f"  {os_key}.{k}: {v!r}")
+            if subtypes:
+                print(f"  {os_key} subtypes: {', '.join(sorted(subtypes))}")
+
+    prefer = runtime.get("prefer")
+    if prefer and isinstance(prefer, list):
+        print(f"Prefer:      {len(prefer)} entries (in order)")
+        for i, entry in enumerate(prefer):
+            if not isinstance(entry, dict):
+                print(f"  [{i}] <malformed: {type(entry).__name__}>")
+                continue
+            bits = []
+            for k in ("interpreter", "script_path", "npx", "npm_script", "binary"):
+                if k in entry:
+                    bits.append(f"{k}={entry[k]}")
+            if entry.get("detect_when"):
+                bits.append("detect_when=<set>")
+            print(f"  [{i}] {', '.join(bits) if bits else '<empty>'}")
+
+
+def _print_runtime_platform_preview(project, spec):
+    """--platform SPEC view: preview platform resolution without PATH checks."""
+    from dazzlecmd_lib.platform_detect import PlatformInfo
+    from dazzlecmd_lib.platform_resolve import resolve_platform_block
+
+    parts = spec.split(".", 1)
+    os_name = parts[0]
+    subtype = parts[1] if len(parts) > 1 else None
+    pi = PlatformInfo(
+        os=os_name, subtype=subtype, arch="preview", is_wsl=False, version=None
+    )
+
+    raw_runtime = project.get("runtime", {})
+    base_runtime = {k: v for k, v in raw_runtime.items() if k != "platforms"}
+    platforms = raw_runtime.get("platforms")
+    effective = resolve_platform_block(base_runtime, platforms, pi)
+
+    runtime_type = effective.get("type", "python")
+    platform_tag = os_name + (f".{subtype}" if subtype else "")
+    print(f"Runtime:     {runtime_type}  (preview for {platform_tag})")
+    _print_runtime_dispatch_fields(effective)
+
+    prefer = effective.get("prefer")
+    if prefer and isinstance(prefer, list):
+        print(f"Prefer:      {len(prefer)} entries (preconditions not evaluated in preview)")
+        for i, entry in enumerate(prefer):
+            if not isinstance(entry, dict):
+                print(f"  [{i}] <malformed: {type(entry).__name__}>")
+                continue
+            bits = []
+            for k in ("interpreter", "script_path", "npx", "npm_script", "binary"):
+                if k in entry:
+                    bits.append(f"{k}={entry[k]}")
+            if entry.get("detect_when"):
+                bits.append("detect_when=<set>")
+            print(f"  [{i}] {', '.join(bits) if bits else '<empty>'}")
 
 
 def render_info(args, projects, engine) -> int:
@@ -640,11 +900,20 @@ def render_info(args, projects, engine) -> int:
         )
         return 1
 
+    # Surface alias provenance so users see how their input resolved.
     if ctx is not None and ctx.alias_fqcn:
-        print(
-            f"(resolved via virtual-kit alias {ctx.alias_fqcn!r} "
-            f"-> {ctx.canonical_fqcn!r})"
-        )
+        if getattr(ctx, "resolution_kind", None) == "qualified_alias":
+            # User typed the qualified form (e.g., "dazzletools:claude:cleanup").
+            # Show both the qualified path AND the canonical-FQCN target.
+            print(
+                f"(qualified alias '{getattr(ctx, 'original_input', ctx.alias_fqcn)}' = "
+                f"'{ctx.alias_fqcn}' -> canonical '{ctx.canonical_fqcn}')"
+            )
+        else:
+            print(
+                f"(resolved via virtual-kit alias '{ctx.alias_fqcn}' "
+                f"-> '{ctx.canonical_fqcn}')"
+            )
 
     # Shadow status: when this tool's short name conflicts with a
     # registered meta-command, surface the dispatch state. The library
@@ -693,19 +962,32 @@ def render_info(args, projects, engine) -> int:
     if project.get("language"):
         print(f"Language:    {project['language']}")
 
-    runtime = project.get("runtime", {})
-    if runtime:
-        print(f"Runtime:     {runtime.get('type', 'python')}")
-        if runtime.get("script_path"):
-            print(f"Script:      {runtime['script_path']}")
-        if runtime.get("interpreter"):
-            print(f"Interpreter: {runtime['interpreter']}")
+    # Runtime dispatch: --raw shows the manifest unresolved; --platform
+    # SPEC previews per-platform resolution; default resolves for the
+    # current host (with conditional dispatch + ``{{var}}`` template
+    # references handled).
+    raw_mode = bool(getattr(args, "raw", False))
+    platform_spec = getattr(args, "platform", None)
+
+    if raw_mode:
+        _print_runtime_raw(project)
+    elif platform_spec:
+        _print_runtime_platform_preview(project, platform_spec)
+    else:
+        _print_runtime_resolved(project)
+
+    if project.get("pass_through"):
+        print(f"Pass-through: yes")
 
     taxonomy = project.get("taxonomy", {})
     if taxonomy.get("category"):
         print(f"Category:    {taxonomy['category']}")
     if taxonomy.get("tags"):
         print(f"Tags:        {', '.join(taxonomy['tags'])}")
+
+    deps = project.get("dependencies", {})
+    if isinstance(deps, dict) and deps.get("python"):
+        print(f"Python deps: {', '.join(deps['python'])}")
 
     setup = project.get("setup")
     if setup:
@@ -714,6 +996,15 @@ def render_info(args, projects, engine) -> int:
         if isinstance(setup, dict):
             cmd_preview = setup.get("command")
         print(f"Setup:       {note or cmd_preview or 'available'}")
+        # Setup hint with consumer's command + FQCN so the user can
+        # copy-paste. ``engine.command`` resolves to the aggregator's
+        # CLI prog name (``dz`` for dazzlecmd, ``amdead`` for amdead,
+        # etc.) so the hint matches whichever aggregator the user is
+        # running.
+        fqcn_for_setup = project.get("_fqcn", project.get("name", ""))
+        cmd_name = getattr(engine, "command", None) or "dz"
+        if fqcn_for_setup:
+            print(f"             Run: {cmd_name} setup {fqcn_for_setup}")
 
     return 0
 

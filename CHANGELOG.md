@@ -4,6 +4,67 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.32] - 2026-05-07
+
+Phase 4e closeout, Tier 1 commit 4 (the info-parity port). Library `dazzlecmd-lib::render_info` reaches behavioral parity with dazzlecmd's `_cmd_info` so library consumers (amdead, wtf-windows, sysdiagnose, future personal aggregators) get the full info display surface — `--raw` and `--platform` flags, full conditional-dispatch runtime resolution, qualified-alias provenance, pass-through marker, Python deps display, and a setup hint that uses the consumer's command name (not a hardcoded `dz`).
+
+This is a prerequisite commit for v0.7.33 (X-22-narrow), where dazzlecmd's `_cmd_list`/`_cmd_info`/`_cmd_tree` collapse to thin library wrappers. The collapse was pre-empted at v0.7.32 sign-off when the audit caught that dazzlecmd's `_cmd_info` had behavior the library version didn't (per the thorough-cleanup discipline). Rather than ship a collapse that silently dropped behavior, the missing surface is ported to the library first as its own scoped commit.
+
+dazzlecmd's `cli.py` is unchanged in this commit — the helpers and `_cmd_info` continue to work as before. `cli.py` will collapse in v0.7.33 to delete the now-duplicated dazzlecmd-side helpers.
+
+Applied disciplines: copy-don't-rewrite (verbatim OS-level capture from dazzlecmd `cli.py:889-1116`, then paste/trim/modify with the engine.command rename for the setup hint) and thorough cleanup (live-verified amdead `info` consumer post-port, full pytest suite green at 975).
+
+### Added
+
+- **Library `_RUNTIME_DISPATCH_FIELDS` constant** — declarative table of runtime fields with display labels and optional render functions. Used by all three runtime helpers.
+
+- **Library `_print_runtime_dispatch_fields(runtime)`** — concrete dispatch field printer covering `script_path`, `interpreter`, `interpreter_args`, `npm_script`, `npx`, `shell`, `shell_args`, `shell_env`, `interactive`, plus Docker-specific fields (`image`, `volumes`, `env`, `env_passthrough`, `docker_args`, `inner_runtime`).
+
+- **Library `_print_runtime_resolved(project)`** — default view: resolves the runtime for the current host using `dazzlecmd_lib.registry.resolve_runtime`, with the BUG-3 fix that triggers resolution when the manifest contains `{{var}}` references (catches unresolved vars at inspection time rather than silently passing through). Falls back to a clean error message when resolution fails (`NoRuntimeResolutionError`, schema-version errors, unresolved-template errors, etc.).
+
+- **Library `_print_runtime_raw(project)`** — `--raw` view: shows the manifest as declared, no resolution. Surfaces manifest-top `_vars` AND runtime-block `_vars` so authors debugging template references see what's declared at each scope level (BUG-2 fix). Shows `platforms` keys, per-platform overrides with subtype names, and `prefer` ladder entries with their detect_when status.
+
+- **Library `_print_runtime_platform_preview(project, spec)`** — `--platform SPEC` view: previews per-platform resolution without PATH checks. Uses `dazzlecmd_lib.platform_resolve.resolve_platform_block` for the platform-specific resolution; shows the resolved runtime fields and the prefer ladder (preconditions not evaluated in preview).
+
+- **`--raw` and `--platform SPEC` flags in `info_parser_factory`** — library consumers' info subcommand now accepts these flags out of the box.
+
+### Changed
+
+- **Library `render_info` qualified-alias provenance** — when the input was a qualified alias (`ctx.resolution_kind == "qualified_alias"`), the provenance line now shows `(qualified alias '<original>' = '<alias>' -> canonical '<canonical>')` matching dazzlecmd's `_cmd_info`. Regular alias resolution still produces the simpler `(resolved via virtual-kit alias 'X' -> 'Y')` form.
+
+- **Library `render_info` runtime dispatch** — replaced the simple Runtime/Script/Interpreter block with conditional dispatch via the three new helpers (`_print_runtime_raw` for `--raw`, `_print_runtime_platform_preview` for `--platform`, `_print_runtime_resolved` for default). Library consumers running `aggregator info <tool>` against tools with conditional runtime now see proper resolution.
+
+- **Library `render_info` pass-through display** — `Pass-through: yes` line surfaces when `project["pass_through"]` is truthy.
+
+- **Library `render_info` Python deps display** — `Python deps: <list>` line surfaces when `project["dependencies"]["python"]` is set.
+
+- **Library `render_info` setup hint** — when a tool declares `setup`, the hint now reads `Run: <engine.command> setup <fqcn>` (using the consumer's actual command name from `engine.command` — `dz` for dazzlecmd, `amdead` for amdead, etc.). Falls back to literal `dz` when `engine.command` is unset (safety net for ad-hoc usage).
+
+- **`dazzlecmd-lib` version**: `0.3.0` → `0.4.0` (MINOR bump for new public surface in `info_parser_factory` and `render_info`).
+
+- **dazzlecmd's `dazzlecmd-lib` pin**: `>=0.3.0` → `>=0.4.0`. The alias package's pin advances accordingly.
+
+### Tests
+
+- `tests/test_default_meta_commands.py::TestRenderInfo` — 8 new tests for the info-parity port: `test_pass_through_displayed`, `test_python_deps_displayed`, `test_setup_hint_uses_engine_command`, `test_raw_flag_marks_runtime_unresolved`, `test_platform_flag_shows_preview`, `test_qualified_alias_provenance`, `test_runtime_resolved_for_simple_python_runtime`, `test_docker_runtime_fields`.
+- Total: 975 passed, 13 skipped (up from 967 in v0.7.31).
+- Human checklist: `tests/checklists/v0.7.32__Tier1B__library-render-info-parity.md`.
+
+### Verification
+
+Live-verified post-port that library consumers gain the new surfaces:
+
+- `amdead info setup` — full info display including shadow block, standard fields, Runtime + Script + Shell dispatch fields.
+- `amdead info setup --raw` — same display with `(raw, unresolved)` marker on the Runtime line. The `--raw` flag now works in amdead.
+- `amdead info detect` — non-shadowed tool renders cleanly (no shadow block, no spurious markers).
+
+### Refs
+
+- Refs #50 (Phase 4e retrospective; Tier 1 commit 4 of master plan).
+- Refs #30 (Phase 4 epic; Tier 1 of master closeout plan).
+- Refs #27 (dazzlecmd-lib package — info parity now matches dazzlecmd CLI; ready for v0.7.33 X-22-narrow collapse).
+
+
 ## [0.7.31] - 2026-05-07
 
 Phase 4e closeout, Tier 1 commit 3 (Phase A of the 4b-T9 / X-22-narrow two-commit sequence). Library-only release: `dazzlecmd-lib` reaches parity with dazzlecmd's CLI for the `list` and `tree` rendering surfaces, and exposes `build_list_entries` as a public stable API for aggregators that want to render their own display layer.
