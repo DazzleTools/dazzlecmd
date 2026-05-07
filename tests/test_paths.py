@@ -13,6 +13,8 @@ from dazzlecmd_lib.paths import (
     ensure_windows_executable_suffix,
     translate_wsl_path,
     which_with_pathext,
+    is_linked_project,
+    get_link_target,
 )
 
 
@@ -110,3 +112,67 @@ class TestWhichWithPathext:
 
     def test_empty_returns_none(self):
         assert which_with_pathext("") is None
+
+
+class TestIsLinkedProject:
+    """v0.7.33 port from dazzlecmd.importer. Cross-platform symlink/junction
+    detection: True for symlinks AND Windows junctions, False otherwise."""
+
+    def test_normal_dir_returns_false(self, tmp_path):
+        plain_dir = tmp_path / "plain"
+        plain_dir.mkdir()
+        assert is_linked_project(str(plain_dir)) is False
+
+    def test_nonexistent_path_returns_false(self):
+        assert is_linked_project("/this/path/does/not/exist/12345") is False
+
+    def test_symlink_returns_true(self, tmp_path):
+        # POSIX has reliable os.symlink for dirs; on Windows symlink
+        # creation requires Developer Mode or admin, so this test is
+        # best-effort: skip if symlink creation isn't available.
+        source = tmp_path / "source"
+        source.mkdir()
+        link = tmp_path / "link"
+        try:
+            os.symlink(str(source), str(link), target_is_directory=True)
+        except (OSError, NotImplementedError):
+            pytest.skip("symlink creation not available on this platform/runtime")
+        assert is_linked_project(str(link)) is True
+
+
+class TestGetLinkTarget:
+    """v0.7.33 port from dazzlecmd.importer. Returns target path string
+    for symlinks/junctions; None for non-links."""
+
+    def test_returns_none_for_normal_dir(self, tmp_path):
+        plain_dir = tmp_path / "plain"
+        plain_dir.mkdir()
+        assert get_link_target(str(plain_dir)) is None
+
+    def test_returns_none_for_nonexistent(self):
+        assert get_link_target("/this/path/does/not/exist/12345") is None
+
+    def test_returns_target_for_symlink(self, tmp_path):
+        source = tmp_path / "source"
+        source.mkdir()
+        link = tmp_path / "link"
+        try:
+            os.symlink(str(source), str(link), target_is_directory=True)
+        except (OSError, NotImplementedError):
+            pytest.skip("symlink creation not available on this platform/runtime")
+        target = get_link_target(str(link))
+        assert target is not None
+        # os.readlink returns the recorded target; on Windows this may
+        # differ in path style. Just assert "source" is in the target.
+        assert "source" in target
+
+
+class TestLibraryReExportFromDazzlecmdImporter:
+    """v0.7.33: ``dazzlecmd.importer`` now re-exports the helpers from
+    ``dazzlecmd_lib.paths``. Importers of the old surface keep working."""
+
+    def test_dazzlecmd_importer_reexport_is_library_function(self):
+        from dazzlecmd.importer import is_linked_project as legacy_is_linked
+        from dazzlecmd.importer import get_link_target as legacy_get_target
+        assert legacy_is_linked is is_linked_project
+        assert legacy_get_target is get_link_target

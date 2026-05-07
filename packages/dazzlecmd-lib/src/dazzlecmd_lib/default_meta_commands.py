@@ -1006,6 +1006,18 @@ def render_info(args, projects, engine) -> int:
         if fqcn_for_setup:
             print(f"             Run: {cmd_name} setup {fqcn_for_setup}")
 
+    # Linked-project status: when the tool's source dir is a symlink or
+    # Windows junction, surface the link target so users see how the
+    # tool's source resolves on disk. Uses dazzlecmd_lib.paths helpers
+    # ported from dazzlecmd.importer in v0.7.33 so this surface works
+    # for any library consumer (amdead, wtf-windows, sysdiagnose, ...)
+    # without dazzlecmd-package coupling.
+    from dazzlecmd_lib.paths import is_linked_project, get_link_target
+    tool_dir = project.get("_dir")
+    if tool_dir and is_linked_project(tool_dir):
+        target = get_link_target(tool_dir)
+        print(f"Linked to:   {target or 'unknown'}")
+
     return 0
 
 

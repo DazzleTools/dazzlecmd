@@ -732,6 +732,38 @@ class TestRenderInfo:
         assert "(raw" not in out
         assert "(preview for" not in out
 
+    def test_no_linked_to_line_for_non_linked_project(self, capsys, tmp_path):
+        """Regression guard (v0.7.33): render_info should NOT emit a
+        ``Linked to:`` line for a project whose ``_dir`` is a normal
+        directory (not a symlink/junction)."""
+        plain_dir = tmp_path / "plain"
+        plain_dir.mkdir()
+        projects = [_project("alpha", fqcn="core:alpha")]
+        projects[0]["_dir"] = str(plain_dir)
+        engine = _engine_with(projects)
+        dmc.render_info(_args(tool="alpha"), projects, engine=engine)
+        out = capsys.readouterr().out
+        assert "Linked to:" not in out
+
+    def test_linked_to_line_for_linked_project(self, capsys, tmp_path):
+        """Positive case for linked-project surface (v0.7.33). Skips
+        when symlink creation isn't available on the runtime (e.g.,
+        Windows without Developer Mode or admin)."""
+        import os as _os
+        source = tmp_path / "source"
+        source.mkdir()
+        link = tmp_path / "link"
+        try:
+            _os.symlink(str(source), str(link), target_is_directory=True)
+        except (OSError, NotImplementedError):
+            pytest.skip("symlink creation not available on this platform/runtime")
+        projects = [_project("alpha", fqcn="core:alpha")]
+        projects[0]["_dir"] = str(link)
+        engine = _engine_with(projects)
+        dmc.render_info(_args(tool="alpha"), projects, engine=engine)
+        out = capsys.readouterr().out
+        assert "Linked to:" in out
+
     def test_docker_runtime_fields(self, capsys):
         """Docker runtime renders Image / Volumes / Env / etc. fields."""
         projects = [

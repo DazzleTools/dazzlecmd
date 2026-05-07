@@ -4,6 +4,60 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.33] - 2026-05-07
+
+Phase 4e closeout, Tier 1 commit 5 (the linked-project-helpers port — final library prerequisite before the v0.7.34 X-22-narrow CLI collapse). Library `dazzlecmd-lib::paths` gains `is_linked_project()` and `get_link_target()` helpers, ported verbatim from `dazzlecmd.importer`. Library `render_info` now displays a "Linked to: <target>" line when a project's `_dir` is a symlink or Windows junction. dazzlecmd's `importer` module keeps the old import surface stable via a back-compat re-export, so `mode.py`, `tests/test_importer.py`, and any external consumer that imports from `dazzlecmd.importer` continue to work unchanged.
+
+This is the third and final library-parity port preparing for the X-22-narrow CLI collapse. After v0.7.33, every dazzlecmd-CLI behavior in `_cmd_list`/`_cmd_info`/`_cmd_tree` has a library equivalent, so the v0.7.34 collapse can convert all three to thin wrappers without losing any user-visible surface.
+
+dazzlecmd's `cli.py` is unchanged in this commit. `_cmd_info` continues to print "Linked to:" via its existing local code (now resolves through the back-compat re-export to the library helpers). v0.7.34 will collapse `_cmd_info` to a thin wrapper and the library version will own the display.
+
+Caught at v0.7.32 sign-off audit: dazzlecmd's `_cmd_info` had a 4-line linked-project block (`cli.py:1213-1218`) using `dazzlecmd.importer.is_linked_project` — a dazzlecmd-package coupling that the library version didn't have. Per the thorough-cleanup discipline: don't ship a collapse that silently drops behavior. Port the helpers + display first as their own scoped commit, then collapse.
+
+The helpers are also useful to wtf-windows (which has its own duplicate at `projects/wtf/src/wtf_windows/importer.py:137,151`); after v0.7.33, wtf-windows can switch its `_wtf_info_handler` augmentation to call the library version too, eliminating its duplicate. (Future cleanup; not in v0.7.33 scope.)
+
+Applied disciplines: copy-don't-rewrite (verbatim OS-level capture from `src/dazzlecmd/importer.py:141-168`, paste into `paths.py`, no modifications) and thorough cleanup (back-compat re-export from `dazzlecmd.importer` so all 14 existing consumers — including `mode.py`'s 9 call sites and 2 test files — keep working without import-path edits).
+
+### Added
+
+- **`dazzlecmd_lib.paths.is_linked_project(tool_dir)`** — cross-platform symlink/junction detection. On Windows, uses `ctypes.windll.kernel32.GetFileAttributesW` to detect the `FILE_ATTRIBUTE_REPARSE_POINT` flag (catches symlinks AND junctions); falls back to `os.path.islink` if the ctypes call fails. On POSIX, uses `os.path.islink` directly. Public API.
+
+- **`dazzlecmd_lib.paths.get_link_target(tool_dir)`** — returns the resolved target of a symlink/junction, or `None` for non-links. Uses `os.readlink`. Public API.
+
+- **Library `render_info` "Linked to:" line** — when a project's `_dir` is a symlink/junction, surfaces the link target. Library consumers (amdead, wtf-windows, sysdiagnose, future personal aggregators) get this surface for free; previously only dazzlecmd's CLI displayed it.
+
+### Changed
+
+- **`dazzlecmd.importer`** — `is_linked_project` and `get_link_target` are now re-exports from `dazzlecmd_lib.paths` (replacing the previous local implementations). Identical behavior; no changes for any caller. Preserves backward compat for `mode.py`, `tests/test_importer.py`, `tests/test_mode.py`, and any external code that already imports from `dazzlecmd.importer`.
+
+- **`dazzlecmd-lib` version**: `0.4.0` → `0.4.1` (PATCH bump — additive helpers + one display line; surface is intentionally small relative to the 0.2.0/0.3.0/0.4.0 MINORs that shipped large API additions).
+
+- **dazzlecmd's `dazzlecmd-lib` pin**: `>=0.4.0` → `>=0.4.1`. The alias package's pin advances accordingly.
+
+- **`packages/dazzlecmd-lib/CHANGELOG.md`** — new file, backfilled with entries for 0.1.0 / 0.2.0 / 0.3.0 / 0.4.0 / 0.4.1. The lib is meant to stand alone as a framework for custom aggregators (amdead, wtf-windows, sysdiagnose, and future user-built tools); it has been bumping versions independently for four commits without a changelog of its own. Adding it here makes future repo extraction (master plan item X-1) cleaner and gives lib-only consumers a tracking record.
+
+### Tests
+
+- `tests/test_paths.py::TestIsLinkedProject` — 3 new tests: normal-dir-returns-false, nonexistent-path-returns-false, symlink-returns-true (skips on Windows where symlink creation requires admin/Developer Mode).
+- `tests/test_paths.py::TestGetLinkTarget` — 3 new tests: returns-none-for-normal-dir, returns-none-for-nonexistent, returns-target-for-symlink (same skip condition).
+- `tests/test_paths.py::TestLibraryReExportFromDazzlecmdImporter` — 1 new test verifying `dazzlecmd.importer.is_linked_project is dazzlecmd_lib.paths.is_linked_project` (back-compat regression guard).
+- `tests/test_default_meta_commands.py::TestRenderInfo` — 2 new tests: regression guard (no "Linked to:" line for normal dirs), positive case (line shown for symlinks; skips when symlink creation isn't available).
+- Total: 984 passed, 13 skipped (up from 975 in v0.7.32 — 9 new tests).
+- Human checklist: `tests/checklists/v0.7.33__Tier1B__library-link-helpers-port.md`.
+
+### Verification
+
+- `amdead info detect` — clean output (no spurious "Linked to:" line for non-linked tools).
+- `dz info safedel` — unchanged from v0.7.32 (dazzlecmd's `_cmd_info` still uses its own code, which now resolves through the back-compat re-export).
+- `python -m pytest tests/test_importer.py tests/test_mode.py` — all existing importer + mode tests still pass against the back-compat shim.
+
+### Refs
+
+- Refs #50 (Phase 4e retrospective; Tier 1 commit 5 of master plan).
+- Refs #30 (Phase 4 epic; Tier 1 of master closeout plan).
+- Refs #27 (dazzlecmd-lib package — link-helpers added; library now ready for v0.7.34 X-22-narrow collapse).
+
+
 ## [0.7.32] - 2026-05-07
 
 Phase 4e closeout, Tier 1 commit 4 (the info-parity port). Library `dazzlecmd-lib::render_info` reaches behavioral parity with dazzlecmd's `_cmd_info` so library consumers (amdead, wtf-windows, sysdiagnose, future personal aggregators) get the full info display surface — `--raw` and `--platform` flags, full conditional-dispatch runtime resolution, qualified-alias provenance, pass-through marker, Python deps display, and a setup hint that uses the consumer's command name (not a hardcoded `dz`).

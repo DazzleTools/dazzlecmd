@@ -138,34 +138,14 @@ def _create_link_unix(source_path, target_path):
         return None
 
 
-def is_linked_project(tool_dir):
-    """Check if a project directory is a symlink or junction.
-
-    Returns True for both symlinks and Windows junctions.
-    """
-    if sys.platform == "win32":
-        try:
-            import ctypes
-            attrs = ctypes.windll.kernel32.GetFileAttributesW(str(tool_dir))
-            if attrs == -1:  # INVALID_FILE_ATTRIBUTES
-                return False
-            return bool(attrs & 0x400)  # FILE_ATTRIBUTE_REPARSE_POINT
-        except (OSError, AttributeError):
-            return os.path.islink(tool_dir)
-    return os.path.islink(tool_dir)
-
-
-def get_link_target(tool_dir):
-    """Get the target of a symlink/junction.
-
-    Returns the target path string, or None if not a link.
-    """
-    if not is_linked_project(tool_dir):
-        return None
-    try:
-        return os.readlink(tool_dir)
-    except OSError:
-        return None
+# Backward-compat re-exports: the canonical implementations now live in
+# dazzlecmd_lib.paths so that library render_info (and any future library
+# consumer like amdead/wtf/sysdiagnose) can detect linked projects without
+# coupling to dazzlecmd's package layout. v0.7.33 ported the originals;
+# this module keeps the dazzlecmd.importer import surface stable for
+# mode.py, tests, and any external consumer that already imports from
+# here.
+from dazzlecmd_lib.paths import is_linked_project, get_link_target  # noqa: F401
 
 
 def remove_link(target_path):

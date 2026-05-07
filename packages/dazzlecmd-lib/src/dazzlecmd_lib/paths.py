@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 from typing import Optional
 
 
@@ -105,6 +106,51 @@ def translate_wsl_path(path: str, direction: str) -> str:
     raise ValueError(
         f"direction must be 'to_windows' or 'to_wsl', got {direction!r}"
     )
+
+
+def is_linked_project(tool_dir):
+    """Check if a project directory is a symlink or junction.
+
+    Returns True for both symlinks and Windows junctions.
+
+    Cross-platform: on Windows, uses
+    ``ctypes.windll.kernel32.GetFileAttributesW`` to detect the
+    ``FILE_ATTRIBUTE_REPARSE_POINT`` flag (catches both symlinks AND
+    junctions). Falls back to ``os.path.islink`` if the ctypes call
+    fails. On POSIX, uses ``os.path.islink`` directly.
+
+    Ported verbatim from dazzlecmd ``importer.py:141`` to dazzlecmd-lib
+    in v0.7.33 so library ``render_info`` can surface "Linked to:"
+    status without dazzlecmd-package coupling. dazzlecmd-internal and
+    wtf-windows callers continue to import from their respective
+    package's ``importer`` module (which now re-exports from here).
+    """
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            attrs = ctypes.windll.kernel32.GetFileAttributesW(str(tool_dir))
+            if attrs == -1:  # INVALID_FILE_ATTRIBUTES
+                return False
+            return bool(attrs & 0x400)  # FILE_ATTRIBUTE_REPARSE_POINT
+        except (OSError, AttributeError):
+            return os.path.islink(tool_dir)
+    return os.path.islink(tool_dir)
+
+
+def get_link_target(tool_dir):
+    """Get the target of a symlink/junction.
+
+    Returns the target path string, or None if not a link.
+
+    Ported verbatim from dazzlecmd ``importer.py:158`` to dazzlecmd-lib
+    in v0.7.33 alongside :func:`is_linked_project`.
+    """
+    if not is_linked_project(tool_dir):
+        return None
+    try:
+        return os.readlink(tool_dir)
+    except OSError:
+        return None
 
 
 def which_with_pathext(name: str) -> Optional[str]:
