@@ -73,6 +73,7 @@ class MetaCommandRegistry:
 
     def __init__(self):
         self._commands: dict[str, tuple[Callable, Callable]] = {}
+        self._user_overrides: set[str] = set()
         self._locked = False
 
     def register(
@@ -143,6 +144,7 @@ class MetaCommandRegistry:
         new_parser = parser_factory if parser_factory is not None else existing_parser
         new_handler = handler if handler is not None else existing_handler
         self._commands[name] = (new_parser, new_handler)
+        self._user_overrides.add(name)
 
     def unregister(self, name: str) -> None:
         """Remove a meta-command.
@@ -165,6 +167,23 @@ class MetaCommandRegistry:
     def registered(self) -> list[str]:
         """Return the currently-registered meta-command names (sorted)."""
         return sorted(self._commands.keys())
+
+    def user_overrides(self) -> frozenset[str]:
+        """Return the set of meta-command names overridden via ``override()``.
+
+        These are the deliberate shadow-acknowledgments: when an aggregator
+        calls ``override("setup", handler=...)`` because it has a tool
+        whose short name conflicts with a library default, the override IS
+        the acknowledgment. The dispatch-time warning for that conflict
+        becomes noise once acknowledged.
+
+        Used by ``cli_helpers.build_tool_subparsers`` via the
+        ``exempt_from_warning`` kwarg to suppress conflict warnings ONLY
+        for names whose meta-command was deliberately overridden. Names
+        with unintended conflicts (no override) still warn — that
+        diagnostic remains valuable.
+        """
+        return frozenset(self._user_overrides)
 
     def resolve(self, name: str) -> Optional[tuple[Callable, Callable]]:
         """Return ``(parser_factory, handler)`` for ``name`` or ``None``."""

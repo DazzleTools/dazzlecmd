@@ -93,6 +93,61 @@ class TestBuildToolSubparsers:
         result = h.build_tool_subparsers(subparsers, projects)
         assert len(result) == 1
 
+    def test_exempt_from_warning_silences_conflict_warning(self, capsys):
+        """Per #56: aggregator-overridden conflicts don't warn (override is the ack)."""
+        parser = argparse.ArgumentParser()
+        subparsers = parser.add_subparsers(dest="command")
+        projects = [{"name": "setup", "description": "amdead probe"}]
+        h.build_tool_subparsers(
+            subparsers, projects,
+            reserved_commands={"setup"},
+            exempt_from_warning={"setup"},
+        )
+        # Tool still skipped (parser registers meta-command, not tool)
+        # but warning is suppressed because override is the acknowledgment.
+        assert capsys.readouterr().err == ""
+
+    def test_exempt_from_warning_only_silences_listed_names(self, capsys):
+        """Names not in exempt_from_warning still warn."""
+        parser = argparse.ArgumentParser()
+        subparsers = parser.add_subparsers(dest="command")
+        projects = [
+            {"name": "setup", "description": "overridden"},
+            {"name": "list", "description": "NOT overridden"},
+        ]
+        h.build_tool_subparsers(
+            subparsers, projects,
+            reserved_commands={"setup", "list"},
+            exempt_from_warning={"setup"},
+        )
+        err = capsys.readouterr().err
+        assert "'setup'" not in err  # silenced
+        assert "'list'" in err  # still warns
+
+    def test_no_exempt_set_warns_as_before(self, capsys):
+        """Regression guard: without exempt_from_warning, behavior unchanged."""
+        parser = argparse.ArgumentParser()
+        subparsers = parser.add_subparsers(dest="command")
+        projects = [{"name": "list", "description": "conflicts"}]
+        h.build_tool_subparsers(
+            subparsers, projects,
+            reserved_commands={"list"},
+        )
+        assert "reserved" in capsys.readouterr().err.lower()
+
+    def test_extra_reserved_no_override_still_warns(self, capsys):
+        """Reserving a name without overriding the meta-command still warns.
+        (No override == no acknowledgment == warning is helpful.)"""
+        parser = argparse.ArgumentParser()
+        subparsers = parser.add_subparsers(dest="command")
+        projects = [{"name": "foo", "description": "extra-reserved"}]
+        h.build_tool_subparsers(
+            subparsers, projects,
+            reserved_commands={"foo"},
+            exempt_from_warning=set(),  # explicitly empty
+        )
+        assert "reserved" in capsys.readouterr().err.lower()
+
 
 # ---------------------------------------------------------------------------
 # derive_reserved_from_registry

@@ -4,6 +4,94 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.30] - 2026-05-06
+
+Phase 4e closeout, Tier 1 commit 1. Closes issue #56: the spurious
+reserved-command warning that fired on every invocation when an
+aggregator deliberately overrode a library meta-command (e.g. amdead's
+`core:setup` plus `engine.meta_registry.override("setup", ...)`) is
+now suppressed for acknowledged overrides. The warning still fires
+for unintended conflicts, so the original diagnostic value is
+preserved.
+
+Surfaced during sysdiagnose adoption. The override IS the acknowledgment
+that the aggregator knows about the shadow and is deliberately chaining 
+the library default — the library was warning on the very pattern it provides
+as the supported escape hatch.
+
+Approach (per issue #56 design discussion): suppress only when the
+shadow has been acknowledged via `override()`, and ship two new
+discoverability surfaces alongside the suppression so shadow state
+remains visible without a noisy per-invocation warning. Library
+mechanism is a new `MetaCommandRegistry.user_overrides()` API that
+distinguishes deliberate-shadow registrations from library defaults;
+`build_tool_subparsers` now accepts an `exempt_from_warning` set
+which the engine populates from that API. Downstream library
+consumers can pass their own exempt set if they need finer control.
+
+### Added
+
+- **`MetaCommandRegistry.user_overrides()`** — returns a frozenset of
+  meta-command names that were registered via `override()` (vs the
+  library defaults installed by `register()`). Library-side mechanism
+  for distinguishing "deliberate shadow acknowledgment" from
+  "unintended name collision."
+
+- **`build_tool_subparsers(..., exempt_from_warning=...)`** kwarg —
+  optional set of names exempt from the conflict warning. The engine
+  passes `meta_registry.user_overrides()` so deliberately-overridden
+  conflicts don't fire the warning on every invocation. Names in the
+  exempt set still skip parser registration (the meta-command's parser
+  still wins); only the warning is suppressed.
+
+- **Shadow-status block in `info`** (library `render_info` and
+  dazzlecmd `_cmd_info`) — when a name is registered both as a
+  library default meta-command AND as an aggregator tool, `info`
+  surfaces both registrations and the override status. If the
+  aggregator overrode the handler, the user sees the chain-the-default
+  acknowledgment; if not, the user sees the FQCN dispatch path as the
+  unblocked alternative. Lives in the library so any consumer (amdead,
+  wtf-windows, sysdiagnose, ...) gets the surface "for free" without
+  needing to override `info`.
+
+- **`[shadowed]` marker in `tree`** (library `render_tree` and
+  dazzlecmd `_cmd_tree`) — tools whose short name is reserved by a
+  meta-command are now flagged in tree output. The inventory still
+  shows them; the dispatch state is flagged. Same library-resident
+  pattern as the `info` surface.
+
+### Fixed
+
+- **Issue #56**: amdead's `core:setup` tool plus
+  `engine.meta_registry.override("setup", handler=...)` no longer
+  produces `Warning: Tool 'setup' conflicts with reserved command,
+  skipping` on every invocation. The warning fires only when the
+  conflict is unintended (no override registered) — the original
+  diagnostic value is preserved.
+
+### Refs
+
+- Closes #56 (warning suppression + discoverability replacements)
+- Refs #50 (Phase 4e retrospective; Tier 1 commit 1)
+- Refs #30 (Phase 4 epic; Tier 1 of master closeout plan)
+
+### Tests
+
+- `tests/test_meta_command_registry.py::TestOverride` — 4 new tests
+  for `user_overrides()` tracking.
+- `tests/test_cli_helpers.py::TestBuildToolSubparsers` — 4 new tests
+  for `exempt_from_warning` behavior.
+- `tests/test_default_meta_commands.py::TestRenderInfo` — 3 new
+  tests for the library-side shadow-status block (no-override case,
+  override-acknowledged case, regression guard for non-shadowed
+  tools).
+- `tests/test_default_meta_commands.py::TestRenderTree` — 2 new
+  tests for the library-side `[shadowed]` marker.
+- Human checklist:
+  `tests/checklists/v0.7.30__Tier1A__issue-56-shadow-warning-and-discoverability.md`.
+- Total: 947 passed, 13 skipped.
+
+
 ## [0.7.29] - 2026-05-06
 
 Phase 4e closeout housekeeping. Test infrastructure fixes, backfill of

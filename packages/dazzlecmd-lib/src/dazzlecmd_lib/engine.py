@@ -1402,9 +1402,19 @@ class AggregatorEngine:
         if self.is_root:
             self.meta_registry.build_parsers(subparsers)
 
-        # Register one subparser per discovered tool (reserved-filtered)
+        # Register one subparser per discovered tool (reserved-filtered).
+        # Pass meta-registry's user_overrides() as exempt_from_warning so
+        # deliberately-overridden conflicts (e.g. amdead's `core:setup`
+        # plus engine.meta_registry.override("setup", ...)) don't fire
+        # the warning on every invocation. Unintended conflicts (no
+        # override) still warn -- that diagnostic remains valuable.
         reserved = self.reserved_commands
-        _ch.build_tool_subparsers(subparsers, self.projects, reserved)
+        _ch.build_tool_subparsers(
+            subparsers,
+            self.projects,
+            reserved,
+            exempt_from_warning=self.meta_registry.user_overrides(),
+        )
 
         # Lock the registry: dispatch has begun, no more registrations.
         self.meta_registry.lock()

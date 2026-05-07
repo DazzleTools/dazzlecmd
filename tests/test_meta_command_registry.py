@@ -144,6 +144,44 @@ class TestOverride:
         assert parser is new_parser
         assert handler is new_handler
 
+    def test_override_records_user_override(self):
+        """override() records the name in user_overrides() for #56 warning suppression."""
+        r = MetaCommandRegistry()
+        r.register("list", _dummy_parser_named("list"), _dummy_handler)
+        assert r.user_overrides() == frozenset()  # initially empty
+        r.override("list", handler=_make_return_handler(2))
+        assert r.user_overrides() == frozenset({"list"})
+
+    def test_user_overrides_returns_frozenset(self):
+        """user_overrides() returns a frozenset (immutable, safe to expose)."""
+        r = MetaCommandRegistry()
+        r.register("list", _dummy_parser_named("list"), _dummy_handler)
+        r.override("list", handler=_make_return_handler(2))
+        result = r.user_overrides()
+        assert isinstance(result, frozenset)
+        # Mutating the returned set must not affect internal state
+        with pytest.raises(AttributeError):
+            result.add("foo")  # frozenset has no add
+
+    def test_user_overrides_tracks_multiple(self):
+        """Multiple override() calls all get tracked."""
+        r = MetaCommandRegistry()
+        r.register("list", _dummy_parser_named("list"), _dummy_handler)
+        r.register("info", _dummy_parser_named("info"), _dummy_handler)
+        r.register("setup", _dummy_parser_named("setup"), _dummy_handler)
+        r.override("list", handler=_make_return_handler(1))
+        r.override("setup", handler=_make_return_handler(2))
+        assert r.user_overrides() == frozenset({"list", "setup"})
+        # info was registered but never overridden
+        assert "info" not in r.user_overrides()
+
+    def test_register_does_not_record_user_override(self):
+        """register() (library defaults) is NOT a user override."""
+        r = MetaCommandRegistry()
+        r.register("list", _dummy_parser_named("list"), _dummy_handler)
+        # register != override; user_overrides stays empty
+        assert r.user_overrides() == frozenset()
+
     def test_override_positional_args(self):
         """``override("name", parser_factory, handler)`` positional form still works."""
         r = MetaCommandRegistry()

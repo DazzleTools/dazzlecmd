@@ -307,6 +307,44 @@ class TestRenderInfo:
         rc = dmc.info_handler(_args(tool="alpha"), engine, projects, [], None)
         assert rc == 0
 
+    def test_shadow_block_when_tool_shadows_meta_no_override(self, capsys):
+        """Tool short-named after a reserved meta-command, no override
+        registered: shadow block must surface the dispatch state and tell
+        the user the tool is unreachable via short name (issue #56)."""
+        projects = [_project("info", fqcn="amdead:info", description="probe")]
+        engine = _engine_with(projects)
+        rc = dmc.render_info(_args(tool="amdead:info"), projects, engine=engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Shadow status:" in out
+        assert "library default meta-command: info" in out
+        assert "aggregator tool: amdead:info" in out
+        assert "NOT overridden" in out
+        assert "amdead:info" in out
+
+    def test_shadow_block_when_tool_shadows_meta_with_override(self, capsys):
+        """Same shadow but the aggregator called override() to chain --
+        block must say the override IS the acknowledgment (issue #56)."""
+        projects = [_project("info", fqcn="amdead:info")]
+        engine = _engine_with(projects)
+        engine.meta_registry.override("info", handler=lambda *a, **k: 0)
+        rc = dmc.render_info(_args(tool="amdead:info"), projects, engine=engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Shadow status:" in out
+        assert "has overridden the handler" in out
+        assert "NOT overridden" not in out
+
+    def test_no_shadow_block_when_not_reserved(self, capsys):
+        """Regression guard: non-shadowed tools must not see a shadow
+        block (the block only appears for genuine name conflicts)."""
+        projects = [_project("alpha", fqcn="amdead:alpha")]
+        engine = _engine_with(projects)
+        rc = dmc.render_info(_args(tool="alpha"), projects, engine=engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Shadow status:" not in out
+
 
 class TestInfoParserFactory:
     def test_registers_subparser_with_tool_arg(self):
@@ -515,6 +553,32 @@ class TestRenderTree:
         engine = _engine(command="dz")
         rc = dmc.render_tree(_args(kit="nonexistent"), engine, [], [], None)
         assert rc == 1
+
+    def test_shadow_marker_when_tool_shadows_meta(self, capsys):
+        """Tools whose short name conflicts with a reserved meta-command
+        must render with [shadowed] in tree output (issue #56)."""
+        projects = [
+            _project("info", kit="amdead", fqcn="amdead:info"),
+            _project("alpha", kit="amdead", fqcn="amdead:alpha"),
+        ]
+        engine = _engine_with(projects)
+        rc = dmc.render_tree(_args(), engine, projects, [], None)
+        assert rc == 0
+        out = capsys.readouterr().out
+        # Shadowed line shows the marker
+        assert "amdead:info [shadowed]" in out
+        # Non-shadowed line does NOT
+        assert "amdead:alpha [shadowed]" not in out
+        assert "amdead:alpha" in out
+
+    def test_no_shadow_marker_when_not_reserved(self, capsys):
+        """Regression guard: tree output must not flag non-shadowed tools."""
+        projects = [_project("alpha", kit="amdead", fqcn="amdead:alpha")]
+        engine = _engine_with(projects)
+        rc = dmc.render_tree(_args(), engine, projects, [], None)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "[shadowed]" not in out
 
 
 # ---------------------------------------------------------------------------

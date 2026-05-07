@@ -1143,6 +1143,36 @@ def _cmd_info(args, projects, engine):
                 f"(resolved via virtual-kit alias '{ctx.alias_fqcn}' "
                 f"-> '{ctx.canonical_fqcn}')"
             )
+
+    # Shadow status: when this tool's short name conflicts with a
+    # registered meta-command, surface the dispatch state. The library
+    # default takes precedence at parse time; if the aggregator has
+    # called engine.meta_registry.override(<short>, handler=...) the
+    # override is the chain-the-default acknowledgment (per issue #56).
+    short = project.get("name", "")
+    if short and short in engine.reserved_commands:
+        overrides = (
+            engine.meta_registry.user_overrides()
+            if hasattr(engine, "meta_registry")
+            else frozenset()
+        )
+        is_overridden = short in overrides
+        print()
+        print(f"Shadow status: name '{short}' is registered as both")
+        print(f"  - library default meta-command: {short}")
+        print(f"  - aggregator tool: {project.get('_fqcn', short)}")
+        print(f"The library default takes precedence at parse time.")
+        if is_overridden:
+            print(
+                f"The aggregator has overridden the handler "
+                f"(engine.meta_registry.override({short!r}, ...)) to chain both."
+            )
+        else:
+            print(
+                f"The aggregator has NOT overridden the handler. "
+                f"The tool is unreachable via short name '{short}' -- "
+                f"dispatch via FQCN: dz {project.get('_fqcn', short)}"
+            )
     print(f"Name:        {project['name']}")
     print(f"FQCN:        {project.get('_fqcn', 'unknown')}")
     print(f"Kit:         {project.get('_kit_import_name', 'unknown')}")
@@ -2226,7 +2256,17 @@ def _cmd_tree(args, engine):
             # Truncate long descriptions
             if len(desc) > 60:
                 desc = desc[:57] + "..."
-            print(f"{branch_indent}{tool_prefix}{fqcn}  {desc}")
+            # Shadow marker: tool's short name conflicts with a reserved
+            # meta-command. Parser registers the meta-command, not the
+            # tool, so the tool is not dispatchable by short name. The
+            # override-via-handler-chain pattern (engine.meta_registry
+            # .override(...)) keeps both reachable; the marker flags the
+            # state regardless.
+            short = project.get("name", "")
+            shadow_marker = ""
+            if short and short in engine.reserved_commands:
+                shadow_marker = " [shadowed]"
+            print(f"{branch_indent}{tool_prefix}{fqcn}{shadow_marker}  {desc}")
 
     # Virtual-kit branches — rendered as [virtual] with -> arrows to canonicals
     for vkit in virtual_kits:

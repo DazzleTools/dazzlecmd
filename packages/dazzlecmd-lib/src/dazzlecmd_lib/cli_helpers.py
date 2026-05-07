@@ -27,6 +27,7 @@ def build_tool_subparsers(
     *,
     add_help: bool = False,
     warn_on_conflict: bool = True,
+    exempt_from_warning: Optional[set] = None,
 ) -> list:
     """Register one subparser per discovered tool.
 
@@ -47,6 +48,13 @@ def build_tool_subparsers(
         warn_on_conflict: if True (default), print a stderr warning for
             tools skipped due to reserved-command collision. Set False
             to silence (test environments, repeated invocations).
+        exempt_from_warning: optional set of names that are exempt from
+            the conflict warning. Used by the engine to pass
+            ``meta_registry.user_overrides()`` so deliberately-overridden
+            meta-commands don't fire the warning on every invocation.
+            Names in this set still skip parser registration (the meta-
+            command's parser wins), but no warning is emitted — the
+            override is the acknowledgment.
 
     Returns:
         List of the subparsers that were registered. Each has
@@ -54,6 +62,7 @@ def build_tool_subparsers(
         identify which tool was invoked.
     """
     reserved = reserved_commands or set()
+    exempt = exempt_from_warning or set()
     registered = []
     seen_names: set = set()
 
@@ -63,7 +72,7 @@ def build_tool_subparsers(
             continue
 
         if name in reserved:
-            if warn_on_conflict:
+            if warn_on_conflict and name not in exempt:
                 print(
                     f"Warning: Tool {name!r} conflicts with reserved command, skipping",
                     file=_sys.stderr,

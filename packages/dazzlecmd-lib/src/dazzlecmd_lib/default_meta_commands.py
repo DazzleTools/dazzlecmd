@@ -176,6 +176,41 @@ def render_info(args, projects, engine) -> int:
             f"(resolved via virtual-kit alias {ctx.alias_fqcn!r} "
             f"-> {ctx.canonical_fqcn!r})"
         )
+
+    # Shadow status: when this tool's short name conflicts with a
+    # registered meta-command, surface the dispatch state. The library
+    # default takes precedence at parse time; if the aggregator has
+    # called engine.meta_registry.override(<short>, handler=...) the
+    # override is the chain-the-default acknowledgment (per issue #56).
+    short = project.get("name", "")
+    reserved = getattr(engine, "reserved_commands", frozenset())
+    if short and short in reserved:
+        meta_registry = getattr(engine, "meta_registry", None)
+        overrides = (
+            meta_registry.user_overrides()
+            if meta_registry is not None
+            else frozenset()
+        )
+        is_overridden = short in overrides
+        print()
+        print(f"Shadow status: name '{short}' is registered as both")
+        print(f"  - library default meta-command: {short}")
+        print(f"  - aggregator tool: {project.get('_fqcn', short)}")
+        print(f"The library default takes precedence at parse time.")
+        if is_overridden:
+            print(
+                f"The aggregator has overridden the handler "
+                f"(engine.meta_registry.override({short!r}, ...)) "
+                f"to chain both."
+            )
+        else:
+            print(
+                f"The aggregator has NOT overridden the handler. "
+                f"The tool is unreachable via short name '{short}' -- "
+                f"dispatch via FQCN: {project.get('_fqcn', short)}"
+            )
+        print()
+
     print(f"Name:        {project['name']}")
     if project.get("_fqcn"):
         print(f"FQCN:        {project['_fqcn']}")
@@ -457,6 +492,7 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
         if depth_limit is not None and depth_limit < 2:
             continue
 
+        reserved = getattr(engine, "reserved_commands", frozenset())
         branch_indent = "    " if is_last_kit else "|   "
         for j, project in enumerate(tools):
             is_last_tool = (j == len(tools) - 1)
@@ -465,7 +501,11 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
             desc = project.get("description", "")
             if len(desc) > 60:
                 desc = desc[:57] + "..."
-            print(f"{branch_indent}{tool_prefix}{fqcn}  {desc}")
+            # Shadow marker: tools whose short name is reserved by a
+            # meta-command are flagged in tree output (per issue #56).
+            short = project.get("name", "")
+            shadow_marker = " [shadowed]" if short and short in reserved else ""
+            print(f"{branch_indent}{tool_prefix}{fqcn}{shadow_marker}  {desc}")
 
     print()
     print(f"{total_tools} tools across {len(kit_names)} kit(s)")
