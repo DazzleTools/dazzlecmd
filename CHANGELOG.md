@@ -4,6 +4,74 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.34] - 2026-05-07
+
+Phase 4e closeout, Tier 1 commit 6 — the X-22-narrow CLI collapse. dazzlecmd's `_cmd_list`, `_cmd_info`, and `_cmd_tree` collapse to thin wrappers over the library equivalents (`render_list` / `render_info` / `render_tree`). The library now owns every behavior these three commands ever had — sectioned `dz list` with `--show {default,canonical,alias,all}` and `[*]`/`[+]` markers, full `dz info` with `--raw` / `--platform` / shadow status / linked-project line, and `dz tree` with `--show-disabled` and `[always_active]` / `[aggregator]` / `[disabled]` markers. The library version was extended in this commit to reach byte-equivalence with dazzlecmd's prior tree behavior, so no user-visible surface was dropped.
+
+This is the structural payoff for the v0.7.30 → v0.7.33 library-parity arc. Cumulative net delete from `cli.py`: about 950 lines (2521 → 1571). dazzlecmd is now a "thin instance" of dazzlecmd-lib for the list/info/tree surface, the same shape as amdead and wtf-windows. The remaining dazzlecmd-specific surfaces (kit management, mode switching, scaffolding, setup) stay on the original dispatch pattern and are addressed by the future X-22-full work.
+
+`dazzlecmd-lib` bumps `0.4.1` → `0.5.0` (MINOR) for the new public API surface added to `render_tree` (`--show-disabled` flag, kit-state computation from user config, canonical-kit `[always_active]` / `[aggregator]` / `[disabled]` markers, JSON output keys `always_active` / `is_aggregator` / `state`). The lib also fixes one small `render_info` discrepancy: the "tool not found" message now uses `engine.command` for the hint (matches the dazzlecmd CLI's prior wording for any consumer; previously the lib emitted a bare `'list'` hint and printed to stderr).
+
+The thorough-cleanup discipline applied: pre-implementation grep across `_build_list_entries`, `_wrap_description`, `_print_runtime_*`, `_RUNTIME_DISPATCH_FIELDS`; full-suite pytest before AND after the collapse; golden-output capture of `dz list` (default + 3 `--show` modes), `dz tree`, `dz info` for safedel + a missing tool — all 7 surfaces verified byte-equivalent to v0.7.33 post-collapse. Live consumer verification: `amdead info detect`, `amdead list`, `wtf list` all unchanged.
+
+Test-suite cleanup: `tests/test_cli_info.py` (23 tests, 406 LOC) deleted. The tests covered the dazzlecmd-side `_print_runtime_raw` / `_print_runtime_resolved` / `_print_runtime_platform_preview` helpers that no longer exist in dazzlecmd; the library's `tests/test_default_meta_commands.py::TestRenderInfo` provides equivalent integration coverage. One test (`TestRenderInfo::test_not_found`) updated to check stdout instead of stderr (matches the new behavior; was checking that the not-found message went to stderr).
+
+### Changed
+
+- **`src/dazzlecmd/cli.py` `_cmd_list`** — collapses from ~262 LOC to a 9-LOC thin wrapper that calls `dazzlecmd_lib.default_meta_commands.render_list(args, projects, engine=engine)`. All `--show` modes, sectioned layout, marker rendering, footer counts, and virtual-kit empty-section injection now sourced from the library.
+
+- **`src/dazzlecmd/cli.py` `_cmd_info`** — collapses from ~104 LOC to an 8-LOC thin wrapper that calls `render_info(args, projects, engine)`. Alias provenance, shadow status, runtime-dispatch resolution, pass-through marker, deps display, setup hint, and "Linked to:" line all sourced from the library.
+
+- **`src/dazzlecmd/cli.py` `_cmd_tree`** — collapses from ~217 LOC to a 12-LOC thin wrapper that calls `render_tree(args, engine, engine.projects, engine.kits, engine.project_root)`. The `--show-disabled` flag, kit-info computation, kit markers, JSON output extensions, and disabled-state filtering are all now in the library.
+
+- **`src/dazzlecmd/cli.py` `_build_list_entries`** — deleted (~150 LOC). The public `dazzlecmd_lib.default_meta_commands.build_list_entries` (added in v0.7.31) is the canonical implementation.
+
+- **`src/dazzlecmd/cli.py` `_wrap_description`** — deleted as a local definition; replaced with a back-compat re-export from `dazzlecmd_lib.default_meta_commands._wrap_description` so the remaining consumer (`_cmd_kit_list`'s virtual-kit listing path; Category C, deferred to X-22-full) keeps working without import-path edits.
+
+- **`src/dazzlecmd/cli.py` runtime helpers** — `_RUNTIME_DISPATCH_FIELDS` constant + `_print_runtime_dispatch_fields` / `_print_runtime_resolved` / `_print_runtime_raw` / `_print_runtime_platform_preview` (~230 LOC) deleted. The library's equivalents (added verbatim in v0.7.32) are the canonical implementations.
+
+- **Library `render_tree`** — extended to match dazzlecmd's prior CLI behavior: accepts `args.show_disabled` and switches the project source to `engine.all_projects`; computes `kit_info` (`always_active`, `is_aggregator` based on whether the kit has a nested `kits/` subdir); computes `_kit_state` from `engine._get_user_config()` (`active_kits` / `disabled_kits`); renders `[always_active]` / `[aggregator]` / `[disabled]` markers on canonical-kit headers; adds disabled-state markers to virtual-kit headers; adds `always_active` / `is_aggregator` / `state` keys to JSON output. The dazzlecmd CLI's `_cmd_tree` `--show-disabled` flag is preserved on the dazzlecmd parser side and the wrapper passes it through unchanged.
+
+- **Library `tree_parser_factory`** — adds the `--show-disabled` argument (matching dazzlecmd's prior parser).
+
+- **Library `render_info` "not found" message** — now `f"Tool '{tool_name}' not found. Use '{engine.command} list' to see available tools."` printed to stdout. Previously the message used a bare `'list'` hint and went to stderr. This matches dazzlecmd's prior wording and means amdead, wtf, and any future consumer get a hint that uses their own command name.
+
+- **`dazzlecmd-lib` version**: `0.4.1` → `0.5.0` (MINOR — new public API surface in `tree_parser_factory` + `render_tree`; small change in `render_info` not-found message).
+
+- **dazzlecmd's `dazzlecmd-lib` pin**: `>=0.4.1` → `>=0.5.0`. The alias package's pin advances accordingly.
+
+- **`packages/dazzlecmd-lib/CHANGELOG.md`** — adds the [0.5.0] entry.
+
+### Removed
+
+- **`src/dazzlecmd/cli.py` private helpers** — `_build_list_entries`, the runtime helpers (`_RUNTIME_DISPATCH_FIELDS` + 4 `_print_runtime_*`), and the local definition of `_wrap_description`. Total: ~430 LOC removed (the library now owns these). `_wrap_description` retained as a back-compat re-export.
+
+- **`tests/test_cli_info.py`** — 23 tests, 406 LOC. Library has equivalent integration coverage.
+
+### Tests
+
+- 959 passed, 13 skipped (down from 984 in v0.7.33 — net −23 from `test_cli_info.py` deletion; library coverage unchanged at 24 `TestRenderInfo` tests + 14 `TestRenderTree` tests + 14 `TestRenderList` tests + 9 `TestBuildListEntries` tests).
+
+- `tests/test_default_meta_commands.py::TestRenderInfo::test_not_found` updated for the not-found message stdout change.
+
+- Golden-output verification: 7 surfaces captured pre-collapse (`tests/one-offs/x22-narrow-golden/`) and diffed post-collapse — all byte-equivalent.
+
+- Human checklist: `tests/checklists/v0.7.34__Tier1B__x-22-narrow-cli-collapse.md`.
+
+### Verification
+
+- `dz list` / `dz list --show all/canonical/alias` / `dz tree` / `dz info safedel` / `dz info dz` (not-found) — all byte-equivalent to v0.7.33 baseline.
+
+- `amdead info detect` — full info banner unchanged. `amdead list` — sectioned output unchanged.
+
+- `wtf list` unchanged. `wtf info` has a pre-existing wtf-windows bug (`_wtf_info_handler` calls `render_info(args, projects)` with the v0.7.31 signature, missing `engine`); not introduced by this commit, out of scope. Future wtf upstream PR (4e-T1) will address.
+
+### Refs
+
+- Refs #50 (Phase 4e retrospective; Tier 1 commit 6 of master plan).
+- Refs #30 (Phase 4 epic; Tier 1 of master closeout plan).
+- Refs #27 (dazzlecmd-lib package — full list/info/tree parity now in the library).
+
 ## [0.7.33] - 2026-05-07
 
 Phase 4e closeout, Tier 1 commit 5 (the linked-project-helpers port — final library prerequisite before the v0.7.34 X-22-narrow CLI collapse). Library `dazzlecmd-lib::paths` gains `is_linked_project()` and `get_link_target()` helpers, ported verbatim from `dazzlecmd.importer`. Library `render_info` now displays a "Linked to: <target>" line when a project's `_dir` is a symlink or Windows junction. dazzlecmd's `importer` module keeps the old import surface stable via a back-compat re-export, so `mode.py`, `tests/test_importer.py`, and any external consumer that imports from `dazzlecmd.importer` continue to work unchanged.

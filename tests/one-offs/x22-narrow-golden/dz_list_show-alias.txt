@@ -1,0 +1,13 @@
+﻿  Name              Kit     Description
+  -------------------------------------
+  cleanup           claude  Stage and commit Claude Code state files -- noise
+                            (transient) or user (configs, skills, session logs)
+  session-metadata  claude  Catalog Claude Code sessions (lost or live) with
+                            artifact cross-referencing, known-docs discovery,
+                            and navigable symlinks
+  sesslog-datefix   claude  Fix timestamps on Claude Code session log
+                            directories after git operations corrupt them
+  view              claude  Open Claude Code sessions in the history viewer
+                            from the command line
+
+  4 alias(es) found

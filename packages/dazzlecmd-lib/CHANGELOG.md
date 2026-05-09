@@ -8,6 +8,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.5.0] - 2026-05-07
+
+Ships with dazzlecmd v0.7.34 (Tier 1 commit 6 -- the X-22-narrow CLI collapse). The library reaches full byte-equivalence parity with dazzlecmd's pre-collapse `_cmd_list` / `_cmd_info` / `_cmd_tree` so dazzlecmd can collapse those commands to thin wrappers without losing any user-visible surface.
+
+### Added
+
+- **`tree_parser_factory --show-disabled`** -- the `dz tree` parser now accepts `--show-disabled`, matching dazzlecmd's pre-collapse CLI parser. Library consumers (amdead, wtf-windows, sysdiagnose, future personal aggregators) inherit the flag automatically.
+
+- **`render_tree` engine-aware tree behaviors** -- when `args.show_disabled` is set, the function uses `engine.all_projects` in place of the supplied `projects`. Kit headers render `[always_active]` / `[aggregator]` / `[disabled]` markers, computed from `engine.kits` (always_active flag, presence of a nested `kits/` subdir) and from `engine._get_user_config()` (`active_kits` / `disabled_kits`). Virtual-kit headers also render `[disabled]` when the kit's state computes as disabled. JSON output gains `always_active`, `is_aggregator`, and `state` keys per kit.
+
+### Changed
+
+- **`render_info` "tool not found" message** -- now `f"Tool '{tool_name}' not found. Use '{engine.command} list' to see available tools."` printed to stdout. Previously the message was `f"Tool {tool_name!r} not found. Run 'list' to see available tools."` printed to stderr. The new wording uses the consumer's command name (so amdead users see `Use 'amdead list' to see available tools.` rather than a bare `list` hint), and prints to stdout to match dazzlecmd's pre-collapse CLI behavior. Behavior change for any consumer that was relying on the message going to stderr or the exact prior wording. Justified for v0.5.0 because both consumers (amdead, wtf) get a more useful message and the pre-1.0 lib version policy permits the minor wording change.
+
+### Notes
+
+- `render_tree` and `render_info` were ported from dazzlecmd's `cli.py` (lines 2098-2312 and 1119-1220 respectively) per copy-don't-rewrite discipline. The dazzlecmd CLI's `_cmd_tree` then collapsed to a thin wrapper calling `render_tree`. Same pattern as the v0.4.0 (info-parity port) and v0.4.1 (link-helpers port) commits.
+
+- The library's `_wrap_description` is now also imported by dazzlecmd's `cli.py` as a back-compat shim (the remaining consumer is `_cmd_kit_list`'s virtual-kit listing path; Category C, deferred to a future X-22-full collapse).
+
 ## [0.4.1] - 2026-05-07
 
 Ships with dazzlecmd v0.7.33 (Tier 1 commit 5 of the master closeout plan).

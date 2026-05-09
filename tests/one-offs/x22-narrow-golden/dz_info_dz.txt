@@ -1,0 +1,1 @@
+﻿Tool 'dz' not found. Use 'dz list' to see available tools.

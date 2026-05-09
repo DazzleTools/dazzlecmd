@@ -894,9 +894,9 @@ def render_info(args, projects, engine) -> int:
     tool_name = args.tool
     project, ctx = engine.find_project(tool_name)
     if project is None:
+        cmd = getattr(engine, "command", None) or "dz"
         print(
-            f"Tool {tool_name!r} not found. Run 'list' to see available tools.",
-            file=_sys.stderr,
+            f"Tool '{tool_name}' not found. Use '{cmd} list' to see available tools."
         )
         return 1
 
@@ -1193,6 +1193,10 @@ def tree_parser_factory(subparsers):
         "--kit", "-k", default=None,
         help="Show only this kit's subtree",
     )
+    p.add_argument(
+        "--show-disabled", action="store_true",
+        help="Include disabled kits in the output",
+    )
     p.set_defaults(_meta="tree")
 
 
@@ -1201,6 +1205,13 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
 
     Groups projects by ``_kit_import_name``. Each tool prints its FQCN
     and (truncated) description.
+
+    When ``--show-disabled`` is set, ``engine.all_projects`` is used in
+    place of the filtered ``projects`` argument so disabled-kit tools
+    appear too. Kit headers carry ``[always_active]`` /
+    ``[aggregator]`` / ``[disabled]`` markers based on the engine's
+    user-config view (``active_kits`` / ``disabled_kits``) and on
+    whether the kit's directory has a nested ``kits/`` subdir.
     """
     if engine is None:
         print("Error: tree requires engine context", file=_sys.stderr)
@@ -1209,11 +1220,57 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
     as_json = getattr(args, "json", False)
     depth_limit = getattr(args, "depth", None)
     kit_filter = getattr(args, "kit", None)
+    show_disabled = getattr(args, "show_disabled", False)
+
+    # Build the hierarchical view from the appropriate project list.
+    # --show-disabled uses all_projects (includes disabled kits' tools);
+    # default uses the supplied projects (typically engine.projects, active only).
+    if show_disabled:
+        projects = getattr(engine, "all_projects", projects)
 
     by_kit: dict[str, list] = {}
     for project in projects:
         kit_name = project.get("_kit_import_name", "?")
         by_kit.setdefault(kit_name, []).append(project)
+
+    # Build a kit info dict for metadata (always_active, is_aggregator).
+    # Aggregator detection: a kit whose directory contains its own ``kits/``
+    # subdir is itself an aggregator (e.g., wtf-windows imported under dz).
+    import os as _os
+    kit_info: dict[str, dict] = {}
+    tools_dir = getattr(engine, "tools_dir", "tools")
+    proj_root = getattr(engine, "project_root", project_root) or ""
+    for kit in getattr(engine, "kits", []):
+        name = kit.get("_kit_name") or kit.get("name")
+        if not name:
+            continue
+        tools_path = _os.path.join(proj_root, tools_dir)
+        candidate_root = _os.path.join(tools_path, name)
+        is_aggregator = _os.path.isdir(_os.path.join(candidate_root, "kits"))
+        kit_info[name] = {
+            "always_active": bool(kit.get("always_active")),
+            "is_aggregator": is_aggregator,
+        }
+
+    # Compute enabled/disabled status from the engine's user config.
+    config = engine._get_user_config() if hasattr(engine, "_get_user_config") else {}
+    enabled_list = config.get("active_kits") if isinstance(config, dict) else None
+    disabled_list = (config.get("disabled_kits") if isinstance(config, dict) else None) or []
+    disabled_set = set(disabled_list) if isinstance(disabled_list, list) else set()
+    enabled_set = set(enabled_list) if isinstance(enabled_list, list) else set()
+
+    def _kit_state(kit_name):
+        if kit_name in disabled_set:
+            return "disabled"
+        if enabled_set and kit_name not in enabled_set:
+            info = kit_info.get(kit_name, {})
+            if info.get("always_active"):
+                return "enabled (always_active)"
+            return "disabled (not in active_kits)"
+        info = kit_info.get(kit_name, {})
+        if info.get("always_active"):
+            return "enabled (always_active)"
+        return "enabled"
 
     kit_names = sorted(by_kit.keys())
     if kit_filter:
@@ -1221,6 +1278,13 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
         if not kit_names:
             print(f"Error: kit {kit_filter!r} not found.", file=_sys.stderr)
             return 1
+
+    # Filter out disabled kits unless --show-disabled
+    if not show_disabled:
+        kit_names = [
+            k for k in kit_names
+            if _kit_state(k) not in ("disabled", "disabled (not in active_kits)")
+        ]
 
     if as_json:
         result = {
@@ -1230,6 +1294,7 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
             "kits": {},
         }
         for kit_name in kit_names:
+            info = kit_info.get(kit_name, {})
             tools_data = []
             for project in sorted(by_kit[kit_name], key=lambda p: p.get("_fqcn", "")):
                 tools_data.append({
@@ -1239,6 +1304,9 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
                 })
             result["kits"][kit_name] = {
                 "name": kit_name,
+                "always_active": info.get("always_active", False),
+                "is_aggregator": info.get("is_aggregator", False),
+                "state": _kit_state(kit_name),
                 "tools": tools_data,
             }
         print(_json.dumps(result, indent=2))
@@ -1257,7 +1325,10 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
     # includes both canonical and virtual after Phase 4e).
     virtual_kits = [
         k for k in getattr(engine, "kits", [])
-        if k.get("virtual") and k.get("_kit_active", True)
+        if k.get("virtual") and (
+            show_disabled or
+            _kit_state(k.get("_kit_name") or k.get("name")) not in ("disabled", "disabled (not in active_kits)")
+        )
     ]
     # Respect --kit filter for virtual kits too
     if kit_filter:
@@ -1277,7 +1348,19 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
         branch_idx += 1
         is_last_branch = (branch_idx == all_branches)
         kit_prefix = "\\-- " if is_last_branch else "+-- "
-        print(f"{kit_prefix}{kit_name}")
+        info = kit_info.get(kit_name, {})
+        state = _kit_state(kit_name)
+
+        markers = []
+        if info.get("always_active"):
+            markers.append("always_active")
+        if info.get("is_aggregator"):
+            markers.append("aggregator")
+        if "disabled" in state:
+            markers.append("disabled")
+        marker_str = f" [{', '.join(markers)}]" if markers else ""
+
+        print(f"{kit_prefix}{kit_name}{marker_str}")
 
         tools = sorted(by_kit[kit_name], key=lambda p: p.get("_fqcn", ""))
         total_tools += len(tools)
@@ -1313,10 +1396,13 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
         is_last_branch = (branch_idx == all_branches)
         kit_prefix = "\\-- " if is_last_branch else "+-- "
         vk_name = vkit.get("_kit_name") or vkit.get("name")
+        state = _kit_state(vk_name)
 
         markers = ["virtual"]
         if vkit.get("always_active"):
             markers.append("always_active")
+        if "disabled" in state:
+            markers.append("disabled")
         marker_str = f" [{', '.join(markers)}]"
         print(f"{kit_prefix}{vk_name}{marker_str}")
 

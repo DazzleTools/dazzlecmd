@@ -1,0 +1,48 @@
+﻿core:
+  find     Cross-platform file search powered by fd
+  fixpath  Fix mangled paths and optionally open, copy, or browse files
+  links    Detect and display filesystem links (symlinks, junctions, hardlinks,
+           dazzlelinks)
+  listall  Flexible directory structure listing with sorting, collection modes,
+           and output formatting
+  rn       Rename files using regular expressions
+  safedel  Safe file/directory deletion with link-aware classification,
+           metadata preservation, and recoverable trash store
+
+dazzletools:
+  claude-cleanup           Stage and commit Claude Code state files -- noise
+                           (transient) or user (configs, skills, session logs)
+  claude-session-metadata  Catalog Claude Code sessions (lost or live) with
+                           artifact cross-referencing, known-docs discovery,
+                           and navigable symlinks
+  claude-sesslog-datefix   Fix timestamps on Claude Code session log
+                           directories after git operations corrupt them
+  claudeview               Open Claude Code sessions in the history viewer from
+                           the command line
+  delete-nul               Delete Windows NUL device files that get
+                           accidentally created
+  dos2unix                 Pure-Python cross-platform line ending converter
+                           (dos2unix/unix2dos)
+  extract-all              Recursively extract archives (exe, zip, msi, 7z,
+                           etc.) and locate files within by glob or regex
+                           pattern
+  git                      Git repo state inspector -- composition, workspace,
+                           and form at a glance
+  git-snapshot             Lightweight named checkpoints for git working state
+                           (save, diff, apply, restore)
+  github                   Open GitHub project pages, issues, PRs, and releases
+                           from any git repo
+  md-rm-img                Strip inline base64 image data from markdown files;
+                           relink references to on-disk source via local search
+                           + dz fixpath
+  private-init             Initialize private/ as a standalone versioned git
+                           repo inside any project
+  split                    Split text by separator with optional token filtering
+  srch-path                Search the system PATH for executables and commands
+
+wtf:core:
+  locked     Why did my Windows PC lock? Diagnoses lock causes, identifies who
+             logged in.
+  restarted  Why did my Windows PC restart? One command, instant answers.
+
+  22 tool(s) found

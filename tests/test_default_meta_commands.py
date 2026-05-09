@@ -473,8 +473,11 @@ class TestRenderInfo:
         engine = _engine_with([])
         rc = dmc.render_info(_args(tool="nonexistent"), [], engine=engine)
         assert rc == 1
-        err = capsys.readouterr().err
-        assert "not found" in err.lower()
+        captured = capsys.readouterr()
+        # v0.7.34: not-found message goes to stdout (matches dazzlecmd CLI's
+        # prior behavior; uses engine.command for the "Use 'X list'" hint).
+        assert "not found" in captured.out.lower()
+        assert "list" in captured.out.lower()
 
     def test_basic_fields_printed(self, capsys):
         projects = [
