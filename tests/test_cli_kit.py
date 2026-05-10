@@ -16,12 +16,14 @@ from dazzlecmd.cli import (
     _cmd_kit_focus,
     _cmd_kit_reset,
     _cmd_kit_favorite,
+    _cmd_kit_favorite_migrate_stale,
     _cmd_kit_unfavorite,
     _cmd_kit_silence,
     _cmd_kit_unsilence,
     _cmd_kit_shadow,
     _cmd_kit_unshadow,
     _cmd_kit_silenced,
+    _suggest_favorite_replacement,
 )
 
 
@@ -211,6 +213,252 @@ class TestKitFavorite:
         engine = _engine(tmp_path, monkeypatch)
         rc = _cmd_kit_unfavorite(_Args(short="ghost"), engine)
         assert rc == 0
+
+
+# ---------------------------------------------------------------------------
+# dz kit favorite --migrate-stale (4e-T2, v0.7.35)
+# ---------------------------------------------------------------------------
+
+
+def _engine_with_canonical(tmp_path, monkeypatch, canonicals=(), aliases=()):
+    """Build an engine with a populated FQCNIndex.
+
+    ``canonicals`` is an iterable of FQCN strings; each becomes a project
+    in ``canonical_index`` keyed on its FQCN. Each canonical also gets a
+    ``short_index`` entry under its last colon-segment so that
+    `_suggest_favorite_replacement` can find single-match short names.
+
+    ``aliases`` is an iterable of ``(alias_fqcn, canonical_fqcn)`` tuples.
+    """
+    engine = _engine(tmp_path, monkeypatch)
+    for fqcn in canonicals:
+        project = {
+            "name": fqcn.rsplit(":", 1)[-1] if ":" in fqcn else fqcn,
+            "_fqcn": fqcn,
+        }
+        engine.fqcn_index.canonical_index[fqcn] = project
+        engine.fqcn_index.short_index.setdefault(project["name"], []).append(fqcn)
+    for alias_fqcn, canonical_fqcn in aliases:
+        engine.fqcn_index.alias_index[alias_fqcn] = canonical_fqcn
+    return engine
+
+
+class TestKitFavoriteMigrateStale:
+
+    def test_no_favorites_returns_zero(self, tmp_path, monkeypatch, capsys):
+        engine = _engine(tmp_path, monkeypatch)
+        rc = _cmd_kit_favorite_migrate_stale(engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "No favorites" in out
+
+    def test_all_valid_favorites_returns_zero(self, tmp_path, monkeypatch, capsys):
+        engine = _engine_with_canonical(
+            tmp_path, monkeypatch, canonicals=["core:safedel"]
+        )
+        # Pre-populate a valid favorite via the existing handler
+        _cmd_kit_favorite(
+            _Args(short="sd", fqcn="core:safedel", migrate_stale=False), engine
+        )
+        capsys.readouterr()  # drain
+        rc = _cmd_kit_favorite_migrate_stale(engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "No stale favorites" in out
+
+    def test_stale_favorite_listed_when_not_tty(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        engine = _engine_with_canonical(tmp_path, monkeypatch, canonicals=[])
+        # Bypass the stale-target warning so we set a stale favorite cleanly
+        config_path = tmp_path / "config.json"
+        config_path.write_text(
+            json.dumps({"favorites": {"sd": "core:gone"}}),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+        rc = _cmd_kit_favorite_migrate_stale(engine)
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "stale favorite" in err.lower()
+        assert "sd -> core:gone" in err
+        assert "interactive shell" in err.lower()
+
+    def test_stale_with_suggestion_listed_when_not_tty(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        # Populate a canonical 'core:safedel' so its short 'safedel' has a
+        # single discoverable target -> _suggest_favorite_replacement returns it.
+        engine = _engine_with_canonical(
+            tmp_path, monkeypatch, canonicals=["core:safedel"]
+        )
+        config_path = tmp_path / "config.json"
+        config_path.write_text(
+            json.dumps({"favorites": {"safedel": "old:safedel-deprecated"}}),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+        rc = _cmd_kit_favorite_migrate_stale(engine)
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "suggestion: core:safedel" in err
+
+    def test_interactive_remap(self, tmp_path, monkeypatch, capsys):
+        engine = _engine_with_canonical(
+            tmp_path, monkeypatch, canonicals=["core:safedel"]
+        )
+        config_path = tmp_path / "config.json"
+        config_path.write_text(
+            json.dumps({"favorites": {"safedel": "old:safedel-deprecated"}}),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr("builtins.input", lambda _prompt: "r")
+        rc = _cmd_kit_favorite_migrate_stale(engine)
+        assert rc == 0
+        config = _read_config(tmp_path)
+        assert config["favorites"] == {"safedel": "core:safedel"}
+        out = capsys.readouterr().out
+        assert "remapped" in out
+
+    def test_interactive_drop(self, tmp_path, monkeypatch, capsys):
+        engine = _engine_with_canonical(tmp_path, monkeypatch, canonicals=[])
+        config_path = tmp_path / "config.json"
+        config_path.write_text(
+            json.dumps({"favorites": {"sd": "old:safedel-deprecated"}}),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr("builtins.input", lambda _prompt: "d")
+        rc = _cmd_kit_favorite_migrate_stale(engine)
+        assert rc == 0
+        config = _read_config(tmp_path)
+        assert config.get("favorites", {}) == {}
+        out = capsys.readouterr().out
+        assert "dropped" in out
+
+    def test_interactive_skip_keeps_stale(self, tmp_path, monkeypatch, capsys):
+        engine = _engine_with_canonical(tmp_path, monkeypatch, canonicals=[])
+        config_path = tmp_path / "config.json"
+        config_path.write_text(
+            json.dumps({"favorites": {"sd": "old:gone"}}),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+        monkeypatch.setattr("builtins.input", lambda _prompt: "s")
+        rc = _cmd_kit_favorite_migrate_stale(engine)
+        assert rc == 0
+        config = _read_config(tmp_path)
+        # Skip preserves the stale entry
+        assert config.get("favorites", {}) == {"sd": "old:gone"}
+        out = capsys.readouterr().out
+        assert "skipped" in out
+
+    def test_alias_target_resolves_canonical(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        # A favorite that targets an alias whose canonical IS discovered
+        # is NOT stale -- mirrors FQCNIndex.resolve favorite-on-alias.
+        # Real virtual-kit alias_index keys are two-segment <vk>:<short>
+        # (e.g., 'claude:cleanup' -> 'dazzletools:claude-cleanup'), NOT
+        # the fully-qualified <agg>:<vk>:<short> dispatch form. A
+        # favorite must use the two-segment form to be alias-resolved.
+        engine = _engine_with_canonical(
+            tmp_path, monkeypatch,
+            canonicals=["dazzletools:claude-cleanup"],
+            aliases=[("claude:cleanup", "dazzletools:claude-cleanup")],
+        )
+        config_path = tmp_path / "config.json"
+        config_path.write_text(
+            json.dumps({"favorites": {"cleanup": "claude:cleanup"}}),
+            encoding="utf-8",
+        )
+        rc = _cmd_kit_favorite_migrate_stale(engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "No stale" in out
+
+    def test_qualified_alias_form_is_stale(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        # The fully-qualified <agg>:<vk>:<short> form is a valid dispatch
+        # path (resolved at find_project time, not via alias_index lookup),
+        # but it's NOT a key in alias_index -- so migrate-stale flags
+        # favorites that use it. Suggestion typically points at the
+        # canonical, which is the right migration target.
+        engine = _engine_with_canonical(
+            tmp_path, monkeypatch,
+            canonicals=["dazzletools:claude-cleanup"],
+            aliases=[("claude:cleanup", "dazzletools:claude-cleanup")],
+        )
+        config_path = tmp_path / "config.json"
+        config_path.write_text(
+            json.dumps({"favorites": {
+                "cleanup": "dazzletools:claude:cleanup"
+            }}),
+            encoding="utf-8",
+        )
+        monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+        rc = _cmd_kit_favorite_migrate_stale(engine)
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "stale" in err.lower()
+        assert "dazzletools:claude:cleanup" in err
+
+    def test_dispatch_via_handler_with_migrate_stale_flag(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        """The handler entry point dispatches --migrate-stale correctly."""
+        engine = _engine(tmp_path, monkeypatch)
+        rc = _cmd_kit_favorite(
+            _Args(short=None, fqcn=None, migrate_stale=True), engine
+        )
+        assert rc == 0  # no favorites configured
+
+    def test_migrate_stale_with_positional_args_errors(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        engine = _engine(tmp_path, monkeypatch)
+        rc = _cmd_kit_favorite(
+            _Args(short="foo", fqcn="core:foo", migrate_stale=True), engine
+        )
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "no positional" in err.lower()
+
+    def test_no_args_no_flag_errors(self, tmp_path, monkeypatch, capsys):
+        engine = _engine(tmp_path, monkeypatch)
+        rc = _cmd_kit_favorite(
+            _Args(short=None, fqcn=None, migrate_stale=False), engine
+        )
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "requires" in err.lower()
+
+
+class TestSuggestFavoriteReplacement:
+
+    def test_single_match_returned(self, tmp_path, monkeypatch):
+        engine = _engine_with_canonical(
+            tmp_path, monkeypatch, canonicals=["core:safedel"]
+        )
+        result = _suggest_favorite_replacement(
+            "safedel", "old:safedel-deprecated", engine
+        )
+        assert result == "core:safedel"
+
+    def test_no_match_returns_none(self, tmp_path, monkeypatch):
+        engine = _engine_with_canonical(tmp_path, monkeypatch, canonicals=[])
+        result = _suggest_favorite_replacement("ghost", "old:ghost", engine)
+        assert result is None
+
+    def test_ambiguous_returns_none(self, tmp_path, monkeypatch):
+        engine = _engine_with_canonical(
+            tmp_path, monkeypatch,
+            canonicals=["core:tool", "extra:tool"],
+        )
+        result = _suggest_favorite_replacement("tool", "old:tool", engine)
+        assert result is None
 
 
 # ---------------------------------------------------------------------------

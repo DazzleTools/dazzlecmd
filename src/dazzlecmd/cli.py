@@ -245,8 +245,23 @@ def _register_meta_commands(subparsers):
         "favorite",
         help="Pin a favorite tool to win short-name resolution on collision",
     )
-    kit_favorite.add_argument("short", help="Short name to bind")
-    kit_favorite.add_argument("fqcn", help="FQCN of the target tool")
+    kit_favorite.add_argument(
+        "short", nargs="?", default=None,
+        help="Short name to bind (omit when using --migrate-stale)",
+    )
+    kit_favorite.add_argument(
+        "fqcn", nargs="?", default=None,
+        help="FQCN of the target tool (omit when using --migrate-stale)",
+    )
+    kit_favorite.add_argument(
+        "--migrate-stale", action="store_true", dest="migrate_stale",
+        help=(
+            "Interactively walk through favorites whose target FQCN is no "
+            "longer discovered (tool removed, renamed, or shadowed). For "
+            "each stale entry, choose to remap, drop, or skip. Non-TTY "
+            "invocations print the stale list and exit non-zero."
+        ),
+    )
     kit_favorite.set_defaults(_meta="kit_favorite")
 
     kit_unfavorite = kit_sub.add_parser(
@@ -1062,12 +1077,35 @@ def _cmd_kit_reset(args, engine):
 
 
 def _cmd_kit_favorite(args, engine):
-    """Set a favorite binding: short name -> FQCN."""
-    short = args.short
-    fqcn = args.fqcn
+    """Set a favorite binding: short name -> FQCN.
+
+    With ``--migrate-stale`` (and no positional args), enters the
+    interactive stale-favorite migration flow instead. See
+    :func:`_cmd_kit_favorite_migrate_stale`.
+    """
     if engine is None:
         print("Error: engine unavailable", file=sys.stderr)
         return 1
+
+    if getattr(args, "migrate_stale", False):
+        if args.short is not None or args.fqcn is not None:
+            print(
+                "Error: --migrate-stale takes no positional arguments.",
+                file=sys.stderr,
+            )
+            return 1
+        return _cmd_kit_favorite_migrate_stale(engine)
+
+    if args.short is None or args.fqcn is None:
+        print(
+            "Error: 'dz kit favorite' requires <short> <fqcn> positional "
+            "args, or use --migrate-stale.",
+            file=sys.stderr,
+        )
+        return 1
+
+    short = args.short
+    fqcn = args.fqcn
 
     # Reject reserved command names
     reserved = engine.reserved_commands
@@ -1099,6 +1137,134 @@ def _cmd_kit_favorite(args, engine):
 
     engine._write_user_config({"favorites": favorites})
     print(f"Favorite set: {short} -> {fqcn}")
+    return 0
+
+
+def _suggest_favorite_replacement(short, stale_fqcn, engine):
+    """Suggest a likely replacement for a stale favorite, or None.
+
+    Heuristic: if exactly one currently-discovered tool registers ``short``
+    as its short name (in ``engine.fqcn_index.short_index``), that's the
+    suggestion. Returns its canonical FQCN.
+
+    For ambiguous cases (zero or multiple short-name matches) we return
+    None and let the user pick manually -- guessing wrong is worse than
+    not guessing.
+    """
+    if not hasattr(engine, "fqcn_index"):
+        return None
+    candidates = engine.fqcn_index.short_index.get(short, [])
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
+
+
+def _cmd_kit_favorite_migrate_stale(engine):
+    """Interactively migrate stale favorites.
+
+    Walks every favorite in user config, checks whether the target FQCN
+    still resolves (matches a canonical OR an alias), and for each stale
+    entry prompts the user to remap, drop, or skip. Writes the updated
+    favorites map back to user config at the end.
+
+    Non-TTY invocations print the stale list with suggestions and exit
+    non-zero -- the migration requires interactive input.
+    """
+    config = engine._get_user_config()
+    favorites = dict(config.get("favorites") or {})
+
+    if not favorites:
+        print("No favorites configured.")
+        return 0
+
+    canonical_index = (
+        engine.fqcn_index.canonical_index
+        if hasattr(engine, "fqcn_index") else {}
+    )
+    alias_index = (
+        engine.fqcn_index.alias_index
+        if hasattr(engine, "fqcn_index") else {}
+    )
+
+    stale = []
+    for short, fqcn in favorites.items():
+        # Same resolution rule as FQCNIndex.resolve favorite-check:
+        # the favorite target must be either a canonical FQCN or an
+        # alias FQCN whose canonical target is currently discovered.
+        if fqcn in canonical_index:
+            continue
+        if fqcn in alias_index:
+            canonical_target = alias_index[fqcn]
+            if canonical_target in canonical_index:
+                continue
+        stale.append((short, fqcn))
+
+    if not stale:
+        print(
+            f"No stale favorites. {len(favorites)} favorite(s) all resolve "
+            f"correctly."
+        )
+        return 0
+
+    if not sys.stdin.isatty():
+        print(f"Found {len(stale)} stale favorite(s):", file=sys.stderr)
+        for short, fqcn in stale:
+            suggestion = _suggest_favorite_replacement(short, fqcn, engine)
+            if suggestion:
+                print(
+                    f"  {short} -> {fqcn}  (suggestion: {suggestion})",
+                    file=sys.stderr,
+                )
+            else:
+                print(f"  {short} -> {fqcn}", file=sys.stderr)
+        print(
+            "\nMigration requires an interactive shell. Re-run from a "
+            "TTY, or use 'dz kit unfavorite <short>' to drop entries "
+            "manually.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(f"Found {len(stale)} stale favorite(s).\n")
+    remapped = 0
+    dropped = 0
+    skipped = 0
+
+    for short, fqcn in stale:
+        suggestion = _suggest_favorite_replacement(short, fqcn, engine)
+        print(f"Stale: {short} -> {fqcn}  (target not found)")
+        if suggestion:
+            print(f"  [r] remap to {suggestion}")
+            choices = "r/d/s"
+        else:
+            print("  (no obvious replacement found)")
+            choices = "d/s"
+        print("  [d] drop this favorite")
+        print("  [s] skip (keep stale)")
+        try:
+            response = input(f"Choose [{choices}]: ").strip().lower()
+        except EOFError:
+            response = "s"
+
+        if response == "r" and suggestion:
+            favorites[short] = suggestion
+            remapped += 1
+            print(f"  -> remapped to {suggestion}")
+        elif response == "d":
+            del favorites[short]
+            dropped += 1
+            print("  -> dropped")
+        else:
+            skipped += 1
+            print("  -> skipped")
+        print()
+
+    if remapped or dropped:
+        engine._write_user_config({"favorites": favorites})
+    print(
+        f"Migration complete: {len(stale)} stale, {remapped} remapped, "
+        f"{dropped} dropped, {skipped} skipped."
+    )
     return 0
 
 

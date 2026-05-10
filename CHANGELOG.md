@@ -4,6 +4,43 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.35] - 2026-05-10
+
+Phase 4e closeout, Tier 1 commit 7 — `dz kit favorite --migrate-stale` interactive subcommand (4e-T2 from the master closeout plan).
+
+The v0.7.27 commit shipped detection-and-warning for stale favorites: when `FQCNIndex.resolve` is asked to look up a name with a favorite mapping whose target FQCN is no longer discovered, the engine prints a warning and falls through to precedence. That detection is fine for surfacing the problem but doesn't help the user fix it — they had to manually `dz kit unfavorite <short>` and `dz kit favorite <short> <new-fqcn>` for each stale entry.
+
+`dz kit favorite --migrate-stale` is the maintenance-cleanup flow: walks every favorite in user config, checks whether its target FQCN still resolves (against canonical_index OR the alias chain), and for each stale entry prompts the user interactively to remap, drop, or skip. Auto-suggests a replacement when exactly one currently-discovered tool registers the same short name (the unambiguous case).
+
+Non-TTY invocations print the stale list with suggestions to stderr and exit non-zero, instructing the user to re-run from an interactive shell or use `dz kit unfavorite <short>` manually. Same logic as a `--check` / read-only mode without adding a separate flag.
+
+### Added
+
+- **`dz kit favorite --migrate-stale`** — interactive maintenance subcommand. Detects stale favorites (target FQCN not in `engine.fqcn_index.canonical_index` AND not resolvable via the alias chain), prompts per-entry, writes the cleaned-up favorites map back to user config when remap/drop choices are made.
+
+- **`_suggest_favorite_replacement(short, stale_fqcn, engine)`** helper — returns the canonical FQCN of the unique discovered tool whose short name matches, or `None` for ambiguous cases (zero matches or multiple matches). Conservative by design: better to make the user pick than to suggest the wrong tool.
+
+### Changed
+
+- **`dz kit favorite` parser** — positional `short` and `fqcn` now `nargs="?"` so `--migrate-stale` can be invoked without them. Validation in `_cmd_kit_favorite` rejects the cases (no flag + no positional args) and (flag + positional args).
+
+### Tests
+
+- 974 passed, 13 skipped (up from 959 in v0.7.34 — 15 new tests).
+- `tests/test_cli_kit.py::TestKitFavoriteMigrateStale` — 11 tests covering: no favorites, all-valid favorites, stale + non-TTY listing, stale + non-TTY with suggestion, interactive remap, interactive drop, interactive skip-keeps-stale, alias-target resolves canonical (two-segment `<vk>:<short>` form), qualified-alias dispatch form IS stale (three-segment `<agg>:<vk>:<short>` not in alias_index), dispatch via handler entry point, validation errors for arg combinations.
+- `tests/test_cli_kit.py::TestSuggestFavoriteReplacement` — 3 tests covering single-match return, no-match returns None, ambiguous-match returns None.
+- Live-verified: non-TTY path correctly detects stale favorite, prints to stderr, exits 1. Two-segment alias-form favorite (`claude:cleanup`) correctly identified as NOT stale. Interactive path covered by `monkeypatch.setattr("builtins.input", ...)` in unit tests.
+
+### Notes on alias FQCN forms
+
+Worth recording for future reference: virtual-kit aliases populate `engine.fqcn_index.alias_index` with **two-segment** keys of the form `<vk_name>:<short>` (e.g., `claude:cleanup` → `dazzletools:claude-cleanup`). The **three-segment** fully-qualified form `<agg>:<vk>:<short>` (e.g., `dazzletools:claude:cleanup`) is a valid dispatch path — `dz dazzletools:claude:cleanup` works because `engine.find_project()` parses it — but it's NOT a key in `alias_index`. So a favorite stored in qualified-form IS flagged stale by `--migrate-stale`; the migration suggestion will typically point at the canonical, which is the correct fix. Initial test mock + checklist used the qualified form incorrectly; tester-unbounded sweep caught the discrepancy and both were corrected before commit.
+- Human checklist: `tests/checklists/v0.7.35__Tier1B__kit-favorite-migrate-stale.md`.
+
+### Refs
+
+- Refs #50 (Phase 4e retrospective; Tier 1 commit 7 of master plan).
+- Refs #30 (Phase 4 epic; Tier 1 of master closeout plan).
+
 ## [0.7.34] - 2026-05-07
 
 Phase 4e closeout, Tier 1 commit 6 — the X-22-narrow CLI collapse. dazzlecmd's `_cmd_list`, `_cmd_info`, and `_cmd_tree` collapse to thin wrappers over the library equivalents (`render_list` / `render_info` / `render_tree`). The library now owns every behavior these three commands ever had — sectioned `dz list` with `--show {default,canonical,alias,all}` and `[*]`/`[+]` markers, full `dz info` with `--raw` / `--platform` / shadow status / linked-project line, and `dz tree` with `--show-disabled` and `[always_active]` / `[aggregator]` / `[disabled]` markers. The library version was extended in this commit to reach byte-equivalence with dazzlecmd's prior tree behavior, so no user-visible surface was dropped.
