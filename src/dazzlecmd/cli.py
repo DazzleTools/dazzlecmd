@@ -550,24 +550,47 @@ def _cmd_kit_list(args, kits, projects, engine=None):
             print("  No tools in this kit.")
             return 0
 
-        # Match tool refs (namespace:name) to discovered projects
+        # Build rows first so per-column widths can be computed from
+        # actual data instead of the v0.7.28-and-earlier fixed 16-char
+        # columns. Matches the `dz list` flat-fallback layout.
+        rows = []  # (name, platform, description_or_notfound_marker)
         for ref in sorted(tool_refs):
-            # Parse "namespace:name" format
             if ":" in ref:
-                ns, name = ref.split(":", 1)
+                ns, ref_name = ref.split(":", 1)
             else:
-                ns, name = "", ref
-
-            match = [p for p in projects if p["name"] == name and (not ns or p.get("namespace") == ns)]
+                ns, ref_name = "", ref
+            match = [
+                p for p in projects
+                if p["name"] == ref_name
+                and (not ns or p.get("namespace") == ns)
+            ]
             if match:
                 p = match[0]
-                desc = p.get("description", "")
-                if len(desc) > 55:
-                    desc = desc[:52] + "..."
-                platform = p.get("platform", "")
-                print(f"  {name:<16} {platform:<16} {desc}")
+                rows.append(
+                    (ref_name, p.get("platform", ""), p.get("description", ""))
+                )
             else:
-                print(f"  {name:<16} {'':16} (not found)")
+                rows.append((ref_name, "", "(not found)"))
+
+        import shutil
+        term_width = shutil.get_terminal_size((80, 24)).columns
+
+        name_width = max(len(r[0]) for r in rows)
+        platform_width = max(len(r[1]) for r in rows)
+        indent = "  "
+        # 2 indent + name + 2 gap + platform + 2 gap = description column
+        desc_col = len(indent) + name_width + 2 + platform_width + 2
+        desc_max = term_width - desc_col
+
+        for n, plat, desc in rows:
+            wrapped = _wrap_description(desc, desc_max)
+            print(
+                f"{indent}{n:<{name_width}}  "
+                f"{plat:<{platform_width}}  {wrapped[0]}"
+            )
+            wrap_indent = " " * desc_col
+            for line in wrapped[1:]:
+                print(f"{wrap_indent}{line}")
 
         print(f"\n  {len(tool_refs)} tool(s)")
         return 0

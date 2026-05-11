@@ -4,6 +4,29 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.36] - 2026-05-11
+
+Phase 4e closeout, Tier 1 commit 8 — closes #48. The `dz kit list <kit>` canonical-kit drill-in had retained a pre-v0.7.27 rendering pattern: fixed 16-character columns for name and platform, plus a hardcoded 55-character description truncation with ellipsis. Result: names longer than 16 chars (like `claude-session-metadata`) collided with the platform column, and descriptions got chopped even when the terminal had plenty of room. Every other display surface (`dz list`, `dz tree`, the `dz` help builder, and the v0.7.27 virtual-kit drill-in via `_render_virtual_kit_aliases`) already computed widths from actual data and used `_wrap_description` for terminal-aware wrapping. v0.7.36 brings the canonical-kit drill-in into parity.
+
+The fix is localized to a single branch in `src/dazzlecmd/cli.py::_cmd_kit_list`. The virtual-kit drill-in (which uses `_render_virtual_kit_aliases`) is untouched.
+
+### Changed
+
+- **`dz kit list <kit>` canonical-kit drill-in** — column widths are now derived from actual row data (longest name + longest platform), and descriptions wrap to the available terminal width via `_wrap_description` (which already lives in `dazzlecmd_lib.default_meta_commands` and is re-exported through `dazzlecmd.cli` for the kit-list path). The fixed 16-char columns and the 55-char truncation are gone.
+
+### Tests
+
+- 979 passed, 13 skipped (up from 974 in v0.7.35; +5 new tests).
+- `tests/test_cli_kit.py::TestKitListDrillInColumnWidths` — 5 tests: short-name-renders-cleanly, long-name-does-not-collide-with-platform, description-wraps-to-terminal-width (no `...` truncation), mixed-short-and-long-names, not-found-marker-preserved.
+- Live-verified: `dz kit list dazzletools` now displays `claude-session-metadata` (24 chars) without column collision, descriptions wrap to terminal width with proper indent alignment.
+- Human checklist: `tests/checklists/v0.7.36__Tier1B__kit-list-column-parity.md`.
+
+### Refs
+
+- Closes #48 (`dz kit list <kit>` drill-in: column-width parity with dz list).
+- Refs #50 (Phase 4e retrospective; Tier 1 commit 8 of master plan).
+- Refs #30 (Phase 4 epic; Tier 1 of master closeout plan).
+
 ## [0.7.35] - 2026-05-10
 
 Phase 4e closeout, Tier 1 commit 7 — `dz kit favorite --migrate-stale` interactive subcommand (4e-T2 from the master closeout plan).

@@ -14,6 +14,7 @@ from dazzlecmd.cli import (
     _cmd_kit_enable,
     _cmd_kit_disable,
     _cmd_kit_focus,
+    _cmd_kit_list,
     _cmd_kit_reset,
     _cmd_kit_favorite,
     _cmd_kit_favorite_migrate_stale,
@@ -584,3 +585,151 @@ class TestKitStatusDisplay:
         rc = _cmd_kit_status(kits)
         assert rc == 0
         assert "legacy: 1 tool(s)" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# dz kit list <kit> drill-in column-width parity (#48, v0.7.36)
+# ---------------------------------------------------------------------------
+
+
+class TestKitListDrillInColumnWidths:
+    """Regression guard for #48: canonical-kit drill-in computes column
+    widths from data instead of fixed 16-char columns and uses
+    `_wrap_description` for terminal-aware wrapping instead of the
+    hardcoded 55-char truncation.
+    """
+
+    def _kit_with_tools(self, kit_name, tool_specs):
+        """Build (kits, projects) for a single-kit drill-in test.
+
+        ``tool_specs`` is a list of (short_name, platform, description) tuples.
+        """
+        kit = {
+            "_kit_name": kit_name,
+            "name": kit_name,
+            "always_active": True,
+            "tools": [f"{kit_name}:{name}" for name, _, _ in tool_specs],
+        }
+        projects = [
+            {
+                "name": name,
+                "namespace": kit_name,
+                "_fqcn": f"{kit_name}:{name}",
+                "platform": platform,
+                "description": desc,
+            }
+            for name, platform, desc in tool_specs
+        ]
+        return [kit], projects
+
+    def test_short_name_renders_cleanly(self, tmp_path, monkeypatch, capsys):
+        engine = _engine(tmp_path, monkeypatch)
+        kits, projects = self._kit_with_tools("kit", [
+            ("a", "cross-platform", "First tool"),
+        ])
+        rc = _cmd_kit_list(_Args(name="kit"), kits, projects, engine=engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "a" in out
+        assert "cross-platform" in out
+        assert "First tool" in out
+        assert "1 tool(s)" in out
+
+    def test_long_name_does_not_collide_with_platform(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        # 24-char name (longer than the old 16-char fixed column).
+        # Old behavior: name overflowed and ate the platform column gap.
+        # New behavior: column widths derived from data; gap preserved.
+        engine = _engine(tmp_path, monkeypatch)
+        kits, projects = self._kit_with_tools("kit", [
+            ("claude-session-metadata", "cross-platform", "Long-named tool"),
+            ("short", "windows", "Short-named tool"),
+        ])
+        rc = _cmd_kit_list(_Args(name="kit"), kits, projects, engine=engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        # Both rows present
+        assert "claude-session-metadata" in out
+        assert "short" in out
+        # The platform column should appear consistently AFTER the longest
+        # name + at least 2-char gap. Verify by checking column alignment
+        # in the long-name row.
+        long_row_lines = [
+            line for line in out.splitlines()
+            if "claude-session-metadata" in line and "cross-platform" in line
+        ]
+        assert long_row_lines, "expected long-name row to render on one line"
+        line = long_row_lines[0]
+        # After the name and at least one space, "cross-platform" should appear
+        name_end = line.index("claude-session-metadata") + len("claude-session-metadata")
+        platform_start = line.index("cross-platform")
+        assert platform_start > name_end + 1  # at least one gap char
+
+    def test_description_wraps_to_terminal_width(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        # Description longer than the v0.7.28 hardcoded 55-char truncation;
+        # the fix should wrap (not truncate) to whatever the terminal width
+        # allows.
+        engine = _engine(tmp_path, monkeypatch)
+        long_desc = (
+            "A description that easily exceeds the v0.7.28 hardcoded "
+            "55-character truncation and should wrap to multiple lines "
+            "rather than being chopped off with an ellipsis suffix."
+        )
+        kits, projects = self._kit_with_tools("kit", [
+            ("a", "cross-platform", long_desc),
+        ])
+        rc = _cmd_kit_list(_Args(name="kit"), kits, projects, engine=engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        # No "..." suffix from the dropped hardcoded truncation
+        # (we still allow `...` if it's part of the description body, but
+        # the description doesn't contain literal "..." here)
+        assert "..." not in out
+        # Full description text reachable across wrapped lines
+        # (rejoin wrapped output by stripping leading whitespace + newlines)
+        joined = " ".join(line.strip() for line in out.splitlines() if line.strip())
+        # Every word from the long description appears somewhere in the
+        # joined output -- proves nothing was truncated.
+        for word in [
+            "description", "exceeds", "v0.7.28",
+            "truncation", "should", "wrap", "chopped",
+        ]:
+            assert word in joined, f"word {word!r} missing from output"
+
+    def test_mixed_short_and_long_names(self, tmp_path, monkeypatch, capsys):
+        engine = _engine(tmp_path, monkeypatch)
+        kits, projects = self._kit_with_tools("kit", [
+            ("a", "cross-platform", "A"),
+            ("claude-session-metadata", "cross-platform", "B"),
+            ("z", "windows", "C"),
+        ])
+        rc = _cmd_kit_list(_Args(name="kit"), kits, projects, engine=engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        # All three present, in alphabetical order via sorted(tool_refs)
+        a_idx = out.index("kit:a") if "kit:a" in out else out.index(" a ")
+        long_idx = out.index("claude-session-metadata")
+        z_idx = out.index(" z ")
+        assert a_idx < long_idx < z_idx
+        assert "3 tool(s)" in out
+
+    def test_not_found_marker_preserved(self, tmp_path, monkeypatch, capsys):
+        # When a tool ref doesn't match any discovered project, the row
+        # should render with "(not found)" in the description column.
+        engine = _engine(tmp_path, monkeypatch)
+        kit = {
+            "_kit_name": "kit",
+            "name": "kit",
+            "always_active": True,
+            "tools": ["kit:ghost"],
+        }
+        rc = _cmd_kit_list(
+            _Args(name="kit"), [kit], projects=[], engine=engine
+        )
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "ghost" in out
+        assert "(not found)" in out
