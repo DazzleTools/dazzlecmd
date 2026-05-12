@@ -340,3 +340,257 @@ class TestLibraryIsolation:
                         violations.append(f"{os.path.basename(py_file)}:{i}: {stripped}")
 
         assert violations == [], f"Library imports from dazzlecmd.*:\n" + "\n".join(violations)
+
+
+# ---------------------------------------------------------------------------
+# Aggregator-as-kit discovery (closes #63, v0.7.38 fix)
+# ---------------------------------------------------------------------------
+
+
+class TestAggregatorAsKitDiscovery:
+    """Regression tests for the discover_kits aggregator-as-kit bug.
+
+    Pre-v0.7.38, ``_load_in_repo_kit_manifest`` Option 2 ("kits/ subdirectory
+    aggregator-style kit") incorrectly merged the FIRST inner kit's identity
+    fields (``name``, ``tools``, ``description``, etc.) into the outer
+    aggregator-as-kit pointer. It also constructed an absolute ``tools_dir``
+    that pointed at the kit's root (not its actual tools directory), which
+    the engine's ``_recurse_into_nested`` then mis-normalized via ``basename``
+    -- yielding a doubled path like ``<root>/<kit>/<kit>``.
+
+    The forward direction (dazzlecmd embeds wtf-windows) happened to work
+    because wtf's ``kits/core.kit.json`` declares ``tools_dir: "tools"`` and
+    ``manifest: ".wtf.json"`` -- those got merged correctly. The inverse
+    direction (wtf embeds dazzlecmd) failed because dazzlecmd's per-kit
+    pointers are minimal, leaving the merge with no useful structural hints.
+
+    These tests pin the correct behavior:
+
+    * Identity fields (``name``) come from the registry pointer, never from
+      an inner kit's manifest.
+    * Structural hints (``tools_dir``, ``manifest``) are extracted from the
+      first non-virtual inner kit that declares them; otherwise the engine
+      falls back to defaults.
+    * Hints stay relative (not absolute) so the engine's recursion joins
+      them with ``nested_root`` correctly.
+    """
+
+    def _make_aggregator(self, tmp_path, name, has_inner_tools_dir=True,
+                        inner_manifest_name=".dazzlecmd.json"):
+        """Build a minimal aggregator-as-kit on disk under tmp_path.
+
+        Layout:
+            tmp_path/<name>/
+                kits/core.kit.json   <- inner kit registry
+                kits/extra.kit.json  <- second inner kit (so this is unambiguously an aggregator)
+                projects/core/sample/<inner_manifest_name>
+                projects/extra/other/<inner_manifest_name>
+        """
+        root = tmp_path / name
+        root.mkdir()
+        (root / "kits").mkdir()
+
+        # Note: inner kits must declare their tools list so that
+        # discover_projects' kit_tools filter (loader.py:401) admits them.
+        # Real-world aggregators (dazzlecmd, wtf) populate this either via
+        # Pattern 1 (.kit.json at project root) or via the registry pointer.
+        core_kit = {
+            "name": "core",
+            "always_active": True,
+            "tools": ["core:sample"],
+        }
+        if has_inner_tools_dir:
+            core_kit["tools_dir"] = "projects"
+            core_kit["manifest"] = inner_manifest_name
+        (root / "kits" / "core.kit.json").write_text(json.dumps(core_kit))
+
+        extra_kit = {
+            "name": "extra",
+            "always_active": True,
+            "tools": ["extra:other"],
+        }
+        if has_inner_tools_dir:
+            extra_kit["tools_dir"] = "projects"
+            extra_kit["manifest"] = inner_manifest_name
+        (root / "kits" / "extra.kit.json").write_text(json.dumps(extra_kit))
+
+        # Make minimal tool dirs so the structure is plausible
+        for kit_ns, tool in [("core", "sample"), ("extra", "other")]:
+            tool_dir = root / "projects" / kit_ns / tool
+            tool_dir.mkdir(parents=True)
+            (tool_dir / inner_manifest_name).write_text(json.dumps({
+                "name": tool, "version": "0.1.0",
+                "description": f"{tool} tool", "runtime": {"type": "python"},
+                "namespace": kit_ns,
+            }))
+
+        return root
+
+    def test_pointer_name_preserved_in_aggregator_case(self, tmp_path):
+        """Registry pointer's ``name`` field must NOT be overridden by inner
+        kits. Pre-fix, the pointer named ``dz`` would end up with
+        ``name='core'`` (the first inner kit's name)."""
+        from dazzlecmd_lib.loader import discover_kits
+
+        # Embedded aggregator at tmp_path/embedded/ with kits/{core,extra}.kit.json
+        self._make_aggregator(tmp_path, "embedded")
+
+        # Parent's registry kits/ dir with a single pointer for the embedded aggregator
+        parent_kits = tmp_path / "parent_kits"
+        parent_kits.mkdir()
+        (parent_kits / "myptr.kit.json").write_text(json.dumps({
+            "name": "myptr",
+            "always_active": True,
+            "source": "https://example.com/repo.git",
+        }))
+
+        kits = discover_kits(str(parent_kits), str(tmp_path))
+        myptr = next(k for k in kits if k.get("_kit_name") == "myptr")
+
+        # The aggregator-as-kit's identity comes from the registry pointer
+        assert myptr["name"] == "myptr"
+        assert myptr.get("source") == "https://example.com/repo.git"
+        assert myptr.get("always_active") is True
+        # Identity fields from inner kits must NOT leak in
+        # (pre-fix, name='core' and tools=[...] would have leaked)
+        assert myptr.get("tools", []) == []
+
+    def test_structural_hints_extracted_from_inner_kits(self, tmp_path):
+        """When inner kits declare ``tools_dir`` and ``manifest``, those
+        should be extracted as structural hints onto the aggregator-as-kit
+        dict so the engine knows how to recurse into it."""
+        from dazzlecmd_lib.loader import discover_kits
+
+        # The embedded aggregator's directory name must match the pointer name
+        # (this is how discover_kits resolves where to look).
+        self._make_aggregator(tmp_path, "ptr", has_inner_tools_dir=True,
+                              inner_manifest_name=".myrepo.json")
+
+        parent_kits = tmp_path / "parent_kits"
+        parent_kits.mkdir()
+        (parent_kits / "ptr.kit.json").write_text(json.dumps({
+            "name": "ptr", "always_active": True,
+        }))
+
+        kits = discover_kits(str(parent_kits), str(tmp_path))
+        ptr = next(k for k in kits if k.get("_kit_name") == "ptr")
+
+        # Inner kits declared tools_dir="projects" and manifest=".myrepo.json"
+        assert ptr.get("tools_dir") == "projects"
+        assert ptr.get("manifest") == ".myrepo.json"
+        # And it stays RELATIVE -- not absolute (pre-fix it was joined with
+        # the embedded root, producing absolute paths that triggered the
+        # basename mis-normalization downstream)
+        assert not os.path.isabs(ptr["tools_dir"])
+
+    def test_no_hints_when_inner_kits_minimal(self, tmp_path):
+        """When inner kits don't declare structural fields, the
+        aggregator-as-kit dict has no tools_dir/manifest. The engine
+        falls back to its own defaults."""
+        from dazzlecmd_lib.loader import discover_kits
+
+        self._make_aggregator(tmp_path, "ptr", has_inner_tools_dir=False)
+
+        parent_kits = tmp_path / "parent_kits"
+        parent_kits.mkdir()
+        (parent_kits / "ptr.kit.json").write_text(json.dumps({
+            "name": "ptr", "always_active": True,
+        }))
+
+        kits = discover_kits(str(parent_kits), str(tmp_path))
+        ptr = next(k for k in kits if k.get("_kit_name") == "ptr")
+
+        # No hints -- engine will use defaults (tools_dir="projects",
+        # manifest=".dazzlecmd.json") via _recurse_into_nested fallbacks.
+        assert "tools_dir" not in ptr or ptr["tools_dir"] in (None, "")
+        assert "manifest" not in ptr or ptr["manifest"] in (None, "")
+        # Identity still comes from the pointer
+        assert ptr["name"] == "ptr"
+
+    def test_single_kit_pattern_1_unchanged(self, tmp_path):
+        """Pattern 1 (kit_dir/.kit.json self-describing) must still work.
+        This is dazzlecmd's own kits' shape and predates the aggregator
+        case. Regression guard against breaking single-kit semantics."""
+        from dazzlecmd_lib.loader import discover_kits
+
+        # Make a SINGLE kit (no kits/ subdir, just .kit.json at root)
+        kit_dir = tmp_path / "singlekit"
+        kit_dir.mkdir()
+        (kit_dir / ".kit.json").write_text(json.dumps({
+            "name": "singlekit",
+            "version": "1.0.0",
+            "description": "A single self-describing kit",
+            "tools_dir": ".",
+            "manifest": ".dazzlecmd.json",
+            "tools": ["singlekit:something"],
+        }))
+
+        parent_kits = tmp_path / "parent_kits"
+        parent_kits.mkdir()
+        (parent_kits / "singlekit.kit.json").write_text(json.dumps({
+            "name": "singlekit", "always_active": True,
+        }))
+
+        kits = discover_kits(str(parent_kits), str(tmp_path))
+        kit = next(k for k in kits if k.get("_kit_name") == "singlekit")
+
+        # Pattern 1: full manifest merged, including version, description,
+        # tools list -- this is the legitimate self-describing case.
+        assert kit["name"] == "singlekit"
+        assert kit.get("version") == "1.0.0"
+        assert kit.get("tools") == ["singlekit:something"]
+
+    def test_engine_recurses_correctly_for_aggregator_as_kit(self, tmp_path):
+        """End-to-end: the engine constructs a child for an aggregator-as-kit
+        with the correct (relative) tools_dir, recursively discovers the
+        inner kits' tools, and populates ``kit.tools`` with the FQCNs of
+        the discovered projects."""
+        from dazzlecmd_lib import AggregatorEngine
+
+        embedded = self._make_aggregator(
+            tmp_path, "embedded", has_inner_tools_dir=True,
+            inner_manifest_name=".dazzlecmd.json",
+        )
+
+        # Parent layout matching wtf-windows-style: kits/ + tools/<kit_name>/
+        # where tools/<kit_name> is the embedded aggregator.
+        parent_root = tmp_path / "parent"
+        parent_root.mkdir()
+        (parent_root / "kits").mkdir()
+        (parent_root / "tools").mkdir()
+        # Symlink-ish: point to embedded via os.symlink (Linux) or just copy
+        # the relative path. For test portability, use a directory move.
+        os.rename(str(embedded), str(parent_root / "tools" / "embedded"))
+
+        # Parent's pointer at parent/kits/embedded.kit.json
+        (parent_root / "kits" / "embedded.kit.json").write_text(json.dumps({
+            "name": "embedded",
+            "always_active": True,
+            "source": "https://example.com/embedded.git",
+        }))
+
+        engine = AggregatorEngine(
+            name="parent", command="parent",
+            tools_dir="tools", kits_dir="kits",
+            manifest=".dazzlecmd.json", is_root=True,
+            project_root=str(parent_root),
+        )
+        engine.discover()
+
+        # Both inner kits' tools should be discovered with embedded: prefix
+        fqcns = [p.get("_fqcn") for p in engine.projects]
+        assert "embedded:core:sample" in fqcns, (
+            f"Expected embedded:core:sample in projects; got {fqcns!r}"
+        )
+        assert "embedded:extra:other" in fqcns, (
+            f"Expected embedded:extra:other in projects; got {fqcns!r}"
+        )
+
+        # The kit dict should have its tools field populated with FQCNs
+        # of the discovered projects (post-recursion derived view).
+        embedded_kit = next(
+            k for k in engine.kits if k.get("_kit_name") == "embedded"
+        )
+        assert set(embedded_kit["tools"]) == {
+            "embedded:core:sample", "embedded:extra:other",
+        }

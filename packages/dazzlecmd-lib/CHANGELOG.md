@@ -8,6 +8,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.6.1] - 2026-05-12
+
+Ships with dazzlecmd v0.7.38 (bug-fix patch -- closes dazzlecmd #63). Fixes a structural bug in `discover_kits` / `_load_in_repo_kit_manifest` that made the "aggregator-as-kit" embedding path produce wrong identity fields and a misconstructed `tools_dir`. The forward direction (dazzlecmd embeds wtf-windows) happened to work because the inner kits' declared structural fields aligned by coincidence; the inverse direction (wtf-windows embeds dazzlecmd) broke because dazzlecmd's per-kit pointers are minimal. Empirically surfaced during a recursion-proof experiment.
+
+### Fixed
+
+- **`_load_in_repo_kit_manifest` Pattern 2 (aggregator-as-kit)** -- `loader.py:88`. The old code picked the first inner kit file (alphabetically) and merged ALL its fields into the outer pointer, including identity fields like `name`, `tools`, `description`, `version`. The new code:
+  - Detects single-kit-using-kits-subdir-convention case (exactly one inner kit, named after the outer pointer) and merges fully (legacy compatibility).
+  - Detects aggregator-as-kit case (multiple inner kits OR no name-matching kit) and extracts ONLY structural hints (`tools_dir`, `manifest`) from the first non-virtual inner kit that declares them. Never identity fields.
+  - Keeps `tools_dir` RELATIVE, so the engine's `_recurse_into_nested` joins it with `nested_root` correctly.
+  - Returns `None` if no inner kits declare hints -- engine falls back to defaults (`tools_dir="projects"`, `manifest=".dazzlecmd.json"`).
+
+- **`discover_kits` always sets `kit["name"]` from the registry pointer** -- `loader.py:73-83`. Identity now always comes from the registry-derived `kit_name`. Previously the kit dict's `name` field could come from an inner kit's manifest or the registry pointer depending on which Pattern-2 branch was taken. The merge accidentally hid the intended semantic.
+
+- **`_discover_aggregator` populates aggregator-as-kit's `tools` list post-recursion** -- `engine.py:864-872`. After the nested aggregator's projects are discovered, the parent kit's `tools` field is populated with the FQCNs of contributed projects. Makes `dz kit list` show the correct tool count for embedded aggregators. Pre-v0.6.1 the count came from the buggy merge.
+
+### Recursion proof
+
+The "any aggregator can attach to any other" architectural claim is now **empirically validated in both directions**:
+
+- Forward (dazzlecmd embeds wtf-windows): unchanged from v0.6.0 (no regression).
+- Inverse (wtf-windows embeds dazzlecmd): `wtf list` shows all 19 dazzlecmd tools + 2 wtf own. `wtf kit list` shows `dz 22 tool(s) (always active)`. Three-tier recursion `dz:wtf:core:locked` works (wtf embeds dazzlecmd embeds wtf, with the deeply-nested-tool hint firing).
+
+### Tests
+
+- +5 new tests in `tests/test_library.py::TestAggregatorAsKitDiscovery` covering: pointer-name preservation in aggregator case, structural-hint extraction from inner kits, no-hints fallback to engine defaults, Pattern 1 single-kit unchanged regression guard, end-to-end engine recursion populating `kit.tools` with discovered FQCNs. Full suite 1021 passed, 13 skipped.
+
 ## [0.6.0] - 2026-05-12
 
 Ships with dazzlecmd v0.7.37 (Tier 1 commit 9, final -- closes #49). New top-level module `dazzlecmd_lib.colors` lands a slim ANSI color taxonomy that all the default meta-command renderers consume. Consumers (dazzlecmd, amdead, wtf-windows, sysdiagnose, future personal aggregators) inherit color output on every render surface automatically -- no per-consumer wiring required.

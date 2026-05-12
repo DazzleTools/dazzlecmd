@@ -4,6 +4,54 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.38] - 2026-05-12
+
+Bug-fix patch — closes #63. The `discover_kits` / `_load_in_repo_kit_manifest` machinery for "aggregator-as-kit" embedding was structurally wrong: when an embedded thing was a full aggregator (had its own `kits/` subdirectory with multiple kit registry pointers), the loader treated it as a single self-describing kit, merging an arbitrary inner kit's fields (including identity fields like `name`, `tools`, `description`, `version`) into the outer pointer. The forward direction (dazzlecmd embeds wtf-windows) happened to work because wtf's `kits/core.kit.json` declares `tools_dir: "tools"` and `manifest: ".wtf.json"` — those merged fields happened to be correct. The inverse direction (wtf-windows embeds dazzlecmd) broke because dazzlecmd's per-kit pointers are minimal (no `tools_dir` declared), leaving the merge with no useful structural hints and a misconstructed absolute `tools_dir` that the engine then mis-normalized via `os.path.basename`.
+
+Empirically surfaced during a recursion-proof experiment on 2026-05-12 — wtf-windows configured to embed dazzlecmd via `kits/dz.kit.json` + a junction at `tools/dz/`. Pre-fix: `wtf kit list dz` showed `0 tool(s)` despite the engine seeing the dz kit and its virtual sub-kit `dz:claude`. Post-fix: `wtf kit list dz` shows `22 tool(s)` (5 core + 14 dazzletools + 2 wtf-recursive + 1 virtual-related counting). The 3-tier recursion `dz:wtf:core:locked` works correctly (wtf embeds dazzlecmd embeds wtf), with the "deeply nested tool" hint firing as designed.
+
+### Fixed
+
+- **`_load_in_repo_kit_manifest` Pattern 2 (aggregator-as-kit)** — `packages/dazzlecmd-lib/src/dazzlecmd_lib/loader.py:88`. The old code picked the first inner kit file (alphabetically) and merged ALL its fields into the outer pointer. The new code:
+  - Detects single-kit-using-kits-subdir-convention case (exactly one inner kit, named after the outer pointer) and merges fully (legacy compatibility, rare in practice).
+  - Detects aggregator-as-kit case (multiple inner kits OR no name-matching kit) and extracts ONLY structural hints (`tools_dir`, `manifest`) from the first non-virtual inner kit that declares them. Never identity fields.
+  - Keeps `tools_dir` RELATIVE (not absolute), so the engine's `_recurse_into_nested` joins it with `nested_root` correctly without needing the `basename` workaround.
+  - Returns `None` if no inner kits declare hints — the engine falls back to defaults (`tools_dir="projects"`, `manifest=".dazzlecmd.json"`).
+
+- **`discover_kits` always sets `kit["name"]` from the registry pointer** — `loader.py:73-83`. Previously the kit dict's `name` field could come from an inner kit's manifest (Pattern 2 merge) or the registry pointer (Pattern 2 fallback) depending on which path was taken. With the bug-fix, identity always comes from the registry-derived `kit_name`. This is the explicit semantic the architecture intended; the merge accidentally hid it.
+
+- **`_discover_aggregator` populates aggregator-as-kit's `tools` list post-recursion** — `engine.py:864-872`. After the nested aggregator's projects are discovered, the parent kit's `tools` field is populated with the FQCNs of contributed projects. This is a derived view that makes `dz kit list` show the correct tool count for embedded aggregators. Pre-v0.7.38 the count came from the buggy merge.
+
+### Recursion proof
+
+The "any aggregator can attach to any other" architectural claim is now **empirically validated in both directions**:
+
+- Forward (dazzlecmd embeds wtf-windows): `dz tree` shows `wtf [aggregator]` branch with `wtf:core:locked` + `wtf:core:restarted`. Same as before this commit (no regression).
+- Inverse (wtf-windows embeds dazzlecmd): `wtf list` shows all 19 dazzlecmd tools + 2 wtf own. `wtf kit list` shows `dz 22 tool(s) (always active)`. Three-tier recursion `dz:wtf:core:locked` works (wtf → dazzlecmd → wtf-tools), with the deeply-nested-tool hint firing.
+
+The recursion proof was scoped by the design analysis `2026-05-12__15-32-50__dev-workflow-process__full-recursion-and-tier2-scaffolding-sequencing.md` (Solution D — empirical config experiment first) and the experimental setup is documented in `2026-05-12__inverse-recursion-wtf-embeds-dazzlecmd.md` (Patterns and recipe for re-test).
+
+### Tests
+
+- 1021 passed, 13 skipped (up from 1016 in v0.7.37; +5 new in `tests/test_library.py::TestAggregatorAsKitDiscovery`).
+- New test class covers: pointer-name preservation in aggregator case, structural-hint extraction from inner kits, no-hints fallback to engine defaults, Pattern 1 single-kit unchanged regression guard, end-to-end engine recursion populating `kit.tools` with discovered FQCNs.
+
+### Changed
+
+- **`dazzlecmd-lib` version**: `0.6.0` → `0.6.1` (PATCH — bug fix, no API addition or breaking change).
+
+### Refs
+
+- Closes #63 (`discover_kits` incorrectly merges in-repo manifest fields for aggregator-as-kit embedding).
+- Refs #30 (Phase 4 epic — recursion proof unblocks Tier 2 scaffolding work).
+- Refs #50 (Phase 4e retro — architectural foundation for cross-aggregator dispatch).
+- Refs #51 (Inverse recursion — this fix is a prerequisite for the `nest_all_under` UX work in #47/#51; the underlying dispatch now works).
+
+### Design
+
+- `2026-05-12__15-32-50__dev-workflow-process__full-recursion-and-tier2-scaffolding-sequencing.md`
+- `private/claude/experiments/2026-05-12__inverse-recursion-wtf-embeds-dazzlecmd.md`
+
 ## [0.7.37] - 2026-05-12
 
 Phase 4e closeout, Tier 1 commit 9 (final) — closes #49. Terminal color taxonomy lands in `dazzlecmd-lib` as a slim, 8-color ANSI palette wired into the meta-command render surfaces (`render_list`, `render_info`, `render_tree`, `render_kit_list`, `render_kit_status`) and the user-facing stderr warning paths. dazzlecmd itself ships zero color code in this commit — the styling rides on the v0.7.34 X-22-narrow collapse, which already made dazzlecmd a thin wrapper over the library's renderers. amdead and wtf-windows pick up the styling automatically. This closes Tier 1 of the 0.7.x master closeout plan.

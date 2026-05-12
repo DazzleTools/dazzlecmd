@@ -862,6 +862,16 @@ class AggregatorEngine:
                 for p in nested_projects:
                     p["_kit_active"] = kit_is_active
                 projects.extend(nested_projects)
+                # Populate the aggregator-as-kit's tools list with FQCNs of
+                # the projects it contributed. This is a derived view that
+                # makes display surfaces (``dz kit list``) show the correct
+                # tool count for embedded aggregators. Pre-v0.7.38 the buggy
+                # ``_load_in_repo_kit_manifest`` merge accidentally populated
+                # this from an inner kit's tools list; now we compute it
+                # honestly from what was discovered.
+                kit["tools"] = [
+                    p["_fqcn"] for p in nested_projects if p.get("_fqcn")
+                ]
                 # A nested virtual kit is active only if its containing
                 # aggregator is active at the parent's level. This
                 # overrides whatever the child determined; the parent's

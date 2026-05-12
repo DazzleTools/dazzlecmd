@@ -70,6 +70,14 @@ def discover_kits(kits_dir, projects_dir=None):
             # No in-repo manifest OR virtual kit -- registry IS the full definition.
             kit = dict(registry)
 
+        # Registry pointer is authoritative for kit identity. Even when the
+        # in-repo manifest is present, the registry-derived ``kit_name``
+        # (taken from the pointer's ``name`` field or the filename) is the
+        # kit's external identity. Without this, an aggregator-as-kit
+        # (Pattern 2) whose hints-only in-repo data lacks a ``name`` field
+        # would yield a nameless kit. (Pre-v0.7.38 the merge accidentally
+        # injected an arbitrary inner kit's name; that hid this gap.)
+        kit["name"] = kit_name
         kit.setdefault("always_active", False)
         kit.setdefault("tools", [])
         kit["_source"] = filepath
@@ -88,24 +96,45 @@ def discover_kits(kits_dir, projects_dir=None):
 def _load_in_repo_kit_manifest(projects_dir, kit_name):
     """Load a kit's self-describing manifest from its project directory.
 
-    Looks for:
-    1. projects/<kit>/.kit.json (single kit manifest at project root)
-    2. projects/<kit>/kits/<kit>.kit.json (kit's own kits directory)
-    3. projects/<kit>/kits/*.kit.json (first found in kit's kits dir)
+    Two patterns supported:
 
-    Returns the manifest dict or None if not found.
+    1. **Single self-describing kit** -- ``kit_dir/.kit.json`` exists at the
+       project root. The full manifest dict is returned (caller's registry
+       pointer overrides ``always_active`` / ``source`` per the merge logic
+       in :func:`discover_kits`).
+
+    2. **Aggregator-as-kit** -- ``kit_dir/kits/`` subdirectory exists,
+       containing the embedded aggregator's own kit registry. In this
+       case the embedded thing is NOT a single kit but a container of
+       multiple kits. Identity fields (``name``, ``tools``, ``description``,
+       ``version``, etc.) MUST NOT be merged from any inner kit -- those
+       belong to the inner kits, not to the parent's view of this
+       embedded aggregator.
+
+       Only structural hints are extracted: ``tools_dir`` and ``manifest``.
+       These tell the engine's :meth:`_recurse_into_nested` how to
+       construct the child engine. If the inner kits don't declare these
+       fields (e.g. when the embedded aggregator follows the engine
+       defaults), this function returns ``None`` and the engine falls
+       back to its defaults (``tools_dir="projects"``,
+       ``manifest=".dazzlecmd.json"``).
+
+    Returns the manifest dict (with ``tools_dir`` resolved RELATIVELY to
+    ``kit_dir``, not absolute), or ``None`` if no useful info was found.
     """
     kit_dir = os.path.join(projects_dir, kit_name)
     if not os.path.isdir(kit_dir):
         return None
 
-    # Option 1: .kit.json at project root
+    # Pattern 1: single self-describing kit
     root_manifest = os.path.join(kit_dir, ".kit.json")
     if os.path.isfile(root_manifest):
         try:
             with open(root_manifest, "r", encoding="utf-8") as f:
                 manifest = json.load(f)
-            # Resolve tools_dir relative to the kit's project directory
+            # Resolve tools_dir relative to the kit's project directory.
+            # Absolute paths here are documented and handled by the engine's
+            # _recurse_into_nested normalization.
             if "tools_dir" in manifest:
                 tools_dir = manifest["tools_dir"]
                 if tools_dir == ".":
@@ -116,44 +145,63 @@ def _load_in_repo_kit_manifest(projects_dir, kit_name):
         except (json.JSONDecodeError, OSError):
             pass
 
-    # Option 2: kits/ subdirectory (aggregator-style kit)
+    # Pattern 2: aggregator-as-kit (kits/ subdir exists)
     kit_kits_dir = os.path.join(kit_dir, "kits")
     if os.path.isdir(kit_kits_dir):
-        # Try kit-named file first, then any .kit.json
-        for candidate in [f"{kit_name}.kit.json", "core.kit.json"]:
-            candidate_path = os.path.join(kit_kits_dir, candidate)
-            if os.path.isfile(candidate_path):
-                try:
-                    with open(candidate_path, "r", encoding="utf-8") as f:
-                        manifest = json.load(f)
-                    # Resolve tools_dir relative to the kit's project directory
-                    if "tools_dir" in manifest:
-                        manifest["tools_dir"] = os.path.join(
-                            kit_dir, manifest["tools_dir"]
-                        )
-                    else:
-                        # Default tools_dir for aggregator kits
-                        manifest.setdefault("tools_dir", kit_dir)
-                    return manifest
-                except (json.JSONDecodeError, OSError):
-                    pass
+        # Detect: is this an aggregator (multiple kits or no self-named kit)
+        # or a single kit that happens to use the kits/ subdir convention?
+        try:
+            kit_files = sorted(
+                f for f in os.listdir(kit_kits_dir) if f.endswith(".kit.json")
+            )
+        except OSError:
+            return None
 
-        # Fallback: first .kit.json found
-        for fname in sorted(os.listdir(kit_kits_dir)):
-            if fname.endswith(".kit.json"):
-                fpath = os.path.join(kit_kits_dir, fname)
-                try:
-                    with open(fpath, "r", encoding="utf-8") as f:
-                        manifest = json.load(f)
-                    if "tools_dir" in manifest:
-                        manifest["tools_dir"] = os.path.join(
-                            kit_dir, manifest["tools_dir"]
-                        )
-                    else:
-                        manifest.setdefault("tools_dir", kit_dir)
-                    return manifest
-                except (json.JSONDecodeError, OSError):
-                    pass
+        # Single-kit case (legacy / rare): exactly one .kit.json AND its
+        # name matches kit_name. Treat as self-describing and merge fully.
+        own_manifest = f"{kit_name}.kit.json"
+        if len(kit_files) == 1 and kit_files[0] == own_manifest:
+            try:
+                with open(os.path.join(kit_kits_dir, own_manifest), "r",
+                          encoding="utf-8") as f:
+                    manifest = json.load(f)
+                if "tools_dir" in manifest:
+                    manifest["tools_dir"] = os.path.join(
+                        kit_dir, manifest["tools_dir"]
+                    )
+                return manifest
+            except (json.JSONDecodeError, OSError):
+                pass
+
+        # Aggregator case: kits/ contains multiple kits, or kits whose names
+        # don't match kit_name. The embedded thing is a container of many
+        # kits, not a single kit. Extract ONLY structural hints (tools_dir,
+        # manifest) -- never identity fields. Hints are taken from the
+        # FIRST non-virtual inner kit that declares them. If no inner kit
+        # declares hints, return None and let the engine fall back to
+        # defaults (tools_dir="projects", manifest=".dazzlecmd.json").
+        hints = {}
+        for fname in kit_files:
+            fpath = os.path.join(kit_kits_dir, fname)
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    inner = json.load(f)
+            except (json.JSONDecodeError, OSError):
+                continue
+            if inner.get("virtual") is True:
+                # Virtual inner kits have no structural ground truth.
+                continue
+            if "tools_dir" in inner and "tools_dir" not in hints:
+                # Keep tools_dir relative -- the engine joins with the
+                # nested_root at recursion time. (Resolving to absolute
+                # here triggered the basename mis-normalization that
+                # produced the duplicated `wtf-windows/tools/dz/dz` path.)
+                hints["tools_dir"] = inner["tools_dir"]
+            if "manifest" in inner and "manifest" not in hints:
+                hints["manifest"] = inner["manifest"]
+            if "tools_dir" in hints and "manifest" in hints:
+                break
+        return hints if hints else None
 
     return None
 
