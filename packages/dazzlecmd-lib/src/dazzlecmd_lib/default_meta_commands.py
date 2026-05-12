@@ -42,6 +42,8 @@ import shutil as _shutil
 import sys as _sys
 from typing import Iterable, Optional
 
+from . import colors as _colors
+
 
 def _wrap_description(text, width):
     """Wrap a description string to fit within a given width.
@@ -308,7 +310,13 @@ def render_list(args, projects, engine=None) -> int:
             if len(fqcns) > 1:
                 colliding.add(short)
 
-    def _label(entry):
+    # v0.7.37: gate ANSI on once per call. The plain/styled label split
+    # below keeps column-width math correct -- ANSI escape sequences
+    # have zero visible width but contribute to ``len()``.
+    _use_color = _colors.should_use_color()
+
+    def _label_plain(entry):
+        """Label without ANSI codes -- used for column-width math."""
         markers = []
         if entry["name"] in colliding:
             markers.append("*")
@@ -316,11 +324,35 @@ def render_list(args, projects, engine=None) -> int:
             markers.append("+")
         if not markers:
             return entry["name"]
-        # Use [*][+] form (each marker bracketed) for clarity
         suffix = "".join(f"[{m}]" for m in markers)
         return f"{entry['name']} {suffix}"
 
+    def _label_styled(entry):
+        """Label with ANSI codes when ``_use_color`` is True.
+
+        ``[*]`` -- bold+red (collision: maximum attention).
+        ``[+]`` -- cyan (alias: informational, not a warning).
+        """
+        if not _use_color:
+            return _label_plain(entry)
+        marker_strs = []
+        if entry["name"] in colliding:
+            marker_strs.append(
+                _colors.colorize("[*]", _colors.BOLD, _colors.RED)
+            )
+        if show_mode == "all" and entry.get("has_aliases"):
+            marker_strs.append(_colors.colorize("[+]", _colors.CYAN))
+        if not marker_strs:
+            return entry["name"]
+        return f"{entry['name']} {''.join(marker_strs)}"
+
     term_width = _shutil.get_terminal_size((80, 24)).columns
+
+    def _print_styled_row(styled, plain, target_width, suffix):
+        """Print row with width padding computed on plain (unstyled) label,
+        so ANSI escape sequences don't break column alignment."""
+        padding = " " * (target_width - len(plain))
+        print(f"{styled}{padding}{suffix}")
 
     if use_flat:
         # Single-section flat fallback (v0.7.27 layout).
@@ -328,23 +360,31 @@ def render_list(args, projects, engine=None) -> int:
         if not flat_entries:
             print("No tools found.")
             return 0
-        name_width = max(len(_label(e)) for e in flat_entries)
+        name_width = max(len(_label_plain(e)) for e in flat_entries)
         name_width = max(name_width, len("Name"))
         kit_width = max(len(e["kit"]) for e in flat_entries)
         kit_width = max(kit_width, len("Kit"))
 
-        header = f"  {'Name':<{name_width}}  {'Kit':<{kit_width}}  Description"
-        print(header)
-        print("  " + "-" * (len(header) - 2))
+        # BOLD header row -- structural emphasis, not data.
+        header_codes = (_colors.BOLD,) if _use_color else ()
+        header_text = (
+            f"  {'Name':<{name_width}}  {'Kit':<{kit_width}}  Description"
+        )
+        print(_colors.colorize(header_text, *header_codes))
+        print("  " + "-" * (len(header_text) - 2))
 
         desc_col = 2 + name_width + 2 + kit_width + 2
         desc_max = term_width - desc_col
         for entry in flat_entries:
-            label = _label(entry)
+            plain = _label_plain(entry)
+            styled = _label_styled(entry)
             kit = entry["kit"]
             desc = entry["description"]
             wrapped = _wrap_description(desc, desc_max)
-            print(f"  {label:<{name_width}}  {kit:<{kit_width}}  {wrapped[0]}")
+            _print_styled_row(
+                "  " + styled, plain, name_width,
+                f"  {kit:<{kit_width}}  {wrapped[0]}",
+            )
             indent = " " * desc_col
             for line in wrapped[1:]:
                 print(f"{indent}{line}")
@@ -354,11 +394,21 @@ def render_list(args, projects, engine=None) -> int:
             if i > 0:
                 print()  # one blank line between sections
             section = sections[sk]
+            # Section header: BOLD canonical/virtual kit name + DIM
+            # virtual-kit annotation. Both fall back to plain when
+            # ``_use_color`` is False (e.g., piped output).
             if section["kind"] == "virtual":
-                annotation = f"  (virtual kit '{section['vk_name']}')"
+                annotation_plain = f"  (virtual kit '{section['vk_name']}')"
+                annotation_styled = (
+                    _colors.colorize(annotation_plain, _colors.DIM)
+                    if _use_color else annotation_plain
+                )
             else:
-                annotation = ""
-            print(f"{sk}:{annotation}")
+                annotation_styled = ""
+            sk_styled = (
+                _colors.colorize(sk, _colors.BOLD) if _use_color else sk
+            )
+            print(f"{sk_styled}:{annotation_styled}")
 
             section_entries = section["entries"]
             if not section_entries:
@@ -366,15 +416,19 @@ def render_list(args, projects, engine=None) -> int:
                 continue
 
             # Per-section column widths (name only; description fills rest)
-            name_width = max(len(_label(e)) for e in section_entries)
+            name_width = max(len(_label_plain(e)) for e in section_entries)
             indent = "  "  # 2-space indent under each section header
             desc_col = len(indent) + name_width + 2
             desc_max = term_width - desc_col
             for entry in section_entries:
-                label = _label(entry)
+                plain = _label_plain(entry)
+                styled = _label_styled(entry)
                 desc = entry["description"]
                 wrapped = _wrap_description(desc, desc_max)
-                print(f"{indent}{label:<{name_width}}  {wrapped[0]}")
+                _print_styled_row(
+                    f"{indent}{styled}", plain, name_width,
+                    f"  {wrapped[0]}",
+                )
                 wrap_indent = " " * desc_col
                 for line in wrapped[1:]:
                     print(f"{wrap_indent}{line}")
@@ -900,20 +954,32 @@ def render_info(args, projects, engine) -> int:
         )
         return 1
 
+    # v0.7.37: gate ANSI on once per call. Provenance and shadow banners
+    # get color emphasis; standard field rows stay plain for now.
+    _use_color = _colors.should_use_color()
+
+    def _dim(s):
+        return _colors.colorize(s, _colors.DIM) if _use_color else s
+
+    def _warn(s):
+        # BOLD+YELLOW for attention-grabbing status banners (shadow surface).
+        return _colors.colorize(s, _colors.BOLD, _colors.YELLOW) if _use_color else s
+
     # Surface alias provenance so users see how their input resolved.
+    # DIM emphasis -- contextual information rather than primary data.
     if ctx is not None and ctx.alias_fqcn:
         if getattr(ctx, "resolution_kind", None) == "qualified_alias":
             # User typed the qualified form (e.g., "dazzletools:claude:cleanup").
             # Show both the qualified path AND the canonical-FQCN target.
-            print(
+            print(_dim(
                 f"(qualified alias '{getattr(ctx, 'original_input', ctx.alias_fqcn)}' = "
                 f"'{ctx.alias_fqcn}' -> canonical '{ctx.canonical_fqcn}')"
-            )
+            ))
         else:
-            print(
+            print(_dim(
                 f"(resolved via virtual-kit alias '{ctx.alias_fqcn}' "
                 f"-> '{ctx.canonical_fqcn}')"
-            )
+            ))
 
     # Shadow status: when this tool's short name conflicts with a
     # registered meta-command, surface the dispatch state. The library
@@ -931,7 +997,7 @@ def render_info(args, projects, engine) -> int:
         )
         is_overridden = short in overrides
         print()
-        print(f"Shadow status: name '{short}' is registered as both")
+        print(f"{_warn('Shadow status:')} name '{short}' is registered as both")
         print(f"  - library default meta-command: {short}")
         print(f"  - aggregator tool: {project.get('_fqcn', short)}")
         print(f"The library default takes precedence at parse time.")
@@ -957,7 +1023,18 @@ def render_info(args, projects, engine) -> int:
     if project.get("namespace"):
         print(f"Namespace:   {project['namespace']}")
     print(f"Version:     {project.get('version', 'unknown')}")
-    print(f"Description: {project.get('description', '')}")
+    # v0.7.37: wrap Description to terminal width with continuation-line
+    # indent aligned to the start of the value column. Matches the layout
+    # discipline established by render_list / render_kit_list (#48 / #NN).
+    _label = "Description: "
+    _indent = " " * len(_label)
+    _desc = project.get("description", "")
+    _term_width = _shutil.get_terminal_size((80, 24)).columns
+    _wrap_width = max(20, _term_width - len(_label))
+    _wrapped = _wrap_description(_desc, _wrap_width)
+    print(f"{_label}{_wrapped[0]}")
+    for _line in _wrapped[1:]:
+        print(f"{_indent}{_line}")
     print(f"Platform:    {project.get('platform', 'cross-platform')}")
     if project.get("language"):
         print(f"Language:    {project['language']}")
@@ -1062,6 +1139,16 @@ def render_kit_list(args, kits, projects) -> int:
         print("No kits found.")
         return 0
 
+    # v0.7.37: kit names BOLD, "(always active)" annotation DIM,
+    # cross-platform/specific platform values differentiated via DIM/plain.
+    _use_color = _colors.should_use_color()
+
+    def _bold(s):
+        return _colors.colorize(s, _colors.BOLD) if _use_color else s
+
+    def _dim(s):
+        return _colors.colorize(s, _colors.DIM) if _use_color else s
+
     kit_name = getattr(args, "name", None)
 
     if kit_name:
@@ -1077,8 +1164,8 @@ def render_kit_list(args, kits, projects) -> int:
 
         kit = matching[0]
         name = kit.get("_kit_name") or kit.get("name")
-        active = " (always active)" if kit.get("always_active") else ""
-        print(f"Kit: {name}{active}")
+        active = _dim(" (always active)") if kit.get("always_active") else ""
+        print(f"Kit: {_bold(name)}{active}")
         if kit.get("description"):
             print(f"  {kit['description']}")
         print()
@@ -1104,9 +1191,16 @@ def render_kit_list(args, kits, projects) -> int:
                 if len(desc) > 55:
                     desc = desc[:52] + "..."
                 platform = p.get("platform", "")
-                print(f"  {name_part:<16} {platform:<16} {desc}")
+                # DIM "cross-platform"; leave OS-specific values plain so
+                # they stand out (windows / linux / macos).
+                platform_styled = (
+                    _dim(f"{platform:<16}")
+                    if _use_color and platform == "cross-platform"
+                    else f"{platform:<16}"
+                )
+                print(f"  {name_part:<16} {platform_styled} {desc}")
             else:
-                print(f"  {name_part:<16} {'':16} (not found)")
+                print(f"  {name_part:<16} {'':16} {_dim('(not found)')}")
         print(f"\n  {len(tool_refs)} tool(s)")
         return 0
 
@@ -1115,9 +1209,9 @@ def render_kit_list(args, kits, projects) -> int:
         if i > 0:
             print()
         name = kit.get("_kit_name") or kit.get("name")
-        active = " (always active)" if kit.get("always_active") else ""
+        active = _dim(" (always active)") if kit.get("always_active") else ""
         tool_count = len(kit.get("tools", []))
-        print(f"  {name:<16} {tool_count} tool(s){active}")
+        print(f"  {_bold(f'{name:<16}')} {tool_count} tool(s){active}")
         if kit.get("description"):
             print(f"    {kit['description']}")
     return 0
@@ -1125,12 +1219,17 @@ def render_kit_list(args, kits, projects) -> int:
 
 def render_kit_status(kits) -> int:
     """Show a summary of active kits."""
+    _use_color = _colors.should_use_color()
+
+    def _bold(s):
+        return _colors.colorize(s, _colors.BOLD) if _use_color else s
+
     active = [k for k in kits if k.get("always_active")] or list(kits)
     print(f"Active kits: {len(active)}")
     for kit in active:
         name = kit.get("_kit_name") or kit.get("name")
         tool_count = len(kit.get("tools", []))
-        print(f"  {name}: {tool_count} tool(s)")
+        print(f"  {_bold(name)}: {tool_count} tool(s)")
     return 0
 
 
@@ -1214,7 +1313,10 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
     whether the kit's directory has a nested ``kits/`` subdir.
     """
     if engine is None:
-        print("Error: tree requires engine context", file=_sys.stderr)
+        print(
+            _colors.error("Error: tree requires engine context"),
+            file=_sys.stderr,
+        )
         return 1
 
     as_json = getattr(args, "json", False)
@@ -1276,7 +1378,10 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
     if kit_filter:
         kit_names = [k for k in kit_names if k == kit_filter]
         if not kit_names:
-            print(f"Error: kit {kit_filter!r} not found.", file=_sys.stderr)
+            print(
+                _colors.error(f"Error: kit {kit_filter!r} not found."),
+                file=_sys.stderr,
+            )
             return 1
 
     # Filter out disabled kits unless --show-disabled
@@ -1313,12 +1418,26 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
         return 0
 
     # ASCII tree output
+    # v0.7.37: gate ANSI on once per call. Kit names get BOLD emphasis;
+    # markers (virtual/aggregator/disabled/always_active) get DIM;
+    # shadow markers get BOLD+RED (consistency with render_list).
+    _use_color = _colors.should_use_color()
+
+    def _bold(s):
+        return _colors.colorize(s, _colors.BOLD) if _use_color else s
+
+    def _dim(s):
+        return _colors.colorize(s, _colors.DIM) if _use_color else s
+
+    def _shadow(s):
+        return _colors.colorize(s, _colors.BOLD, _colors.RED) if _use_color else s
+
     header = getattr(engine, "command", "root")
     if getattr(engine, "version_info", None):
         display, _ = engine.version_info
         name = getattr(engine, "name", "")
         header = f"{engine.command} ({name} {display})"
-    print(header)
+    print(_bold(header))
 
     # Virtual kits appear as separate top-level branches with -> arrows
     # to their canonical targets. Collect them from engine.kits (which
@@ -1358,9 +1477,10 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
             markers.append("aggregator")
         if "disabled" in state:
             markers.append("disabled")
-        marker_str = f" [{', '.join(markers)}]" if markers else ""
+        marker_plain = f" [{', '.join(markers)}]" if markers else ""
+        marker_str = _dim(marker_plain) if marker_plain else ""
 
-        print(f"{kit_prefix}{kit_name}{marker_str}")
+        print(f"{kit_prefix}{_bold(kit_name)}{marker_str}")
 
         tools = sorted(by_kit[kit_name], key=lambda p: p.get("_fqcn", ""))
         total_tools += len(tools)
@@ -1378,8 +1498,9 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
                 desc = desc[:57] + "..."
             # Shadow marker: tools whose short name is reserved by a
             # meta-command are flagged in tree output (per issue #56).
+            # BOLD+RED to draw attention, consistent with render_list [*].
             short = project.get("name", "")
-            shadow_marker = " [shadowed]" if short and short in reserved else ""
+            shadow_marker = _shadow(" [shadowed]") if short and short in reserved else ""
             print(f"{branch_indent}{tool_prefix}{fqcn}{shadow_marker}  {desc}")
 
     # Virtual-kit branches — rendered as [virtual] with -> arrows to canonicals.
@@ -1403,8 +1524,9 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
             markers.append("always_active")
         if "disabled" in state:
             markers.append("disabled")
-        marker_str = f" [{', '.join(markers)}]"
-        print(f"{kit_prefix}{vk_name}{marker_str}")
+        marker_plain = f" [{', '.join(markers)}]"
+        marker_str = _dim(marker_plain)
+        print(f"{kit_prefix}{_bold(vk_name)}{marker_str}")
 
         if depth_limit is not None and depth_limit < 2:
             continue
@@ -1421,7 +1543,10 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
         for j, (alias_fqcn, canonical_fqcn) in enumerate(alias_pairs):
             is_last = (j == len(alias_pairs) - 1)
             tool_prefix = "\\-- " if is_last else "+-- "
-            print(f"{branch_indent}{tool_prefix}{alias_fqcn} -> {canonical_fqcn}")
+            # Virtual-kit aliases point at canonical FQCNs; DIM the arrow
+            # so the alias-target pair reads as one logical element.
+            arrow = _dim("->") if _use_color else "->"
+            print(f"{branch_indent}{tool_prefix}{alias_fqcn} {arrow} {canonical_fqcn}")
 
     print()
     if total_aliases:
@@ -1513,14 +1638,16 @@ def setup_handler(args, engine, projects, kits, project_root) -> int:
     # canonical FQCN, alias FQCN, and kit-qualified shortcuts uniformly.
     # engine is mandatory in the registry dispatch path; library
     # consumers that build their own dispatcher must pass an engine.
+    # Advisories (tool-not-found, no-setup) use warn() -> YELLOW.
+    # Genuine error paths (override-file parse/read failures) use error() -> BRIGHT_RED.
     project, ctx = engine.find_project(tool_name)
     if project is None:
-        print(f"Tool {tool_name!r} not found.", file=_sys.stderr)
+        print(_colors.warn(f"Tool {tool_name!r} not found."), file=_sys.stderr)
         return 1
     matches = [project]
 
     if len(matches) > 1:
-        print(f"Multiple tools named {tool_name!r}:", file=_sys.stderr)
+        print(_colors.warn(f"Multiple tools named {tool_name!r}:"), file=_sys.stderr)
         for p in matches:
             print(f"  {p.get('_fqcn', p['name'])}", file=_sys.stderr)
         return 1
@@ -1529,7 +1656,9 @@ def setup_handler(args, engine, projects, kits, project_root) -> int:
     setup = project.get("setup")
     if not setup:
         print(
-            f"Tool {project.get('_fqcn', project['name'])!r} has no setup declared.",
+            _colors.warn(
+                f"Tool {project.get('_fqcn', project['name'])!r} has no setup declared."
+            ),
             file=_sys.stderr,
         )
         return 1
@@ -1542,20 +1671,25 @@ def setup_handler(args, engine, projects, kits, project_root) -> int:
         resolved = resolve_setup_block(project)
     except _json.JSONDecodeError as exc:
         print(
-            f"Error: user override file is not valid JSON: {exc}",
+            _colors.error(f"Error: user override file is not valid JSON: {exc}"),
             file=_sys.stderr,
         )
         return 1
     except OSError as exc:
-        print(f"Error: cannot read user override file: {exc}", file=_sys.stderr)
+        print(
+            _colors.error(f"Error: cannot read user override file: {exc}"),
+            file=_sys.stderr,
+        )
         return 1
     except Exception as exc:
-        print(f"Error resolving setup: {exc}", file=_sys.stderr)
+        print(_colors.error(f"Error resolving setup: {exc}"), file=_sys.stderr)
         return 1
 
     if resolved is None:
         print(
-            f"Tool {project.get('_fqcn', project['name'])!r} has no executable setup.",
+            _colors.warn(
+                f"Tool {project.get('_fqcn', project['name'])!r} has no executable setup."
+            ),
             file=_sys.stderr,
         )
         return 1
@@ -1563,8 +1697,10 @@ def setup_handler(args, engine, projects, kits, project_root) -> int:
     command = resolved.get("command")
     if not command:
         print(
-            f"Tool {project.get('_fqcn', project['name'])!r} has no setup command "
-            f"for this platform.",
+            _colors.warn(
+                f"Tool {project.get('_fqcn', project['name'])!r} has no setup command "
+                f"for this platform."
+            ),
             file=_sys.stderr,
         )
         return 1

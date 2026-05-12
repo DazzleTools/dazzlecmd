@@ -4,6 +4,64 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.37] - 2026-05-12
+
+Phase 4e closeout, Tier 1 commit 9 (final) — closes #49. Terminal color taxonomy lands in `dazzlecmd-lib` as a slim, 8-color ANSI palette wired into the meta-command render surfaces (`render_list`, `render_info`, `render_tree`, `render_kit_list`, `render_kit_status`) and the user-facing stderr warning paths. dazzlecmd itself ships zero color code in this commit — the styling rides on the v0.7.34 X-22-narrow collapse, which already made dazzlecmd a thin wrapper over the library's renderers. amdead and wtf-windows pick up the styling automatically. This closes Tier 1 of the 0.7.x master closeout plan.
+
+The /dev-workflow-process (`2026-05-11__04-14-42__dev-workflow-process__v0-7-37-color-taxonomy.md`) framed three orthogonal decisions: (1) **lib or per-consumer** — looking at amdead and wtf-windows cli.py, both consume the same library renderers, so adding color in dazzlecmd would force every other consumer to reimplement it; (2) **rich vs ANSI** — slim 8-color ANSI palette only (compatible with PuTTY, Windows Terminal, legacy cmd.exe via colorama, modern conhost with VT processing); (3) **flag vs config vs env** — env vars (`NO_COLOR`, `DZ_COLOR`, `FORCE_COLOR`) plus `isatty()` gating. No new argparse flags. Rationale: keep the surface minimal and let users disable via the community-standard `NO_COLOR=1` if their terminal can't handle ANSI.
+
+The new `dazzlecmd_lib.colors` module exports the 8-color palette (`RESET`/`BOLD`/`DIM`/`RED`/`GREEN`/`YELLOW`/`CYAN`/`BRIGHT_RED`), a `should_use_color(stream)` probe (NO_COLOR > DZ_COLOR=always|FORCE_COLOR > DZ_COLOR=never > isatty), a `colorize(text, *codes)` wrapper, a `colorize_for(stream, text, *codes)` convenience wrapper for the stderr-warning pattern, and two semantic stderr-class wrappers — `warn(text)` (YELLOW) and `error(text)` (BRIGHT_RED) — that default the stream to `sys.stderr` so call sites collapse from `print(colorize_for(sys.stderr, f"...", YELLOW), file=sys.stderr)` to `print(warn(f"..."), file=sys.stderr)`. On Windows the module lazily imports colorama; for the forced-color paths (`DZ_COLOR=always` / `FORCE_COLOR`) it calls `colorama.init(strip=False)` so ANSI bytes survive into a redirected pipe — colorama's default strips them.
+
+### Added
+
+- **`dazzlecmd_lib.colors`** — new module. 8-color ANSI palette, `should_use_color(stream=None)`, `colorize(text, *codes)`, `colorize_for(stream, text, *codes)`, semantic stderr wrappers `warn(text, stream=None)` and `error(text, stream=None)`, `_init_windows_ansi(force=False)`. Lazy colorama import on Windows. Public API documented in module docstring.
+
+- **`dazzlecmd-lib[color]` optional extra** — colorama as a Windows-only optional dep. Modern Windows (1511+) doesn't need colorama; legacy cmd.exe does. Keeping it optional preserves the lib's slim-defaults constraint.
+
+### Changed
+
+- **Library `render_list`** — section headers BOLD, virtual-kit annotation (`(virtual: <vk_name>)`) DIM, shadow `[*]` marker BOLD+RED, dual-presence `[+]` marker CYAN, flat-fallback header row BOLD. Plain/styled label split so column-width math stays correct in the presence of ANSI codes.
+
+- **Library `render_info`** — alias provenance line DIM (both qualified and standard variants), shadow-status banner "Shadow status:" BOLD+YELLOW. **Description field now wraps to terminal width** (closes #60) — continuation lines indent to the value column (13 spaces past `Description: `) so multi-line descriptions align cleanly. Same `_wrap_description` helper that `render_list` and `dz kit list <kit>` use, applied uniformly. Previously the `Description:` line was a bare `print()` that ran off-screen on narrow terminals or hard-wrapped at terminal width with no continuation indent.
+
+- **Library `render_tree`** — root header BOLD, kit names BOLD, kit markers (`[always_active]` / `[aggregator]` / `[disabled]` / `[virtual]`) DIM, shadow `[shadowed]` marker BOLD+RED, virtual-kit alias arrows DIM.
+
+- **Library `render_kit_list`** — kit names BOLD, `(always active)` annotation DIM, "cross-platform" platform value DIM (OS-specific values stay plain so they stand out), `(not found)` marker DIM.
+
+- **Library `render_kit_status`** — kit names BOLD.
+
+- **Library stderr paths** — user-facing meta-command stderr writes in `default_meta_commands.py` and `cli_helpers.py` now use `colorize_for(sys.stderr, ...)` with YELLOW (advisories: tool-not-found, no-setup, conflicts-with-reserved) or BRIGHT_RED (errors: tree-requires-engine, kit-not-found, override-file-parse-failure, etc). Engine/loader/registry subprocess-orchestration stderr writes are intentionally untouched in this commit; those are higher-risk plumbing paths and the user-facing value of styling them is lower. Sweep deferred to a follow-up.
+
+- **dazzlecmd `_cmd_setup`** — adopts the same `colorize_for(sys.stderr, ...)` pattern for the user-facing tool-not-found / override-file-parse / platform-not-available paths. The remaining cli.py-side stderr writes (`_cmd_add`, `_cmd_kit_show`, `_cmd_kit_remove`, `dispatch_tool` error path, etc.) are deferred to a follow-up — same boundary as the engine/loader/registry sweep.
+
+- **`dazzlecmd-lib` version**: `0.5.0` → `0.6.0` (MINOR — new public `dazzlecmd_lib.colors` module, new `colorize_for` API, visible behavior change on every meta-command render surface).
+
+### Color detection precedence
+
+1. `NO_COLOR` set (any value, including empty string) → no color. Community standard (https://no-color.org/).
+2. `DZ_COLOR=always` OR `FORCE_COLOR` set → color on (overrides isatty).
+3. `DZ_COLOR=never` → no color.
+4. Fallback: `stream.isatty()` — TTY gets color, redirected/piped output stays plain.
+
+### Tests
+
+- 1016 passed, 13 skipped (up from 979 in v0.7.36; +33 new tests in `tests/test_colors.py` plus +4 wrap tests in `tests/test_default_meta_commands.py::TestRenderInfoDescriptionWrap`).
+- `tests/test_colors.py` — 33 tests covering `colorize` (empty codes, single code, multiple codes, empty string), env precedence (NO_COLOR vs FORCE_COLOR, NO_COLOR vs DZ_COLOR=always, DZ_COLOR=always vs non-TTY, FORCE_COLOR vs non-TTY, DZ_COLOR=never vs TTY, DZ_COLOR=never loses to FORCE_COLOR, case-insensitive DZ_COLOR, garbage DZ_COLOR falls through), isatty fallback (TTY True, non-TTY False, stream without isatty, default `sys.stdout`), public constants regression guard (8-color palette only, no 256-color or RGB), the `colorize_for` stream-aware wrapper (TTY/non-TTY/NO_COLOR/FORCE_COLOR/empty-codes), and the semantic stderr wrappers `warn` and `error` (TTY/non-TTY/NO_COLOR/explicit-stream, with a regression guard that warn and error use distinct colors).
+- `tests/test_default_meta_commands.py::TestRenderInfoDescriptionWrap` — 4 tests covering short-description-unwrapped, long-description-wraps-to-terminal-width, continuation-indent-aligns-with-value-column, empty-description-renders-single-line.
+- Human checklist: `tests/checklists/v0.7.37__Tier1B__color-taxonomy.md`.
+
+### Refs
+
+- Closes #49 (terminal color taxonomy across `dz list` / `dz tree` / `dz info` / `dz kit list` / stderr).
+- Closes #60 (`dz info` Description field wraps to terminal width — folded into this commit per scope discussion; ~10 LOC + 4 tests).
+- Refs #50 (Phase 4e retrospective; Tier 1 commit 9 of master plan — Tier 1 now closes).
+- Refs #30 (Phase 4 epic; Tier 1 of master closeout plan completes).
+- Refs #61 (extended description / mini-manpage surface; new feature deferred to /dev-workflow-process).
+
+### Design
+
+- `private/claude/2026-05-11__04-14-42__dev-workflow-process__v0-7-37-color-taxonomy.md`
+
 ## [0.7.36] - 2026-05-11
 
 Phase 4e closeout, Tier 1 commit 8 — closes #48. The `dz kit list <kit>` canonical-kit drill-in had retained a pre-v0.7.27 rendering pattern: fixed 16-character columns for name and platform, plus a hardcoded 55-character description truncation with ellipsis. Result: names longer than 16 chars (like `claude-session-metadata`) collided with the platform column, and descriptions got chopped even when the terminal had plenty of room. Every other display surface (`dz list`, `dz tree`, the `dz` help builder, and the v0.7.27 virtual-kit drill-in via `_render_virtual_kit_aliases`) already computed widths from actual data and used `_wrap_description` for terminal-aware wrapping. v0.7.36 brings the canonical-kit drill-in into parity.

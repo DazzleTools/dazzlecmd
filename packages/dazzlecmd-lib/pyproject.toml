@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "dazzlecmd-lib"
-version = "0.5.0"
+version = "0.6.0"
 description = "Engine library for dazzlecmd-pattern tool aggregators"
 readme = "README.md"
 license = {text = "GPL-3.0-or-later"}
@@ -26,6 +26,12 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
+
+[project.optional-dependencies]
+# Windows ANSI translation for legacy cmd.exe (modern Windows 1511+
+# handles ANSI natively via VT processing; only legacy cmd needs this).
+# v0.6.0: introduced for the color taxonomy module (#49).
+color = ["colorama>=0.4.0; platform_system == 'Windows'"]
 
 [project.urls]
 Homepage = "https://github.com/DazzleTools/dazzlecmd"

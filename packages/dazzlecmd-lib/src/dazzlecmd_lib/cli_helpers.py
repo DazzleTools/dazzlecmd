@@ -19,6 +19,8 @@ from __future__ import annotations
 import sys as _sys
 from typing import Iterable, Optional
 
+from . import colors as _colors
+
 
 def build_tool_subparsers(
     subparsers,
@@ -74,7 +76,9 @@ def build_tool_subparsers(
         if name in reserved:
             if warn_on_conflict and name not in exempt:
                 print(
-                    f"Warning: Tool {name!r} conflicts with reserved command, skipping",
+                    _colors.warn(
+                        f"Warning: Tool {name!r} conflicts with reserved command, skipping"
+                    ),
                     file=_sys.stderr,
                 )
             continue

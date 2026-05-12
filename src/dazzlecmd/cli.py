@@ -18,6 +18,7 @@ from dazzlecmd.loader import (
     get_active_kits,
     resolve_entry_point,
 )
+from dazzlecmd_lib import colors as _colors
 
 
 # Reserved command names that cannot be used as tool names
@@ -1614,7 +1615,10 @@ def _cmd_setup(args, engine):
         if matches:
             project = matches[0]
         else:
-            print(f"Tool '{tool_name}' not found.", file=sys.stderr)
+            print(
+                _colors.warn(f"Tool '{tool_name}' not found."),
+                file=sys.stderr,
+            )
             return 1
 
     if not project.get("setup"):
@@ -1631,16 +1635,22 @@ def _cmd_setup(args, engine):
     try:
         effective = resolve_setup_block(project)
     except UnsupportedSchemaVersionError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
+        print(_colors.error(f"Error: {exc}"), file=sys.stderr)
         return 1
     except _json.JSONDecodeError as exc:
         # Malformed user-override JSON (v0.7.22). Surface clean error with
         # path + parse position; no Python traceback.
-        print(f"Error: user override file is not valid JSON: {exc}", file=sys.stderr)
+        print(
+            _colors.error(f"Error: user override file is not valid JSON: {exc}"),
+            file=sys.stderr,
+        )
         return 1
     except OSError as exc:
         # Override file exists but can't be read (permissions, etc.).
-        print(f"Error: cannot read user override file: {exc}", file=sys.stderr)
+        print(
+            _colors.error(f"Error: cannot read user override file: {exc}"),
+            file=sys.stderr,
+        )
         return 1
 
     cmd_str = effective.get("command") if effective else None
@@ -1649,9 +1659,11 @@ def _cmd_setup(args, engine):
         pi = get_platform_info()
         tag = pi.os + (f".{pi.subtype}" if pi.subtype else "")
         print(
-            f"No setup command available for platform '{tag}'. "
-            f"Add setup.command, setup.platforms.{pi.os}, "
-            f"or setup.platforms.{pi.os}.general to the manifest.",
+            _colors.warn(
+                f"No setup command available for platform '{tag}'. "
+                f"Add setup.command, setup.platforms.{pi.os}, "
+                f"or setup.platforms.{pi.os}.general to the manifest."
+            ),
             file=sys.stderr,
         )
         return 1

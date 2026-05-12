@@ -8,6 +8,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.6.0] - 2026-05-12
+
+Ships with dazzlecmd v0.7.37 (Tier 1 commit 9, final -- closes #49). New top-level module `dazzlecmd_lib.colors` lands a slim ANSI color taxonomy that all the default meta-command renderers consume. Consumers (dazzlecmd, amdead, wtf-windows, sysdiagnose, future personal aggregators) inherit color output on every render surface automatically -- no per-consumer wiring required.
+
+Slim by design: 8-color ANSI palette (RESET / BOLD / DIM / RED / GREEN / YELLOW / CYAN / BRIGHT_RED), broadly supported across PuTTY, cmd.exe, PowerShell, Windows Terminal, conhost.exe with VT processing, bash, zsh, WSL. No 256-color or truecolor (RGB) codes because those break older terminals. colorama is an optional Windows-only extra; modern Windows 1511+ handles ANSI natively via `ENABLE_VIRTUAL_TERMINAL_PROCESSING` so colorama isn't required for most users. Disable color via `NO_COLOR=1` (community standard) or `DZ_COLOR=never` (project-specific). Force color through a pipe via `DZ_COLOR=always` or `FORCE_COLOR=1`.
+
+### Added
+
+- **`dazzlecmd_lib.colors`** -- new module. Public API: `RESET`, `BOLD`, `DIM`, `RED`, `GREEN`, `YELLOW`, `CYAN`, `BRIGHT_RED` (ANSI escape strings), `should_use_color(stream=None) -> bool` (env-aware TTY probe; precedence `NO_COLOR > DZ_COLOR=always|FORCE_COLOR > DZ_COLOR=never > stream.isatty()`), `colorize(text, *codes) -> str` (wrap text in ANSI codes terminated with RESET), `colorize_for(stream, text, *codes) -> str` (convenience wrapper combining `should_use_color(stream)` + `colorize` for explicit-stream/explicit-codes call sites), `warn(text, stream=None) -> str` (YELLOW; defaults stream to `sys.stderr`), `error(text, stream=None) -> str` (BRIGHT_RED; defaults stream to `sys.stderr`). The semantic `warn` / `error` wrappers are the recommended pattern for stderr advisories and errors; `colorize_for` and `colorize` remain available for non-standard styling. On Windows the module lazily initializes colorama; forced-color paths (`DZ_COLOR=always` / `FORCE_COLOR`) call `colorama.init(strip=False)` so ANSI bytes survive into redirected pipes (colorama's default strips them).
+
+- **`[color]` optional extra** -- `colorama>=0.4.0` declared as a Windows-only optional dependency. Install via `pip install dazzlecmd-lib[color]` for legacy cmd.exe (codepage 437/1252) terminals. Most modern Windows installations don't need it because Win10 1511+ supports ANSI natively.
+
+### Changed
+
+- **`render_list`** -- section headers BOLD; virtual-kit annotation `(virtual: <vk_name>)` DIM; shadow `[*]` marker BOLD+RED; dual-presence `[+]` marker CYAN; flat-fallback header row BOLD. Column-width math handles ANSI codes correctly via a plain/styled label split.
+
+- **`render_info`** -- alias provenance line (both qualified and standard variants) DIM; "Shadow status:" banner BOLD+YELLOW. Tool field labels stay plain (BOLD on every label would be noisy).
+
+- **`render_tree`** -- root header BOLD; kit names BOLD; markers `[always_active]` / `[aggregator]` / `[disabled]` / `[virtual]` DIM; shadow `[shadowed]` marker BOLD+RED (consistency with `render_list`); virtual-kit alias arrows (`->`) DIM.
+
+- **`render_kit_list`** -- kit names BOLD; `(always active)` annotation DIM; `cross-platform` platform value DIM (OS-specific values like `windows` / `linux` stay plain to stand out); `(not found)` marker DIM.
+
+- **`render_kit_status`** -- kit names BOLD.
+
+- **stderr warning paths in `default_meta_commands.py` and `cli_helpers.py`** -- user-facing meta-command stderr writes now use `colorize_for(sys.stderr, ...)` with YELLOW for advisories (tool-not-found, no-setup, conflicts-with-reserved) or BRIGHT_RED for errors (tree-requires-engine, kit-not-found, override-file-parse-failure, override-file-read-failure, generic setup-resolve failure). engine/loader/registry subprocess-orchestration stderr paths are intentionally untouched in this commit; sweep deferred to a follow-up so the higher-risk plumbing paths get their own attention.
+
+### Notes
+
+- `colors.py` is documented with detection-priority commentary in the module docstring, plus per-function docstrings showing the recommended usage patterns. The `_init_windows_ansi(force=False)` helper is module-private but documented for maintainers; `force=True` is the escape hatch for forced-color piped output on Windows.
+
+- Test fixtures (`reset_ansi_init`, `clear_color_env`, `_TTYStream`, `_NonTTYStream`) in `tests/test_colors.py` are the recommended pattern for any future test that exercises color-detection paths.
+
 ## [0.5.0] - 2026-05-07
 
 Ships with dazzlecmd v0.7.34 (Tier 1 commit 6 -- the X-22-narrow CLI collapse). The library reaches full byte-equivalence parity with dazzlecmd's pre-collapse `_cmd_list` / `_cmd_info` / `_cmd_tree` so dazzlecmd can collapse those commands to thin wrappers without losing any user-visible surface.

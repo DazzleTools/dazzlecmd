@@ -795,6 +795,100 @@ class TestRenderInfo:
         assert "1 var(s)" in out
 
 
+class TestRenderInfoDescriptionWrap:
+    """v0.7.37: Description field wraps to terminal width with continuation
+    indent aligned to the value column (closes the wrap-fix follow-up)."""
+
+    def _label_len(self):
+        return len("Description: ")  # 13 chars
+
+    def test_short_description_unwrapped(self, capsys, monkeypatch):
+        # Force a wide terminal so short text never wraps.
+        monkeypatch.setenv("COLUMNS", "200")
+        projects = [_project("alpha", description="short desc", fqcn="k:alpha")]
+        engine = _engine_with(projects)
+        dmc.render_info(_args(tool="alpha"), projects, engine=engine)
+        out = capsys.readouterr().out
+        # The description line appears as one line; no continuation indent
+        # lines beneath it (which would show up as 13-space-prefixed text).
+        desc_lines = [l for l in out.splitlines() if l.startswith("Description: ")]
+        assert len(desc_lines) == 1
+        assert desc_lines[0] == "Description: short desc"
+
+    def test_long_description_wraps_to_terminal_width(self, capsys, monkeypatch):
+        # Narrow terminal forces wrap.
+        monkeypatch.setattr(
+            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            lambda fallback=(80, 24): type("S", (), {"columns": 60})(),
+        )
+        long_desc = (
+            "Apply the driver-disable workaround: turn off the leaking AMD "
+            "iGPU when a discrete GPU is available to take over display. "
+            "Snapshots state for revert."
+        )
+        projects = [_project("alpha", description=long_desc, fqcn="k:alpha")]
+        engine = _engine_with(projects)
+        dmc.render_info(_args(tool="alpha"), projects, engine=engine)
+        out = capsys.readouterr().out
+        lines = out.splitlines()
+        desc_idx = next(i for i, l in enumerate(lines) if l.startswith("Description: "))
+        # The Description: line should be <= terminal width
+        assert len(lines[desc_idx]) <= 60
+        # At least one continuation line follows, indented to value column
+        # (13 spaces). The next non-continuation field is "Platform:".
+        cont_lines = []
+        i = desc_idx + 1
+        while i < len(lines) and lines[i].startswith(" " * self._label_len()):
+            cont_lines.append(lines[i])
+            i += 1
+        assert len(cont_lines) >= 1
+        # Every continuation line starts with exactly 13 spaces, no more
+        for line in cont_lines:
+            assert line.startswith(" " * 13)
+            # next char isn't whitespace (no over-indent)
+            assert line[13] != " "
+
+    def test_continuation_indent_aligns_with_value_column(self, capsys, monkeypatch):
+        # Verify the alignment: continuation chars line up directly under
+        # the first char of the description value on the header row.
+        monkeypatch.setattr(
+            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            lambda fallback=(80, 24): type("S", (), {"columns": 40})(),
+        )
+        projects = [
+            _project(
+                "alpha",
+                description="word1 word2 word3 word4 word5 word6 word7",
+                fqcn="k:alpha",
+            ),
+        ]
+        engine = _engine_with(projects)
+        dmc.render_info(_args(tool="alpha"), projects, engine=engine)
+        out = capsys.readouterr().out
+        lines = out.splitlines()
+        desc_idx = next(i for i, l in enumerate(lines) if l.startswith("Description: "))
+        header = lines[desc_idx]
+        # Column where description value begins on the header row
+        value_col = len("Description: ")
+        # Continuation line's first non-space char should be at that column
+        cont = lines[desc_idx + 1]
+        assert cont.startswith(" " * value_col)
+        assert cont[value_col] != " "
+
+    def test_empty_description_renders_single_line(self, capsys, monkeypatch):
+        monkeypatch.setattr(
+            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            lambda fallback=(80, 24): type("S", (), {"columns": 80})(),
+        )
+        projects = [_project("alpha", description="", fqcn="k:alpha")]
+        engine = _engine_with(projects)
+        dmc.render_info(_args(tool="alpha"), projects, engine=engine)
+        out = capsys.readouterr().out
+        desc_lines = [l for l in out.splitlines() if l.startswith("Description:")]
+        assert len(desc_lines) == 1
+        assert desc_lines[0].rstrip() == "Description:"
+
+
 class TestInfoParserFactory:
     def test_registers_subparser_with_tool_arg(self):
         parser = argparse.ArgumentParser()
