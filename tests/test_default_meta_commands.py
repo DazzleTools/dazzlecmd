@@ -958,6 +958,65 @@ class TestRenderKitList:
         out = capsys.readouterr().out
         assert "(not found)" in out
 
+    def test_fqcn_ref_resolves_via_fqcn_match(self, capsys):
+        """Aggregator-as-kit kits contain full FQCNs (e.g. 'wtf:core:locked').
+
+        Regression for #64: prior to fix, the ``ns:name`` parser split on
+        the first colon -- yielding ``ns="wtf"``, ``name_part="core:locked"``
+        -- and the matcher then looked for a project with name
+        ``"core:locked"`` which never exists. Multi-segment FQCN refs must
+        match by ``_fqcn`` directly.
+        """
+        kits = [_kit("wtf", tools=["wtf:core:locked", "wtf:core:restarted"])]
+        projects = [
+            _project(
+                "locked", namespace="core", kit="wtf",
+                fqcn="wtf:core:locked", description="Lock cause",
+            ),
+            _project(
+                "restarted", namespace="core", kit="wtf",
+                fqcn="wtf:core:restarted", description="Restart cause",
+            ),
+        ]
+        rc = dmc.render_kit_list(_args(name="wtf"), kits, projects)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "(not found)" not in out
+        assert "Lock cause" in out
+        assert "Restart cause" in out
+
+    def test_fqcn_ref_displays_leaf_name(self, capsys):
+        """The display column shows the project's leaf name, not the full
+        FQCN, so existing ``dz kit list`` output stays readable.
+        """
+        kits = [_kit("wtf", tools=["wtf:core:locked"])]
+        projects = [
+            _project(
+                "locked", namespace="core", kit="wtf",
+                fqcn="wtf:core:locked", description="Lock cause",
+            ),
+        ]
+        dmc.render_kit_list(_args(name="wtf"), kits, projects)
+        out = capsys.readouterr().out
+        # Leaf name visible, full FQCN not in the row body (only in lookup).
+        assert "  locked   " in out or "locked " in out
+
+    def test_legacy_ns_name_ref_still_works(self, capsys):
+        """Existing kit manifests with 2-segment ``ns:name`` refs (e.g.
+        ``core:find``) keep working via the legacy fallback parser.
+        """
+        kits = [_kit("core", tools=["core:find"])]
+        projects = [
+            _project(
+                "find", namespace="core", kit="core",
+                fqcn="core:find", description="File search",
+            ),
+        ]
+        dmc.render_kit_list(_args(name="core"), kits, projects)
+        out = capsys.readouterr().out
+        assert "(not found)" not in out
+        assert "File search" in out
+
 
 class TestRenderKitStatus:
     def test_prints_active_count(self, capsys):

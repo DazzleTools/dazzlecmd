@@ -88,7 +88,13 @@ class FQCNIndex:
       (discovery order), used for precedence rank defaults.
     """
 
-    def __init__(self):
+    def __init__(self, command="dz"):
+        # ``command`` is the consumer's CLI program name (e.g. "dz", "wtf",
+        # "amdead"). Used to format user-facing precedence-notification
+        # messages with the right command name; defaults to "dz" for
+        # legacy callers that instantiate FQCNIndex directly without an
+        # engine context.
+        self.command = command
         self.canonical_index = {}
         self.alias_index = {}
         self.short_index = {}
@@ -409,9 +415,9 @@ class FQCNIndex:
         others_display = ", ".join(self._kit_of(f) for f in other_fqcns)
 
         precedence_note = (
-            f"dz: '{name}' resolved to {picked_fqcn} "
+            f"{self.command}: '{name}' resolved to {picked_fqcn} "
             f"(also in: {others_display}). "
-            f"Use 'dz {picked_fqcn}' to be explicit."
+            f"Use '{self.command} {picked_fqcn}' to be explicit."
         )
         if _stale_prefix:
             notification = _stale_prefix + "\n" + precedence_note
@@ -596,7 +602,7 @@ class AggregatorEngine:
         self.kits = []
         self.active_kits = []
         self.projects = []
-        self.fqcn_index = FQCNIndex()
+        self.fqcn_index = FQCNIndex(command=self.command)
         self._precedence_cache = None
 
     def find_project_root(self, start_path=None):
@@ -739,13 +745,14 @@ class AggregatorEngine:
         count = len(reportable)
         details = ", ".join(f"'{s}' -> '{f}'" for s, f in reportable[:3])
         more = f" (+{count - 3} more)" if count > 3 else ""
+        cmd = self.command
         print(
-            f"dz: warning: {count} stale favorite(s) detected: {details}{more}. "
+            f"{cmd}: warning: {count} stale favorite(s) detected: {details}{more}. "
             f"These point to FQCNs not in the current index (virtual kit "
             f"removed, tool deleted, or kit disabled). Run "
-            f"'dz kit favorite list' to inspect; remove stale entries "
-            f"with 'dz kit favorite --remove <short>' or re-point them "
-            f"via 'dz kit favorite <short> <new-fqcn>'.",
+            f"'{cmd} kit favorite list' to inspect; remove stale entries "
+            f"with '{cmd} kit favorite --remove <short>' or re-point them "
+            f"via '{cmd} kit favorite <short> <new-fqcn>'.",
             file=sys.stderr,
         )
 
@@ -1178,7 +1185,7 @@ class AggregatorEngine:
         Assumes projects are already annotated with ``_fqcn``, ``_short_name``,
         and ``_kit_import_name`` by ``_discover_aggregator``.
         """
-        self.fqcn_index = FQCNIndex()
+        self.fqcn_index = FQCNIndex(command=self.command)
         for project in self.projects:
             # Safety net: annotate if discovery path didn't (unit tests etc.)
             if "_fqcn" not in project:
@@ -1239,11 +1246,12 @@ class AggregatorEngine:
         )
         fqcn = deepest["_fqcn"]
         segments = max_colons + 1
+        cmd = self.command
         print(
-            f"dz: hint: deeply nested tool '{fqcn}' ({segments} segments). "
+            f"{cmd}: hint: deeply nested tool '{fqcn}' ({segments} segments). "
             f"If used often, consider rerooting -- extract this subtree as a "
             f"standalone install so it can be invoked directly. Set DZ_QUIET=1 "
-            f"or 'dz kit silence {fqcn}' to silence.",
+            f"or '{cmd} kit silence {fqcn}' to silence.",
             file=sys.stderr,
         )
 

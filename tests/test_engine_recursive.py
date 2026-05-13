@@ -370,6 +370,31 @@ class TestRerootHint:
         assert "5 segments" in captured.err
         assert "rerooting" in captured.err
 
+    def test_hint_uses_engine_command(self, capsys):
+        """Hint message uses the consumer's command name, not hardcoded 'dz'.
+
+        Regression for #64: lib previously hardcoded 'dz' in user-facing
+        hint messages, giving wtf-windows / amdead / future consumers bad
+        advice (e.g., 'dz kit silence ...' instead of 'wtf kit silence ...').
+        """
+        engine = AggregatorEngine(command="wtf", is_root=True)
+        engine.projects = [
+            {
+                "name": "leaf",
+                "_fqcn": "a:b:c:d:leaf",
+                "_short_name": "leaf",
+                "_kit_import_name": "a",
+                "_dir": "/fake",
+                "description": "deep tool",
+            }
+        ]
+        engine._maybe_emit_reroot_hint()
+        captured = capsys.readouterr()
+        assert "wtf: hint:" in captured.err
+        assert "'wtf kit silence" in captured.err
+        # No hardcoded dz in the per-engine portions of the message.
+        assert "dz kit silence" not in captured.err
+
     def test_hint_silenceable_via_dz_quiet(self, monkeypatch, capsys):
         monkeypatch.setenv("DZ_QUIET", "1")
         engine = AggregatorEngine(is_root=True)

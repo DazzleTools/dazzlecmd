@@ -4,6 +4,42 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.39] - 2026-05-12
+
+Bug-fix patch — closes #64. Removes the last user-visible dazzlecmd-isms from the library code path and fixes a `render_kit_list` regression that surfaced when v0.7.38 started honestly populating `kit["tools"]` for aggregator-as-kit. Surfaced by the post-v0.7.38 wtf-windows recursion sweep where every tool in the embedded `dz` kit rendered as `(not found)`.
+
+The fix has two halves. **Half 1 — FQCN-aware kit-list matching:** the kit-tool-to-project lookup in both the library's `render_kit_list` (`default_meta_commands.py:1178`) and dazzlecmd's `_cmd_kit_list` (`cli.py:558`) used a naive `ref.split(":", 1)` which only handles 2-segment refs (`core:find`, `dazzletools:git`). For multi-segment FQCN refs produced by `_discover_aggregator`'s post-recursion populate (`dz:core:find`, `wtf:core:locked`), the splitter yielded `ns="dz"`, `name_part="core:find"`, and the matcher then looked for a project with name `"core:find"` which never exists. Now matches by `_fqcn` first, falls back to legacy `ns:name` parsing for backward compatibility with existing kit manifests.
+
+**Half 2 — `engine.command` plumbing through user-facing messages:** five places in the library hardcoded `'dz'` in user-facing hint and warning text, giving non-dazzlecmd consumers (wtf-windows, amdead, future personal aggregators) bad advice ("Use 'dz core:locked' to be explicit" when invoked through wtf). Threaded `engine.command` through: the FQCN-index precedence-note (`engine.py:412/414`), the deeply-nested-tool hint (`engine.py:1244-1248`), the stale-favorite warning (`engine.py:742-749`), and the short-name-collision hint in `render_list` (`default_meta_commands.py:445-447`). `FQCNIndex.__init__` now accepts a `command` parameter (default `"dz"` for legacy callers); the engine instantiates it as `FQCNIndex(command=self.command)`.
+
+### Fixed
+
+- **`render_kit_list` and `_cmd_kit_list` FQCN matching** — kit tools containing full FQCNs (e.g. `dz:core:find`, `wtf:core:locked`) now resolve correctly. Affected both forward (`dz kit list wtf`) and inverse (`wtf kit list dz`) directions. Same fix applied to both the library renderer and dazzlecmd's pre-X-22-full CLI implementation (the two still duplicate this logic — Category C migration is deferred).
+- **Hardcoded `'dz'` in `FQCNIndex` precedence-note** (`engine.py:412/414`) — used `self.command` (threaded in via the new `FQCNIndex(command=...)` parameter). Affects every consumer that hits an ambiguous short-name resolution (`wtf locked`, etc.).
+- **Hardcoded `'dz'` in deeply-nested-tool hint** (`engine.py:1244-1248`) — used `self.command`. wtf users invoking a 4+ segment tool now see `'wtf kit silence ...'` instead of `'dz kit silence ...'`.
+- **Hardcoded `'dz'` in stale-favorite warning** (`engine.py:742-749`) — used `self.command`.
+- **Hardcoded `'dz'` in short-name collision hint in `render_list`** (`default_meta_commands.py:445-447`) — uses `getattr(engine, "command", None) or "dz"`. Visible in `dz list` / `wtf list` output when collisions exist.
+
+### Tests
+
+- 1025 passed, 13 skipped (up from 1021 in v0.7.38; +4 new: 3 in `tests/test_default_meta_commands.py::TestRenderKitList` covering FQCN-match path, leaf-name display, and legacy `ns:name` fallback; 1 in `tests/test_engine_recursive.py::TestRerootHint::test_hint_uses_engine_command` regression guard).
+
+### Changed
+
+- **`FQCNIndex.__init__` signature** — adds `command="dz"` kwarg. Backward-compatible default for legacy callers; engine passes `self.command` so consumer-specific messages render correctly.
+- **`dazzlecmd-lib` version**: `0.6.1` → `0.6.2` (PATCH — bug fix, backward-compatible API change).
+
+### Known deferred
+
+- **DockerRunner image-not-found hint** (`registry.py:1200`) still emits `Try: dz setup <fqcn>`. The runner factory doesn't have `engine.command` plumbed in; fixing requires either threading the engine through or stashing command on the project at discovery. Low priority (only fires when Docker tool pre-flight fails).
+
+### Refs
+
+- Closes #64 (`render_kit_list` FQCN matching + hardcoded `'dz'` in ambiguity message).
+- Refs #63 (v0.7.38 fix exposed Half 1 by populating `kit["tools"]` honestly).
+- Refs #30 (Phase 4 epic — lib is the product; remove dazzlecmd-isms).
+- Refs #50 (Phase 4e retro — cross-aggregator dispatch correctness).
+
 ## [0.7.38] - 2026-05-12
 
 Bug-fix patch — closes #63. The `discover_kits` / `_load_in_repo_kit_manifest` machinery for "aggregator-as-kit" embedding was structurally wrong: when an embedded thing was a full aggregator (had its own `kits/` subdirectory with multiple kit registry pointers), the loader treated it as a single self-describing kit, merging an arbitrary inner kit's fields (including identity fields like `name`, `tools`, `description`, `version`) into the outer pointer. The forward direction (dazzlecmd embeds wtf-windows) happened to work because wtf's `kits/core.kit.json` declares `tools_dir: "tools"` and `manifest: ".wtf.json"` — those merged fields happened to be correct. The inverse direction (wtf-windows embeds dazzlecmd) broke because dazzlecmd's per-kit pointers are minimal (no `tools_dir` declared), leaving the merge with no useful structural hints and a misconstructed absolute `tools_dir` that the engine then mis-normalized via `os.path.basename`.

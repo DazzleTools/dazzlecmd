@@ -8,6 +8,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.6.2] - 2026-05-12
+
+Ships with dazzlecmd v0.7.39 (bug-fix patch -- closes dazzlecmd #64). Fixes a regression in `render_kit_list` that v0.6.1's honest `kit["tools"]` populate exposed, plus four hardcoded `'dz'` strings in user-facing hint and warning text that gave non-dazzlecmd consumers bad advice.
+
+### Fixed
+
+- **`render_kit_list` FQCN matching** (`default_meta_commands.py:1178-1207`) -- the kit-tool-to-project lookup used `ref.split(":", 1)` which only handles 2-segment refs. For multi-segment FQCNs (e.g. `dz:core:find`, `wtf:core:locked`) produced by the v0.6.1 post-recursion populate, the splitter yielded the wrong `name_part` and every tool rendered as `(not found)`. Now matches by `_fqcn` first; falls back to legacy `ns:name` parsing for backward compat. Display column shows the project's leaf name, not the full FQCN.
+
+- **Hardcoded `'dz'` in `FQCNIndex` precedence-note** (`engine.py:412/414`) -- non-dazzlecmd consumers now see `"Use 'wtf core:locked' to be explicit"` instead of `"Use 'dz core:locked' to be explicit"`.
+
+- **Hardcoded `'dz'` in deeply-nested-tool hint** (`engine.py:1244-1248`) -- now `"{cmd} kit silence ..."`.
+
+- **Hardcoded `'dz'` in stale-favorite warning** (`engine.py:742-749`) -- now `"{cmd} kit favorite list"` / `"{cmd} kit favorite --remove ..."`.
+
+- **Hardcoded `'dz'` in short-name-collision hint in `render_list`** (`default_meta_commands.py:445-447`) -- uses `getattr(engine, "command", None) or "dz"`.
+
+### Changed
+
+- **`FQCNIndex.__init__` signature** -- adds `command="dz"` kwarg. Backward-compatible default; engine passes `self.command` so consumer-specific messages render correctly. Legacy callers that instantiate `FQCNIndex()` directly without an engine context continue to work.
+
+### Known deferred
+
+- **DockerRunner image-not-found hint** (`registry.py:1200`) still emits `Try: dz setup <fqcn>`. The runner factory doesn't have `engine.command` plumbed in; fixing requires either threading the engine through or stashing command on the project at discovery. Low priority (only fires when Docker pre-flight fails).
+
+### Tests
+
+- +4 new (1025 total in main repo, up from 1021): 3 in `TestRenderKitList` covering FQCN-match path, leaf-name display, and legacy `ns:name` fallback; 1 in `TestRerootHint::test_hint_uses_engine_command` regression guard.
+
 ## [0.6.1] - 2026-05-12
 
 Ships with dazzlecmd v0.7.38 (bug-fix patch -- closes dazzlecmd #63). Fixes a structural bug in `discover_kits` / `_load_in_repo_kit_manifest` that made the "aggregator-as-kit" embedding path produce wrong identity fields and a misconstructed `tools_dir`. The forward direction (dazzlecmd embeds wtf-windows) happened to work because the inner kits' declared structural fields aligned by coincidence; the inverse direction (wtf-windows embeds dazzlecmd) broke because dazzlecmd's per-kit pointers are minimal. Empirically surfaced during a recursion-proof experiment.

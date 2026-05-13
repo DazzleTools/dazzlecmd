@@ -441,9 +441,10 @@ def render_list(args, projects, engine=None) -> int:
     if has_collision or has_alias_marker:
         print()
         if has_collision:
+            cmd = getattr(engine, "command", None) or "dz"
             print(
-                "  [*] short-name collision -- use 'dz info <fqcn>' or "
-                "'dz kit favorite' to disambiguate."
+                f"  [*] short-name collision -- use '{cmd} info <fqcn>' or "
+                f"'{cmd} kit favorite' to disambiguate."
             )
         if has_alias_marker:
             print(
@@ -1176,15 +1177,29 @@ def render_kit_list(args, kits, projects) -> int:
             return 0
 
         for ref in sorted(tool_refs):
-            if ":" in ref:
-                ns, name_part = ref.split(":", 1)
+            # Modern path: ref is a full FQCN as written by
+            # ``engine._discover_aggregator``'s post-recursion populate
+            # (e.g., ``dz:core:find``, ``wtf:core:locked``). Match by
+            # ``_fqcn`` directly so multi-segment FQCNs resolve.
+            match = [p for p in projects if p.get("_fqcn") == ref]
+            if match:
+                # Display the leaf name; the namespace is implicit from kit.
+                p = match[0]
+                display_name = p["name"]
             else:
-                ns, name_part = "", ref
-            match = [
-                p for p in projects
-                if p["name"] == name_part
-                and (not ns or p.get("namespace") == ns)
-            ]
+                # Legacy fallback: parse ref as ``ns:name`` for existing
+                # kit manifests that use 2-segment refs (e.g.,
+                # ``core:find``, ``dazzletools:git``).
+                if ":" in ref:
+                    ns, name_part = ref.split(":", 1)
+                else:
+                    ns, name_part = "", ref
+                match = [
+                    p for p in projects
+                    if p["name"] == name_part
+                    and (not ns or p.get("namespace") == ns)
+                ]
+                display_name = name_part
             if match:
                 p = match[0]
                 desc = p.get("description", "")
@@ -1198,9 +1213,9 @@ def render_kit_list(args, kits, projects) -> int:
                     if _use_color and platform == "cross-platform"
                     else f"{platform:<16}"
                 )
-                print(f"  {name_part:<16} {platform_styled} {desc}")
+                print(f"  {display_name:<16} {platform_styled} {desc}")
             else:
-                print(f"  {name_part:<16} {'':16} {_dim('(not found)')}")
+                print(f"  {display_name:<16} {'':16} {_dim('(not found)')}")
         print(f"\n  {len(tool_refs)} tool(s)")
         return 0
 

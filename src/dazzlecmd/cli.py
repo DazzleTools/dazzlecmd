@@ -556,15 +556,26 @@ def _cmd_kit_list(args, kits, projects, engine=None):
         # columns. Matches the `dz list` flat-fallback layout.
         rows = []  # (name, platform, description_or_notfound_marker)
         for ref in sorted(tool_refs):
-            if ":" in ref:
-                ns, ref_name = ref.split(":", 1)
+            # Modern path: ref is a full FQCN as written by
+            # ``engine._discover_aggregator``'s post-recursion populate
+            # (e.g., ``wtf:core:locked``). Match by ``_fqcn`` directly so
+            # multi-segment FQCNs resolve.
+            match = [p for p in projects if p.get("_fqcn") == ref]
+            if match:
+                p = match[0]
+                ref_name = p["name"]
             else:
-                ns, ref_name = "", ref
-            match = [
-                p for p in projects
-                if p["name"] == ref_name
-                and (not ns or p.get("namespace") == ns)
-            ]
+                # Legacy fallback: parse ref as ``ns:name`` for existing
+                # kit manifests that use 2-segment refs.
+                if ":" in ref:
+                    ns, ref_name = ref.split(":", 1)
+                else:
+                    ns, ref_name = "", ref
+                match = [
+                    p for p in projects
+                    if p["name"] == ref_name
+                    and (not ns or p.get("namespace") == ns)
+                ]
             if match:
                 p = match[0]
                 rows.append(
