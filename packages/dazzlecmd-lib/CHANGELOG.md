@@ -8,6 +8,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.6.3] - 2026-05-13
+
+Ships with dazzlecmd v0.7.40 (Tier 2A.1 -- closes dazzlecmd #61). Adds the rendering-side of the `long_description` mini-manpage feature -- the schema field landed in dazzlecmd v0.7.40 (scaffolding side); this surface is the rendering complement so the feature is end-to-end usable in one release.
+
+### Added
+
+- **`render_info` renders `long_description`** -- when the manifest's optional `long_description` field is non-empty, render a `Details:` section below the standard field rows. BOLD section header (when color enabled); body indented two spaces and wrapped to terminal width using the existing `_wrap_description` helper. Multi-line `long_description` content preserves paragraph breaks (blank lines in input render as blank lines in output).
+
+### Tests
+
+- +6 new in `tests/test_default_meta_commands.py::TestRenderInfoLongDescription` covering: present-renders-with-header, absent-no-block, missing-field-backward-compat, whitespace-only-no-block, wraps-to-terminal-width, multi-line-preserved.
+- 1053 passed, 13 skipped (up from 1047 in dazzlecmd v0.7.39 / lib v0.6.2).
+
+### Notes
+
+This commit closes the rendering gap that the v0.7.40 scaffolding side would have left open. Per the cross-phase-dependencies-park-partials feedback, we ship the smallest self-sufficient slice: scaffold the field + render the field in the same release.
+
 ## [0.6.2] - 2026-05-12
 
 Ships with dazzlecmd v0.7.39 (bug-fix patch -- closes dazzlecmd #64). Fixes a regression in `render_kit_list` that v0.6.1's honest `kit["tools"]` populate exposed, plus four hardcoded `'dz'` strings in user-facing hint and warning text that gave non-dazzlecmd consumers bad advice.

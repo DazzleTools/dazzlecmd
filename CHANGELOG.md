@@ -4,6 +4,55 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.40] - 2026-05-13
+
+Tier 2A.1 (4d-1) — first commit of the Phase 4b/4d scaffolding redesign. The flat `dz new <name>` command is replaced with a sub-parser surface `dz new <type> <name>` covering three entity types: `tool` (fully implemented this commit), `kit` and `aggregator` (stubs printing planned-shape messages; full impls land in v0.7.42 / 4d-2). The redesign follows the synthesis design in `2026-05-13__16-27-57__dev-workflow-process__tier2-scaffolding-synthesis.md` (Open Question A2: separate `kit` and `aggregator` rather than collapsed under `--standalone` flag).
+
+`_cmd_new_tool` (renamed from `_cmd_new`) now reads the user-config `new` section (a new config schema area) for defaults: `default_namespace` and `default_language` apply when the corresponding CLI flag is omitted. Precedence is CLI flag > config > built-in (`dazzletools` / `python`). The generated `.dazzlecmd.json` manifest now includes the `long_description` field (closes #61) — empty by default; populated from a new `--long-description` CLI flag. The library's `render_info` is extended to render the `long_description` content as a `Details:` mini-manpage block below the standard field rows so the feature is end-to-end usable: scaffolding writes the field, `dz info` displays it.
+
+### Breaking
+
+- **`dz new <name>` no longer works.** Replace with `dz new tool <name>`. The argparse error message lists the three sub-types. Migration is a one-token addition (`tool`); no flag changes for tool creation.
+- Bare `dz new` (no type) now prints a usage hint to stderr and exits 2. Previously it was an argparse error.
+- **`--language` accepts only `python` in v0.7.40.** Other values (`rust`, `node`, `powershell`, `c_cpp`, `docker`, `generic`) are rejected with exit code 2 and a coming-soon message pointing at v0.7.44 (4d-3). This prevents users from creating internally-inconsistent manifests (`language: "rust"` with a Python `.py` script and `runtime.type: "python"`). The guard is removed in v0.7.44 when per-language scaffolding lands. Affects users who set `~/.dazzlecmd/config.json` `new.default_language` to anything other than `python` — they'll need to either change the config or temporarily omit the field until v0.7.44.
+
+### Added
+
+- **`dz new tool <name>`** — fully wired sub-parser. Same flags as the legacy flat `dz new` plus `--long-description <text>` for mini-manpage content. CLI > config > built-in precedence for `--namespace` and `--language`.
+- **`dz new kit <name>`** — stub printing the planned shape ("Create a flat kit at projects/<name>/") and pointing users at `dz new tool <name>` / `dz kit add <url>` for today's workflows. Exits 2.
+- **`dz new aggregator <name>`** — stub printing the planned shape (standalone aggregator project with `--with common,template,ci` composition) and pointing users at `dz new tool` for today's workflows. Exits 2.
+- **User-config `new` section** — new schema area in `~/.dazzlecmd/config.json` read by `_cmd_new_tool`. Initial keys: `default_namespace` (string), `default_language` (string). Extends naturally as Tier 2 progresses with `license`, `author`, `github_org`, `repokit_common_url`, etc. (v0.7.47).
+- **`long_description` field in generated manifest** — empty default; populated from `--long-description` CLI flag. Surfaces in `dz info <tool>` via v0.7.37's render_info long-description display.
+- **`packages/dazzlecmd-lib/src/dazzlecmd_lib/templates/dazzlecmd.json.tmpl`** — extended with `"long_description": "{long_description}"` placeholder so future template-driven scaffolding stays in sync with the in-CLI inline generation.
+- **`render_info` `Details:` block** — library's `render_info` now renders `long_description` content (when non-empty) as a `Details:` section below the standard field rows. BOLD section header (when color enabled); body indented two spaces and wrapped to terminal width using `_wrap_description`. Multi-line `long_description` content preserves paragraph breaks. Closes the rendering side of #61.
+
+### Changed
+
+- **`_cmd_new` → `_cmd_new_tool`** — renamed to disambiguate from the forthcoming `_cmd_new_kit` / `_cmd_new_aggregator` handlers in v0.7.42. Signature gained `engine=None` parameter for config-section access via `engine._get_config_dict("new")`.
+- **`dispatch_meta`** in `src/dazzlecmd/cli.py` — `meta == "new"` now prints usage hint instead of calling the legacy handler. Three new dispatch branches: `new_tool`, `new_kit_stub`, `new_aggregator_stub`.
+- **`dazzlecmd-lib` version**: `0.6.2` → `0.6.3` (PATCH — additive `render_info` extension).
+
+### Fixed
+
+- **`_register_in_kit` wrote to the wrong file** — pre-fix it wrote `tools` entries to the registry pointer (`kits/<kit>.kit.json`), but the loader's merge order (`loader.py:55-71`) makes the in-repo manifest's `tools` list authoritatively override the registry pointer's when both exist. So `dz new tool foo --kit core` would silently fail to register: the entry landed in the registry pointer but the merge replaced it with the in-repo manifest's untouched list. Now writes to the in-repo manifest (`projects/<kit>/.kit.json`) when present, falling back to the registry pointer only for registry-only kits. Affects `dz new tool --kit X` AND `dz add --kit X`. 4 regression tests in `TestRegisterInKit`.
+
+### Tests
+
+- 1059 passed, 13 skipped (up from 1025 in v0.7.39; +28 new in `tests/test_cmd_new_tool.py`, +6 new in `tests/test_default_meta_commands.py::TestRenderInfoLongDescription`).
+- New test classes: `TestNewToolScaffold` (file structure, `long_description` field, existing-project error), `TestNewToolConfigDefaults` (config-namespace default, CLI override, language guard: unsupported config-language rejected, unsupported CLI-language rejected, python-explicit accepted, python-default accepted, malformed-config safety), `TestNewKitStub` and `TestNewAggregatorStub` (exit code 2, planned-shape messages, workaround references), `TestRegisterInKit` (in-repo manifest preferred, registry-pointer fallback, missing-kit warning, duplicate-no-double-write), `TestResolveNewDefaults` (helper-level robustness: None engine, malformed config, exception during read), `TestRenderInfoLongDescription` (header rendering, absent/missing/whitespace cases, terminal-width wrapping, multi-line paragraph preservation).
+
+### Refs
+
+- Refs #35 (`dz new` redesign — this commit lands the sub-parser scaffolding; `kit` / `aggregator` full impls follow in v0.7.42).
+- Closes #61 (long_description schema + render_info `Details:` block — end-to-end usable: scaffolding writes the field, `dz info` displays it).
+- Refs #30 (Phase 4 epic — Tier 2 begin).
+
+### Design
+
+- `2026-05-13__16-27-57__dev-workflow-process__tier2-scaffolding-synthesis.md` — the synthesis doc that resolved Open Question A (separate `kit` vs `aggregator`) and laid out the 11-commit Tier 2 sequence
+- `2026-04-13__06-56-42__dev-workflow-process_new-aggregator-scaffolding-and-repokit-integration.md` (6 addenda) — the foundational design corpus
+- `2026-05-12__15-32-50__dev-workflow-process__full-recursion-and-tier2-scaffolding-sequencing.md` — sequencing decisions placing X-6 at the 4d-2/4d-3 seam
+
 ## [0.7.39] - 2026-05-12
 
 Bug-fix patch — closes #64. Removes the last user-visible dazzlecmd-isms from the library code path and fixes a `render_kit_list` regression that surfaced when v0.7.38 started honestly populating `kit["tools"]` for aggregator-as-kit. Surfaced by the post-v0.7.38 wtf-windows recursion sweep where every tool in the embedded `dz` kit rendered as `(not found)`.

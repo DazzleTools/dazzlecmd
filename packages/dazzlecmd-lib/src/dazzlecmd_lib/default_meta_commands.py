@@ -1096,6 +1096,31 @@ def render_info(args, projects, engine) -> int:
         target = get_link_target(tool_dir)
         print(f"Linked to:   {target or 'unknown'}")
 
+    # Long-form description / mini-manpage (closes #61). Optional manifest
+    # field ``long_description``; rendered below the standard field rows
+    # with a BOLD ``Details:`` header. Wrapped to terminal width using
+    # the same ``_wrap_description`` helper that the ``Description:`` row
+    # uses. Multi-line content is preserved -- each input line wraps
+    # independently and blank input lines render as blank output lines
+    # (paragraph breaks).
+    long_desc = project.get("long_description", "")
+    if isinstance(long_desc, str) and long_desc.strip():
+        print()
+        details_header = (
+            _colors.colorize("Details:", _colors.BOLD)
+            if _use_color else "Details:"
+        )
+        print(details_header)
+        term_width = _shutil.get_terminal_size((80, 24)).columns
+        indent = "  "
+        wrap_width = max(20, term_width - len(indent))
+        for line in long_desc.splitlines():
+            if not line.strip():
+                print()
+                continue
+            for sub in _wrap_description(line, wrap_width):
+                print(f"{indent}{sub}")
+
     return 0
 
 
