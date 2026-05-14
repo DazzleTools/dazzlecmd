@@ -33,6 +33,24 @@ Issues = "https://github.com/DazzleTools/dazzlecmd/issues"
 dazzlecmd = "dazzlecmd.cli:main"
 dz = "dazzlecmd.cli:main"
 
+[tool.repokit-common]
+version-source = "src/dazzlecmd/_version.py"
+changelog = "CHANGELOG.md"
+repo-url = "https://github.com/DazzleTools/dazzlecmd"
+tag-prefix = "v"
+tag-format = "pep440"
+private-patterns = [
+    "private/",
+    "convos/",
+    "logs/",
+    "test-runs/",
+    "test_runs/",
+    ".env",
+    "credentials/",
+    "secrets/",
+    "revisions/",
+]
+
 [tool.setuptools.dynamic]
 version = {attr = "dazzlecmd._version.PIP_VERSION"}
 

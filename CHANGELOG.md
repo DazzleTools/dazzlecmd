@@ -4,6 +4,27 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.42] - 2026-05-14
+
+Internal tooling refresh — replaces project-local `scripts/` with the shared `git-repokit-common@v0.2.4` toolbox consumed as a git subtree at `scripts/`. No user-visible CLI or library behavior changes. Hook checks (pre-commit version sync + private-content guard + 10MB file blocker; post-commit hash refresh; pre-push syntax/test/debug scan) all continue to run with the same semantics. What's new is the toolbox underneath: a richer version manager (`sync-versions.py` supersedes the legacy `update-version.sh` and adds `--check`, `--dry-run`, `--bump`, `--demote`, `--set X.Y.Z`, `--phase {alpha,beta,rc1}`, and automatic CHANGELOG compare-link maintenance), GitHub issue tooling (`gh_issue_full.py`, `gh_sub_issues.py` — the issue-context viewer that was previously referenced from a sibling project now ships in-repo), Claude session tools (`search_sesslog.py`, `extract_tool_result.py`), demo recording scaffolding (`demo/`), `paths.sh`/`safe_move.sh` utilities, a tag-only push fast path in `pre-push`, and bidirectional sync with the upstream toolbox via `bash scripts/update-common.sh`. Project configuration lives in a new `[tool.repokit-common]` block in `pyproject.toml`.
+
+### Added
+
+- **`scripts/` is now a git subtree of `git-repokit-common@v0.2.4`** (`https://github.com/DazzleTools/git-repokit-common`). Pull updates with `bash scripts/update-common.sh`; check status with `bash scripts/update-common.sh --check`; push local improvements upstream with `bash scripts/update-common.sh --push`.
+- **`[tool.repokit-common]` block in `pyproject.toml`** wiring `version-source = "src/dazzlecmd/_version.py"`, `changelog = "CHANGELOG.md"`, `repo-url`, `tag-prefix = "v"`, `tag-format = "pep440"`, and `private-patterns` (the file/dir patterns blocked by the pre-commit private-content guard).
+- **CHANGELOG compare-links scaffolding** (`[Unreleased]` + `[0.7.39]` reference links at the bottom of this file) so `python scripts/sync-versions.py --check` validates cleanly and auto-maintains the link block on future bumps.
+
+### Changed
+
+- **Version bump workflow** — the canonical command for version edits is now `python scripts/sync-versions.py --bump {major,minor,patch}` (or `--set X.Y.Z`, `--phase alpha`, etc.). The legacy `scripts/update-version.sh` is still present in the subtree but deprecated upstream. Pre-commit hook auto-runs `sync-versions.py --auto`.
+- **Pre-push hook** — gains the tag-only push fast path from `git-repokit-common@v0.2.3`: `git push --tags` no longer runs the full pytest sweep.
+
+### Refs
+
+- Closes #24 (Replace legacy scripts/ with git-repokit-common subtree). Two deliberate divergences from the issue's draft acceptance criteria: chose `tag-format = "pep440"` (matches existing dazzlecmd tag style: v0.7.39 through v0.7.42 are all PEP 440 compatible) rather than `"human"`; expanded `private-patterns` to match the existing pre-commit private-content regex (`private/`, `convos/`, `logs/`, `test-runs/`, `test_runs/`, `.env`, `credentials/`, `secrets/`, `revisions/`) rather than the minimal `["private/", ".env"]` the issue suggested. Both divergences preserve dazzlecmd's pre-existing conventions.
+- Refs #27 (dazzlecmd-lib extraction prep — shared tooling smoothes the multi-project workflow)
+- Refs #30 (Phase 4 EPIC — tooling alignment supports library extraction work)
+
 ## [0.7.39] - 2026-05-12
 
 Bug-fix patch — closes #64. Removes the last user-visible dazzlecmd-isms from the library code path and fixes a `render_kit_list` regression that surfaced when v0.7.38 started honestly populating `kit["tools"]` for aggregator-as-kit. Surfaced by the post-v0.7.38 wtf-windows recursion sweep where every tool in the embedded `dz` kit rendered as `(not found)`.
@@ -1427,3 +1448,9 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Meta-commands: list, info, kit, new, version
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
+
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.42...HEAD
+[0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
+[0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
+[0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
+[0.7.39]: https://github.com/DazzleTools/dazzlecmd/releases/tag/v0.7.39
