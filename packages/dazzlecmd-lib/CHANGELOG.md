@@ -8,6 +8,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.6.4] - 2026-05-14
+
+Ships with dazzlecmd v0.7.41 (closes dazzlecmd #65). Adds realpath-based auto-aliasing at discovery time so the same on-disk script reached via two FQCNs (junction loop, symlink, cross-embedded aggregators with shared physical files) collapses to one canonical + one auto-realpath alias. Display surfaces inherit the `[+]` marker semantics for free; dispatch via any FQCN still works.
+
+### Added
+
+- **`AggregatorEngine._realpath_index`** -- per-engine `{realpath: canonical_fqcn}` map populated during `_build_fqcn_index`.
+- **`FQCNIndex._alias_sources`** -- side-table `{alias_fqcn: source}` where `source` is `"auto-realpath"` for realpath dedup or the virtual-kit manifest path for declared aliases. Consumed by `render_info` for accurate provenance banners.
+- **`render_info` auto-realpath provenance banner** -- distinct DIM banner shown when the user dispatches via an auto-realpath alias FQCN, distinguishing it from virtual-kit alias resolutions.
+
+### Changed
+
+- **`_build_fqcn_index`** -- groups projects by `realpath(_dir)`; per group, shortest FQCN wins canonical (segment count then alphabetical); rest register as auto-realpath aliases. Marks demoted projects with `_auto_realpath_alias=True` and `_canonical_fqcn=<winner>`.
+- **`engine.projects` filter** -- auto-realpath aliases excluded from the active dispatch list after `_build_fqcn_index`. Custom list handlers (consumer-side `_wtf_list_handler` etc.) see one project per physical script automatically without each handler needing dedup logic.
+- **`_apply_virtual_kits`** -- when the virtual-kit's declared target was demoted to an auto-realpath alias, the new alias points directly at the actual canonical instead of raising KeyError. Single-hop alias invariant preserved.
+- **`build_list_entries`** -- omits projects marked `_auto_realpath_alias` from canonical iteration; omits auto-realpath alias entries from alias iteration (they would otherwise render under bogus "(virtual kit '<path>')" section headers). The `[+]` marker on the canonical signals their existence.
+- **`render_list` footer** -- `[+]` marker explanation updated to acknowledge both virtual-kit overlays and auto-realpath dedup.
+
+### Fixed
+
+- **Duplicate rows in `dz list`-class commands** when the same physical script is reachable via two FQCNs.
+- **"missing canonical" warnings from virtual-kit application** when the virtual kit targets an FQCN that was demoted to an auto-realpath alias.
+
+### Tests
+
+Coverage in dazzlecmd's `tests/test_engine_recursive.py::TestRealpathDedup` (9 new tests). All 1068 dazzlecmd tests pass; lib-package-internal test surface remains the responsibility of the consumer (see X-1 / X-8 in the closeout plan for the dedicated lib test suite).
+
+### Refs
+
+Closes dazzlecmd #65.
+Companion to dazzlecmd v0.7.41.
+
 ## [0.6.3] - 2026-05-13
 
 Ships with dazzlecmd v0.7.40 (Tier 2A.1 -- closes dazzlecmd #61). Adds the rendering-side of the `long_description` mini-manpage feature -- the schema field landed in dazzlecmd v0.7.40 (scaffolding side); this surface is the rendering complement so the feature is end-to-end usable in one release.

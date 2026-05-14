@@ -447,9 +447,11 @@ def render_list(args, projects, engine=None) -> int:
                 f"'{cmd} kit favorite' to disambiguate."
             )
         if has_alias_marker:
+            cmd = getattr(engine, "command", None) or "dz"
             print(
-                "  [+] canonical has aliases under one or more virtual kits "
-                "-- see virtual-kit sections below."
+                f"  [+] canonical has aliases (virtual-kit overlays and/or "
+                f"auto-realpath dedup of cross-aggregator embeddings) -- "
+                f"use '{cmd} info <name>' for alias details."
             )
 
     # Footer — counts
@@ -548,6 +550,11 @@ def build_list_entries(projects, engine, show_mode, kit_filter):
     # exclusively aliases, not canonicals.
     if show_mode in ("canonical", "all", "default") and not kit_filter_is_virtual:
         for p in projects:
+            # Skip projects whose FQCN was demoted to an auto-realpath
+            # alias (issue #65): they appear under their canonical's row
+            # in the alias section, never as duplicate canonical rows.
+            if p.get("_auto_realpath_alias"):
+                continue
             kit_name = p.get("_kit_import_name", "")
             if kit_filter is not None:
                 if kit_name != kit_filter:
@@ -582,8 +589,16 @@ def build_list_entries(projects, engine, show_mode, kit_filter):
             canonical_by_fqcn = {
                 p.get("_fqcn"): p for p in projects if p.get("_fqcn")
             }
+            alias_sources = getattr(engine.fqcn_index, "_alias_sources", {})
             # Iterate every alias and build its entry
             for alias_fqcn, canonical_fqcn in engine.fqcn_index.alias_index.items():
+                # Auto-realpath aliases (#65) are physical-identity
+                # bookkeeping for dispatch; their canonical already
+                # appears in the canonical section with the [+] marker.
+                # Skip them from the alias rows to avoid duplicate rows
+                # under bogus "(virtual kit '<path>')" section headers.
+                if alias_sources.get(alias_fqcn) == "auto-realpath":
+                    continue
                 vk_name, _, alias_short = alias_fqcn.rpartition(":")
                 if kit_filter is not None and kit_filter_is_virtual:
                     if vk_name != kit_filter:
@@ -969,7 +984,19 @@ def render_info(args, projects, engine) -> int:
     # Surface alias provenance so users see how their input resolved.
     # DIM emphasis -- contextual information rather than primary data.
     if ctx is not None and ctx.alias_fqcn:
-        if getattr(ctx, "resolution_kind", None) == "qualified_alias":
+        alias_sources = getattr(
+            getattr(engine, "fqcn_index", None), "_alias_sources", {}
+        )
+        if alias_sources.get(ctx.alias_fqcn) == "auto-realpath":
+            # Issue #65: auto-realpath dedup. The user typed a longer
+            # FQCN that resolves to the same physical script as the
+            # canonical (shorter) FQCN.
+            print(_dim(
+                f"(auto-realpath alias '{ctx.alias_fqcn}' -> canonical "
+                f"'{ctx.canonical_fqcn}'; same physical script reached "
+                f"via two discovery paths)"
+            ))
+        elif getattr(ctx, "resolution_kind", None) == "qualified_alias":
             # User typed the qualified form (e.g., "dazzletools:claude:cleanup").
             # Show both the qualified path AND the canonical-FQCN target.
             print(_dim(

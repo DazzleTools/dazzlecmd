@@ -4,6 +4,60 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.41] - 2026-05-14
+
+Closes #65 (duplicate-FQCN display when discovery loops back via filesystem). Implements Solution B from the dev-workflow analysis: realpath-based auto-aliasing at discovery time. When two or more FQCNs reach the same on-disk script (junction loop, symlink, or two aggregators that cross-embed each other with shared physical files), only the shortest FQCN registers as canonical; the others register as aliases with `source="auto-realpath"`. Dispatch via any FQCN still works (alias mechanism forwards to canonical). Display surfaces collapse to one row per physical script automatically.
+
+This is the recursion-architecture follow-up to v0.7.38's `discover_kits` aggregator-as-kit fix (#63). Together they make "any aggregator can attach to any other" a coherent claim: physical identity is detected, dispatch is correct, display is duplicate-free.
+
+Note on wtf-windows visible duplicates: the v0.7.38 + v0.7.41 fixes do not collapse duplicates that arise from two *distinct* physical copies of the same tool (e.g., dazzlecmd's `projects/wtf` submodule at one commit + standalone wtf-windows at another). Those are real separate files with different SHAs — a separate "two installs of the same logical tool" problem, not realpath equality.
+
+### Added
+
+- **`AggregatorEngine._realpath_index`** — per-engine `{realpath: canonical_fqcn}` map populated during `_build_fqcn_index`. Records the canonical FQCN chosen for each physical script.
+- **`FQCNIndex._alias_sources`** — side-table mapping each alias FQCN to its source ("auto-realpath" for realpath dedup, virtual-kit manifest path for declared virtual aliases). Used by `render_info` to surface alias provenance accurately.
+- **`render_info` auto-realpath provenance banner** (lib) — when the user dispatches via an auto-realpath alias FQCN, `dz info` shows `(auto-realpath alias '...' -> canonical '...'; same physical script reached via two discovery paths)` instead of the virtual-kit alias banner.
+
+### Changed
+
+- **`_build_fqcn_index` (engine)** — now groups projects by `realpath(_dir)` before insertion. Within each group: shortest FQCN (by segment count, then alphabetical) wins canonical; the rest register as auto-realpath aliases via `insert_alias(..., source="auto-realpath")`. Demoted projects are marked with `_auto_realpath_alias=True` and `_canonical_fqcn=<winner>`.
+- **`engine.projects` filtering** — auto-realpath aliases are filtered out after `_build_fqcn_index`. Custom list handlers iterating `engine.projects` directly (wtf's `_wtf_list_handler`, amdead's similar) see one project per physical script automatically. `engine.all_projects` retains everything for consumers that need the full set.
+- **`_apply_virtual_kits` (engine)** — when a virtual-kit alias's declared target was demoted to an auto-realpath alias, the new alias points directly at the actual canonical instead of failing with KeyError. Preserves the single-hop alias invariant.
+- **`build_list_entries` (lib)** — skips projects marked `_auto_realpath_alias` from canonical iteration; skips auto-realpath alias entries from the alias iteration (they don't get their own row). The `[+]` marker on the canonical signals their existence; `dz info` is the inspection path.
+- **`render_list` (lib)** — `[+]` footer message extended to acknowledge auto-realpath aliases alongside virtual-kit overlays.
+
+### Fixed
+
+- **Duplicate rows in `dz list`/`wtf list`/aggregator-custom list handlers** when the discovery path reaches the same physical script via two FQCNs. Pre-v0.7.41 the second FQCN registered as a separate canonical; now it registers as an alias and the row collapses.
+- **"missing canonical" warnings from virtual-kit application** when the virtual kit targets a canonical that was demoted to an auto-realpath alias. The alias-following logic in `_apply_virtual_kits` now resolves these correctly.
+
+### Tests
+
+1068 passed, 14 skipped (up from 1059 / 13 in v0.7.40; +9 new):
+
+- 9 in `tests/test_engine_recursive.py::TestRealpathDedup` covering same-realpath aliases the longer FQCN, distinct dirs stay distinct canonicals, three-way collision picks shortest, alphabetical tiebreak, `_realpath_index` populated, dispatch via alias resolves to canonical, demoted project marker, `build_list_entries` omits auto-realpath aliases, virtual-kit alias follows demoted target.
+- 1 POSIX-only integration test (`test_symlink_loop_real_discovery`) skipped on Windows.
+
+### Human test checklist
+
+`tests/checklists/v0.7.41__Bugfix__realpath-dedup.md` covers synthetic junction setup, dispatch correctness across both FQCNs, `dz info` banner content, and the wtf-windows live verification confirming no regression for the separate two-physical-copies case.
+
+### Versions
+
+- dazzlecmd `0.7.40` -> `0.7.41` (PATCH — bug-fix; closes #65).
+- dazzlecmd-lib `0.6.3` -> `0.6.4` (PATCH — engine + display layer touch).
+- dazzle-dz alias bumped to `0.7.41`; deps re-pinned to `>=0.7.41` / `>=0.6.4`.
+
+### Refs
+
+Closes #65 (duplicate-FQCN display when discovery loops back).
+Refs #30 (Phase 4 epic — recursion architecture).
+Refs #50 (Phase 4e retro — cross-aggregator dispatch correctness).
+
+### Design
+
+- `2026-05-13__00-33-46__dev-workflow-process__duplicate-fqcn-display-when-recursion-loops-back.md`
+
 ## [0.7.40] - 2026-05-13
 
 Tier 2A.1 (4d-1) — first commit of the Phase 4b/4d scaffolding redesign. The flat `dz new <name>` command is replaced with a sub-parser surface `dz new <type> <name>` covering three entity types: `tool` (fully implemented this commit), `kit` and `aggregator` (stubs printing planned-shape messages; full impls land in v0.7.42 / 4d-2). The redesign follows the synthesis design in `2026-05-13__16-27-57__dev-workflow-process__tier2-scaffolding-synthesis.md` (Open Question A2: separate `kit` and `aggregator` rather than collapsed under `--standalone` flag).
