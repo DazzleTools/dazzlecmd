@@ -880,3 +880,220 @@ class TestModuleDispatch:
         runner = _make_python_runner(project)
         result = runner([])
         assert result == 0
+
+
+# ---------------------------------------------------------------------------
+# Issue #65: realpath-based auto-aliasing
+# ---------------------------------------------------------------------------
+
+
+def _make_project(fqcn, tool_dir, name=None):
+    """Construct a minimal project dict for _build_fqcn_index tests."""
+    short = name or fqcn.rsplit(":", 1)[-1]
+    kit = fqcn.split(":", 1)[0]
+    return {
+        "name": short,
+        "_fqcn": fqcn,
+        "_short_name": short,
+        "_kit_import_name": kit,
+        "_dir": tool_dir,
+        "_kit_active": True,
+        "description": f"Tool {short}",
+        "runtime": {"type": "python"},
+    }
+
+
+class TestRealpathDedup:
+    """Issue #65: same on-disk script reachable via two FQCNs collapses to
+    one canonical + N-1 auto-realpath aliases.
+    """
+
+    def _engine(self):
+        return AggregatorEngine(
+            name="test", command="test",
+            tools_dir="projects", kits_dir="kits",
+            manifest=".dazzlecmd.json",
+        )
+
+    def test_same_realpath_two_fqcns_aliases_the_longer(self, tmp_path):
+        tool_dir = str(tmp_path / "tool")
+        os.makedirs(tool_dir)
+        engine = self._engine()
+        engine.projects = [
+            _make_project("wtf:core:locked", tool_dir),
+            _make_project("dz:wtf:core:locked", tool_dir),
+        ]
+        engine._build_fqcn_index()
+        # Shorter FQCN wins canonical.
+        assert "wtf:core:locked" in engine.fqcn_index.canonical_index
+        assert "dz:wtf:core:locked" not in engine.fqcn_index.canonical_index
+        # Longer FQCN becomes auto-realpath alias.
+        assert engine.fqcn_index.alias_index["dz:wtf:core:locked"] == "wtf:core:locked"
+        assert engine.fqcn_index._alias_sources["dz:wtf:core:locked"] == "auto-realpath"
+
+    def test_distinct_dirs_both_canonical(self, tmp_path):
+        dir_a = str(tmp_path / "a")
+        dir_b = str(tmp_path / "b")
+        os.makedirs(dir_a)
+        os.makedirs(dir_b)
+        engine = self._engine()
+        engine.projects = [
+            _make_project("wtf:core:locked", dir_a),
+            _make_project("dz:wtf:core:locked", dir_b),
+        ]
+        engine._build_fqcn_index()
+        # No dedup: distinct realpaths -> both canonical.
+        assert "wtf:core:locked" in engine.fqcn_index.canonical_index
+        assert "dz:wtf:core:locked" in engine.fqcn_index.canonical_index
+        assert "dz:wtf:core:locked" not in engine.fqcn_index.alias_index
+
+    def test_shortest_fqcn_wins_three_way(self, tmp_path):
+        tool_dir = str(tmp_path / "tool")
+        os.makedirs(tool_dir)
+        engine = self._engine()
+        engine.projects = [
+            _make_project("a:b:c:d", tool_dir),
+            _make_project("z:x", tool_dir),
+            _make_project("m:n:o", tool_dir),
+        ]
+        engine._build_fqcn_index()
+        assert "z:x" in engine.fqcn_index.canonical_index
+        assert engine.fqcn_index.alias_index["a:b:c:d"] == "z:x"
+        assert engine.fqcn_index.alias_index["m:n:o"] == "z:x"
+        for alias in ("a:b:c:d", "m:n:o"):
+            assert engine.fqcn_index._alias_sources[alias] == "auto-realpath"
+
+    def test_alphabetical_tiebreak_when_equal_depth(self, tmp_path):
+        tool_dir = str(tmp_path / "tool")
+        os.makedirs(tool_dir)
+        engine = self._engine()
+        engine.projects = [
+            _make_project("zz:tool", tool_dir),
+            _make_project("aa:tool", tool_dir),
+        ]
+        engine._build_fqcn_index()
+        # Same segment count -> alphabetical wins.
+        assert "aa:tool" in engine.fqcn_index.canonical_index
+        assert engine.fqcn_index.alias_index["zz:tool"] == "aa:tool"
+
+    def test_realpath_index_populated(self, tmp_path):
+        tool_dir = str(tmp_path / "tool")
+        os.makedirs(tool_dir)
+        engine = self._engine()
+        engine.projects = [
+            _make_project("a:b", tool_dir),
+            _make_project("c:d:e", tool_dir),
+        ]
+        engine._build_fqcn_index()
+        real = os.path.realpath(tool_dir)
+        assert engine._realpath_index[real] == "a:b"
+
+    def test_dispatch_resolves_alias_to_canonical(self, tmp_path):
+        tool_dir = str(tmp_path / "tool")
+        os.makedirs(tool_dir)
+        engine = self._engine()
+        engine.projects = [
+            _make_project("wtf:core:locked", tool_dir),
+            _make_project("dz:wtf:core:locked", tool_dir),
+        ]
+        engine._build_fqcn_index()
+        # Resolving the alias FQCN returns the canonical project.
+        proj, ctx = engine.fqcn_index.resolve("dz:wtf:core:locked")
+        assert proj is not None
+        assert proj["_fqcn"] == "wtf:core:locked"
+        assert ctx.resolution_kind == "alias"
+        assert ctx.alias_fqcn == "dz:wtf:core:locked"
+
+    def test_demoted_project_marked(self, tmp_path):
+        tool_dir = str(tmp_path / "tool")
+        os.makedirs(tool_dir)
+        winner = _make_project("a:b", tool_dir)
+        loser = _make_project("c:d:e", tool_dir)
+        engine = self._engine()
+        engine.projects = [winner, loser]
+        engine._build_fqcn_index()
+        assert not winner.get("_auto_realpath_alias")
+        assert loser.get("_auto_realpath_alias") is True
+        assert loser.get("_canonical_fqcn") == "a:b"
+
+    def test_list_entries_omit_auto_realpath_alias(self, tmp_path):
+        from dazzlecmd_lib.default_meta_commands import build_list_entries
+
+        tool_dir = str(tmp_path / "tool")
+        os.makedirs(tool_dir)
+        engine = self._engine()
+        engine.projects = [
+            _make_project("wtf:core:locked", tool_dir),
+            _make_project("dz:wtf:core:locked", tool_dir),
+        ]
+        engine._build_fqcn_index()
+        entries = build_list_entries(
+            engine.projects, engine, show_mode="all", kit_filter=None
+        )
+        fqcns_in_entries = {e["_fqcn"] for e in entries}
+        # Auto-realpath alias FQCN does NOT appear as a row.
+        assert "dz:wtf:core:locked" not in fqcns_in_entries
+        # Canonical winner DOES appear, marked with has_aliases.
+        winner_entries = [e for e in entries if e["_fqcn"] == "wtf:core:locked"]
+        assert len(winner_entries) == 1
+        assert winner_entries[0]["has_aliases"] is True
+
+    def test_virtual_kit_alias_follows_demoted_target(self, tmp_path):
+        """When a virtual-kit alias's declared target was demoted to an
+        auto-realpath alias, the new alias re-points at the actual
+        canonical instead of failing with KeyError.
+        """
+        tool_dir = str(tmp_path / "tool")
+        os.makedirs(tool_dir)
+        engine = self._engine()
+        engine.projects = [
+            _make_project("wtf:core:locked", tool_dir),
+            _make_project("dz:wtf:core:locked", tool_dir),
+        ]
+        engine._build_fqcn_index()
+        # dz:wtf:core:locked is now an alias of wtf:core:locked.
+        # A virtual kit targets the demoted FQCN — should resolve to the canonical.
+        virtual_kits = [{
+            "name": "dz:claude",
+            "_kit_name": "dz:claude",
+            "_kit_active": True,
+            "virtual": True,
+            "tools": ["dz:wtf:core:locked"],
+            "name_rewrite": {"dz:wtf:core:locked": "why-locked"},
+        }]
+        engine._apply_virtual_kits(virtual_kits)
+        # The virtual-kit alias should be registered with the actual canonical.
+        assert engine.fqcn_index.alias_index.get("dz:claude:why-locked") == "wtf:core:locked"
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX-only symlink test")
+    def test_symlink_loop_real_discovery(self, tmp_path):
+        """Integration: build two aggregators where the second symlinks into
+        the first, discover, and verify only one canonical exists per script.
+        """
+        # Aggregator A
+        root_a = tmp_path / "agg_a"
+        build_flat_aggregator(str(root_a), name="flat")
+
+        # Aggregator B with a kit that symlinks A's projects/core
+        root_b = tmp_path / "agg_b"
+        os.makedirs(root_b / "kits")
+        os.makedirs(root_b / "projects")
+        os.symlink(str(root_a / "projects" / "core"),
+                   str(root_b / "projects" / "core"))
+        _write_json(
+            str(root_b / "kits" / "core.kit.json"),
+            {"name": "core", "always_active": True},
+        )
+        engine = AggregatorEngine(
+            name="test_b", command="test_b",
+            tools_dir="projects", kits_dir="kits",
+            manifest=".dazzlecmd.json",
+        )
+        engine.discover(project_root=str(root_b))
+        # The symlink should resolve to the same realpath as A's tools.
+        # In a single-aggregator discovery, only one canonical per realpath.
+        fqcns = {p["_fqcn"] for p in engine.projects if not p.get("_auto_realpath_alias")}
+        # Both tools should still be canonical (no other FQCN reaches them
+        # in this single-engine setup).
+        assert "core:toolA" in fqcns
+        assert "core:toolB" in fqcns

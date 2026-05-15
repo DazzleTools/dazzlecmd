@@ -24,6 +24,108 @@ Internal tooling refresh — replaces project-local `scripts/` with the shared `
 - Closes #24 (Replace legacy scripts/ with git-repokit-common subtree). Two deliberate divergences from the issue's draft acceptance criteria: chose `tag-format = "pep440"` (matches existing dazzlecmd tag style: v0.7.39 through v0.7.42 are all PEP 440 compatible) rather than `"human"`; expanded `private-patterns` to match the existing pre-commit private-content regex (`private/`, `convos/`, `logs/`, `test-runs/`, `test_runs/`, `.env`, `credentials/`, `secrets/`, `revisions/`) rather than the minimal `["private/", ".env"]` the issue suggested. Both divergences preserve dazzlecmd's pre-existing conventions.
 - Refs #27 (dazzlecmd-lib extraction prep — shared tooling smoothes the multi-project workflow)
 - Refs #30 (Phase 4 EPIC — tooling alignment supports library extraction work)
+## [0.7.41] - 2026-05-14
+
+Closes #65 (duplicate-FQCN display when discovery loops back via filesystem). Implements Solution B from the dev-workflow analysis: realpath-based auto-aliasing at discovery time. When two or more FQCNs reach the same on-disk script (junction loop, symlink, or two aggregators that cross-embed each other with shared physical files), only the shortest FQCN registers as canonical; the others register as aliases with `source="auto-realpath"`. Dispatch via any FQCN still works (alias mechanism forwards to canonical). Display surfaces collapse to one row per physical script automatically.
+
+This is the recursion-architecture follow-up to v0.7.38's `discover_kits` aggregator-as-kit fix (#63). Together they make "any aggregator can attach to any other" a coherent claim: physical identity is detected, dispatch is correct, display is duplicate-free.
+
+Note on wtf-windows visible duplicates: the v0.7.38 + v0.7.41 fixes do not collapse duplicates that arise from two *distinct* physical copies of the same tool (e.g., dazzlecmd's `projects/wtf` submodule at one commit + standalone wtf-windows at another). Those are real separate files with different SHAs — a separate "two installs of the same logical tool" problem, not realpath equality.
+
+### Added
+
+- **`AggregatorEngine._realpath_index`** — per-engine `{realpath: canonical_fqcn}` map populated during `_build_fqcn_index`. Records the canonical FQCN chosen for each physical script.
+- **`FQCNIndex._alias_sources`** — side-table mapping each alias FQCN to its source ("auto-realpath" for realpath dedup, virtual-kit manifest path for declared virtual aliases). Used by `render_info` to surface alias provenance accurately.
+- **`render_info` auto-realpath provenance banner** (lib) — when the user dispatches via an auto-realpath alias FQCN, `dz info` shows `(auto-realpath alias '...' -> canonical '...'; same physical script reached via two discovery paths)` instead of the virtual-kit alias banner.
+
+### Changed
+
+- **`_build_fqcn_index` (engine)** — now groups projects by `realpath(_dir)` before insertion. Within each group: shortest FQCN (by segment count, then alphabetical) wins canonical; the rest register as auto-realpath aliases via `insert_alias(..., source="auto-realpath")`. Demoted projects are marked with `_auto_realpath_alias=True` and `_canonical_fqcn=<winner>`.
+- **`engine.projects` filtering** — auto-realpath aliases are filtered out after `_build_fqcn_index`. Custom list handlers iterating `engine.projects` directly (wtf's `_wtf_list_handler`, amdead's similar) see one project per physical script automatically. `engine.all_projects` retains everything for consumers that need the full set.
+- **`_apply_virtual_kits` (engine)** — when a virtual-kit alias's declared target was demoted to an auto-realpath alias, the new alias points directly at the actual canonical instead of failing with KeyError. Preserves the single-hop alias invariant.
+- **`build_list_entries` (lib)** — skips projects marked `_auto_realpath_alias` from canonical iteration; skips auto-realpath alias entries from the alias iteration (they don't get their own row). The `[+]` marker on the canonical signals their existence; `dz info` is the inspection path.
+- **`render_list` (lib)** — `[+]` footer message extended to acknowledge auto-realpath aliases alongside virtual-kit overlays.
+
+### Fixed
+
+- **Duplicate rows in `dz list`/`wtf list`/aggregator-custom list handlers** when the discovery path reaches the same physical script via two FQCNs. Pre-v0.7.41 the second FQCN registered as a separate canonical; now it registers as an alias and the row collapses.
+- **"missing canonical" warnings from virtual-kit application** when the virtual kit targets a canonical that was demoted to an auto-realpath alias. The alias-following logic in `_apply_virtual_kits` now resolves these correctly.
+
+### Tests
+
+1068 passed, 14 skipped (up from 1059 / 13 in v0.7.40; +9 new):
+
+- 9 in `tests/test_engine_recursive.py::TestRealpathDedup` covering same-realpath aliases the longer FQCN, distinct dirs stay distinct canonicals, three-way collision picks shortest, alphabetical tiebreak, `_realpath_index` populated, dispatch via alias resolves to canonical, demoted project marker, `build_list_entries` omits auto-realpath aliases, virtual-kit alias follows demoted target.
+- 1 POSIX-only integration test (`test_symlink_loop_real_discovery`) skipped on Windows.
+
+### Human test checklist
+
+`tests/checklists/v0.7.41__Bugfix__realpath-dedup.md` covers synthetic junction setup, dispatch correctness across both FQCNs, `dz info` banner content, and the wtf-windows live verification confirming no regression for the separate two-physical-copies case.
+
+### Versions
+
+- dazzlecmd `0.7.40` -> `0.7.41` (PATCH — bug-fix; closes #65).
+- dazzlecmd-lib `0.6.3` -> `0.6.4` (PATCH — engine + display layer touch).
+- dazzle-dz alias bumped to `0.7.41`; deps re-pinned to `>=0.7.41` / `>=0.6.4`.
+
+### Refs
+
+Closes #65 (duplicate-FQCN display when discovery loops back).
+Refs #30 (Phase 4 epic — recursion architecture).
+Refs #50 (Phase 4e retro — cross-aggregator dispatch correctness).
+
+### Design
+
+- `2026-05-13__00-33-46__dev-workflow-process__duplicate-fqcn-display-when-recursion-loops-back.md`
+
+## [0.7.40] - 2026-05-13
+
+Tier 2A.1 (4d-1) — first commit of the Phase 4b/4d scaffolding redesign. The flat `dz new <name>` command is replaced with a sub-parser surface `dz new <type> <name>` covering three entity types: `tool` (fully implemented this commit), `kit` and `aggregator` (stubs printing planned-shape messages; full impls land in v0.7.42 / 4d-2). The redesign follows the synthesis design in `2026-05-13__16-27-57__dev-workflow-process__tier2-scaffolding-synthesis.md` (Open Question A2: separate `kit` and `aggregator` rather than collapsed under `--standalone` flag).
+
+`_cmd_new_tool` (renamed from `_cmd_new`) now reads the user-config `new` section (a new config schema area) for defaults: `default_namespace` and `default_language` apply when the corresponding CLI flag is omitted. Precedence is CLI flag > config > built-in (`dazzletools` / `python`). The generated `.dazzlecmd.json` manifest now includes the `long_description` field (closes #61) — empty by default; populated from a new `--long-description` CLI flag. The library's `render_info` is extended to render the `long_description` content as a `Details:` mini-manpage block below the standard field rows so the feature is end-to-end usable: scaffolding writes the field, `dz info` displays it.
+
+### Breaking
+
+- **`dz new <name>` no longer works.** Replace with `dz new tool <name>`. The argparse error message lists the three sub-types. Migration is a one-token addition (`tool`); no flag changes for tool creation.
+- Bare `dz new` (no type) now prints a usage hint to stderr and exits 2. Previously it was an argparse error.
+- **`--language` accepts only `python` in v0.7.40.** Other values (`rust`, `node`, `powershell`, `c_cpp`, `docker`, `generic`) are rejected with exit code 2 and a coming-soon message pointing at v0.7.44 (4d-3). This prevents users from creating internally-inconsistent manifests (`language: "rust"` with a Python `.py` script and `runtime.type: "python"`). The guard is removed in v0.7.44 when per-language scaffolding lands. Affects users who set `~/.dazzlecmd/config.json` `new.default_language` to anything other than `python` — they'll need to either change the config or temporarily omit the field until v0.7.44.
+
+### Added
+
+- **`dz new tool <name>`** — fully wired sub-parser. Same flags as the legacy flat `dz new` plus `--long-description <text>` for mini-manpage content. CLI > config > built-in precedence for `--namespace` and `--language`.
+- **`dz new kit <name>`** — stub printing the planned shape ("Create a flat kit at projects/<name>/") and pointing users at `dz new tool <name>` / `dz kit add <url>` for today's workflows. Exits 2.
+- **`dz new aggregator <name>`** — stub printing the planned shape (standalone aggregator project with `--with common,template,ci` composition) and pointing users at `dz new tool` for today's workflows. Exits 2.
+- **User-config `new` section** — new schema area in `~/.dazzlecmd/config.json` read by `_cmd_new_tool`. Initial keys: `default_namespace` (string), `default_language` (string). Extends naturally as Tier 2 progresses with `license`, `author`, `github_org`, `repokit_common_url`, etc. (v0.7.47).
+- **`long_description` field in generated manifest** — empty default; populated from `--long-description` CLI flag. Surfaces in `dz info <tool>` via v0.7.37's render_info long-description display.
+- **`packages/dazzlecmd-lib/src/dazzlecmd_lib/templates/dazzlecmd.json.tmpl`** — extended with `"long_description": "{long_description}"` placeholder so future template-driven scaffolding stays in sync with the in-CLI inline generation.
+- **`render_info` `Details:` block** — library's `render_info` now renders `long_description` content (when non-empty) as a `Details:` section below the standard field rows. BOLD section header (when color enabled); body indented two spaces and wrapped to terminal width using `_wrap_description`. Multi-line `long_description` content preserves paragraph breaks. Closes the rendering side of #61.
+
+### Changed
+
+- **`_cmd_new` → `_cmd_new_tool`** — renamed to disambiguate from the forthcoming `_cmd_new_kit` / `_cmd_new_aggregator` handlers in v0.7.42. Signature gained `engine=None` parameter for config-section access via `engine._get_config_dict("new")`.
+- **`dispatch_meta`** in `src/dazzlecmd/cli.py` — `meta == "new"` now prints usage hint instead of calling the legacy handler. Three new dispatch branches: `new_tool`, `new_kit_stub`, `new_aggregator_stub`.
+- **`dazzlecmd-lib` version**: `0.6.2` → `0.6.3` (PATCH — additive `render_info` extension).
+
+### Fixed
+
+- **`_register_in_kit` wrote to the wrong file** — pre-fix it wrote `tools` entries to the registry pointer (`kits/<kit>.kit.json`), but the loader's merge order (`loader.py:55-71`) makes the in-repo manifest's `tools` list authoritatively override the registry pointer's when both exist. So `dz new tool foo --kit core` would silently fail to register: the entry landed in the registry pointer but the merge replaced it with the in-repo manifest's untouched list. Now writes to the in-repo manifest (`projects/<kit>/.kit.json`) when present, falling back to the registry pointer only for registry-only kits. Affects `dz new tool --kit X` AND `dz add --kit X`. 4 regression tests in `TestRegisterInKit`.
+
+### Tests
+
+- 1059 passed, 13 skipped (up from 1025 in v0.7.39; +28 new in `tests/test_cmd_new_tool.py`, +6 new in `tests/test_default_meta_commands.py::TestRenderInfoLongDescription`).
+- New test classes: `TestNewToolScaffold` (file structure, `long_description` field, existing-project error), `TestNewToolConfigDefaults` (config-namespace default, CLI override, language guard: unsupported config-language rejected, unsupported CLI-language rejected, python-explicit accepted, python-default accepted, malformed-config safety), `TestNewKitStub` and `TestNewAggregatorStub` (exit code 2, planned-shape messages, workaround references), `TestRegisterInKit` (in-repo manifest preferred, registry-pointer fallback, missing-kit warning, duplicate-no-double-write), `TestResolveNewDefaults` (helper-level robustness: None engine, malformed config, exception during read), `TestRenderInfoLongDescription` (header rendering, absent/missing/whitespace cases, terminal-width wrapping, multi-line paragraph preservation).
+
+### Refs
+
+- Refs #35 (`dz new` redesign — this commit lands the sub-parser scaffolding; `kit` / `aggregator` full impls follow in v0.7.42).
+- Closes #61 (long_description schema + render_info `Details:` block — end-to-end usable: scaffolding writes the field, `dz info` displays it).
+- Refs #30 (Phase 4 epic — Tier 2 begin).
+
+### Design
+
+- `2026-05-13__16-27-57__dev-workflow-process__tier2-scaffolding-synthesis.md` — the synthesis doc that resolved Open Question A (separate `kit` vs `aggregator`) and laid out the 11-commit Tier 2 sequence
+- `2026-04-13__06-56-42__dev-workflow-process_new-aggregator-scaffolding-and-repokit-integration.md` (6 addenda) — the foundational design corpus
+- `2026-05-12__15-32-50__dev-workflow-process__full-recursion-and-tier2-scaffolding-sequencing.md` — sequencing decisions placing X-6 at the 4d-2/4d-3 seam
 
 ## [0.7.39] - 2026-05-12
 

@@ -889,6 +889,133 @@ class TestRenderInfoDescriptionWrap:
         assert desc_lines[0].rstrip() == "Description:"
 
 
+class TestRenderInfoLongDescription:
+    """v0.7.40 / lib v0.6.3: long_description manifest field rendered as
+    a mini-manpage Details: block below the standard field rows.
+
+    Closes dazzlecmd #61 -- the schema field was added in v0.7.40
+    (scaffolding side); this surface is the rendering complement.
+    """
+
+    def _project_with_long_desc(self, long_desc):
+        return _project(
+            "alpha",
+            description="short one-liner",
+            fqcn="k:alpha",
+            long_description=long_desc,
+        )
+
+    def test_long_description_renders_with_details_header(self, capsys, monkeypatch):
+        monkeypatch.setenv("NO_COLOR", "1")  # strip ANSI so assertions are simple
+        monkeypatch.setattr(
+            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            lambda fallback=(80, 24): type("S", (), {"columns": 80})(),
+        )
+        projects = [self._project_with_long_desc(
+            "Detailed body explaining the tool's purpose and gotchas."
+        )]
+        engine = _engine_with(projects)
+        dmc.render_info(_args(tool="alpha"), projects, engine=engine)
+        out = capsys.readouterr().out
+        assert "Details:" in out
+        assert "Detailed body explaining the tool's purpose" in out
+
+    def test_long_description_absent_no_details_block(self, capsys, monkeypatch):
+        monkeypatch.setenv("NO_COLOR", "1")
+        monkeypatch.setattr(
+            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            lambda fallback=(80, 24): type("S", (), {"columns": 80})(),
+        )
+        # Project explicitly has empty long_description.
+        projects = [self._project_with_long_desc("")]
+        engine = _engine_with(projects)
+        dmc.render_info(_args(tool="alpha"), projects, engine=engine)
+        out = capsys.readouterr().out
+        assert "Details:" not in out
+
+    def test_long_description_field_missing_no_details_block(self, capsys, monkeypatch):
+        """Backward-compat: manifests without the field render normally."""
+        monkeypatch.setenv("NO_COLOR", "1")
+        monkeypatch.setattr(
+            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            lambda fallback=(80, 24): type("S", (), {"columns": 80})(),
+        )
+        # _project helper builds the dict without long_description by default.
+        projects = [_project("alpha", description="x", fqcn="k:alpha")]
+        # Make sure the field really is absent (sanity check):
+        assert "long_description" not in projects[0]
+        engine = _engine_with(projects)
+        dmc.render_info(_args(tool="alpha"), projects, engine=engine)
+        out = capsys.readouterr().out
+        assert "Details:" not in out
+
+    def test_long_description_whitespace_only_renders_nothing(self, capsys, monkeypatch):
+        """A long_description of `   \\n  \\n` (only whitespace) is treated
+        as absent -- no Details: block."""
+        monkeypatch.setenv("NO_COLOR", "1")
+        monkeypatch.setattr(
+            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            lambda fallback=(80, 24): type("S", (), {"columns": 80})(),
+        )
+        projects = [self._project_with_long_desc("   \n  \n   ")]
+        engine = _engine_with(projects)
+        dmc.render_info(_args(tool="alpha"), projects, engine=engine)
+        out = capsys.readouterr().out
+        assert "Details:" not in out
+
+    def test_long_description_wraps_to_terminal_width(self, capsys, monkeypatch):
+        monkeypatch.setenv("NO_COLOR", "1")
+        monkeypatch.setattr(
+            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            lambda fallback=(80, 24): type("S", (), {"columns": 50})(),
+        )
+        long_text = (
+            "This is a very long paragraph of body text that must wrap "
+            "to the configured terminal width because terminals are "
+            "narrow when piped or in small consoles."
+        )
+        projects = [self._project_with_long_desc(long_text)]
+        engine = _engine_with(projects)
+        dmc.render_info(_args(tool="alpha"), projects, engine=engine)
+        out = capsys.readouterr().out
+        lines = out.splitlines()
+        # Find the Details: line index, then check the body lines beneath
+        details_idx = next(i for i, l in enumerate(lines) if l.startswith("Details:"))
+        body_lines = []
+        i = details_idx + 1
+        while i < len(lines) and lines[i].startswith("  "):
+            body_lines.append(lines[i])
+            i += 1
+        assert len(body_lines) >= 2  # wrapped to at least 2 lines
+        for line in body_lines:
+            assert len(line) <= 50  # within terminal width
+
+    def test_long_description_multi_line_preserved(self, capsys, monkeypatch):
+        """Paragraph breaks in long_description survive into the output."""
+        monkeypatch.setenv("NO_COLOR", "1")
+        monkeypatch.setattr(
+            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            lambda fallback=(80, 24): type("S", (), {"columns": 80})(),
+        )
+        long_text = "First paragraph.\n\nSecond paragraph after a blank line."
+        projects = [self._project_with_long_desc(long_text)]
+        engine = _engine_with(projects)
+        dmc.render_info(_args(tool="alpha"), projects, engine=engine)
+        out = capsys.readouterr().out
+        # Both paragraphs present; a blank line between them.
+        assert "First paragraph." in out
+        assert "Second paragraph" in out
+        # Locate them and check separation
+        lines = out.splitlines()
+        first_idx = next(i for i, l in enumerate(lines) if "First paragraph" in l)
+        second_idx = next(i for i, l in enumerate(lines) if "Second paragraph" in l)
+        assert second_idx > first_idx
+        # A blank line should sit between them (paragraph break)
+        assert any(
+            lines[j].strip() == "" for j in range(first_idx + 1, second_idx)
+        )
+
+
 class TestInfoParserFactory:
     def test_registers_subparser_with_tool_arg(self):
         parser = argparse.ArgumentParser()

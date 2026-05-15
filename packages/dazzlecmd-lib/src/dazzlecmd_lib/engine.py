@@ -97,6 +97,7 @@ class FQCNIndex:
         self.command = command
         self.canonical_index = {}
         self.alias_index = {}
+        self._alias_sources = {}
         self.short_index = {}
         self.shortcut_candidates = {}
         self.kit_order = []
@@ -197,6 +198,8 @@ class FQCNIndex:
             return  # idempotent no-op
 
         self.alias_index[alias_fqcn] = canonical_fqcn
+        if source:
+            self._alias_sources[alias_fqcn] = source
 
         # Rule 7c (v0.7.28 relaxation): alias shorts populate short_index
         # the same as canonical shorts. Virtual kits are first-class kits;
@@ -603,6 +606,7 @@ class AggregatorEngine:
         self.active_kits = []
         self.projects = []
         self.fqcn_index = FQCNIndex(command=self.command)
+        self._realpath_index = {}
         self._precedence_cache = None
 
     def find_project_root(self, start_path=None):
@@ -684,6 +688,15 @@ class AggregatorEngine:
                 root_kit_names.add(vk_name)
 
         self._build_fqcn_index()
+        # Filter out auto-realpath aliases from the active dispatch list
+        # (#65). The demoted projects remain in `all_projects` for
+        # consumers that want the full set (e.g., `dz list --show all`),
+        # but custom list handlers iterating `engine.projects` see one
+        # project per physical script and get duplicate-free output for
+        # free.
+        self.projects = [
+            p for p in self.projects if not p.get("_auto_realpath_alias")
+        ]
         # Second pass: install alias FQCNs from virtual kits. Runs AFTER
         # canonical index is complete so aliases can validate their
         # targets (rule 9b requires canonical_index to be populated first).
@@ -1085,9 +1098,18 @@ class AggregatorEngine:
                     short = canonical_fqcn.rsplit(":", 1)[-1]
                 alias_fqcn = f"{vk_name}:{short}"
 
+                # Follow auto-realpath demotion: if the virtual-kit's
+                # declared target was demoted to an auto-realpath alias
+                # during _build_fqcn_index (#65), point the new alias
+                # directly at the actual canonical. Preserves the
+                # single-hop invariant.
+                resolved_canonical = self.fqcn_index.alias_index.get(
+                    canonical_fqcn, canonical_fqcn
+                )
+
                 try:
                     self.fqcn_index.insert_alias(
-                        alias_fqcn, canonical_fqcn, source=source
+                        alias_fqcn, resolved_canonical, source=source
                     )
                 except KeyError:
                     missing_targets.append((alias_fqcn, canonical_fqcn))
@@ -1184,16 +1206,77 @@ class AggregatorEngine:
 
         Assumes projects are already annotated with ``_fqcn``, ``_short_name``,
         and ``_kit_import_name`` by ``_discover_aggregator``.
+
+        Realpath-based auto-aliasing (issue #65): when discovery reaches the
+        same on-disk script via two or more distinct FQCNs (junction loop,
+        symlink, two aggregators that cross-embed each other), only the
+        shortest FQCN registers as canonical; the rest register as aliases
+        with ``source="auto-realpath"``. Display surfaces inherit the
+        ``[+]`` marker semantics for free. Dispatch via any of the FQCNs
+        still works because the alias mechanism forwards to the canonical.
         """
         self.fqcn_index = FQCNIndex(command=self.command)
+        self._realpath_index = {}
+
+        # First pass: annotate any projects whose FQCN wasn't set during
+        # discovery (unit-test path constructs projects directly).
         for project in self.projects:
-            # Safety net: annotate if discovery path didn't (unit tests etc.)
             if "_fqcn" not in project:
                 self._annotate_project_fqcn(project, kit_prefix=None)
+
+        # Group projects by realpath of their _dir. Projects without _dir
+        # (defensive — should not happen in production) form a singleton
+        # bucket keyed by their FQCN, so they're processed individually.
+        groups = {}
+        for project in self.projects:
+            tool_dir = project.get("_dir")
+            if tool_dir:
+                try:
+                    key = os.path.realpath(tool_dir)
+                except OSError:
+                    key = tool_dir
+            else:
+                key = f"__no_dir__::{project.get('_fqcn', id(project))}"
+            groups.setdefault(key, []).append(project)
+
+        # Per group: shortest FQCN wins canonical, alphabetical tiebreak.
+        # Others register as auto-realpath aliases. Preserve discovery
+        # order for the "no collision" case (single-element groups) by
+        # iterating in insertion order.
+        for key, group_projects in groups.items():
+            if len(group_projects) > 1:
+                group_projects.sort(
+                    key=lambda p: (p.get("_fqcn", "").count(":"), p.get("_fqcn", ""))
+                )
+            winner = group_projects[0]
             try:
-                self.fqcn_index.insert_canonical(project)
+                self.fqcn_index.insert_canonical(winner)
             except FQCNCollisionError as exc:
                 print(f"Warning: {exc}", file=sys.stderr)
+                continue
+            if not key.startswith("__no_dir__::"):
+                self._realpath_index[key] = winner.get("_fqcn", "")
+            # Remaining group members register as auto-realpath aliases.
+            for alias_project in group_projects[1:]:
+                alias_fqcn = alias_project.get("_fqcn", "")
+                canonical_fqcn = winner.get("_fqcn", "")
+                if not alias_fqcn or not canonical_fqcn:
+                    continue
+                try:
+                    self.fqcn_index.insert_alias(
+                        alias_fqcn=alias_fqcn,
+                        canonical_fqcn=canonical_fqcn,
+                        source="auto-realpath",
+                    )
+                except (FQCNCollisionError, KeyError) as exc:
+                    print(
+                        f"Warning: auto-realpath dedup of '{alias_fqcn}' "
+                        f"-> '{canonical_fqcn}': {exc}",
+                        file=sys.stderr,
+                    )
+                    continue
+                alias_project["_auto_realpath_alias"] = True
+                alias_project["_canonical_fqcn"] = canonical_fqcn
 
     def _maybe_emit_reroot_hint(self):
         """Hint at rerooting when discovery surfaces deeply-nested tools.

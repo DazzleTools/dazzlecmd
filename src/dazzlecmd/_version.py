@@ -27,7 +27,7 @@ PHASE = ""  # Per-MINOR feature set: None, "alpha", "beta", "rc1", etc.
 PROJECT_PHASE = "prealpha"  # Project-wide: "prealpha", "alpha", "beta", "stable"
 
 # Auto-updated by git hooks - do not edit manually
-__version__ = "0.7.42_integrate-repokit-common_70-20260514-1de0c067"
+__version__ = "0.7.42_integrate-repokit-common_71-20260515-be4799be"
 __app_name__ = "dazzlecmd"
 
 

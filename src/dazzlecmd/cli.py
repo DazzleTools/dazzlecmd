@@ -28,6 +28,15 @@ RESERVED_COMMANDS = {
 }
 
 
+# v0.7.40 (4d-1): only python is scaffolded today. Per-language templates
+# for rust/node/powershell/c_cpp/docker/generic land in v0.7.44 (4d-3 /
+# 4b-T3). Guarding here prevents users from creating internally-inconsistent
+# manifests (e.g., ``language: "rust"`` with a generated ``.py`` script and
+# ``runtime.type: "python"``). This guard is REMOVED in v0.7.44 when the
+# per-language scaffolder catches up.
+_SUPPORTED_LANGUAGES_V0740 = {"python"}
+
+
 def find_project_root():
     """Find the dazzlecmd project root by navigating from __file__.
 
@@ -340,15 +349,71 @@ def _register_meta_commands(subparsers):
     )
     setup_parser.set_defaults(_meta="setup")
 
-    # dz new <name>
-    new_parser = subparsers.add_parser("new", help="Create a new tool project")
-    new_parser.add_argument("name", help="Tool name")
-    new_parser.add_argument("--namespace", "-n", default="dazzletools", help="Namespace (default: dazzletools)")
-    new_parser.add_argument("--kit", "-k", help="Register in this kit (e.g., core, dazzletools)")
-    new_parser.add_argument("--simple", action="store_true", help="Add TODO.md and NOTES.md")
-    new_parser.add_argument("--full", action="store_true", help="Add ROADMAP.md, private/claude/, tests/")
-    new_parser.add_argument("--description", "-d", default="", help="Tool description")
-    new_parser.add_argument("--language", "-l", default="python", help="Primary language (default: python)")
+    # dz new <type> <name>  -- sub-parser redesign (4d-1)
+    # Replaces flat ``dz new <name>``. Three types:
+    #   tool       -- fully implemented in v0.7.40
+    #   kit        -- stub in v0.7.40; full impl in v0.7.42 (4d-2)
+    #   aggregator -- stub in v0.7.40; full impl in v0.7.42 (4d-2)
+    new_parser = subparsers.add_parser(
+        "new", help="Create a new tool, kit, or aggregator"
+    )
+    new_sub = new_parser.add_subparsers(
+        dest="new_type", title="entity types",
+        description="Choose the kind of entity to create",
+    )
+
+    # dz new tool <name>
+    new_tool_parser = new_sub.add_parser(
+        "tool", help="Create a new tool"
+    )
+    new_tool_parser.add_argument("name", help="Tool name")
+    new_tool_parser.add_argument(
+        "--namespace", "-n", default=None,
+        help="Namespace (default: from user config 'new.default_namespace' "
+             "or 'dazzletools')",
+    )
+    new_tool_parser.add_argument(
+        "--kit", "-k", help="Register in this kit (e.g., core, dazzletools)"
+    )
+    new_tool_parser.add_argument(
+        "--simple", action="store_true",
+        help="Add TODO.md and NOTES.md",
+    )
+    new_tool_parser.add_argument(
+        "--full", action="store_true",
+        help="Add ROADMAP.md, private/claude/, tests/",
+    )
+    new_tool_parser.add_argument(
+        "--description", "-d", default="", help="Tool description"
+    )
+    new_tool_parser.add_argument(
+        "--long-description", default="",
+        help="Long-form description (mini man-page text; supports multi-line)",
+    )
+    new_tool_parser.add_argument(
+        "--language", "-l", default=None,
+        help="Primary language. v0.7.40 supports 'python' only; "
+             "rust/node/powershell/c_cpp/docker/generic land in v0.7.44 (4d-3). "
+             "Default: user config 'new.default_language' or 'python'.",
+    )
+    new_tool_parser.set_defaults(_meta="new_tool")
+
+    # dz new kit <name>  -- stub in v0.7.40
+    new_kit_parser = new_sub.add_parser(
+        "kit", help="Create a new flat kit (full impl in v0.7.42)"
+    )
+    new_kit_parser.add_argument("name", help="Kit name")
+    new_kit_parser.set_defaults(_meta="new_kit_stub")
+
+    # dz new aggregator <name>  -- stub in v0.7.40
+    new_agg_parser = new_sub.add_parser(
+        "aggregator",
+        help="Create a new aggregator project (full impl in v0.7.42)",
+    )
+    new_agg_parser.add_argument("name", help="Aggregator name")
+    new_agg_parser.set_defaults(_meta="new_aggregator_stub")
+
+    # Bare ``dz new`` with no type -> show help
     new_parser.set_defaults(_meta="new")
 
     # dz add
@@ -445,7 +510,22 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
         return _cmd_setup(args, engine)
     # Legacy paths
     elif meta == "new":
-        return _cmd_new(args, project_root)
+        # Bare ``dz new`` (no type chosen) -- print help and exit non-zero.
+        print(
+            "Usage: dz new {tool|kit|aggregator} <name> [flags]\n"
+            "  dz new tool <name>        Create a new tool (fully supported)\n"
+            "  dz new kit <name>         Create a new flat kit (v0.7.42)\n"
+            "  dz new aggregator <name>  Create a new aggregator (v0.7.42)\n"
+            "Run 'dz new tool --help' for tool-specific flags.",
+            file=sys.stderr,
+        )
+        return 2
+    elif meta == "new_tool":
+        return _cmd_new_tool(args, project_root, engine)
+    elif meta == "new_kit_stub":
+        return _cmd_new_kit_stub(args)
+    elif meta == "new_aggregator_stub":
+        return _cmd_new_aggregator_stub(args)
     elif meta == "add":
         return _cmd_add(args, project_root)
     elif meta == "mode_status":
@@ -761,28 +841,56 @@ def _cmd_add(args, project_root):
 
 
 def _register_in_kit(project_root, kit_name, namespace, tool_name):
-    """Add a tool reference to a kit's tools array."""
-    kits_dir = os.path.join(project_root, "kits")
-    kit_file = os.path.join(kits_dir, f"{kit_name}.kit.json")
+    """Add a tool reference to a kit's tools array.
 
-    if not os.path.isfile(kit_file):
-        print(f"  Warning: Kit '{kit_name}' not found at {kit_file}",
-              file=sys.stderr)
+    Writes to the kit's **in-repo manifest** (``projects/<kit>/.kit.json``)
+    when present, falling back to the registry pointer
+    (``kits/<kit>.kit.json``) only for registry-only kits.
+
+    Why in-repo manifest first: ``loader.discover_kits`` merges in-repo
+    fields OVER the registry pointer when both exist (loader.py:55-71).
+    The in-repo manifest's ``tools`` list authoritatively overrides
+    whatever the registry pointer carries. Pre-fix, this function wrote
+    only to the registry pointer, which the merge silently ignored for
+    every kit with an in-repo manifest (``core``, ``dazzletools``, ...).
+    The registered entry never surfaced in ``dz list`` because the
+    in-repo manifest's untouched ``tools`` list won the merge.
+    """
+    in_repo_manifest = os.path.join(
+        project_root, "projects", kit_name, ".kit.json"
+    )
+    registry_pointer = os.path.join(
+        project_root, "kits", f"{kit_name}.kit.json"
+    )
+
+    # Prefer in-repo manifest (authoritative when present).
+    if os.path.isfile(in_repo_manifest):
+        target = in_repo_manifest
+        target_label = f"{kit_name} (in-repo manifest)"
+    elif os.path.isfile(registry_pointer):
+        target = registry_pointer
+        target_label = f"{kit_name} (registry pointer)"
+    else:
+        print(
+            f"  Warning: Kit '{kit_name}' not found (looked at "
+            f"'{in_repo_manifest}' and '{registry_pointer}')",
+            file=sys.stderr,
+        )
         return
 
     try:
-        with open(kit_file, "r", encoding="utf-8") as f:
+        with open(target, "r", encoding="utf-8") as f:
             kit = json.load(f)
 
         qualified = f"{namespace}:{tool_name}"
         if qualified not in kit.get("tools", []):
             kit.setdefault("tools", []).append(qualified)
-            with open(kit_file, "w", encoding="utf-8") as f:
+            with open(target, "w", encoding="utf-8") as f:
                 json.dump(kit, f, indent=4)
                 f.write("\n")
-            print(f"  Registered in kit: {kit_name}")
+            print(f"  Registered in kit: {target_label}")
         else:
-            print(f"  Already in kit: {kit_name}")
+            print(f"  Already in kit: {target_label}")
     except (json.JSONDecodeError, OSError) as exc:
         print(f"  Warning: Could not update kit: {exc}", file=sys.stderr)
 
@@ -817,12 +925,66 @@ def _cmd_mode_switch(args, projects, project_root):
     )
 
 
-def _cmd_new(args, project_root):
-    """Create a new tool project with progressive scaffolding."""
+def _resolve_new_defaults(engine):
+    """Read the user config's ``new`` section and return a defaults dict.
+
+    Precedence applied at call site is: CLI flag > config > built-in.
+    This helper returns the config layer; callers fall back to built-ins.
+    """
+    if engine is None:
+        return {}
+    try:
+        cfg = engine._get_config_dict("new") or {}
+    except Exception:
+        cfg = {}
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _cmd_new_tool(args, project_root, engine=None):
+    """Create a new tool project with progressive scaffolding.
+
+    Renamed from ``_cmd_new`` in v0.7.40 (4d-1) to disambiguate from the
+    forthcoming ``_cmd_new_kit`` / ``_cmd_new_aggregator`` handlers (v0.7.42).
+    Reads user-config ``new`` section for defaults; CLI flags override.
+    """
+    new_defaults = _resolve_new_defaults(engine)
+
     name = args.name
-    namespace = args.namespace
+    # Namespace: CLI > config > built-in 'dazzletools'
+    namespace = (
+        args.namespace
+        or new_defaults.get("default_namespace")
+        or "dazzletools"
+    )
     description = args.description or f"A new dazzlecmd tool: {name}"
-    language = args.language
+    long_description = getattr(args, "long_description", "") or ""
+    # Language: CLI > config > built-in 'python'
+    language = (
+        args.language
+        or new_defaults.get("default_language")
+        or "python"
+    )
+
+    # v0.7.40 guard: only ``python`` produces a working tool today. Reject
+    # other values explicitly with a coming-soon message so users don't
+    # end up with internally-inconsistent manifests (language=rust but
+    # runtime=python). Guard removed in v0.7.44 (4d-3) when per-language
+    # scaffolding lands.
+    if language not in _SUPPORTED_LANGUAGES_V0740:
+        source = (
+            "config 'new.default_language'"
+            if args.language is None and new_defaults.get("default_language")
+            else "--language flag"
+        )
+        print(
+            f"Error: language {language!r} is not yet supported "
+            f"(from {source}).\n\n"
+            f"v0.7.40 only scaffolds 'python' tools. Per-language templates "
+            f"for rust/node/powershell/c_cpp/docker/generic land in v0.7.44 "
+            f"(4d-3). For now, use --language python (or omit the flag).",
+            file=sys.stderr,
+        )
+        return 2
 
     projects_dir = os.path.join(project_root, "projects", namespace)
     tool_dir = os.path.join(projects_dir, name)
@@ -842,6 +1004,7 @@ def _cmd_new(args, project_root):
         "name": name,
         "version": "0.1.0",
         "description": description,
+        "long_description": long_description,
         "namespace": namespace,
         "language": language,
         "platform": "cross-platform",
@@ -906,6 +1069,47 @@ def _cmd_new(args, project_root):
         _register_in_kit(project_root, kit_name, namespace, name)
 
     return 0
+
+
+def _cmd_new_kit_stub(args):
+    """Stub for ``dz new kit <name>`` -- full impl in v0.7.42 (4d-2).
+
+    Prints a clear "coming soon" message so users see the planned shape
+    without confusing argparse errors. Returns 2 (not 0) so scripts can
+    detect that the command did not actually create anything.
+    """
+    print(
+        f"'dz new kit {args.name}' is not yet implemented (v0.7.40).\n\n"
+        "Planned shape (v0.7.42, item 4d-2):\n"
+        "  dz new kit <name>                  Create a flat kit at projects/<name>/\n"
+        "  dz new kit <name> --with-starter   Include a starter 'hello' tool\n\n"
+        "For now, use 'dz new tool <name>' to create individual tools,\n"
+        "and 'dz kit add <url>' to import existing kits from a repo.",
+        file=sys.stderr,
+    )
+    return 2
+
+
+def _cmd_new_aggregator_stub(args):
+    """Stub for ``dz new aggregator <name>`` -- full impl in v0.7.42 (4d-2).
+
+    Aggregator scaffolding always produces a standalone project (own
+    pyproject.toml + entry point + tests). Local-kit creation is the
+    separate ``dz new kit`` command (per Tier 2 design synthesis 2026-05-13
+    Open Question A resolution A2).
+    """
+    print(
+        f"'dz new aggregator {args.name}' is not yet implemented (v0.7.40).\n\n"
+        "Planned shape (v0.7.42, item 4d-2):\n"
+        "  dz new aggregator <name>                Standalone aggregator project\n"
+        "  dz new aggregator <name> --command <c>  Override CLI command name\n"
+        "  dz new aggregator <name> --with common,template,ci\n"
+        "                                          Composable scaffolding components\n\n"
+        "For now, use 'dz new tool <name>' to create tools inside the current\n"
+        "dazzlecmd project.",
+        file=sys.stderr,
+    )
+    return 2
 
 
 def _layer_extras(tool_dir, name, args):
