@@ -4,14 +4,15 @@
     "description": "{description}",
     "long_description": "{long_description}",
     "namespace": "{namespace}",
-    "language": "python",
+    "language": "powershell",
     "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
     "runtime": {
-        "type": "python",
-        "entry_point": "main",
-        "script_path": "{name}.py"
+        "type": "shell",
+        "shell": "powershell",
+        "script_path": "{name}.ps1"
     },
-    "pass_through": false,
+    "pass_through": true,
     "taxonomy": {
         "category": "",
         "tags": []

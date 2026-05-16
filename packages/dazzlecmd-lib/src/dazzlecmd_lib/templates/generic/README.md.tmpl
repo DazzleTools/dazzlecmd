@@ -1,0 +1,67 @@
+# {name}
+
+{description}
+
+## What this template gives you
+
+The `generic` scaffold ships ONLY a manifest skeleton -- no source files, no
+build configuration. It's intended for tools that already exist as a binary
+or script somewhere on disk and just need a dazzlecmd manifest to be
+dispatchable.
+
+## Next steps
+
+1. **Drop your tool's executable / script into this directory** (or anywhere
+   reachable by an absolute path).
+
+2. **Edit `.dazzlecmd.json` `runtime` block** to declare how the engine
+   should invoke your tool. Common shapes:
+
+   - For a compiled binary on PATH:
+     ```json
+     "runtime": {"type": "binary", "binary_path": "myapp"}
+     ```
+
+   - For a binary relative to the tool dir:
+     ```json
+     "runtime": {"type": "binary", "binary_path": "bin/myapp"}
+     ```
+
+   - For a shell script:
+     ```json
+     "runtime": {"type": "shell", "shell": "bash", "script_path": "run.sh"}
+     ```
+
+   - For a Node script:
+     ```json
+     "runtime": {"type": "node", "script_path": "index.js"}
+     ```
+
+   - For a Docker image:
+     ```json
+     "runtime": {"type": "docker", "image": "myorg/myapp:latest"}
+     ```
+
+3. **Verify discovery**:
+
+   ```bash
+   dz info {name}
+   ```
+
+   should print your manifest. If `Tool '{name}' not found`, check that the
+   tool dir is under your aggregator's `projects/<namespace>/` and that the
+   parent kit registry pointer lists it.
+
+4. **Dispatch**:
+
+   ```bash
+   dz {name} [arguments]
+   ```
+
+## Why pick `generic` over a per-language template
+
+- You already have the tool built; you just need the dazzlecmd manifest.
+- Your tool's runtime is custom enough that none of the language-specific
+  templates fit (e.g., a multi-runtime composite, a tool that dispatches to
+  itself via `subprocess`, or anything not yet covered by the language set).
+- You want to start minimal and decide later.

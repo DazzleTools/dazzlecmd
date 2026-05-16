@@ -1,0 +1,18 @@
+"""Tests for {name}."""
+
+import pytest
+
+from {name_underscore} import main
+
+
+def test_main_returns_zero_on_empty_argv():
+    """The entry point returns exit code 0 when called with no arguments."""
+    assert main([]) == 0
+
+
+def test_main_returns_zero_with_args(capsys):
+    """The entry point returns exit code 0 and echoes its arguments."""
+    assert main(["foo", "bar"]) == 0
+    captured = capsys.readouterr()
+    assert "foo" in captured.out
+    assert "bar" in captured.out

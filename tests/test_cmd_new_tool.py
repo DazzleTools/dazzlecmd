@@ -156,21 +156,22 @@ class TestNewToolConfigDefaults:
             os.path.join(scratch_project_root, "projects", "dazzletools", "c")
         )
 
-    def test_config_language_unsupported_rejected(self, scratch_project_root, capsys):
-        """v0.7.40 guard: only 'python' is scaffolded.
+    def test_config_unknown_language_rejected(self, scratch_project_root, capsys):
+        """When config defaults specify a language with no template dir,
+        the scaffold fails with a clear error listing the available languages.
 
-        When config defaults specify an unsupported language, the scaffold
-        fails with a clear coming-soon message pointing at v0.7.44 (4d-3).
-        The guard is removed in v0.7.44 when per-language templates land.
+        v0.7.44 (4b-T3 + 4d-3) replaced v0.7.40's python-only guard with
+        a generic "template dir not found" validation. The available set
+        is the directories under templates/ (currently c_cpp, docker,
+        generic, node, powershell, python, rust).
         """
-        engine = _make_engine_with_config({"default_language": "rust"})
+        engine = _make_engine_with_config({"default_language": "klingon"})
         rc = cli._cmd_new_tool(
             _make_args(name="d"), scratch_project_root, engine=engine,
         )
         assert rc == 2
         err = capsys.readouterr().err
-        assert "'rust' is not yet supported" in err
-        assert "v0.7.44" in err
+        assert "'klingon' not supported" in err
         # Source reference: config, not CLI flag
         assert "config 'new.default_language'" in err
         # Tool dir must NOT have been created
@@ -178,21 +179,20 @@ class TestNewToolConfigDefaults:
             os.path.join(scratch_project_root, "projects", "dazzletools", "d")
         )
 
-    def test_cli_language_unsupported_rejected(self, scratch_project_root, capsys):
-        """CLI --language with an unsupported value is rejected with a
+    def test_cli_unknown_language_rejected(self, scratch_project_root, capsys):
+        """CLI --language with an unknown value is rejected with a
         message pointing at the --language flag as the source.
         """
         engine = _make_engine_with_config({"default_language": "rust"})
         rc = cli._cmd_new_tool(
-            _make_args(name="e", language="node"),
+            _make_args(name="e", language="brainfuck"),
             scratch_project_root,
             engine=engine,
         )
         assert rc == 2
         err = capsys.readouterr().err
-        assert "'node' is not yet supported" in err
+        assert "'brainfuck' not supported" in err
         assert "--language flag" in err
-        assert "v0.7.44" in err
 
     def test_python_language_explicitly_accepted(self, scratch_project_root):
         """Explicit ``--language python`` works (no rejection)."""

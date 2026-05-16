@@ -8,6 +8,48 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.6.5] - 2026-05-16
+
+Ships with dazzlecmd v0.7.43 (closes dazzlecmd #67). Engine + cli_helpers updates so shadowed tools win short-name dispatch: `_dispatch_registry_path` attempts tool lookup before the meta-command path, and the build-time conflict warning is reworded to reflect the new precedence. See dazzlecmd CHANGELOG `[0.7.43]` for full details. CHANGELOG entry retroactively added in 0.6.6 commit.
+
+### Changed
+
+- `engine._dispatch_registry_path` -- tool lookup precedes meta-command lookup. Non-shadowed reserved names route to the meta-command path as before (resolve_command returns None for names without a registered tool).
+- `cli_helpers.build_tool_subparsers` -- shadowed-tool warning reworded ("tool wins short-name dispatch" instead of "skipping").
+
+### Refs
+
+- Closes dazzlecmd #67. Ships with dazzlecmd v0.7.43.
+
+## [0.6.6] - 2026-05-16
+
+Ships with dazzlecmd v0.7.44 (Tier 2A.2). Bundles per-language scaffolding templates under `dazzlecmd_lib/templates/`: seven directories (`python`, `rust`, `node`, `powershell`, `c_cpp`, `docker`, `generic`) with manifest + entry-point source templates for each. Python additionally ships a `__full__/` overlay (README + pytest stub) for `dz new tool --full --language python`. No library API change; the lib continues to expose its existing `AggregatorEngine`, `FQCNIndex`, `default_meta_commands`, etc. The new content is the templates themselves.
+
+### Added
+
+- **Seven per-language template directories** under `src/dazzlecmd_lib/templates/`:
+  - `python/` -- `.dazzlecmd.json.tmpl`, `{name_underscore}.py.tmpl`, and `__full__/README.md.tmpl` + `__full__/tests/test_{name_underscore}.py.tmpl`
+  - `rust/` -- `.dazzlecmd.json.tmpl`, `Cargo.toml.tmpl`, `src/main.rs.tmpl`
+  - `node/` -- `.dazzlecmd.json.tmpl`, `package.json.tmpl`, `index.js.tmpl`
+  - `powershell/` -- `.dazzlecmd.json.tmpl`, `{name}.ps1.tmpl`
+  - `c_cpp/` -- `.dazzlecmd.json.tmpl`, `Makefile.tmpl`, `main.c.tmpl`
+  - `docker/` -- `.dazzlecmd.json.tmpl`, `Dockerfile.tmpl`
+  - `generic/` -- `.dazzlecmd.json.tmpl`, `README.md.tmpl` (for tools that already exist as a binary or script)
+- **Recursive package-data globs** in `pyproject.toml` so subdirectory template files ship in the wheel.
+
+### Changed
+
+- Templates dir layout migrated from flat (`dazzlecmd.json.tmpl` + `python_tool.py.tmpl` at the root) to per-language subdirs. Consumers calling into the new `dz new tool --language X` flow get scaffolds appropriate to X; the consumer-facing API surface (the engine, default_meta_commands, render functions) is unchanged.
+
+### Tests
+
+Coverage in dazzlecmd's `tests/test_cmd_new_tool_languages.py` (20 new tests). Lib-package-internal test surface remains the responsibility of the consumer (see X-1 / X-8 in the closeout plan for the dedicated lib test suite).
+
+### Refs
+
+Ships with dazzlecmd v0.7.44.
+Companion to Tier 2A.2 work; refs #35 (`dz new` redesign).
+
 ## [0.6.4] - 2026-05-14
 
 Ships with dazzlecmd v0.7.41 (closes dazzlecmd #65). Adds realpath-based auto-aliasing at discovery time so the same on-disk script reached via two FQCNs (junction loop, symlink, cross-embedded aggregators with shared physical files) collapses to one canonical + one auto-realpath alias. Display surfaces inherit the `[+]` marker semantics for free; dispatch via any FQCN still works.

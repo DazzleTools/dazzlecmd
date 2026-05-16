@@ -28,13 +28,11 @@ RESERVED_COMMANDS = {
 }
 
 
-# v0.7.40 (4d-1): only python is scaffolded today. Per-language templates
-# for rust/node/powershell/c_cpp/docker/generic land in v0.7.44 (4d-3 /
-# 4b-T3). Guarding here prevents users from creating internally-inconsistent
-# manifests (e.g., ``language: "rust"`` with a generated ``.py`` script and
-# ``runtime.type: "python"``). This guard is REMOVED in v0.7.44 when the
-# per-language scaffolder catches up.
-_SUPPORTED_LANGUAGES_V0740 = {"python"}
+# v0.7.44 (4b-T3 + 4d-3): per-language scaffolding ships. The set of
+# valid ``--language`` values is now derived from the template directory
+# layout under ``packages/dazzlecmd-lib/src/dazzlecmd_lib/templates/`` --
+# any directory there (other than ``__*__`` overlay dirs) is a valid
+# language. The v0.7.40 ``_SUPPORTED_LANGUAGES_V0740`` guard is gone.
 
 
 def find_project_root():
@@ -940,17 +938,105 @@ def _resolve_new_defaults(engine):
     return cfg if isinstance(cfg, dict) else {}
 
 
+def _find_templates_root():
+    """Locate the templates directory shipped with dazzlecmd-lib.
+
+    Prefers the lib package (installed or editable). Falls back to a
+    local ``templates/`` next to this module for the legacy single-repo
+    layout.
+    """
+    import dazzlecmd_lib
+    lib_dir = os.path.dirname(dazzlecmd_lib.__file__)
+    template_dir = os.path.join(lib_dir, "templates")
+    if os.path.isdir(template_dir):
+        return template_dir
+    return os.path.join(os.path.dirname(__file__), "templates")
+
+
+def _available_languages(templates_root):
+    """Return the sorted list of language template directory names.
+
+    Filters out overlay directories (``__full__`` etc.) and any
+    non-directory entries.
+    """
+    if not os.path.isdir(templates_root):
+        return []
+    return sorted(
+        entry for entry in os.listdir(templates_root)
+        if os.path.isdir(os.path.join(templates_root, entry))
+        and not entry.startswith("__")
+    )
+
+
+def _substitute_placeholders(text, placeholders):
+    """Replace ``{key}`` markers in text with their placeholder values.
+
+    Order matters when one placeholder is a substring of another. The
+    placeholder set is small (~5 entries) and stable; iterate the dict
+    and replace each in turn.
+    """
+    for key, value in placeholders.items():
+        text = text.replace("{" + key + "}", value)
+    return text
+
+
+def _copy_template_tree(src_dir, dest_dir, placeholders):
+    """Recursively copy ``src_dir`` into ``dest_dir`` with placeholder
+    substitution applied to file contents AND filenames.
+
+    Files ending in ``.tmpl`` have the suffix stripped on output. Files
+    without the suffix are copied verbatim (no substitution). Subdirectory
+    names also receive placeholder substitution so e.g. ``src/`` stays
+    ``src/`` but a hypothetical ``{name}-pkg/`` would be renamed.
+
+    Overlay subdirectories matching ``__*__`` (e.g., ``__full__``) are
+    skipped in the recursion -- callers apply them separately.
+
+    Returns the list of relative paths created (for the success message).
+    """
+    created = []
+    for entry in sorted(os.listdir(src_dir)):
+        if entry.startswith("__") and entry.endswith("__"):
+            continue
+        src_path = os.path.join(src_dir, entry)
+        dest_entry = _substitute_placeholders(entry, placeholders)
+        if os.path.isdir(src_path):
+            sub_dest = os.path.join(dest_dir, dest_entry)
+            os.makedirs(sub_dest, exist_ok=True)
+            sub_created = _copy_template_tree(src_path, sub_dest, placeholders)
+            created.extend(os.path.join(dest_entry, p) for p in sub_created)
+            continue
+        # File
+        if dest_entry.endswith(".tmpl"):
+            dest_entry = dest_entry[:-len(".tmpl")]
+            with open(src_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            content = _substitute_placeholders(content, placeholders)
+            dest_path = os.path.join(dest_dir, dest_entry)
+            with open(dest_path, "w", encoding="utf-8") as f:
+                f.write(content)
+        else:
+            import shutil
+            dest_path = os.path.join(dest_dir, dest_entry)
+            shutil.copy2(src_path, dest_path)
+        created.append(dest_entry)
+    return created
+
+
 def _cmd_new_tool(args, project_root, engine=None):
     """Create a new tool project with progressive scaffolding.
 
-    Renamed from ``_cmd_new`` in v0.7.40 (4d-1) to disambiguate from the
-    forthcoming ``_cmd_new_kit`` / ``_cmd_new_aggregator`` handlers (v0.7.42).
-    Reads user-config ``new`` section for defaults; CLI flags override.
+    Per-language template dispatch (v0.7.44, 4b-T3 + 4d-3): the
+    ``--language`` flag (with config and built-in fallbacks) selects a
+    template directory under
+    ``packages/dazzlecmd-lib/src/dazzlecmd_lib/templates/<language>/``.
+    The whole tree is copied to the new tool's directory with placeholder
+    substitution. For Python, ``--full`` additionally applies the
+    ``python/__full__/`` overlay (README + test stub).
     """
     new_defaults = _resolve_new_defaults(engine)
 
     name = args.name
-    # Namespace: CLI > config > built-in 'dazzletools'
     namespace = (
         args.namespace
         or new_defaults.get("default_namespace")
@@ -958,30 +1044,24 @@ def _cmd_new_tool(args, project_root, engine=None):
     )
     description = args.description or f"A new dazzlecmd tool: {name}"
     long_description = getattr(args, "long_description", "") or ""
-    # Language: CLI > config > built-in 'python'
     language = (
         args.language
         or new_defaults.get("default_language")
         or "python"
     )
 
-    # v0.7.40 guard: only ``python`` produces a working tool today. Reject
-    # other values explicitly with a coming-soon message so users don't
-    # end up with internally-inconsistent manifests (language=rust but
-    # runtime=python). Guard removed in v0.7.44 (4d-3) when per-language
-    # scaffolding lands.
-    if language not in _SUPPORTED_LANGUAGES_V0740:
+    templates_root = _find_templates_root()
+    available = _available_languages(templates_root)
+    if language not in available:
         source = (
             "config 'new.default_language'"
             if args.language is None and new_defaults.get("default_language")
             else "--language flag"
         )
+        avail_str = ", ".join(available) if available else "(none found)"
         print(
-            f"Error: language {language!r} is not yet supported "
-            f"(from {source}).\n\n"
-            f"v0.7.40 only scaffolds 'python' tools. Per-language templates "
-            f"for rust/node/powershell/c_cpp/docker/generic land in v0.7.44 "
-            f"(4d-3). For now, use --language python (or omit the flag).",
+            f"Error: language {language!r} not supported (from {source}).\n"
+            f"Available: {avail_str}.",
             file=sys.stderr,
         )
         return 2
@@ -990,80 +1070,40 @@ def _cmd_new_tool(args, project_root, engine=None):
     tool_dir = os.path.join(projects_dir, name)
 
     if os.path.exists(tool_dir):
-        # Check if we're layering on extras
         if args.simple or args.full:
             return _layer_extras(tool_dir, name, args)
         print(f"Error: Project '{namespace}/{name}' already exists at {tool_dir}")
         return 1
 
-    # Create the project directory
     os.makedirs(tool_dir, exist_ok=True)
 
-    # Create .dazzlecmd.json manifest (always)
-    manifest = {
+    placeholders = {
         "name": name,
-        "version": "0.1.0",
+        "name_underscore": name.replace("-", "_"),
         "description": description,
         "long_description": long_description,
         "namespace": namespace,
-        "language": language,
-        "platform": "cross-platform",
-        "platforms": ["windows", "linux", "macos"],
-        "runtime": {
-            "type": "python",
-            "entry_point": "main",
-            "script_path": f"{name.replace('-', '_')}.py",
-        },
-        "pass_through": False,
-        "taxonomy": {
-            "category": "",
-            "tags": [],
-        },
-        "lifecycle": {
-            "type": "tool",
-            "status": "active",
-            "created_as": "tool",
-        },
     }
 
-    manifest_path = os.path.join(tool_dir, ".dazzlecmd.json")
-    with open(manifest_path, "w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=4)
-        f.write("\n")
+    lang_template_dir = os.path.join(templates_root, language)
+    created = _copy_template_tree(lang_template_dir, tool_dir, placeholders)
 
-    # Create starter script (always)
-    script_name = f"{name.replace('-', '_')}.py"
-    script_path = os.path.join(tool_dir, script_name)
-
-    # Templates live in dazzlecmd-lib; fall back to local templates dir
-    import dazzlecmd_lib
-    lib_dir = os.path.dirname(dazzlecmd_lib.__file__)
-    template_dir = os.path.join(lib_dir, "templates")
-    if not os.path.isdir(template_dir):
-        template_dir = os.path.join(os.path.dirname(__file__), "templates")
-    tmpl_path = os.path.join(template_dir, "python_tool.py.tmpl")
-
-    if os.path.isfile(tmpl_path):
-        with open(tmpl_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        content = content.replace("{name}", name)
-        content = content.replace("{description}", description)
-    else:
-        content = _default_python_template(name, description)
-
-    with open(script_path, "w", encoding="utf-8") as f:
-        f.write(content)
+    # Python --full overlay: copy the python/__full__/ tree as well.
+    if args.full and language == "python":
+        full_dir = os.path.join(lang_template_dir, "__full__")
+        if os.path.isdir(full_dir):
+            extra = _copy_template_tree(full_dir, tool_dir, placeholders)
+            created.extend(extra)
 
     print(f"Created project: {namespace}/{name}")
     print(f"  {tool_dir}/")
-    print(f"  - .dazzlecmd.json")
-    print(f"  - {script_name}")
+    for rel_path in created:
+        print(f"  - {rel_path}")
 
-    # Layer on extras if requested
+    # Universal --simple/--full extras (TODO.md, NOTES.md, ROADMAP.md, etc.)
     if args.simple or args.full:
         _layer_extras(tool_dir, name, args)
 
-    # Register in kit if requested
     kit_name = getattr(args, "kit", None)
     if kit_name:
         _register_in_kit(project_root, kit_name, namespace, name)
@@ -1142,31 +1182,6 @@ def _layer_extras(tool_dir, name, args):
     if added:
         print(f"  Added: {', '.join(added)}")
     return 0
-
-
-def _default_python_template(name, description):
-    """Fallback Python tool template when template file is not found."""
-    safe_name = name.replace("-", "_")
-    return f'''"""
-{name} - {description}
-"""
-
-import sys
-
-
-def main(argv=None):
-    """Entry point for {name}."""
-    if argv is None:
-        argv = sys.argv[1:]
-
-    print(f"{name}: not yet implemented")
-    print(f"Arguments: {{argv}}")
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
-'''
 
 
 #

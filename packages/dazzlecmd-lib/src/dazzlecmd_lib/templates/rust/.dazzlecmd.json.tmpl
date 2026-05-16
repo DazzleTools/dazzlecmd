@@ -1,0 +1,25 @@
+{
+    "name": "{name}",
+    "version": "0.1.0",
+    "description": "{description}",
+    "long_description": "{long_description}",
+    "namespace": "{namespace}",
+    "language": "rust",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "binary",
+        "binary_path": "target/debug/{name_underscore}",
+        "build_hint": "cargo build  (or cargo build --release; then update binary_path to target/release/{name_underscore})"
+    },
+    "pass_through": true,
+    "taxonomy": {
+        "category": "",
+        "tags": []
+    },
+    "lifecycle": {
+        "type": "tool",
+        "status": "active",
+        "created_as": "tool"
+    }
+}

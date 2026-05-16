@@ -4,6 +4,57 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.44] - 2026-05-16
+
+Tier 2A.2 (4b-T3 + 4d-3) — multi-language scaffolding templates and `--language` dispatch. Replaces v0.7.40's python-only `_SUPPORTED_LANGUAGES_V0740` guard with a real per-language scaffolder. Seven languages ship: `python` (full depth — manifest + entry + `--full` overlay with README and pytest stub), `rust` (manifest + `Cargo.toml` + `src/main.rs`), `node` (manifest + `package.json` + `index.js`), `powershell` (manifest + `<name>.ps1` with `param` block), `c_cpp` (manifest + `Makefile` + `main.c`), `docker` (manifest + `Dockerfile`), and `generic` (manifest + README explaining the runtime block — for tools that already exist as a binary or script). Resolves v0.7.40's coming-soon promise and closes the scaffolding side of #35.
+
+The CLI rewrite is small (~80 LOC). `_cmd_new_tool` now derives the template directory from `--language`, recursively copies the tree with placeholder substitution applied to BOTH file contents AND filenames (so `python/{name_underscore}.py.tmpl` -> `my_tool.py`), and applies the `__full__/` overlay for Python `--full`. The validation set is derived from the directory layout under `packages/dazzlecmd-lib/src/dazzlecmd_lib/templates/`, so adding a future language is purely additive (drop in a new directory).
+
+### Added
+
+- **Per-language template directories** under `packages/dazzlecmd-lib/src/dazzlecmd_lib/templates/`: `python/`, `rust/`, `node/`, `powershell/`, `c_cpp/`, `docker/`, `generic/`. Each contains a per-language `.dazzlecmd.json.tmpl` (with the correct `runtime.type` for that language) plus the entry-point source files appropriate to the language.
+- **`python/__full__/` overlay** containing `README.md.tmpl` and `tests/test_{name_underscore}.py.tmpl`. Applied when `dz new tool --language python --full <name>` so Python-tier users get a fully-fledged starter (universal `_layer_extras` items still apply: TODO.md, NOTES.md, ROADMAP.md, private/claude/).
+- **Filename placeholder substitution.** Template filenames may contain `{name}` / `{name_underscore}` markers; on copy, those are replaced with the user-supplied tool name before writing to disk. Required for Python (`{name_underscore}.py`), PowerShell (`{name}.ps1`), and Python `--full` tests (`tests/test_{name_underscore}.py`).
+- **`_find_templates_root`, `_available_languages`, `_substitute_placeholders`, `_copy_template_tree` helpers** in `src/dazzlecmd/cli.py`. The copy helper handles recursive directory walks, `.tmpl` suffix stripping, overlay-dir skipping (`__*__`), and both file and filename substitution.
+
+### Changed
+
+- **`_cmd_new_tool` rewrite.** Replaced inline manifest construction + ad-hoc script copy with the template-tree dispatch. The function now picks a language, validates its template dir exists, then delegates the entire scaffold to `_copy_template_tree`. ~80 LOC down from ~120; clearer separation of concerns.
+- **Validation: language must have a template dir.** Replaces v0.7.40's hardcoded `_SUPPORTED_LANGUAGES_V0740 = {"python"}` set. Error message lists all available languages so users can see what's valid. The validation runs against config-derived AND CLI-derived language values.
+- **Package data layout (`packages/dazzlecmd-lib/pyproject.toml`).** `package-data` now uses recursive globs (`templates/*`, `templates/**/*`, `templates/**/**/*`) so subdirectory template files ship in the wheel.
+
+### Removed
+
+- **`_SUPPORTED_LANGUAGES_V0740` guard** in `src/dazzlecmd/cli.py`. The v0.7.40 coming-soon message that pointed at v0.7.44 is gone — v0.7.44 IS that release.
+- **`_default_python_template` fallback** in `src/dazzlecmd/cli.py`. Templates are bundled with the lib package; if they're missing the install is broken (not a recoverable case). Cleaner than maintaining a parallel inline copy.
+- **Old flat templates** `dazzlecmd.json.tmpl` and `python_tool.py.tmpl` (under `templates/` root). Replaced by `templates/python/.dazzlecmd.json.tmpl` and `templates/python/{name_underscore}.py.tmpl`.
+
+### Tests
+
+1096 passed, 14 skipped (up from 1068 / 14 in v0.7.41 + the v0.7.42/v0.7.43 commits; +28 new):
+
+- 20 in `tests/test_cmd_new_tool_languages.py` covering all seven languages: scaffolded file structure, manifest schema correctness, `runtime.type` matches language conventions, hyphenated-name placeholder substitution, Python `--full` overlay produces README + tests/, generic ships no source file, unknown language error lists all seven, kit registration works for non-Python tools, description placeholder appears in non-manifest files (Cargo.toml).
+- 2 replaced in `tests/test_cmd_new_tool.py`: v0.7.40's `_config_language_unsupported_rejected` / `_cli_language_unsupported_rejected` (asserted the python-only guard) repurposed to assert that truly unknown language names (`klingon`, `brainfuck`) are rejected. The 26 other v0.7.40 tests continue to pass unchanged.
+
+### Human test checklist
+
+`tests/checklists/v0.7.44__Tier2A__multi-language-templates.md` covers per-language scaffold round-trips, manifest schema verification, `dz info` output for each language, Python `--full` overlay verification, the placeholder-substitution-in-filenames mechanic, and a regression check that v0.7.40's `dz new tool <name>` (defaults to Python) still works end-to-end.
+
+### Versions
+
+- dazzlecmd `0.7.43` -> `0.7.44` (PATCH — additive scaffolding surface, no breaking CLI change; the v0.7.40 python-only guard is gone but the behavior `dz new tool foo` produces is unchanged).
+- dazzlecmd-lib `0.6.5` -> `0.6.6` (PATCH — templates content bundled with the lib package).
+- dazzle-dz alias bumped to `0.7.44`; deps re-pinned to `>=0.7.44` / `>=0.6.6`.
+
+### Refs
+
+Refs #35 (`dz new` redesign — the kit/aggregator sub-parsers are still stubs; planned for v0.7.45+).
+Refs #30 (Phase 4 epic — Tier 2 continues).
+
+### Design
+
+- `2026-05-15__21-29-29__dev-workflow-process__4b-T3-multi-language-templates.md`
+
 ## [0.7.43] - 2026-05-16
 
 ### Fixed
@@ -1561,7 +1612,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.43...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.44...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

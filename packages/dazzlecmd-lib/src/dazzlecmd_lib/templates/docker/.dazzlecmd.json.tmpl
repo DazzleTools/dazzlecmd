@@ -1,0 +1,26 @@
+{
+    "name": "{name}",
+    "version": "0.1.0",
+    "description": "{description}",
+    "long_description": "{long_description}",
+    "namespace": "{namespace}",
+    "language": "docker",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "docker",
+        "image": "{name}:latest",
+        "build_hint": "docker build -t {name}:latest .",
+        "passthrough_args": true
+    },
+    "pass_through": true,
+    "taxonomy": {
+        "category": "",
+        "tags": []
+    },
+    "lifecycle": {
+        "type": "tool",
+        "status": "active",
+        "created_as": "tool"
+    }
+}

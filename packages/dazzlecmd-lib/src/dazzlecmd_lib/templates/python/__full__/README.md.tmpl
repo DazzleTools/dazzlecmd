@@ -1,0 +1,32 @@
+# {name}
+
+{description}
+
+## Install
+
+```bash
+pip install -e .
+```
+
+Or, if this tool ships inside a dazzlecmd-pattern aggregator, it is dispatchable as `dz {name}` (or via FQCN: `dz {namespace}:{name}`).
+
+## Usage
+
+```bash
+{name} [arguments]
+```
+
+## Development
+
+Run the tests:
+
+```bash
+pytest tests/
+```
+
+## Files
+
+- `.dazzlecmd.json` -- tool manifest (consumed by dazzlecmd-lib at discovery)
+- `{name_underscore}.py` -- the tool's entry point (exposes a `main(argv=None)` function)
+- `tests/` -- pytest test suite (added by `dz new tool --full`)
+- `TODO.md`, `NOTES.md`, `ROADMAP.md` -- developer notes (added by `--simple`/`--full`)

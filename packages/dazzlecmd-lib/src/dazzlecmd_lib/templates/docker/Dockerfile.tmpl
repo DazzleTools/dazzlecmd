@@ -1,0 +1,12 @@
+# {name} -- {description}
+
+FROM alpine:latest
+
+WORKDIR /app
+
+# Add your build steps here. For example:
+# COPY . /app
+# RUN apk add --no-cache <packages>
+# RUN <build commands>
+
+ENTRYPOINT ["/bin/sh", "-c", "echo '{name}: not yet implemented' && echo Args: \"$@\""]

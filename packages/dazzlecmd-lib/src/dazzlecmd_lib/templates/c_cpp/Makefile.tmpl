@@ -1,0 +1,11 @@
+CC = cc
+CFLAGS = -Wall -Wextra -O2
+TARGET = {name_underscore}
+
+$(TARGET): main.c
+	$(CC) $(CFLAGS) -o $(TARGET) main.c
+
+clean:
+	rm -f $(TARGET)
+
+.PHONY: clean

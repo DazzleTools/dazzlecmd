@@ -1,0 +1,12 @@
+# {name} -- {description}
+
+param(
+    [Parameter(ValueFromRemainingArguments=$true)]
+    [string[]]$RestArgs
+)
+
+Write-Host "{name}: not yet implemented"
+if ($RestArgs) {
+    Write-Host "Arguments: $($RestArgs -join ', ')"
+}
+exit 0
