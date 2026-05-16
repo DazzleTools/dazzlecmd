@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.43] - 2026-05-16
+
+### Fixed
+
+- **Shadowed tool names now dispatch to the tool, not the meta-command** (`dazzlecmd-lib`). When a tool's short name matches a reserved meta-command name (e.g. AMDead's `setup` PowerShell tool vs the library's `setup` meta-command), the tool wins and receives the full argv after the command name unchanged. Previously the meta-command's argparse rejected any flag it didn't recognize, blocking tool invocation with anything other than the FQCN form (`amdead core:setup -Install`). The FQCN workaround still works; it just isn't required anymore. Closes #67.
+
+### Added
+
+- **`docs/guides/help-conventions.md`** — guidance for tool authors on handling `-h` in PowerShell, bash, cmd, and binary tools. The library does not intercept help flags for non-Python runtimes; tools receive argv exactly as the user typed it.
+
 ## [0.7.42] - 2026-05-14
 
 Internal tooling refresh — replaces project-local `scripts/` with the shared `git-repokit-common@v0.2.4` toolbox consumed as a git subtree at `scripts/`. No user-visible CLI or library behavior changes. Hook checks (pre-commit version sync + private-content guard + 10MB file blocker; post-commit hash refresh; pre-push syntax/test/debug scan) all continue to run with the same semantics. What's new is the toolbox underneath: a richer version manager (`sync-versions.py` supersedes the legacy `update-version.sh` and adds `--check`, `--dry-run`, `--bump`, `--demote`, `--set X.Y.Z`, `--phase {alpha,beta,rc1}`, and automatic CHANGELOG compare-link maintenance), GitHub issue tooling (`gh_issue_full.py`, `gh_sub_issues.py` — the issue-context viewer that was previously referenced from a sibling project now ships in-repo), Claude session tools (`search_sesslog.py`, `extract_tool_result.py`), demo recording scaffolding (`demo/`), `paths.sh`/`safe_move.sh` utilities, a tag-only push fast path in `pre-push`, and bidirectional sync with the upstream toolbox via `bash scripts/update-common.sh`. Project configuration lives in a new `[tool.repokit-common]` block in `pyproject.toml`.
@@ -1551,7 +1561,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.42...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.43...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

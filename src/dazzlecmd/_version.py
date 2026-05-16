@@ -22,12 +22,12 @@ Version levels:
 # Version components - edit these for version bumps
 MAJOR = 0
 MINOR = 7
-PATCH = 42
+PATCH = 43
 PHASE = ""  # Per-MINOR feature set: None, "alpha", "beta", "rc1", etc.
 PROJECT_PHASE = "prealpha"  # Project-wide: "prealpha", "alpha", "beta", "stable"
 
 # Auto-updated by git hooks - do not edit manually
-__version__ = "0.7.42_integrate-repokit-common_75-20260515-c3f60c26"
+__version__ = "0.7.43_fix-tool-help-non-python_76-20260516-4cb0d865"
 __app_name__ = "dazzlecmd"
 
 

@@ -1533,6 +1533,26 @@ class AggregatorEngine:
 
         command_name = argv[0]
 
+        # Issue #67: named tools own their name -- tool dispatch is
+        # attempted BEFORE the meta-command path. For shadowed names
+        # (a tool whose short name matches a reserved meta-command,
+        # e.g. AMDead's `setup` PS tool vs the library's `setup` meta-
+        # command), the tool wins. argv after the command name passes
+        # through to the runner unchanged; the lib does NOT parse or
+        # filter post-command args for tools (no per-flag intercepts,
+        # no argparse consumption of tool-bound flags). For non-shadowed
+        # reserved names (e.g. `list`), no tool exists with that name,
+        # resolve_command returns None, and the meta-command path runs
+        # as before. Command names starting with `-` are top-level flags
+        # for the aggregator itself; those skip tool lookup and go
+        # straight to the meta/argparse path below.
+        if not command_name.startswith("-"):
+            project, context = self.resolve_command(command_name)
+            if project is not None:
+                if context is not None and context.notification and not os.environ.get("DZ_QUIET"):
+                    print(context.notification, file=sys.stderr)
+                return self._run_tool(project, argv[1:], context=context)
+
         # Meta-command path (only if is_root)
         if self.is_root and (
             command_name in reserved or command_name.startswith("-")
@@ -1548,14 +1568,6 @@ class AggregatorEngine:
             finally:
                 sys.argv = sys_argv_backup
             return 0
-
-        # Tool dispatch
-        project, context = self.resolve_command(command_name)
-        if project is not None:
-            if context is not None and context.notification and not os.environ.get("DZ_QUIET"):
-                print(context.notification, file=sys.stderr)
-            tool_argv = argv[1:]
-            return self._run_tool(project, tool_argv, context=context)
 
         # Unknown command — let argparse produce its standard error
         sys_argv_backup = sys.argv

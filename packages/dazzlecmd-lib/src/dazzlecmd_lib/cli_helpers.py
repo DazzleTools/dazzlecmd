@@ -75,9 +75,19 @@ def build_tool_subparsers(
 
         if name in reserved:
             if warn_on_conflict and name not in exempt:
+                # As of issue #67's redesign, shadowed tools WIN short-name
+                # dispatch (engine._dispatch_registry_path checks tool
+                # lookup before the meta-command path). The argparse
+                # subparser is still skipped here because argparse can't
+                # carry two subparsers with the same name; the meta-
+                # command's subparser stays registered but is unreachable
+                # by short name (FQCN access for meta-commands is a
+                # planned future enhancement). The warning tells aggregator
+                # authors about the collision so they can rename or
+                # consciously accept the shadowing.
                 print(
                     _colors.warn(
-                        f"Warning: Tool {name!r} conflicts with reserved command, skipping"
+                        f"Warning: Tool {name!r} shadows reserved meta-command -- tool wins short-name dispatch"
                     ),
                     file=_sys.stderr,
                 )
