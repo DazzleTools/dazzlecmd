@@ -1,0 +1,59 @@
+# {name}
+
+{description}
+
+## What this template gives you
+
+The `binary` scaffold creates a dazzlecmd manifest pointing at a pre-built
+executable. It ships ONLY a manifest -- no source files, no build
+configuration. Use this when you already have a compiled binary (or a
+binary installed elsewhere on PATH) and just need dazzlecmd to dispatch
+to it.
+
+For a pre-built binary you'll build yourself (Rust, C/C++), prefer the
+language-specific templates (`--language rust`, `--language c_cpp`); they
+ship build manifests AND register `runtime.type: "binary"`. The `binary`
+template is for the case where the build process is out of dazzlecmd's
+scope.
+
+## Next steps
+
+1. **Drop your binary in this directory** as `{name}` (or `{name}.exe` on
+   Windows). The default manifest's `binary_path` already points there.
+
+   OR
+
+2. **Edit `.dazzlecmd.json` `runtime.binary_path`** to point at a binary
+   somewhere else:
+
+   - **Already on PATH**: `"binary_path": "myapp"` -- the engine will
+     resolve via PATH lookup.
+   - **Absolute path**: `"binary_path": "C:/Program Files/MyApp/myapp.exe"`
+     or `/usr/local/bin/myapp`.
+   - **Relative to tool dir**: `"binary_path": "bin/myapp"` or
+     `"./scripts/myapp"`.
+
+3. **Verify discovery**:
+
+   ```bash
+   dz info {name}
+   ```
+
+   should print your manifest.
+
+4. **Dispatch**:
+
+   ```bash
+   dz {name} [arguments]
+   ```
+
+   All arguments after the tool name pass through to the binary unchanged.
+
+## Why pick `binary` over `generic`
+
+- `binary` is for pre-built executables specifically -- the runtime block
+  is pre-filled with `runtime.type: "binary"` and a sensible default
+  `binary_path`.
+- `generic` is for tools whose runtime is custom -- maybe a binary, maybe
+  a shell script, maybe a Docker-wrapped composite. Pick `generic` if
+  you're not sure yet.

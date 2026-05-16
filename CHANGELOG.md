@@ -4,6 +4,45 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.45] - 2026-05-16
+
+Adds three more language templates to the v0.7.44 multi-language scaffolding set: `bash`, `cmd`, and `binary`. The engine's shell runner and binary runner already support these via the existing `runtime.shell` / `runtime.binary_path` fields -- this commit is pure template addition, no engine changes.
+
+Resolves two gaps surfaced after v0.7.44 shipped:
+
+1. User feedback that bash/cmd scripts are common scaffolding targets. #35's acceptance criteria listed "shell" as a supported language; v0.7.44 only covered the shell case via PowerShell.
+2. The acceptance criteria also explicitly listed "binary" as a supported language; v0.7.44 conflated this with `generic` (which is broader -- the generic README mentions runtime could end up shell, node, docker, etc.). `binary` is now its own template for the narrower "I have a pre-built executable, register a manifest pointing at it" case.
+
+The seven-language set from v0.7.44 (python, rust, node, powershell, c_cpp, docker, generic) is now ten.
+
+### Added
+
+- `templates/bash/` -- `.dazzlecmd.json.tmpl` (`language: "bash"`, `runtime.type: "shell"`, `runtime.shell: "bash"`, `platforms: ["linux", "macos"]`) + `{name}.sh.tmpl` (bash hashbang, `set -euo pipefail`, `$*` argv passthrough).
+- `templates/cmd/` -- `.dazzlecmd.json.tmpl` (`language: "cmd"`, `runtime.type: "shell"`, `runtime.shell: "cmd"`, `platforms: ["windows"]`) + `{name}.cmd.tmpl` (`@echo off`, `setlocal`/`endlocal`, `%*` passthrough, `exit /b 0`).
+- `templates/binary/` -- `.dazzlecmd.json.tmpl` (`language: "binary"`, `runtime.type: "binary"`, `binary_path: "{name}"`, cross-platform) + `README.md.tmpl` explaining drop-in vs PATH-lookup vs absolute/relative binary_path patterns and when to prefer `binary` over `generic`.
+
+### Changed
+
+- `TestAvailableLanguagesError::test_unknown_language_error_lists_all_seven` renamed to `test_unknown_language_error_lists_all_ten`; the assertion set now includes `bash`, `cmd`, and `binary`.
+
+### Tests
+
+1104 passed, 14 skipped (up from 1096 / 14 in v0.7.44; +8 new):
+
+- 3 in `tests/test_cmd_new_tool_languages.py::TestLanguageBash` (scaffold produces `<name>.sh`; manifest runtime is shell/bash with POSIX platforms; entry has bash hashbang).
+- 3 in `TestLanguageCmd` (scaffold produces `<name>.cmd`; manifest runtime is shell/cmd with windows-only platform; entry has `@echo off` and `%*` passthrough).
+- 2 in `TestLanguageBinary` (scaffold produces manifest + README only, no source files; manifest runtime is binary with cross-platform metadata and the drop-in binary_path default).
+
+### Versions
+
+- dazzlecmd `0.7.44` -> `0.7.45` (PATCH -- additive language templates).
+- dazzlecmd-lib `0.6.6` -> `0.6.7` (PATCH -- template content bundled with the lib package).
+- dazzle-dz alias bumped to `0.7.45`; deps re-pinned to `>=0.7.45` / `>=0.6.7`.
+
+### Refs
+
+Refs #35 (`dz new` redesign -- shell-language and binary-language gaps surfaced post-v0.7.44 and addressed here).
+
 ## [0.7.44] - 2026-05-16
 
 Tier 2A.2 (4b-T3 + 4d-3) — multi-language scaffolding templates and `--language` dispatch. Replaces v0.7.40's python-only `_SUPPORTED_LANGUAGES_V0740` guard with a real per-language scaffolder. Seven languages ship: `python` (full depth — manifest + entry + `--full` overlay with README and pytest stub), `rust` (manifest + `Cargo.toml` + `src/main.rs`), `node` (manifest + `package.json` + `index.js`), `powershell` (manifest + `<name>.ps1` with `param` block), `c_cpp` (manifest + `Makefile` + `main.c`), `docker` (manifest + `Dockerfile`), and `generic` (manifest + README explaining the runtime block — for tools that already exist as a binary or script). Resolves v0.7.40's coming-soon promise and closes the scaffolding side of #35.
@@ -1612,7 +1651,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.44...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.45...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

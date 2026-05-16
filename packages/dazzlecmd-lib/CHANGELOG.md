@@ -8,6 +8,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.6.7] - 2026-05-16
+
+Ships with dazzlecmd v0.7.45. Adds three more language templates to the bundled scaffolding set: `bash` (POSIX shell scripts), `cmd` (Windows batch files), and `binary` (pre-built executable registration). Pure template addition; no library API change. The seven-language set bundled in v0.6.6 (python, rust, node, powershell, c_cpp, docker, generic) is now ten.
+
+### Added
+
+- `templates/bash/.dazzlecmd.json.tmpl` + `templates/bash/{name}.sh.tmpl` -- bash scaffold with `#!/usr/bin/env bash`, `set -euo pipefail`, `$*` passthrough; `runtime.shell: "bash"`, `platforms: ["linux", "macos"]`.
+- `templates/cmd/.dazzlecmd.json.tmpl` + `templates/cmd/{name}.cmd.tmpl` -- cmd scaffold with `@echo off`, `setlocal`/`endlocal`, `%*` passthrough, `exit /b 0`; `runtime.shell: "cmd"`, `platforms: ["windows"]`.
+- `templates/binary/.dazzlecmd.json.tmpl` + `templates/binary/README.md.tmpl` -- binary scaffold for pre-built executables. Manifest has `runtime.type: "binary"`, `binary_path: "{name}"` (drop-in default), cross-platform metadata. README explains drop-in vs PATH-lookup vs absolute-path patterns and clarifies when to pick `binary` over `generic`.
+
+### Refs
+
+Ships with dazzlecmd v0.7.45.
+Refs dazzlecmd #35.
+
 ## [0.6.5] - 2026-05-16
 
 Ships with dazzlecmd v0.7.43 (closes dazzlecmd #67). Engine + cli_helpers updates so shadowed tools win short-name dispatch: `_dispatch_registry_path` attempts tool lookup before the meta-command path, and the build-time conflict warning is reworded to reflect the new precedence. See dazzlecmd CHANGELOG `[0.7.43]` for full details. CHANGELOG entry retroactively added in 0.6.6 commit.

@@ -181,8 +181,84 @@ class TestLanguageGeneric:
         assert "Edit" in m["runtime"]["build_hint"]
 
 
+class TestLanguageBash:
+    def test_scaffolds_sh(self, scratch_project_root):
+        rc, tool_dir = _scaffold(scratch_project_root, "bash", name="bsh1")
+        assert rc == 0
+        assert os.path.isfile(os.path.join(tool_dir, "bsh1.sh"))
+
+    def test_manifest_runtime_is_shell_bash(self, scratch_project_root):
+        _, tool_dir = _scaffold(scratch_project_root, "bash", name="bsh2")
+        m = _read_manifest(tool_dir)
+        assert m["language"] == "bash"
+        assert m["runtime"]["type"] == "shell"
+        assert m["runtime"]["shell"] == "bash"
+        assert m["runtime"]["script_path"] == "bsh2.sh"
+        # Bash is POSIX-only; platform metadata reflects that.
+        assert m["platform"] == "linux"
+        assert "windows" not in m["platforms"]
+
+    def test_entry_has_bash_hashbang(self, scratch_project_root):
+        _, tool_dir = _scaffold(scratch_project_root, "bash", name="bsh3")
+        with open(os.path.join(tool_dir, "bsh3.sh"), "r", encoding="utf-8") as f:
+            first_line = f.readline().rstrip("\n")
+        assert first_line == "#!/usr/bin/env bash"
+
+
+class TestLanguageCmd:
+    def test_scaffolds_cmd(self, scratch_project_root):
+        rc, tool_dir = _scaffold(scratch_project_root, "cmd", name="cmd1")
+        assert rc == 0
+        assert os.path.isfile(os.path.join(tool_dir, "cmd1.cmd"))
+
+    def test_manifest_runtime_is_shell_cmd(self, scratch_project_root):
+        _, tool_dir = _scaffold(scratch_project_root, "cmd", name="cmd2")
+        m = _read_manifest(tool_dir)
+        assert m["language"] == "cmd"
+        assert m["runtime"]["type"] == "shell"
+        assert m["runtime"]["shell"] == "cmd"
+        assert m["runtime"]["script_path"] == "cmd2.cmd"
+        # cmd.exe is Windows-only.
+        assert m["platform"] == "windows"
+        assert m["platforms"] == ["windows"]
+
+    def test_entry_has_echo_off(self, scratch_project_root):
+        _, tool_dir = _scaffold(scratch_project_root, "cmd", name="cmd3")
+        with open(os.path.join(tool_dir, "cmd3.cmd"), "r", encoding="utf-8") as f:
+            content = f.read()
+        assert content.startswith("@echo off")
+        assert "%*" in content  # passthrough of all args
+
+
+class TestLanguageBinary:
+    def test_scaffolds_manifest_and_readme_only(self, scratch_project_root):
+        rc, tool_dir = _scaffold(scratch_project_root, "binary", name="bin1")
+        assert rc == 0
+        assert os.path.isfile(os.path.join(tool_dir, ".dazzlecmd.json"))
+        assert os.path.isfile(os.path.join(tool_dir, "README.md"))
+        # binary template ships NO source file (no build configuration either)
+        assert not any(
+            os.path.isfile(os.path.join(tool_dir, fname))
+            for fname in ("main.py", "main.c", "main.rs", "index.js",
+                          "bin1.py", "bin1.sh", "bin1.cmd", "Cargo.toml",
+                          "Makefile", "Dockerfile")
+        )
+
+    def test_manifest_runtime_is_binary(self, scratch_project_root):
+        _, tool_dir = _scaffold(scratch_project_root, "binary", name="bin2")
+        m = _read_manifest(tool_dir)
+        assert m["language"] == "binary"
+        assert m["runtime"]["type"] == "binary"
+        # Default binary_path matches the tool name (drop-in pattern)
+        assert m["runtime"]["binary_path"] == "bin2"
+        # build_hint mentions dropping the binary in the dir, OR PATH lookup
+        assert "binary" in m["runtime"]["build_hint"].lower()
+        # Cross-platform by default (binaries can be anything)
+        assert m["platforms"] == ["windows", "linux", "macos"]
+
+
 class TestAvailableLanguagesError:
-    def test_unknown_language_error_lists_all_seven(
+    def test_unknown_language_error_lists_all_ten(
         self, scratch_project_root, capsys
     ):
         rc = cli._cmd_new_tool(
@@ -193,7 +269,10 @@ class TestAvailableLanguagesError:
         assert rc == 2
         err = capsys.readouterr().err
         assert "'cobol' not supported" in err
-        for lang in ("python", "rust", "node", "powershell", "c_cpp", "docker", "generic"):
+        for lang in (
+            "python", "rust", "node", "powershell",
+            "c_cpp", "docker", "generic", "bash", "cmd", "binary",
+        ):
             assert lang in err
 
 

@@ -1,0 +1,25 @@
+{
+    "name": "{name}",
+    "version": "0.1.0",
+    "description": "{description}",
+    "long_description": "{long_description}",
+    "namespace": "{namespace}",
+    "language": "binary",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "binary",
+        "binary_path": "{name}",
+        "build_hint": "Drop your pre-built binary in this directory as '{name}' (or '{name}.exe' on Windows). For binaries already on PATH, set binary_path to just the executable name (e.g., 'myapp')."
+    },
+    "pass_through": true,
+    "taxonomy": {
+        "category": "",
+        "tags": []
+    },
+    "lifecycle": {
+        "type": "tool",
+        "status": "active",
+        "created_as": "tool"
+    }
+}
