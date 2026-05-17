@@ -4,19 +4,20 @@
     "description": "{description}",
     "long_description": "{long_description}",
     "namespace": "{namespace}",
-    "language": "rust",
+    "language": "python",
     "platform": "cross-platform",
     "platforms": ["windows", "linux", "macos"],
     "runtime": {
-        "type": "binary",
-        "script_path": "target/debug/{name_underscore}",
-        "dev_command": "cargo run --"
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "{name_underscore}.py",
+        "venv": ".venv"
     },
     "setup": {
-        "note": "Build the debug binary. For a release build use 'cargo build --release' and update runtime.script_path to target/release/{name_underscore}.",
-        "command": "cargo build"
+        "note": "Create .venv and install dependencies. The setup script detects which Python installer to use (uv, poetry, pdm, pipenv, conda, pip + pyproject.toml, pip + requirements.txt).",
+        "script": "dz_setup.py"
     },
-    "pass_through": true,
+    "pass_through": false,
     "taxonomy": {
         "category": "",
         "tags": []

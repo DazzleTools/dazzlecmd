@@ -1,0 +1,235 @@
+"""Setup script for {name} (dazzlecmd `setup.script` target).
+
+Invoked by `dz setup {namespace}:{name}`. Detects the project's Python
+installer from on-disk markers and dispatches the appropriate install
+flow into ``.venv/`` (the directory ``runtime.venv`` points at).
+
+Detection precedence (first match wins):
+    1. uv          -- uv.lock or [tool.uv] in pyproject.toml
+    2. poetry      -- poetry.lock or [tool.poetry] in pyproject.toml
+    3. pdm         -- pdm.lock or [tool.pdm] in pyproject.toml
+    4. pipenv      -- Pipfile or Pipfile.lock
+    5. conda       -- environment.yml
+    6. pip + pyproject.toml -- pyproject.toml without the above markers
+    7. pip + requirements.txt -- requirements.txt only
+
+If none of the above are present, an empty .venv is created (so the
+tool's runtime.venv interpreter resolution still succeeds, even without
+declared dependencies).
+
+Convention: this script honors ``--dry-run`` (print what would run, do
+not execute). All `dazzlecmd-pattern` setup scripts SHOULD support
+``--dry-run`` so users can preview destructive or elevated operations
+before committing. The convention is policy, not engine-enforced.
+
+This script is intentionally self-contained: it has no third-party
+dependencies. dazzlecmd's engine dispatches it via the current Python
+interpreter; the script then bootstraps the per-tool .venv.
+"""
+
+from __future__ import annotations
+
+import argparse
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+
+HERE = Path(__file__).resolve().parent
+VENV_DIR = HERE / ".venv"
+
+# Mutable flag toggled by --dry-run; consulted by _run() below. Holding
+# this as module state (rather than threading a kwarg through every
+# install_* function) keeps the per-installer signatures uniform.
+DRY_RUN: bool = False
+
+
+def _has_marker(path: Path, marker: str) -> bool:
+    """Cheap text scan for a [tool.foo] section in pyproject.toml."""
+    if not path.is_file():
+        return False
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return marker in text
+
+
+def detect_installer() -> str:
+    """Return the installer name to use, based on on-disk markers."""
+    pyproject = HERE / "pyproject.toml"
+
+    if (HERE / "uv.lock").is_file() or _has_marker(pyproject, "[tool.uv]"):
+        return "uv"
+    if (HERE / "poetry.lock").is_file() or _has_marker(pyproject, "[tool.poetry]"):
+        return "poetry"
+    if (HERE / "pdm.lock").is_file() or _has_marker(pyproject, "[tool.pdm]"):
+        return "pdm"
+    if (HERE / "Pipfile").is_file() or (HERE / "Pipfile.lock").is_file():
+        return "pipenv"
+    if (HERE / "environment.yml").is_file():
+        return "conda"
+    if pyproject.is_file():
+        return "pip-pyproject"
+    if (HERE / "requirements.txt").is_file():
+        return "pip-requirements"
+    return "venv-only"
+
+
+def _on_path(name: str) -> bool:
+    return shutil.which(name) is not None
+
+
+def _run(cmd, cwd=None) -> int:
+    """Run a command, echoing it first; return the exit code.
+
+    Honors the module-level DRY_RUN flag: when set, prints the command
+    and returns 0 without executing.
+    """
+    printable = " ".join(str(c) for c in cmd)
+    print(f"$ {printable}", flush=True)
+    if DRY_RUN:
+        return 0
+    result = subprocess.run(cmd, cwd=cwd or str(HERE))
+    return result.returncode
+
+
+def _venv_python() -> Path:
+    if sys.platform == "win32":
+        return VENV_DIR / "Scripts" / "python.exe"
+    return VENV_DIR / "bin" / "python"
+
+
+def create_venv_only() -> int:
+    """Create an empty .venv with the current Python."""
+    return _run([sys.executable, "-m", "venv", str(VENV_DIR)])
+
+
+def install_pip_requirements() -> int:
+    rc = create_venv_only()
+    if rc != 0:
+        return rc
+    return _run([str(_venv_python()), "-m", "pip", "install", "-r", "requirements.txt"])
+
+
+def install_pip_pyproject() -> int:
+    rc = create_venv_only()
+    if rc != 0:
+        return rc
+    return _run([str(_venv_python()), "-m", "pip", "install", "-e", "."])
+
+
+def install_uv() -> int:
+    if not _on_path("uv"):
+        print(
+            "Error: uv markers detected (uv.lock or [tool.uv]) but 'uv' is "
+            "not on PATH. Install uv (https://docs.astral.sh/uv/) or remove "
+            "the uv markers to fall back to pip.",
+            file=sys.stderr,
+        )
+        return 1
+    # `uv sync` reads pyproject.toml + uv.lock and creates .venv/ if absent.
+    return _run(["uv", "sync"])
+
+
+def install_poetry() -> int:
+    if not _on_path("poetry"):
+        print(
+            "Error: poetry markers detected but 'poetry' is not on PATH.",
+            file=sys.stderr,
+        )
+        return 1
+    # Force the venv into this directory (instead of poetry's cache).
+    rc = _run(["poetry", "config", "virtualenvs.in-project", "true", "--local"])
+    if rc != 0:
+        return rc
+    return _run(["poetry", "install"])
+
+
+def install_pdm() -> int:
+    if not _on_path("pdm"):
+        print(
+            "Error: pdm markers detected but 'pdm' is not on PATH.",
+            file=sys.stderr,
+        )
+        return 1
+    rc = _run(["pdm", "config", "venv.in_project", "true", "--local"])
+    if rc != 0:
+        return rc
+    return _run(["pdm", "install"])
+
+
+def install_pipenv() -> int:
+    if not _on_path("pipenv"):
+        print(
+            "Error: pipenv markers detected but 'pipenv' is not on PATH.",
+            file=sys.stderr,
+        )
+        return 1
+    # PIPENV_VENV_IN_PROJECT=1 keeps the venv at ./.venv instead of a
+    # global cache. Set in environ so the child pipenv inherits it.
+    env = dict(os.environ)
+    env["PIPENV_VENV_IN_PROJECT"] = "1"
+    print("$ PIPENV_VENV_IN_PROJECT=1 pipenv install", flush=True)
+    if DRY_RUN:
+        return 0
+    result = subprocess.run(["pipenv", "install"], cwd=str(HERE), env=env)
+    return result.returncode
+
+
+def install_conda() -> int:
+    if not _on_path("conda"):
+        print(
+            "Error: environment.yml present but 'conda' is not on PATH.",
+            file=sys.stderr,
+        )
+        return 1
+    # `conda env create -p <prefix>` puts the env at .venv/ so dazzlecmd's
+    # runtime.venv resolution works without conda-specific knowledge.
+    return _run([
+        "conda", "env", "create",
+        "-p", str(VENV_DIR),
+        "-f", "environment.yml",
+    ])
+
+
+INSTALLERS = {
+    "uv":              install_uv,
+    "poetry":          install_poetry,
+    "pdm":             install_pdm,
+    "pipenv":          install_pipenv,
+    "conda":           install_conda,
+    "pip-pyproject":   install_pip_pyproject,
+    "pip-requirements": install_pip_requirements,
+    "venv-only":       create_venv_only,
+}
+
+
+def main(argv=None) -> int:
+    global DRY_RUN
+    parser = argparse.ArgumentParser(
+        prog="dz setup {name}",
+        description="Detect installer and create .venv for {name}.",
+    )
+    parser.add_argument(
+        "--dry-run", "-n",
+        action="store_true",
+        help="Print the chosen installer commands without executing them.",
+    )
+    args = parser.parse_args(argv)
+    DRY_RUN = args.dry_run
+
+    installer = detect_installer()
+    print(f"[dz setup {name}] installer detected: {installer}"
+          + (" (--dry-run)" if DRY_RUN else ""))
+    handler = INSTALLERS.get(installer)
+    if handler is None:
+        print(f"Error: unknown installer {installer!r}", file=sys.stderr)
+        return 1
+    return handler()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

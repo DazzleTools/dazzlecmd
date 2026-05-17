@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from dazzlecmd_lib.setup_resolve import resolve_setup_block, _normalize_platforms
+from dazzlecmd_lib.setup_resolve import (
+    InvalidSetupBlockError,
+    _normalize_platforms,
+    infer_setup_script_interpreter,
+    resolve_setup_block,
+)
 from dazzlecmd_lib.platform_detect import PlatformInfo
 from dazzlecmd_lib.schema_version import UnsupportedSchemaVersionError
 
@@ -272,6 +277,101 @@ class TestNormalizePlatforms:
     def test_non_dict_input_returned_unchanged(self):
         # Defensive: shouldn't happen in practice, but don't crash
         assert _normalize_platforms("not a dict") == "not a dict"  # type: ignore
+
+
+class TestSetupScriptField:
+    """v0.7.46: setup.script -- file pointer dispatched via inferred interpreter."""
+
+    def test_script_only_top_level(self, linux_debian):
+        project = {"name": "x", "setup": {"script": "install.sh"}}
+        result = resolve_setup_block(project, platform_info=linux_debian)
+        assert result == {"script": "install.sh"}
+
+    def test_script_with_note(self, linux_debian):
+        project = {
+            "name": "x",
+            "setup": {"script": "install.py", "note": "Bootstrap"},
+        }
+        result = resolve_setup_block(project, platform_info=linux_debian)
+        assert result == {"script": "install.py", "note": "Bootstrap"}
+
+    def test_command_and_script_both_top_level_raises(self, linux_debian):
+        project = {
+            "name": "x",
+            "setup": {"command": "pip install foo", "script": "install.sh"},
+        }
+        with pytest.raises(InvalidSetupBlockError):
+            resolve_setup_block(project, platform_info=linux_debian)
+
+    def test_command_and_script_both_inside_platform_raises(self, linux_debian):
+        project = {
+            "name": "x",
+            "setup": {
+                "platforms": {
+                    "linux": {
+                        "command": "apt install foo",
+                        "script": "install.sh",
+                    },
+                },
+            },
+        }
+        with pytest.raises(InvalidSetupBlockError):
+            resolve_setup_block(project, platform_info=linux_debian)
+
+    def test_script_per_platform_resolution(self, linux_debian, windows_win11):
+        project = {
+            "name": "x",
+            "setup": {
+                "platforms": {
+                    "linux":   {"script": "install.sh"},
+                    "windows": {"script": "install.ps1"},
+                },
+            },
+        }
+        linux_result = resolve_setup_block(project, platform_info=linux_debian)
+        win_result = resolve_setup_block(project, platform_info=windows_win11)
+        assert linux_result["script"] == "install.sh"
+        assert win_result["script"] == "install.ps1"
+
+    def test_command_at_top_script_at_platform_allowed(self, linux_debian):
+        # No collision at any single level -- the top-level command and the
+        # per-platform script live in different scopes.
+        project = {
+            "name": "x",
+            "setup": {
+                "command": "fallback-cmd",
+                "platforms": {"linux": {"script": "install.sh"}},
+            },
+        }
+        result = resolve_setup_block(project, platform_info=linux_debian)
+        # platform branch overrides; only script in effective
+        assert result.get("script") == "install.sh"
+
+
+class TestInferSetupScriptInterpreter:
+    """v0.7.46: extension-based interpreter dispatch."""
+
+    def test_python(self):
+        assert infer_setup_script_interpreter("install.py") == ["python"]
+        assert infer_setup_script_interpreter("/abs/path/dz_setup.py") == ["python"]
+
+    def test_bash(self):
+        assert infer_setup_script_interpreter("install.sh") == ["bash"]
+
+    def test_cmd(self):
+        assert infer_setup_script_interpreter("install.cmd") == ["cmd", "/c"]
+        assert infer_setup_script_interpreter("install.bat") == ["cmd", "/c"]
+
+    def test_ps1(self):
+        assert infer_setup_script_interpreter("install.ps1") == ["powershell", "-File"]
+
+    def test_case_insensitive(self):
+        assert infer_setup_script_interpreter("INSTALL.PY") == ["python"]
+        assert infer_setup_script_interpreter("install.PS1") == ["powershell", "-File"]
+
+    def test_unknown_extension_returns_none(self):
+        assert infer_setup_script_interpreter("install.rb") is None
+        assert infer_setup_script_interpreter("install") is None
 
 
 class TestImmutability:

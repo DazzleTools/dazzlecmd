@@ -103,11 +103,38 @@ class TestDetectLinuxSubtype:
         fake_distro.id = lambda: "debian"
         fake_distro.version = lambda: "12"
         fake_distro.name = lambda: "Debian GNU/Linux"
+        fake_distro.like = lambda: ""
         monkeypatch.setitem(sys.modules, "distro", fake_distro)
-        subtype, version, raw = _detect_linux_subtype()
+        subtype, version, id_like, raw = _detect_linux_subtype()
         assert subtype == "debian"
         assert version == "12"
+        assert id_like == ("debian",)
         assert raw["distro_id"] == "debian"
+
+    def test_distro_package_with_id_like(self, monkeypatch):
+        """v0.7.46: id_like exposes the ID_LIKE chain for distro-family
+        decisions (Ubuntu/Mint/Kali -> debian; CentOS Stream -> rhel)."""
+        fake_distro = type("distro", (), {})()
+        fake_distro.id = lambda: "ubuntu"
+        fake_distro.version = lambda: "22.04"
+        fake_distro.name = lambda: "Ubuntu"
+        fake_distro.like = lambda: "debian"
+        monkeypatch.setitem(sys.modules, "distro", fake_distro)
+        subtype, version, id_like, raw = _detect_linux_subtype()
+        assert subtype == "ubuntu"
+        assert id_like == ("ubuntu", "debian")
+
+    def test_distro_package_with_multi_id_like(self, monkeypatch):
+        """CentOS Stream declares id_like as 'rhel fedora'."""
+        fake_distro = type("distro", (), {})()
+        fake_distro.id = lambda: "centos"
+        fake_distro.version = lambda: "9"
+        fake_distro.name = lambda: "CentOS Stream"
+        fake_distro.like = lambda: "rhel fedora"
+        monkeypatch.setitem(sys.modules, "distro", fake_distro)
+        subtype, version, id_like, raw = _detect_linux_subtype()
+        assert subtype == "centos"
+        assert id_like == ("centos", "rhel", "fedora")
 
     def test_os_release_fallback(self, monkeypatch):
         monkeypatch.setitem(sys.modules, "distro", None)
@@ -115,19 +142,35 @@ class TestDetectLinuxSubtype:
             'NAME="Ubuntu"\n'
             'VERSION_ID="22.04"\n'
             'ID=ubuntu\n'
+            'ID_LIKE=debian\n'
             'PRETTY_NAME="Ubuntu 22.04.3 LTS"\n'
         )
         with patch("builtins.open", mock_open(read_data=os_release)):
-            subtype, version, raw = _detect_linux_subtype()
+            subtype, version, id_like, raw = _detect_linux_subtype()
         assert subtype == "ubuntu"
         assert version == "22.04"
+        assert id_like == ("ubuntu", "debian")
+
+    def test_os_release_fallback_no_id_like(self, monkeypatch):
+        """Debian itself doesn't declare ID_LIKE (it IS the root)."""
+        monkeypatch.setitem(sys.modules, "distro", None)
+        os_release = (
+            'NAME="Debian GNU/Linux"\n'
+            'VERSION_ID="12"\n'
+            'ID=debian\n'
+        )
+        with patch("builtins.open", mock_open(read_data=os_release)):
+            subtype, version, id_like, raw = _detect_linux_subtype()
+        assert subtype == "debian"
+        assert id_like == ("debian",)
 
     def test_no_detection_possible(self, monkeypatch):
         monkeypatch.setitem(sys.modules, "distro", None)
         with patch("builtins.open", side_effect=OSError):
-            subtype, version, raw = _detect_linux_subtype()
+            subtype, version, id_like, raw = _detect_linux_subtype()
         assert subtype is None
         assert version is None
+        assert id_like == ()
 
 
 class TestDetectWindowsSubtype:
@@ -259,6 +302,7 @@ class TestDetectPlatformInfoUncached:
         fake_distro.id = lambda: "Debian"  # uppercase from upstream
         fake_distro.version = lambda: "12"
         fake_distro.name = lambda: "Debian"
+        fake_distro.like = lambda: ""
         monkeypatch.setitem(sys.modules, "distro", fake_distro)
         monkeypatch.setattr("platform.system", lambda: "Linux")
         monkeypatch.setattr("platform.machine", lambda: "x86_64")
@@ -266,6 +310,7 @@ class TestDetectPlatformInfoUncached:
         monkeypatch.delenv("WSL_DISTRO_NAME", raising=False)
         info = _detect_platform_info_uncached()
         assert info.subtype == "debian"
+        assert info.id_like == ("debian",)
 
 
 class TestGetPlatformInfoCaching:

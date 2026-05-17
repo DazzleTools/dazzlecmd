@@ -6,10 +6,11 @@ layer. Both layers consume the same `platform_resolve` + `platform_detect` +
 `schema_version` primitives so subtype fallback and schema versioning behave
 identically.
 
-Schema shape (v0.7.20+):
+Schema shape (v0.7.20+, extended in v0.7.46):
 
     "setup": {
-        "command": "<default shell command>",
+        "command": "<default shell command>",                   -- one-liner
+        "script": "<path/to/setup-file>",                       -- file pointer (v0.7.46+)
         "note": "<optional human-readable description>",
         "platforms": {
             "<os>": "<shell command>"                           -- shorthand
@@ -21,6 +22,17 @@ Schema shape (v0.7.20+):
             }
         }
     }
+
+`command` and `script` are mutually exclusive at any single resolution level:
+declaring both at the top level OR both inside the same platform branch
+raises `InvalidSetupBlockError`. The author picks ONE based on complexity:
+
+    - `command` -- single shell line; the simplest case (e.g., venv + pip).
+    - `script` -- pointer to a file in the tool directory; engine dispatches
+      via the right interpreter inferred from the file extension. Use when
+      setup needs multiple steps, conditional logic, or external downloads.
+      Supported extensions: .py (-> python), .sh (-> bash), .cmd/.bat
+      (-> cmd /c), .ps1 (-> powershell -File).
 
 Flat-string shorthand rule:
     - `platforms.<os>` MAY be a string when the author only needs one shell
@@ -34,13 +46,14 @@ Schema version: `setup._schema_version` follows the same rules as runtime.
 Un-versioned blocks default to "1". Unsupported versions raise
 UnsupportedSchemaVersionError.
 
-Returned effective block contains the merged fields (command, note, plus any
-future fields #40 adds) ready for `_cmd_setup` to dispatch. Returns None if
-the project has no setup declared.
+Returned effective block contains the merged fields (command OR script, note,
+plus any future fields #40 adds) ready for `_cmd_setup` to dispatch.
+Returns None if the project has no setup declared.
 """
 
 from __future__ import annotations
 
+import os
 from typing import Optional
 
 from dazzlecmd_lib.platform_detect import PlatformInfo, get_platform_info
@@ -48,6 +61,51 @@ from dazzlecmd_lib.platform_resolve import deep_merge, resolve_platform_block
 from dazzlecmd_lib.schema_version import check_schema_version
 from dazzlecmd_lib.templates import has_template_refs, substitute_vars
 from dazzlecmd_lib.user_overrides import load_override
+
+
+class InvalidSetupBlockError(ValueError):
+    """Raised when a setup block declares both `command` and `script` at
+    the same level (top-level or within a single platform branch).
+    """
+
+
+# Map of supported setup.script file extensions -> interpreter argv prefix.
+# The full command is constructed as: <prefix> + [<absolute script path>].
+SETUP_SCRIPT_INTERPRETERS = {
+    ".py": ["python"],
+    ".sh": ["bash"],
+    ".cmd": ["cmd", "/c"],
+    ".bat": ["cmd", "/c"],
+    ".ps1": ["powershell", "-File"],
+}
+
+
+def infer_setup_script_interpreter(script_path: str) -> Optional[list[str]]:
+    """Return the argv prefix to dispatch a setup.script by extension.
+
+    Args:
+        script_path: The script's path (or just its name -- only the
+            extension is consulted).
+
+    Returns:
+        Argv prefix list (e.g., ``["python"]``) for the known extensions,
+        or ``None`` for unrecognized extensions.
+    """
+    _, ext = os.path.splitext(script_path)
+    return SETUP_SCRIPT_INTERPRETERS.get(ext.lower())
+
+
+def _check_command_xor_script(block: dict, context: str) -> None:
+    """Raise InvalidSetupBlockError if both ``command`` and ``script`` are
+    declared at the same level. Either can be absent; both being absent is
+    fine (the resolver returns None higher up).
+    """
+    if isinstance(block, dict) and block.get("command") and block.get("script"):
+        raise InvalidSetupBlockError(
+            f"Setup block {context} declares both 'command' and 'script'. "
+            f"Pick one: 'command' for a single shell line; 'script' for a "
+            f"file pointer (engine dispatches via extension)."
+        )
 
 
 def _normalize_platforms(platforms: dict) -> dict:
@@ -111,6 +169,12 @@ def resolve_setup_block(
         setup, context=f"setup for {project.get('name', '?')}"
     )
 
+    # XOR validation: command and script are mutually exclusive at every
+    # level. Check the top-level block first; per-platform branches are
+    # checked after normalization.
+    tool_label = project.get("_fqcn") or project.get("name") or "?"
+    _check_command_xor_script(setup, context=f"for {tool_label}")
+
     platforms = setup.get("platforms")
     base_setup = {k: v for k, v in setup.items() if k != "platforms"}
 
@@ -121,6 +185,14 @@ def resolve_setup_block(
             platform_info = get_platform_info()
 
         normalized_platforms = _normalize_platforms(platforms)
+        # XOR check each platform branch (post-normalization). The flat-string
+        # shorthand becomes {"command": "..."} which can't conflict; only
+        # author-written dicts can declare both fields at this level.
+        for os_key, branch in normalized_platforms.items():
+            if isinstance(branch, dict):
+                _check_command_xor_script(
+                    branch, context=f"for {tool_label} (platforms.{os_key})"
+                )
         effective = resolve_platform_block(
             base_setup, normalized_platforms, platform_info
         )

@@ -1294,3 +1294,252 @@ class TestPythonPackageModeRelativeImports:
             _sys.modules.pop("flatmod", None)
 
         assert exit_code == 7
+
+
+class TestRuntimeVenvShorthand:
+    """v0.7.46 (4b-T4): runtime.venv shorthand synthesizes interpreter
+    from venv + platform conventions (Windows: Scripts/python.exe;
+    POSIX: bin/python).
+    """
+
+    def _make_project(self, tool_dir, **runtime_overrides):
+        runtime = {
+            "type": "python",
+            "entry_point": "main",
+            "script_path": "tool.py",
+        }
+        runtime.update(runtime_overrides)
+        return {
+            "name": "tool",
+            "_fqcn": "test:tool",
+            "_dir": str(tool_dir),
+            "runtime": runtime,
+        }
+
+    def _stub_venv(self, tool_dir, platform):
+        """Create a stub venv that the resolver will treat as 'present'."""
+        if platform == "win32":
+            bin_dir = tool_dir / ".venv" / "Scripts"
+            interp = bin_dir / "python.exe"
+        else:
+            bin_dir = tool_dir / ".venv" / "bin"
+            interp = bin_dir / "python"
+        bin_dir.mkdir(parents=True)
+        interp.write_text("#!stub\n")
+        return interp
+
+    def test_venv_synthesizes_windows_interpreter(self, tmp_path, monkeypatch):
+        import dazzlecmd_lib.registry as registry
+        from dazzlecmd_lib.registry import make_python_runner
+
+        monkeypatch.setattr(registry.sys, "platform", "win32")
+        tool_dir = tmp_path / "tool"
+        tool_dir.mkdir()
+        (tool_dir / "tool.py").write_text("def main():\n    return 0\n")
+        interp = self._stub_venv(tool_dir, "win32")
+
+        captured = []
+
+        class _Result:
+            returncode = 0
+
+        def fake_run(cmd, **kwargs):
+            captured.append(cmd)
+            return _Result()
+
+        monkeypatch.setattr(registry.subprocess, "run", fake_run)
+
+        project = self._make_project(tool_dir, venv=".venv")
+        runner = make_python_runner(project)
+        assert runner([]) == 0
+        # The first element of the dispatched command must be the venv python.
+        assert captured, "subprocess.run was not invoked"
+        assert captured[0][0] == str(interp)
+
+    def test_venv_synthesizes_posix_interpreter(self, tmp_path, monkeypatch):
+        import dazzlecmd_lib.registry as registry
+        from dazzlecmd_lib.registry import make_python_runner
+
+        monkeypatch.setattr(registry.sys, "platform", "linux")
+        tool_dir = tmp_path / "tool"
+        tool_dir.mkdir()
+        (tool_dir / "tool.py").write_text("def main():\n    return 0\n")
+        interp = self._stub_venv(tool_dir, "linux")
+
+        captured = []
+
+        class _Result:
+            returncode = 0
+
+        def fake_run(cmd, **kwargs):
+            captured.append(cmd)
+            return _Result()
+
+        monkeypatch.setattr(registry.subprocess, "run", fake_run)
+
+        project = self._make_project(tool_dir, venv=".venv")
+        runner = make_python_runner(project)
+        assert runner([]) == 0
+        assert captured[0][0] == str(interp)
+
+    def test_explicit_interpreter_wins_over_venv(self, tmp_path, monkeypatch):
+        """When both interpreter and venv are declared, interpreter takes
+        precedence (venv is shorthand for the no-interpreter case only)."""
+        import dazzlecmd_lib.registry as registry
+        from dazzlecmd_lib.registry import make_python_runner
+
+        monkeypatch.setattr(registry.sys, "platform", "linux")
+        tool_dir = tmp_path / "tool"
+        tool_dir.mkdir()
+        (tool_dir / "tool.py").write_text("def main():\n    return 0\n")
+        self._stub_venv(tool_dir, "linux")
+
+        # Real python on PATH so the runner can actually dispatch via it.
+        captured = []
+
+        class _Result:
+            returncode = 0
+
+        def fake_run(cmd, **kwargs):
+            captured.append(cmd)
+            return _Result()
+
+        monkeypatch.setattr(registry.subprocess, "run", fake_run)
+
+        project = self._make_project(
+            tool_dir, interpreter="python3.99", venv=".venv",
+        )
+        runner = make_python_runner(project)
+        assert runner([]) == 0
+        # The explicit (bare) interpreter wins; venv is NOT consulted.
+        assert captured[0][0] == "python3.99"
+
+
+class TestSetupRequiredError:
+    """v0.7.46 (4b-T5): interpreter-not-found surfaces SetupRequiredError
+    with a 'dz setup <fqcn>' hint (or 'ask the tool creator' hint when
+    no setup block is declared).
+    """
+
+    def _make_python_project(self, tool_dir, *, interpreter, with_setup=False):
+        runtime = {
+            "type": "python",
+            "interpreter": interpreter,
+            "script_path": "tool.py",
+        }
+        project = {
+            "name": "tool",
+            "_fqcn": "test:tool",
+            "_dir": str(tool_dir),
+            "runtime": runtime,
+        }
+        if with_setup:
+            project["setup"] = {"command": "python -m venv .venv"}
+        return project
+
+    def test_missing_relative_interpreter_with_setup_raises(self, tmp_path):
+        from dazzlecmd_lib.registry import (
+            SetupRequiredError, make_python_runner,
+        )
+
+        tool_dir = tmp_path / "tool"
+        tool_dir.mkdir()
+        (tool_dir / "tool.py").write_text("def main():\n    return 0\n")
+
+        project = self._make_python_project(
+            tool_dir,
+            interpreter=".venv/bin/python",  # doesn't exist
+            with_setup=True,
+        )
+        runner = make_python_runner(project)
+        with pytest.raises(SetupRequiredError) as excinfo:
+            runner([])
+        assert excinfo.value.has_setup is True
+        assert excinfo.value.fqcn == "test:tool"
+        msg = str(excinfo.value)
+        assert "Interpreter not found" in msg
+        assert "dz setup test:tool" in msg
+
+    def test_missing_relative_interpreter_without_setup_raises(self, tmp_path):
+        from dazzlecmd_lib.registry import (
+            SetupRequiredError, make_python_runner,
+        )
+
+        tool_dir = tmp_path / "tool"
+        tool_dir.mkdir()
+        (tool_dir / "tool.py").write_text("def main():\n    return 0\n")
+
+        project = self._make_python_project(
+            tool_dir,
+            interpreter=".venv/bin/python",
+            with_setup=False,
+        )
+        runner = make_python_runner(project)
+        with pytest.raises(SetupRequiredError) as excinfo:
+            runner([])
+        assert excinfo.value.has_setup is False
+        msg = str(excinfo.value)
+        assert "no setup block" in msg
+        # Should NOT print the dz setup hint when no setup block exists.
+        assert "dz setup test:tool" not in msg
+
+    def test_missing_bare_interpreter_surfaces_setup_required(
+        self, tmp_path, monkeypatch,
+    ):
+        """A bare-name interpreter (no separators) defers to subprocess; the
+        FileNotFoundError it raises must be translated to SetupRequiredError.
+        """
+        import dazzlecmd_lib.registry as registry
+        from dazzlecmd_lib.registry import (
+            SetupRequiredError, make_python_runner,
+        )
+
+        tool_dir = tmp_path / "tool"
+        tool_dir.mkdir()
+        (tool_dir / "tool.py").write_text("def main():\n    return 0\n")
+
+        def fake_run(cmd, **kwargs):
+            raise FileNotFoundError("interpreter not on PATH")
+
+        monkeypatch.setattr(registry.subprocess, "run", fake_run)
+
+        project = self._make_python_project(
+            tool_dir,
+            interpreter="python3.99",  # bare name not on PATH
+            with_setup=True,
+        )
+        runner = make_python_runner(project)
+        with pytest.raises(SetupRequiredError) as excinfo:
+            runner([])
+        assert "python3.99" in str(excinfo.value)
+        assert "dz setup test:tool" in str(excinfo.value)
+
+    def test_venv_missing_raises_setup_required(self, tmp_path, monkeypatch):
+        """The venv shorthand + a not-yet-created .venv must surface
+        SetupRequiredError pointing at the setup block."""
+        import dazzlecmd_lib.registry as registry
+        from dazzlecmd_lib.registry import (
+            SetupRequiredError, make_python_runner,
+        )
+
+        monkeypatch.setattr(registry.sys, "platform", "linux")
+        tool_dir = tmp_path / "tool"
+        tool_dir.mkdir()
+        (tool_dir / "tool.py").write_text("def main():\n    return 0\n")
+        # No venv directory present on disk.
+
+        project = {
+            "name": "tool",
+            "_fqcn": "test:tool",
+            "_dir": str(tool_dir),
+            "runtime": {
+                "type": "python",
+                "script_path": "tool.py",
+                "venv": ".venv",
+            },
+            "setup": {"command": "python -m venv .venv"},
+        }
+        runner = make_python_runner(project)
+        with pytest.raises(SetupRequiredError) as excinfo:
+            runner([])
+        assert "dz setup test:tool" in str(excinfo.value)

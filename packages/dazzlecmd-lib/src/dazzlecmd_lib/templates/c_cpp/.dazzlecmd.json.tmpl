@@ -9,8 +9,12 @@
     "platforms": ["windows", "linux", "macos"],
     "runtime": {
         "type": "binary",
-        "binary_path": "{name_underscore}",
-        "build_hint": "make  (produces ./{name_underscore} in the project root)"
+        "script_path": "{name_underscore}",
+        "dev_command": "make run"
+    },
+    "setup": {
+        "note": "Build the binary via the project Makefile.",
+        "command": "make"
     },
     "pass_through": true,
     "taxonomy": {

@@ -1859,11 +1859,19 @@ def _cmd_setup(args, engine):
     # Resolve via shared library: applies platforms.<os>.<subtype> fallback,
     # normalizes flat-string platform values to {"command": <str>}, validates
     # _schema_version. See dazzlecmd_lib.setup_resolve.
-    from dazzlecmd_lib.setup_resolve import resolve_setup_block
+    from dazzlecmd_lib.setup_resolve import (
+        InvalidSetupBlockError,
+        resolve_setup_block,
+    )
     from dazzlecmd_lib.schema_version import UnsupportedSchemaVersionError
     import json as _json
     try:
         effective = resolve_setup_block(project)
+    except InvalidSetupBlockError as exc:
+        # v0.7.46: setup.command + setup.script XOR violation. Surface
+        # the structured message cleanly instead of a Python traceback.
+        print(_colors.error(f"Error: {exc}"), file=sys.stderr)
+        return 1
     except UnsupportedSchemaVersionError as exc:
         print(_colors.error(f"Error: {exc}"), file=sys.stderr)
         return 1
@@ -1883,39 +1891,93 @@ def _cmd_setup(args, engine):
         )
         return 1
 
+    # Determine the runnable form: either a shell `command` string or a
+    # `script` file pointer. v0.7.46 (4d-3 follow-up) added `setup.script`
+    # as a sibling of `setup.command`; XOR-validated by setup_resolve.
     cmd_str = effective.get("command") if effective else None
-    if not cmd_str:
+    script_path = effective.get("script") if effective else None
+
+    tool_dir = project.get("_dir", ".")
+    fqcn = project.get("_fqcn", tool_name)
+
+    if not cmd_str and not script_path:
         from dazzlecmd_lib.platform_detect import get_platform_info
         pi = get_platform_info()
         tag = pi.os + (f".{pi.subtype}" if pi.subtype else "")
         print(
             _colors.warn(
-                f"No setup command available for platform '{tag}'. "
-                f"Add setup.command, setup.platforms.{pi.os}, "
+                f"No setup command or script available for platform '{tag}'. "
+                f"Add setup.command, setup.script, setup.platforms.{pi.os}, "
                 f"or setup.platforms.{pi.os}.general to the manifest."
             ),
             file=sys.stderr,
         )
         return 1
 
-    tool_dir = project.get("_dir", ".")
-    fqcn = project.get("_fqcn", tool_name)
+    # Build the dispatch command. `command` runs via the system shell;
+    # `script` runs via an interpreter inferred from the file extension.
+    import subprocess as _subprocess
+    if script_path:
+        from dazzlecmd_lib.setup_resolve import infer_setup_script_interpreter
+        prefix = infer_setup_script_interpreter(script_path)
+        if prefix is None:
+            print(
+                _colors.error(
+                    f"Error: setup.script '{script_path}' has an unsupported "
+                    f"extension. Supported: .py, .sh, .cmd, .bat, .ps1."
+                ),
+                file=sys.stderr,
+            )
+            return 1
+        # Resolve the script path relative to the tool directory. Reject
+        # absolute paths to keep the setup contract scoped to the tool.
+        if os.path.isabs(script_path):
+            print(
+                _colors.error(
+                    f"Error: setup.script must be relative to the tool "
+                    f"directory; got absolute path '{script_path}'."
+                ),
+                file=sys.stderr,
+            )
+            return 1
+        full_script_path = os.path.join(tool_dir, script_path)
+        if not os.path.isfile(full_script_path):
+            print(
+                _colors.error(
+                    f"Error: setup.script '{script_path}' not found at "
+                    f"{full_script_path}."
+                ),
+                file=sys.stderr,
+            )
+            return 1
+        invocation = prefix + [full_script_path]
+        # Display: human-readable form joining argv with spaces. Real
+        # dispatch uses the argv list (no shell parsing, no quote
+        # escaping concerns).
+        display_form = " ".join(invocation)
+    else:
+        invocation = cmd_str
+        display_form = cmd_str
 
     print(f"Running setup for {fqcn}...")
     if effective.get("note"):
         print(f"  Note: {effective['note']}")
-    print(f"  Command: {cmd_str}")
+    if script_path:
+        print(f"  Script: {script_path}")
+        print(f"  Invocation: {display_form}")
+    else:
+        print(f"  Command: {display_form}")
     print(f"  Working dir: {tool_dir}")
     print()
-    # BUG-1 fix: flush the header to the terminal BEFORE the subprocess
-    # starts writing. Without this, Python's line-buffered stdout holds the
-    # header until exit, while the subprocess writes directly to the terminal
-    # -- producing a visually reversed display where pip/install output
-    # appears above the dz framing.
     sys.stdout.flush()
 
-    import subprocess as _subprocess
-    result = _subprocess.run(cmd_str, shell=True, cwd=tool_dir)
+    # `script` path uses argv (shell=False); `command` path keeps shell=True
+    # for legacy back-compat (existing setup.command strings often use && and
+    # other shell operators).
+    if script_path:
+        result = _subprocess.run(invocation, cwd=tool_dir, shell=False)
+    else:
+        result = _subprocess.run(invocation, shell=True, cwd=tool_dir)
     if result.returncode == 0:
         print(f"\nSetup for {fqcn} completed successfully.")
     else:
@@ -1925,7 +1987,10 @@ def _cmd_setup(args, engine):
 
 def dispatch_tool(project, argv):
     """Dispatch to a tool's entry point."""
-    from dazzlecmd_lib.registry import NoRuntimeResolutionError
+    from dazzlecmd_lib.registry import (
+        NoRuntimeResolutionError,
+        SetupRequiredError,
+    )
     from dazzlecmd_lib.schema_version import UnsupportedSchemaVersionError
     from dazzlecmd_lib.templates import (
         UnresolvedTemplateVariableError,
@@ -1968,6 +2033,12 @@ def dispatch_tool(project, argv):
 
     try:
         return runner(argv)
+    except SetupRequiredError as exc:
+        # v0.7.46 (4b-T5): interpreter/binary missing -> dz setup <fqcn> hint
+        # (or "ask the tool creator" hint when the tool has no setup block).
+        # Message is pre-formatted by the raiser; print as-is.
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
     except KeyboardInterrupt:
         return 130
     except Exception as exc:

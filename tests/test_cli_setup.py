@@ -230,3 +230,60 @@ class TestMalformedOverrideCleanError:
         assert "Traceback" not in captured.err
         assert "File \"" not in captured.err
 
+
+class TestInvalidSetupBlockCleanError:
+    """v0.7.46 (Scenario 5 fix): setup.command + setup.script XOR
+    violations surface as a clean `Error: ...` line, not a Python
+    traceback. The unit tests for `resolve_setup_block` confirm the
+    exception type/message; these tests confirm `_cmd_setup` catches
+    them at the CLI surface.
+    """
+
+    def test_xor_violation_top_level_clean_error(self, tmp_path, capsys):
+        project = {
+            "name": "badxor",
+            "_fqcn": "test:badxor",
+            "_dir": str(tmp_path),
+            "setup": {
+                "command": "echo cmd",
+                "script": "oops.sh",  # XOR violation at top level
+            },
+        }
+        engine = _fake_engine([project])
+        engine.resolve_command.return_value = (project, None)
+
+        exit_code = cli._cmd_setup(_Args(tool="test:badxor"), engine)
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "Error:" in captured.err
+        assert "declares both 'command' and 'script'" in captured.err
+        # No Python traceback markers
+        assert "Traceback" not in captured.err
+        assert "File \"" not in captured.err
+
+    def test_xor_violation_per_platform_clean_error(self, tmp_path, capsys):
+        project = {
+            "name": "badxor2",
+            "_fqcn": "test:badxor2",
+            "_dir": str(tmp_path),
+            "setup": {
+                "platforms": {
+                    "windows": {
+                        "command": "echo cmd",
+                        "script": "oops.cmd",  # XOR violation in platform branch
+                    },
+                },
+            },
+        }
+        engine = _fake_engine([project])
+        engine.resolve_command.return_value = (project, None)
+
+        exit_code = cli._cmd_setup(_Args(tool="test:badxor2"), engine)
+        captured = capsys.readouterr()
+        assert exit_code == 1
+        assert "Error:" in captured.err
+        assert "declares both 'command' and 'script'" in captured.err
+        assert "platforms.windows" in captured.err
+        # No Python traceback markers
+        assert "Traceback" not in captured.err
+

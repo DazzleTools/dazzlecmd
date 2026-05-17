@@ -42,6 +42,50 @@ class NoRuntimeResolutionError(RuntimeError):
     """
 
 
+class SetupRequiredError(RuntimeError):
+    """Raised when a tool's interpreter or binary is missing at dispatch time.
+
+    Carries the tool's FQCN and whether the tool declares a setup block so
+    the dispatch layer can print one of two actionable hints:
+
+    - ``has_setup=True``  -> "Run: dz setup <fqcn>"
+    - ``has_setup=False`` -> "Ask the tool creator to add a setup block"
+
+    The message itself is pre-formatted by the raiser; consumers (cli.py
+    dispatch_tool) just print it. Attributes are exposed for callers that
+    want to render their own message.
+    """
+
+    def __init__(self, message, fqcn=None, has_setup=False):
+        super().__init__(message)
+        self.fqcn = fqcn
+        self.has_setup = has_setup
+
+
+def _setup_required_message(project, missing_what):
+    """Build a SetupRequiredError message for the given project.
+
+    Args:
+        project: The project dict (must contain ``_fqcn`` or ``name`` and
+            optionally ``setup``).
+        missing_what: One-line description of what was missing (e.g.
+            ``"Interpreter not found: .venv/Scripts/python.exe"``).
+
+    Returns:
+        Pre-formatted multi-line message string ready for stderr.
+    """
+    fqcn = project.get("_fqcn") or project.get("name", "?")
+    has_setup = bool(project.get("setup"))
+    if has_setup:
+        hint = f"Run: dz setup {fqcn}"
+    else:
+        hint = (
+            f"This tool has no setup block. Ask the tool's creator to add "
+            f"one (or run the tool's documented install steps manually)."
+        )
+    return f"{missing_what}\n       {hint}"
+
+
 class RunnerRegistry:
     """Registry mapping runtime type names to runner factory functions.
 
@@ -133,13 +177,26 @@ def make_python_runner(project):
        (``interpreter: "python3.11"``), or arbitrary python binaries.
        Relative interpreter paths resolve against the tool directory.
 
-    2. **Pass-through** (``pass_through: true``): subprocess dispatch via
+    2. **venv shorthand** (``runtime.venv`` declared, ``runtime.interpreter``
+       absent; v0.7.46, 4b-T4): derive the interpreter from the venv
+       directory in a platform-aware way:
+
+       - Windows: ``<venv>/Scripts/python.exe``
+       - POSIX:   ``<venv>/bin/python``
+
+       The venv path resolves against the tool directory (same convention
+       as ``runtime.interpreter``). This is path-resolution shorthand only --
+       the venv must already exist (``dz setup`` is the engine's only
+       venv-creation surface). Missing venv surfaces at dispatch time via
+       the standard interpreter-not-found path, not at manifest load.
+
+    3. **Pass-through** (``pass_through: true``): subprocess dispatch via
        ``sys.executable`` (legacy path, pre-v0.7.20). Functionally equivalent
        to ``runtime.interpreter: "<sys.executable>"`` but with the calling
        process's Python and without the interpreter field. Preserved for
        backwards compat.
 
-    3. **Import modes** (default, no interpreter/pass_through): direct
+    4. **Import modes** (default, no interpreter/venv/pass_through): direct
        ``importlib`` dispatch.
 
        a. Package mode (``runtime.module`` set, or ``__init__.py`` detected):
@@ -150,6 +207,19 @@ def make_python_runner(project):
     """
     runtime = project.get("runtime", {})
     interpreter = runtime.get("interpreter")
+    venv = runtime.get("venv")
+
+    # v0.7.46 (4b-T4): runtime.venv shorthand. When venv is declared but
+    # interpreter is not, synthesize the interpreter path from the venv
+    # directory + platform conventions. Relative venv paths resolve against
+    # the tool directory via _make_python_interpreter_runner's existing
+    # _resolve_interpreter helper (the synthesized path includes os.sep so
+    # the helper treats it as a tool-dir-relative path).
+    if venv and not interpreter:
+        if sys.platform == "win32":
+            interpreter = os.path.join(venv, "Scripts", "python.exe")
+        else:
+            interpreter = os.path.join(venv, "bin", "python")
 
     # Explicit interpreter -> subprocess dispatch via that interpreter.
     if interpreter:
@@ -285,10 +355,42 @@ def _make_python_interpreter_runner(project, interpreter):
     def runner(argv):
         resolved_interp = _resolve_interpreter(interpreter)
 
+        # v0.7.46 (4b-T5): pre-flight check for interpreter paths with
+        # separators (relative or absolute). Env-var-prefixed paths skip
+        # the check -- the shell expands them at dispatch time, so we can't
+        # verify them here. Bare names (e.g. "python3.11") rely on PATH
+        # lookup and the FileNotFoundError catch below.
+        is_env_var_path = resolved_interp.startswith(("$", "%"))
+        is_path_form = (
+            os.path.isabs(resolved_interp)
+            or os.sep in resolved_interp
+            or "/" in resolved_interp
+        )
+        if is_path_form and not is_env_var_path:
+            if not os.path.isfile(resolved_interp):
+                raise SetupRequiredError(
+                    _setup_required_message(
+                        project,
+                        f"Interpreter not found: {resolved_interp}",
+                    ),
+                    fqcn=project.get("_fqcn") or project.get("name"),
+                    has_setup=bool(project.get("setup")),
+                )
+
         # Module-path form: python -m package.module args
         if module_path:
             cmd = [resolved_interp, "-m", module_path] + list(argv)
-            result = subprocess.run(cmd, cwd=tool_dir)
+            try:
+                result = subprocess.run(cmd, cwd=tool_dir)
+            except FileNotFoundError:
+                raise SetupRequiredError(
+                    _setup_required_message(
+                        project,
+                        f"Interpreter not found: {resolved_interp}",
+                    ),
+                    fqcn=project.get("_fqcn") or project.get("name"),
+                    has_setup=bool(project.get("setup")),
+                )
             return result.returncode
 
         if not script_path:
@@ -310,7 +412,17 @@ def _make_python_interpreter_runner(project, interpreter):
             return 1
 
         cmd = [resolved_interp, full_script] + list(argv)
-        result = subprocess.run(cmd, cwd=os.getcwd())
+        try:
+            result = subprocess.run(cmd, cwd=os.getcwd())
+        except FileNotFoundError:
+            raise SetupRequiredError(
+                _setup_required_message(
+                    project,
+                    f"Interpreter not found: {resolved_interp}",
+                ),
+                fqcn=project.get("_fqcn") or project.get("name"),
+                has_setup=bool(project.get("setup")),
+            )
         return result.returncode
 
     return runner

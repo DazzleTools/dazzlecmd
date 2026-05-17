@@ -76,6 +76,43 @@ class TestLanguagePython:
         assert os.path.isfile(os.path.join(tool_dir, "README.md"))
         assert os.path.isfile(os.path.join(tool_dir, "tests", "test_py3.py"))
 
+    def test_full_overlay_adds_dz_setup_and_requirements(self, scratch_project_root):
+        """v0.7.46 (Phase 7): --full ships the installer-detection setup script
+        and a starter requirements.txt alongside the manifest."""
+        _, tool_dir = _scaffold(scratch_project_root, "python", name="py4", full=True)
+        assert os.path.isfile(os.path.join(tool_dir, "dz_setup.py"))
+        assert os.path.isfile(os.path.join(tool_dir, "requirements.txt"))
+
+    def test_full_overlay_manifest_uses_venv_and_setup_script(
+        self, scratch_project_root,
+    ):
+        """v0.7.46 (Phase 7): the --full manifest overrides the base with
+        ``runtime.venv: ".venv"`` and ``setup.script: "dz_setup.py"``."""
+        _, tool_dir = _scaffold(scratch_project_root, "python", name="py5", full=True)
+        m = _read_manifest(tool_dir)
+        assert m["runtime"]["venv"] == ".venv"
+        assert m["setup"]["script"] == "dz_setup.py"
+
+    def test_full_overlay_dz_setup_detects_pip_requirements(
+        self, scratch_project_root,
+    ):
+        """The rendered dz_setup.py should expose `detect_installer()` that
+        returns `pip-requirements` when only requirements.txt is present."""
+        import importlib.util as _imputil
+        _, tool_dir = _scaffold(scratch_project_root, "python", name="py6", full=True)
+        # Remove pyproject.toml/other markers if any (the template should
+        # only ship requirements.txt, but be defensive).
+        for noise in ("pyproject.toml", "uv.lock", "poetry.lock"):
+            p = os.path.join(tool_dir, noise)
+            if os.path.isfile(p):
+                os.remove(p)
+        spec = _imputil.spec_from_file_location(
+            "py6_dz_setup", os.path.join(tool_dir, "dz_setup.py"),
+        )
+        mod = _imputil.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        assert mod.detect_installer() == "pip-requirements"
+
     def test_hyphenated_name_underscore_substitution(self, scratch_project_root):
         _, tool_dir = _scaffold(scratch_project_root, "python", name="my-cool-tool")
         m = _read_manifest(tool_dir)
@@ -97,7 +134,9 @@ class TestLanguageRust:
         m = _read_manifest(tool_dir)
         assert m["language"] == "rust"
         assert m["runtime"]["type"] == "binary"
-        assert "rs2" in m["runtime"]["binary_path"]
+        assert "rs2" in m["runtime"]["script_path"]
+        assert "setup" in m
+        assert m["setup"]["command"] == "cargo build"
 
 
 class TestLanguageNode:
@@ -142,7 +181,9 @@ class TestLanguageCCpp:
         m = _read_manifest(tool_dir)
         assert m["language"] == "c_cpp"
         assert m["runtime"]["type"] == "binary"
-        assert m["runtime"]["binary_path"] == "c2"
+        assert m["runtime"]["script_path"] == "c2"
+        assert "setup" in m
+        assert m["setup"]["command"] == "make"
 
 
 class TestLanguageDocker:

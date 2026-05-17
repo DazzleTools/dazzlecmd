@@ -10,8 +10,11 @@
     "runtime": {
         "type": "docker",
         "image": "{name}:latest",
-        "build_hint": "docker build -t {name}:latest .",
         "passthrough_args": true
+    },
+    "setup": {
+        "note": "Build the Docker image from the included Dockerfile.",
+        "command": "docker build -t {name}:latest ."
     },
     "pass_through": true,
     "taxonomy": {

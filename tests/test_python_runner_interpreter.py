@@ -63,7 +63,13 @@ class TestInterpreterDispatch:
         assert not mock_import.called
 
     def test_interpreter_bypasses_pass_through(self, tmp_path):
-        """interpreter wins over pass_through: true."""
+        """interpreter wins over pass_through: true.
+
+        Uses ``sys.executable`` as the interpreter so v0.7.46's pre-flight
+        existence check passes. The point is that interpreter dispatch is
+        chosen over pass-through, not the path resolution rules (those are
+        exercised in TestInterpreterPathResolution).
+        """
         script = tmp_path / "tool.py"
         script.write_text("pass")
         project = {
@@ -73,32 +79,39 @@ class TestInterpreterDispatch:
             "runtime": {
                 "type": "python",
                 "script_path": "tool.py",
-                "interpreter": "/some/venv/bin/python",
+                "interpreter": sys.executable,
             },
         }
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             runner = make_python_runner(project)
             runner([])
-        # interpreter was used (no resolution since not a real path), not sys.executable
+        # interpreter was used, not pass_through's sys.executable bypass
         cmd = mock_run.call_args[0][0]
-        assert cmd[0] == "/some/venv/bin/python"
-        assert cmd[0] != sys.executable
+        assert cmd[0] == sys.executable
+        # Confirms interpreter dispatch path was taken (script appears as
+        # arg[1], not via importlib).
+        assert cmd[1].endswith("tool.py")
 
 
 class TestInterpreterPathResolution:
     def test_absolute_interpreter_used_as_is(self, tmp_path):
+        """Absolute interpreter paths are used as-is (no tool_dir join).
+
+        Uses ``sys.executable`` (a real absolute path) so v0.7.46's
+        pre-flight existence check passes.
+        """
         script = tmp_path / "tool.py"
         script.write_text("pass")
         project = {
             "name": "t",
             "_dir": str(tmp_path),
-            "runtime": {"script_path": "tool.py", "interpreter": "/abs/python"},
+            "runtime": {"script_path": "tool.py", "interpreter": sys.executable},
         }
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             make_python_runner(project)([])
-        assert mock_run.call_args[0][0][0] == "/abs/python"
+        assert mock_run.call_args[0][0][0] == sys.executable
 
     def test_relative_interpreter_resolves_against_tool_dir_when_exists(self, tmp_path):
         # Create a fake venv layout
@@ -125,8 +138,13 @@ class TestInterpreterPathResolution:
         assert resolved.endswith("python")
         assert str(tmp_path) in resolved
 
-    def test_relative_interpreter_unresolved_passes_through(self, tmp_path):
-        """If relative path doesn't resolve to a real file, pass through unchanged."""
+    def test_relative_interpreter_unresolved_raises_setup_required(self, tmp_path):
+        """v0.7.46 (4b-T5) contract change: relative interpreter paths that
+        don't resolve to a real file now raise SetupRequiredError instead
+        of silently passing through to subprocess (which would fail with a
+        less actionable FileNotFoundError)."""
+        from dazzlecmd_lib.registry import SetupRequiredError
+
         script = tmp_path / "tool.py"
         script.write_text("pass")
         project = {
@@ -137,11 +155,9 @@ class TestInterpreterPathResolution:
                 "interpreter": ".venv/bin/python",  # doesn't exist
             },
         }
-        with patch("subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
-            make_python_runner(project)([])
-        # Relative path passed through (with separator, tried to resolve, file missing)
-        assert mock_run.call_args[0][0][0] == ".venv/bin/python"
+        runner = make_python_runner(project)
+        with pytest.raises(SetupRequiredError):
+            runner([])
 
     def test_bare_name_interpreter_passes_through(self, tmp_path):
         """`python3.11` or similar bare names are handled by subprocess PATH lookup."""

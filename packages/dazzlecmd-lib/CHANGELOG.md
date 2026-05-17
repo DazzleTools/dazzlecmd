@@ -8,6 +8,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.6.8] - 2026-05-17
+
+Ships with dazzlecmd v0.7.46 (Tier 2C -- setup API formalization). Four additions to the library's setup/runtime/platform surface: `setup.script` as a file-pointer alternative to inline `setup.command`; `runtime.venv` shorthand that synthesizes a python interpreter from a venv directory + platform conventions; a new `SetupRequiredError` exception type that translates missing-interpreter dispatch failures into actionable `dz setup <fqcn>` hints; and a new `PlatformInfo.id_like` field that exposes the Linux ID_LIKE chain so tool setup scripts can write distro-family decisions without enumeration. Bundled templates updated so newly-scaffolded tools ship with working setup blocks out of the box, the Python `--full` overlay adds an installer-detection setup script with `--dry-run` support, and the library's first real-world consumer (`dz find`'s `dz_setup.py`) demonstrates the full API on every supported platform.
+
+### Added
+
+- `platform_detect.PlatformInfo.id_like` -- new tuple field exposing the Linux `/etc/os-release` `ID_LIKE` chain (e.g. `("ubuntu", "debian")` for Ubuntu, `("centos", "rhel", "fedora")` for CentOS Stream). Always includes the subtype itself first so `"debian" in pi.id_like` works whether the host IS debian or just debian-derived (Ubuntu/Mint/Kali/Pop/Raspbian/etc.). Empty tuple on non-Linux or when `ID_LIKE` isn't declared. Detection via the optional `distro` package (uses `distro.like()`) OR the stdlib `/etc/os-release` parser fallback.
+- `setup_resolve.InvalidSetupBlockError` -- raised when a setup block declares both `command` and `script` at the same level (top-level or within a single platform branch). XOR validation runs both at the top of the resolved block and for each per-platform branch after normalization.
+- `setup_resolve.SETUP_SCRIPT_INTERPRETERS` -- public dict mapping `.py` / `.sh` / `.cmd` / `.bat` / `.ps1` extensions to their argv prefixes (e.g. `[".ps1"] = ["powershell", "-File"]`). Engines that consume `setup.script` use this for dispatch.
+- `setup_resolve.infer_setup_script_interpreter(path)` -- helper that returns the argv prefix list for a given script path (case-insensitive on the extension) or `None` for unrecognized extensions.
+- `registry.SetupRequiredError` -- raised by `_make_python_interpreter_runner` when the resolved interpreter is a separator-bearing path that doesn't exist, or when `subprocess.run` raises `FileNotFoundError` on a bare-name interpreter. Carries the tool's `fqcn` and a `has_setup` flag so consumers can pick between "Run: dz setup <fqcn>" and "Ask the tool's creator" hints.
+- `registry._setup_required_message(project, missing_what)` -- shared message builder used by both pre-flight existence checks and post-subprocess `FileNotFoundError` catches.
+- `runtime.venv` shorthand in `make_python_runner`. When `runtime.venv` is declared and `runtime.interpreter` is not, the runner synthesizes the interpreter as `<venv>/Scripts/python.exe` on Windows or `<venv>/bin/python` on POSIX. Explicit `runtime.interpreter` wins on collision. Path-resolution shorthand only -- the runner does not create the venv.
+- Setup blocks in bundled `templates/rust/`, `templates/node/`, `templates/c_cpp/`, and `templates/docker/` `.dazzlecmd.json.tmpl` (`cargo build`, `npm install`, `make`, `docker build -t {name}:latest .`).
+- Bundled `templates/python/__full__/.dazzlecmd.json.tmpl` (override of base manifest using `runtime.venv` + `setup.script`), `templates/python/__full__/dz_setup.py.tmpl` (installer-detection script targeting uv, poetry, pdm, pipenv, conda, pip+pyproject, pip+requirements, or empty-venv fallback; now ships with a `--dry-run` flag per the v0.7.46 convention), and `templates/python/__full__/requirements.txt.tmpl` (starter).
+
+### Changed
+
+- `platform_detect._detect_linux_subtype` -- now returns a 4-tuple `(subtype, version, id_like, raw)` instead of a 3-tuple to expose ID_LIKE parsing. Internal helper; external consumers should use `get_platform_info()`.
+- `setup_resolve.resolve_setup_block` -- XOR validation now runs both at the top-level block and (post-normalization) inside each per-platform branch. The docstring documents `setup.script` as a sibling of `setup.command` and explains the file-pointer dispatch model.
+- `registry._make_python_interpreter_runner` -- adds pre-flight existence check for separator-bearing interpreter paths (skipped for env-var-prefixed paths like `%USERPROFILE%\...` because the shell expands them at dispatch). `FileNotFoundError` from subprocess in both module-mode and script-mode paths is now translated to `SetupRequiredError`.
+- `templates/rust/.dazzlecmd.json.tmpl` and `templates/c_cpp/.dazzlecmd.json.tmpl` -- migrated from `runtime.binary_path` (which the binary runner never consumed) to `runtime.script_path` (the canonical field) plus a `runtime.dev_command` (`cargo run --` / `make run`) for the "binary not built yet" case. The old `build_hint` advisory text was removed; the same information now lives in `setup.note`.
+
+### Refs
+
+- Ships with dazzlecmd v0.7.46. Refs dazzlecmd #33, #35.
+
 ## [0.6.7] - 2026-05-16
 
 Ships with dazzlecmd v0.7.45. Adds three more language templates to the bundled scaffolding set: `bash` (POSIX shell scripts), `cmd` (Windows batch files), and `binary` (pre-built executable registration). Pure template addition; no library API change. The seven-language set bundled in v0.6.6 (python, rust, node, powershell, c_cpp, docker, generic) is now ten.

@@ -41,6 +41,13 @@ class PlatformInfo:
         arch: Normalized architecture ("x86_64", "arm64", "i386", ...).
         is_wsl: True if running under Windows Subsystem for Linux.
         version: OS version string ("11", "22.04", "13.4"). None if unavailable.
+        id_like: Tuple of distro-family identifiers from /etc/os-release's
+            ID_LIKE field (Linux only; empty tuple on non-Linux or when
+            ID_LIKE isn't declared). Lets tool setup scripts write
+            ``if "debian" in pi.id_like: apt`` without enumerating every
+            Debian-derived distro (ubuntu, mint, kali, pop, raspbian, ...).
+            For Linux, the tuple is always (subtype,) + parsed ID_LIKE,
+            so a direct ID-only match also works through this field.
         raw: Diagnostic dict of raw detection inputs. Excluded from equality.
     """
 
@@ -49,6 +56,7 @@ class PlatformInfo:
     arch: str
     is_wsl: bool
     version: Optional[str]
+    id_like: Tuple[str, ...] = ()
     raw: dict = field(default_factory=dict, compare=False, hash=False)
 
 
@@ -76,36 +84,60 @@ def _normalize_arch(machine: str) -> str:
     return m or "unknown"
 
 
-def _detect_linux_subtype() -> Tuple[Optional[str], Optional[str], dict]:
-    """Detect Linux distribution subtype and version."""
+def _detect_linux_subtype() -> Tuple[Optional[str], Optional[str], Tuple[str, ...], dict]:
+    """Detect Linux distribution subtype, version, and ID_LIKE chain.
+
+    Returns (subtype, version, id_like, raw) where id_like is the tuple of
+    distro-family identifiers parsed from /etc/os-release's ID_LIKE field.
+    For consistency, id_like ALWAYS includes the subtype itself first (so
+    `"debian" in pi.id_like` works whether the distro IS debian or just
+    debian-derived).
+    """
     raw: dict = {}
+    subtype: Optional[str] = None
+    version: Optional[str] = None
+    id_like_str: str = ""
+
     try:
         import distro  # type: ignore
 
         raw["distro_id"] = distro.id()
         raw["distro_version"] = distro.version()
         raw["distro_name"] = distro.name()
+        # distro.like() returns a space-separated string of derivation roots
+        # (e.g. "debian" for Ubuntu/Mint, "rhel fedora" for CentOS Stream).
+        id_like_str = (distro.like() or "").strip()
+        raw["distro_like"] = id_like_str
         subtype = distro.id() or None
         version = distro.version() or None
-        return subtype, version, raw
     except ImportError:
-        pass
+        # Stdlib fallback: parse /etc/os-release
+        try:
+            with open("/etc/os-release", "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or "=" not in line:
+                        continue
+                    k, _, v = line.partition("=")
+                    v = v.strip('"').strip("'")
+                    raw[f"os_release_{k.lower()}"] = v
+            subtype = raw.get("os_release_id") or None
+            version = raw.get("os_release_version_id") or None
+            id_like_str = raw.get("os_release_id_like", "") or ""
+        except (OSError, IOError):
+            pass
 
-    # Stdlib fallback: parse /etc/os-release
-    try:
-        with open("/etc/os-release", "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line or "=" not in line:
-                    continue
-                k, _, v = line.partition("=")
-                v = v.strip('"').strip("'")
-                raw[f"os_release_{k.lower()}"] = v
-        subtype = raw.get("os_release_id") or None
-        version = raw.get("os_release_version_id") or None
-        return subtype, version, raw
-    except (OSError, IOError):
-        return None, None, raw
+    # Build id_like tuple: subtype first (so direct-ID checks work via id_like
+    # without enumerating subtype separately), then each parsed ID_LIKE token.
+    id_like_tokens: list[str] = []
+    if subtype:
+        id_like_tokens.append(subtype.lower())
+    for tok in id_like_str.split():
+        tok_lower = tok.lower()
+        if tok_lower and tok_lower not in id_like_tokens:
+            id_like_tokens.append(tok_lower)
+
+    return subtype, version, tuple(id_like_tokens), raw
 
 
 def _detect_windows_subtype() -> Tuple[Optional[str], Optional[str], dict]:
@@ -177,8 +209,9 @@ def _detect_platform_info_uncached() -> PlatformInfo:
         "python_version": sys.version.split()[0],
     }
 
+    id_like: Tuple[str, ...] = ()
     if system == "Linux":
-        subtype, version, subtype_raw = _detect_linux_subtype()
+        subtype, version, id_like, subtype_raw = _detect_linux_subtype()
         os_name = "linux"
     elif system == "Windows":
         subtype, version, subtype_raw = _detect_windows_subtype()
@@ -204,6 +237,7 @@ def _detect_platform_info_uncached() -> PlatformInfo:
         arch=arch,
         is_wsl=is_wsl,
         version=version,
+        id_like=id_like,
         raw=raw,
     )
 
