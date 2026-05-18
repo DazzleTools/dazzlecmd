@@ -1,0 +1,19 @@
+{
+    "_schema_version": 1,
+    "name": "AMDead",
+    "command": "amdead",
+    "description": "Diagnostic, defensive, and PoC tools for the amdkmdag.sys _EPROCESS zombie leak",
+    "tools_dir": "tools",
+    "kits_dir": "kits",
+    "manifest_name": ".amdead.json",
+    "enabled_meta_commands": ["list", "info", "kit", "tree", "setup", "version"],
+    "extra_reserved_commands": [],
+    "schema": {
+        "remote_url_paths": ["source.url", "lifecycle.remote"],
+        "lifecycle_path": "lifecycle"
+    },
+    "discovery": {
+        "tool_patterns": ["${tools_dir}/*/*"],
+        "scan_hidden": false
+    }
+}

@@ -85,87 +85,13 @@ def add_from_local(source_path, projects_dir, namespace, link_mode="copy",
     }
 
 
-def create_link(source_path, target_path):
-    """Create a directory symlink or junction.
-
-    Tries symlink first, falls back to junction on Windows.
-    Returns the actual link mode used, or None on failure.
-    """
-    if sys.platform == "win32":
-        return _create_link_windows(source_path, target_path)
-    else:
-        return _create_link_unix(source_path, target_path)
-
-
-def _create_link_windows(source_path, target_path):
-    """Create directory link on Windows: mklink /D -> mklink /J fallback."""
-    # Try symbolic link first
-    try:
-        result = subprocess.run(
-            ["cmd", "/c", "mklink", "/D", target_path, source_path],
-            capture_output=True, text=True, timeout=10
-        )
-        if result.returncode == 0:
-            return "symlink"
-    except (OSError, subprocess.TimeoutExpired):
-        pass
-
-    # Fall back to junction (no admin required)
-    try:
-        result = subprocess.run(
-            ["cmd", "/c", "mklink", "/J", target_path, source_path],
-            capture_output=True, text=True, timeout=10
-        )
-        if result.returncode == 0:
-            return "junction"
-    except (OSError, subprocess.TimeoutExpired):
-        pass
-
-    print(f"Error: Could not create link: {target_path} -> {source_path}",
-          file=sys.stderr)
-    print("  mklink /D failed (may need admin). mklink /J also failed.",
-          file=sys.stderr)
-    return None
-
-
-def _create_link_unix(source_path, target_path):
-    """Create directory symlink on Unix."""
-    try:
-        os.symlink(source_path, target_path)
-        return "symlink"
-    except OSError as exc:
-        print(f"Error: Could not create symlink: {exc}", file=sys.stderr)
-        return None
-
-
-# Backward-compat re-exports: the canonical implementations now live in
-# dazzlecmd_lib.paths so that library render_info (and any future library
-# consumer like amdead/wtf/sysdiagnose) can detect linked projects without
-# coupling to dazzlecmd's package layout. v0.7.33 ported the originals;
-# this module keeps the dazzlecmd.importer import surface stable for
-# mode.py, tests, and any external consumer that already imports from
-# here.
-from dazzlecmd_lib.paths import is_linked_project, get_link_target  # noqa: F401
-
-
-def remove_link(target_path):
-    """Remove a symlink/junction without affecting the source.
-
-    On Windows, uses rmdir to remove the junction point.
-    On Unix, uses os.unlink.
-    """
-    if not is_linked_project(target_path):
-        return False
-
-    try:
-        if sys.platform == "win32":
-            result = subprocess.run(
-                ["cmd", "/c", "rmdir", target_path],
-                capture_output=True, text=True, timeout=10
-            )
-            return result.returncode == 0
-        else:
-            os.unlink(target_path)
-            return True
-    except (OSError, subprocess.TimeoutExpired):
-        return False
+# Link helpers (create_link, remove_link, is_linked_project, get_link_target)
+# live in dazzlecmd_lib.paths as of v0.7.47 -- they're aggregator-agnostic
+# primitives any consumer of dazzlecmd_lib can use. This module re-exports
+# them for callers that import from dazzlecmd.importer.
+from dazzlecmd_lib.paths import (  # noqa: F401
+    create_link,
+    get_link_target,
+    is_linked_project,
+    remove_link,
+)

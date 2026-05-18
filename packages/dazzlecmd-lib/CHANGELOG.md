@@ -8,6 +8,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.6.9] - 2026-05-18
+
+Ships with dazzlecmd v0.7.47 (Phase 3.5 Tier 1 commit 1 of N). Aggregator-decoupling scaffolding: `aggregator.json` declarative configuration, the `reserved` module (namespace contract + user-vs-dev meta-command sets), `AggregatorEngine.from_project()` canonical constructor, and a verbatim-moved `dazzlecmd_lib.mode` module that any aggregator can consume. Link helpers (`create_link`/`remove_link`) join `is_linked_project` and `get_link_target` in `dazzlecmd_lib.paths`. Parameterization of the moved mode code for BLOCKERs F1-F8 lands in v0.6.10 (Tier 1 commit 2); the verbatim move and the parameterization are separate passes per the X-28 copy-don't-rewrite discipline.
+
+### Added
+
+- `aggregator_config` module -- declarative aggregator schema. `AggregatorConfig` dataclass (frozen) + nested `AggregatorSchema` / `AggregatorDiscovery` blocks + `load_aggregator_config(project_root)` + `AggregatorConfigError`. 11 top-level fields cover identity (name, command, description), layout (tools_dir, kits_dir, manifest_name), command policy (enabled_meta_commands, extra_reserved_commands), manifest schema decoupling, and discovery patterns. `${tools_dir}` interpolation in `discovery.tool_patterns` lets pattern values stay declarative without duplicating the literal directory name. Required at every aggregator project root for `AggregatorEngine.from_project()`.
+- `reserved` module -- the namespace contract. `DEFAULT_RESERVED_COMMANDS` (9 names) is the cross-aggregator name-block list; `DEFAULT_META_COMMANDS_USER` (6 names) is the minimal user-facing registration set; `DEFAULT_META_COMMANDS_DEV_EXTRAS` (add/mode/new) is the opt-in dev-mode addition. The distinction between reserved (blocked from tool naming) and registered (exposed as CLI subcommand) is documented in the module docstring -- reserving a name does not register it.
+- `AggregatorEngine.from_project(project_root, **overrides)` classmethod -- canonical engine constructor reading `aggregator.json`. Maps schema fields onto `__init__` kwargs. Caller-supplied `overrides` win (intended for tests + ad-hoc construction).
+- `mode` module -- verbatim copy of dazzlecmd's `src/dazzlecmd/mode.py` (730 LOC) with the single import line swapped from `dazzlecmd.importer` to `dazzlecmd_lib.paths`. No behavior changes in this commit; Tier 1 commit 2 parameterizes the hardcoded `"projects/"` / `"dz"` / `.dazzlecmd.json`-schema usages to support wtf-windows / amdead / future aggregators.
+- `paths` link helpers -- `create_link()` (tries symlink first, falls back to junction on Windows), `_create_link_windows()`, `_create_link_unix()`, `remove_link()`. Moved verbatim from `dazzlecmd.importer` so library code can create/remove links without depending on the dazzlecmd package layout.
+
+### Refs
+
+- Ships with dazzlecmd v0.7.47. Refs dazzlecmd #37 (Phase 3.5 EPIC).
+
 ## [0.6.8] - 2026-05-17
 
 Ships with dazzlecmd v0.7.46 (Tier 2C -- setup API formalization). Four additions to the library's setup/runtime/platform surface: `setup.script` as a file-pointer alternative to inline `setup.command`; `runtime.venv` shorthand that synthesizes a python interpreter from a venv directory + platform conventions; a new `SetupRequiredError` exception type that translates missing-interpreter dispatch failures into actionable `dz setup <fqcn>` hints; and a new `PlatformInfo.id_like` field that exposes the Linux ID_LIKE chain so tool setup scripts can write distro-family decisions without enumeration. Bundled templates updated so newly-scaffolded tools ship with working setup blocks out of the box, the Python `--full` overlay adds an installer-detection setup script with `--dry-run` support, and the library's first real-world consumer (`dz find`'s `dz_setup.py`) demonstrates the full API on every supported platform.

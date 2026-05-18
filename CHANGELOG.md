@@ -4,6 +4,46 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.47] - 2026-05-18
+
+Phase 3.5 Tier 1 commit 1 of N (refs #37). Aggregator-decoupling scaffolding for the mode-system extraction. Three additions to dazzlecmd-lib that ship together: `aggregator.json` declarative configuration; `dazzlecmd_lib.reserved` module with the namespace contract; `AggregatorEngine.from_project()` classmethod as the new canonical constructor. Link helpers (`create_link`/`remove_link`) moved from `dazzlecmd.importer` to `dazzlecmd_lib.paths` so any aggregator can use them. `dazzlecmd_lib.mode` module added as a verbatim copy of `src/dazzlecmd/mode.py` (the working version); parameterization for senior-engineer audit BLOCKERs F1-F8 lands in Tier 1 commit 2 (v0.7.48+).
+
+### Added
+
+- `dazzlecmd_lib.aggregator_config` module -- declarative aggregator schema. `AggregatorConfig` dataclass + `load_aggregator_config(project_root)` + `AggregatorConfigError`. 11 top-level fields covering identity (name, command, description), layout (tools_dir, kits_dir, manifest_name), command policy (enabled_meta_commands, extra_reserved_commands), manifest schema decoupling (schema.remote_url_paths, schema.lifecycle_path), and discovery patterns (discovery.tool_patterns with `${tools_dir}` interpolation, discovery.scan_hidden). Required at every aggregator project root for the new `AggregatorEngine.from_project()` constructor; the library refuses to instantiate without it (no backward compat -- we are the only consumer right now and would rather break things now and do it right).
+- `dazzlecmd_lib.reserved` module -- the namespace contract. `DEFAULT_RESERVED_COMMANDS` (9 names: list/info/kit/new/add/mode/tree/setup/version) blocks tool names from colliding with meta-command semantics across all aggregators. `DEFAULT_META_COMMANDS_USER` (6 names: list/info/kit/tree/setup/version) is the "complete-unto-itself" registration set; `DEFAULT_META_COMMANDS_DEV_EXTRAS` (add/mode/new) is the opt-in dev-mode addition. Aggregators choose their registration set via `enabled_meta_commands` in aggregator.json -- amdead opts into the user set only (it ships as a focused diagnostic suite, no third-party imports); dazzlecmd opts into both (it is a developer toolchain); wtf-windows opts into user + mode (submodule lifecycle for its core tools).
+- `AggregatorEngine.from_project(project_root, **overrides)` classmethod -- canonical engine constructor. Reads `aggregator.json` via `load_aggregator_config`, maps its fields onto the constructor kwargs, then applies any caller-supplied overrides. The kwargs `__init__` remains for tests and ad-hoc construction; `from_project` is intended for production code in every aggregator's `cli.py` main.
+- `dazzlecmd_lib.mode` module -- verbatim copy of `src/dazzlecmd/mode.py` (730 LOC). Single change from the source: `from dazzlecmd.importer import (create_link, get_link_target, is_linked_project, remove_link)` becomes `from dazzlecmd_lib.paths import (create_link, get_link_target, is_linked_project, remove_link)`. Tier 1 commit 2 parameterizes the verbatim-moved code for BLOCKERs F1-F8 (thread tools_dir, command, schema through every code path that currently hardcodes "projects/", "dz", and `.dazzlecmd.json`-schema-specific keys).
+- `dazzlecmd_lib.paths` link helpers -- `create_link()`, `_create_link_windows()`, `_create_link_unix()`, `remove_link()`. Moved verbatim from `src/dazzlecmd/importer.py` so the library's `dazzlecmd_lib.mode` (and any future consumer) can use them without depending on the dazzlecmd package layout. `is_linked_project` and `get_link_target` were already in `dazzlecmd_lib.paths` since v0.7.33; this commit completes the link-primitive set.
+- `packages/dazzlecmd-lib/tests/fixtures/aggregator-json/` -- canonical aggregator.json drafts for dazzlecmd, wtf-windows, amdead. Used by the new test suite as real-world fixtures and double as the production drafts that will deploy to each aggregator's project root in Tier 1 commit T1-M1/M2/M3.
+
+### Changed
+
+- `src/dazzlecmd/importer.py` -- thinned. The `create_link`/`remove_link` function bodies plus their Windows/Unix helpers moved to `dazzlecmd_lib.paths`; importer.py now re-exports them for backward compatibility with any external caller that already imports from `dazzlecmd.importer`. The `add_from_local` function still imports `RESERVED_COMMANDS` from `dazzlecmd.cli` (F1 BLOCKER); that lands in Tier 1 commit 2 as the `reserved_commands` parameter.
+
+### Tests
+
+- 14 new tests in `packages/dazzlecmd-lib/tests/test_aggregator_config.py`. `TestRealWorldDrafts` parses all 3 production drafts and verifies the field values (tools_dir / command / enabled_meta_commands / extra_reserved_commands resolution); `TestFieldValidation` covers missing required keys, wrong types, unknown meta-command names, invalid JSON, mismatched schema versions; `TestDiscoveryPatternInterpolation` proves `${tools_dir}` substitutes correctly; `TestSchemaDecoupling` validates the custom-manifest-layout path that fixes F7.
+- Total: 1179 passed, 14 skipped (was 1165 / 14 in v0.7.46; +14 new).
+
+### What's NOT in this commit (scheduled for v0.7.48+)
+
+- Parameterization of `dazzlecmd_lib.mode` for BLOCKERs F1-F8: thread `tools_dir`, `command`, `schema` through `parse_gitmodules`, `cmd_status`, `_find_undiscovered_tool`, `_tool_dir_to_submodule_path`, `_resolve_remote_url`. The moved code currently still hardcodes `"projects/"` and `"dz"` everywhere -- the move and the parameterization are separate passes per the X-28 copy-don't-rewrite discipline.
+- Safety primitives: dirty-tree refuse-or-force gate at every `shutil.rmtree` call site (T1-E, the CRITICAL hazard from the senior-engineer audit) and `New-Item -ItemType Junction` PowerShell replacement for `cmd.exe /c mklink` (T1-D, CLAUDE.md rule #4 self-consistency).
+- `src/dazzlecmd/mode.py` thin-wrapper conversion (T1-H) -- delete the ~650 LOC of business logic, replace with re-exports from `dazzlecmd_lib.mode`.
+- Migration of `src/dazzlecmd/importer.py:add_from_local`'s `RESERVED_COMMANDS` import (T1-Z, F1 BLOCKER fix) -- add `reserved_commands: set` parameter; caller (dazzlecmd's `_cmd_add`) supplies its set.
+- Per-aggregator `aggregator.json` deployment to dazzlecmd / wtf-windows / amdead project roots (T1-M1/M2/M3) -- the fixtures already exist; this is the rollout step.
+- `dazzlecmd_lib.mode` test migration (T1-I) from `tests/test_mode.py` to `packages/dazzlecmd-lib/tests/test_mode_*.py`.
+
+### Refs
+
+- Refs #37 (Phase 3.5 EPIC -- mode-system expansion for non-submodule tool sources). The body of #37 was updated 2026-05-17 with the revised Tier 1/2/3 split this commit advances.
+
+### Design
+
+- `2026-05-17__22-38-36__dev-workflow-process__phase-3-5-mode-system-hardening-shipped-vs-missing.md` -- the live DWP with 6 addendums covering the survey findings (oracle + senior-engineer + DazzleNodes prior art), the no-backward-compat decision, the aggregator.json schema, and the no-duplication mandate that drove Option B (library extraction during Tier 1).
+- `2026-05-07__00-07-55__claude-plan__0-7-x-closeout-ultraplan-with-x28-copy-dont-rewrite-addendum.md` -- the master 0.7.x closeout plan (X-28 copy-don't-rewrite discipline applies).
+
 ## [0.7.46] - 2026-05-17
 
 Tier 2C (4b-T4 + 4b-T5 + Setup API formalization + first real-world validator). Closes the engine half of #33's "tools should be runnable on a fresh machine after `dz setup`" arc AND ships the first cross-platform `setup.script` consumer (`dz find`) so the API is proven end-to-end on real hardware. Four reinforcing changes compose into a real install surface (not just a documentation hint), plus the scaffolding templates and a developer guide that codify the conventions.
@@ -1713,7 +1753,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.46...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.47...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

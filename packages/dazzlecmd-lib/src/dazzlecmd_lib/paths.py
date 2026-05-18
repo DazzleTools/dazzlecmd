@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 import sys
 from typing import Optional
 
@@ -167,3 +168,79 @@ def which_with_pathext(name: str) -> Optional[str]:
     if not name:
         return None
     return shutil.which(name)
+
+
+def create_link(source_path, target_path):
+    """Create a directory symlink or junction.
+
+    Tries symlink first, falls back to junction on Windows.
+    Returns the actual link mode used, or None on failure.
+    """
+    if sys.platform == "win32":
+        return _create_link_windows(source_path, target_path)
+    else:
+        return _create_link_unix(source_path, target_path)
+
+
+def _create_link_windows(source_path, target_path):
+    """Create directory link on Windows: mklink /D -> mklink /J fallback."""
+    # Try symbolic link first
+    try:
+        result = subprocess.run(
+            ["cmd", "/c", "mklink", "/D", target_path, source_path],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            return "symlink"
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+    # Fall back to junction (no admin required)
+    try:
+        result = subprocess.run(
+            ["cmd", "/c", "mklink", "/J", target_path, source_path],
+            capture_output=True, text=True, timeout=10
+        )
+        if result.returncode == 0:
+            return "junction"
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+    print(f"Error: Could not create link: {target_path} -> {source_path}",
+          file=sys.stderr)
+    print("  mklink /D failed (may need admin). mklink /J also failed.",
+          file=sys.stderr)
+    return None
+
+
+def _create_link_unix(source_path, target_path):
+    """Create directory symlink on Unix."""
+    try:
+        os.symlink(source_path, target_path)
+        return "symlink"
+    except OSError as exc:
+        print(f"Error: Could not create symlink: {exc}", file=sys.stderr)
+        return None
+
+
+def remove_link(target_path):
+    """Remove a symlink/junction without affecting the source.
+
+    On Windows, uses rmdir to remove the junction point.
+    On Unix, uses os.unlink.
+    """
+    if not is_linked_project(target_path):
+        return False
+
+    try:
+        if sys.platform == "win32":
+            result = subprocess.run(
+                ["cmd", "/c", "rmdir", target_path],
+                capture_output=True, text=True, timeout=10
+            )
+            return result.returncode == 0
+        else:
+            os.unlink(target_path)
+            return True
+    except (OSError, subprocess.TimeoutExpired):
+        return False

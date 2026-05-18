@@ -1,0 +1,19 @@
+{
+    "_schema_version": 1,
+    "name": "dazzlecmd",
+    "command": "dz",
+    "description": "Unified CLI for the DazzleTools collection -- many tools, one command",
+    "tools_dir": "projects",
+    "kits_dir": "kits",
+    "manifest_name": ".dazzlecmd.json",
+    "enabled_meta_commands": ["list", "info", "kit", "tree", "setup", "version", "add", "mode", "new"],
+    "extra_reserved_commands": ["find", "git", "github", "f", "safedel", "snapshot", "fixpath"],
+    "schema": {
+        "remote_url_paths": ["source.url", "lifecycle.remote"],
+        "lifecycle_path": "lifecycle"
+    },
+    "discovery": {
+        "tool_patterns": ["${tools_dir}/*/*"],
+        "scan_hidden": false
+    }
+}

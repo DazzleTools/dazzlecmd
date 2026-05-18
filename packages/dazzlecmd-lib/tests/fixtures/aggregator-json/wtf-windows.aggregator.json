@@ -1,0 +1,19 @@
+{
+    "_schema_version": 1,
+    "name": "wtf-windows",
+    "command": "wtf",
+    "description": "Windows diagnostic and AI-IT toolkit",
+    "tools_dir": "tools",
+    "kits_dir": "kits",
+    "manifest_name": ".wtf.json",
+    "enabled_meta_commands": ["list", "info", "kit", "tree", "setup", "version", "mode"],
+    "extra_reserved_commands": [],
+    "schema": {
+        "remote_url_paths": ["source.url", "lifecycle.remote"],
+        "lifecycle_path": "lifecycle"
+    },
+    "discovery": {
+        "tool_patterns": ["${tools_dir}/*/*"],
+        "scan_hidden": false
+    }
+}

@@ -480,6 +480,58 @@ class AggregatorEngine:
     dispatch.
     """
 
+    @classmethod
+    def from_project(cls, project_root, *, version_info=None, is_root=True,
+                     parser_builder=None, meta_dispatcher=None,
+                     tool_dispatcher=None, config_dir=None, **overrides):
+        """Construct an engine from ``aggregator.json`` at ``project_root``.
+
+        This is the canonical constructor. The library refuses to instantiate
+        without ``aggregator.json``; see ``dazzlecmd_lib.aggregator_config``
+        for the schema.
+
+        Args:
+            project_root: Absolute path to the aggregator's project root.
+            version_info: Runtime version info (not in aggregator.json).
+            is_root: Whether this engine is the root invocation
+                (not in aggregator.json; runtime context).
+            parser_builder, meta_dispatcher, tool_dispatcher: Runtime escape
+                hatches (not in aggregator.json).
+            config_dir: Override the default config directory.
+            **overrides: Override any field from aggregator.json. Useful for
+                tests and ad-hoc construction.
+
+        Raises:
+            AggregatorConfigError: If ``aggregator.json`` is missing,
+                malformed, or invalid.
+        """
+        # Local import to avoid circular dependency at module load.
+        from dazzlecmd_lib.aggregator_config import load_aggregator_config
+
+        cfg = load_aggregator_config(project_root)
+
+        # Map AggregatorConfig fields onto __init__ kwargs.
+        kwargs = {
+            "name": cfg.name,
+            "command": cfg.command,
+            "tools_dir": cfg.tools_dir,
+            "kits_dir": cfg.kits_dir,
+            "manifest": cfg.manifest_name,
+            "description": cfg.description,
+            "version_info": version_info,
+            "is_root": is_root,
+            "parser_builder": parser_builder,
+            "meta_dispatcher": meta_dispatcher,
+            "tool_dispatcher": tool_dispatcher,
+            "meta_commands": cfg.enabled_meta_commands,
+            "extra_reserved_commands": cfg.reserved_commands - cfg.enabled_meta_commands,
+            "config_dir": config_dir,
+            "project_root": cfg.project_root,
+        }
+        # Caller-supplied kwargs win (intended for tests + ad-hoc construction).
+        kwargs.update(overrides)
+        return cls(**kwargs)
+
     def __init__(
         self,
         name="dazzlecmd",
