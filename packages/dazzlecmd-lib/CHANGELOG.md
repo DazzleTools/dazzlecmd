@@ -8,6 +8,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.6.10] - 2026-05-18
+
+Ships with dazzlecmd v0.7.48 (Phase 3.5 Tier 1 commit 2). Parameterizes the verbatim-moved `mode` module so every function takes the aggregator's `tools_dir` / `command` / manifest `schema` as required keyword-only parameters instead of baking dazzlecmd-specific values into the implementation. Resolves the senior-engineer audit's BLOCKERs F2/F3/F4/F5/F7/F8 + F1 (the latter via the `add_from_local` import-side fix in dazzlecmd's importer.py). 25 new tests in `tests/test_mode_parameterization.py` prove the library works for any tools_dir layout (parametric over `projects/`, `tools/`, and `src/tools/`) and any manifest schema.
+
+### Changed
+
+- `parse_gitmodules(project_root)` -> `parse_gitmodules(project_root, *, tools_dir)`. The hardcoded `"projects/"` prefix check becomes `tools_dir.rstrip("/") + "/"`; the 3-part path assumption becomes a 2-part check on the suffix after the prefix.
+- `_tool_dir_to_submodule_path(tool_dir)` -> `_tool_dir_to_submodule_path(tool_dir, project_root, *, tools_dir)`. The substring search for `"projects/"` becomes `os.path.relpath(tool_dir, project_root)` followed by a prefix check on `tools_dir`. Prevents the F8 regression where a parent path containing `"projects"` (e.g., `C:\code\my-projects\dz`) would substring-match incorrectly.
+- `detect_tool_state(tool_dir, gitmodules)` -> `detect_tool_state(tool_dir, gitmodules, project_root, *, tools_dir)`. Threads project_root + tools_dir to `_tool_dir_to_submodule_path`.
+- `resolve_dev_path(qualified_name, project_root, explicit_path=None)` -> `resolve_dev_path(qualified_name, project_root, explicit_path=None, *, tools_dir)`.
+- `cmd_status(projects, project_root, tool_filter=None, kit_filter=None)` -> `cmd_status(projects, project_root, tool_filter=None, kit_filter=None, *, tools_dir, command)`. The undiscovered-tool scan uses `os.path.join(project_root, tools_dir)` instead of the hardcoded `"projects"`; user-facing error strings substitute `command` instead of hardcoded `"dz"`.
+- `cmd_switch(tool_name, projects, project_root, ...)` -> `cmd_switch(tool_name, projects, project_root, ..., *, tools_dir, command, schema=None)`. Threads tools_dir + command + schema to `_find_undiscovered_tool`, `parse_gitmodules`, `detect_tool_state`, `_print_no_toggle`, `_switch_to_dev`, `_switch_to_publish`.
+- `_find_undiscovered_tool(tool_name, project_root)` -> `_find_undiscovered_tool(tool_name, project_root, *, tools_dir)`.
+- `_print_no_toggle(tool_name, state)` -> `_print_no_toggle(tool_name, state, *, command)`. Substitutes the aggregator's CLI name into the "register a submodule first" hint.
+- `_switch_to_dev(project, project_root, gitmodules, explicit_path, dry_run)` -> `_switch_to_dev(project, project_root, gitmodules, explicit_path, dry_run, *, tools_dir, command)`.
+- `_switch_to_publish(project, project_root, gitmodules, dry_run, url=None)` -> `_switch_to_publish(project, project_root, gitmodules, dry_run, url=None, *, tools_dir, command, schema=None)`. Default-submodule-path construction uses `tools_dir` instead of hardcoded `"projects"`.
+- `_resolve_remote_url(project, explicit_url=None)` -> `_resolve_remote_url(project, explicit_url=None, *, schema=None)`. The new `schema` parameter is an `AggregatorSchema` (or dict-like) with ordered `remote_url_paths`; the function probes each path in order via dotted-key lookup. When `schema=None`, defaults to `("source.url", "lifecycle.remote")` matching dazzlecmd's historical behavior. `lifecycle.graduated_to` is always tried as a final fallback because it represents tool-graduation semantics, not aggregator-specific manifest layout.
+
+### Added
+
+- `_dotted_lookup(obj, dotted_path)` -- internal helper for walking dotted paths into a nested dict (e.g., `"source.url"`). Returns the value or `None`. Used by `_resolve_remote_url` to implement schema-driven remote URL resolution.
+
+### Refs
+
+Ships with dazzlecmd v0.7.48. Refs dazzlecmd #37 (Phase 3.5 EPIC).
+
 ## [0.6.9] - 2026-05-18
 
 Ships with dazzlecmd v0.7.47 (Phase 3.5 Tier 1 commit 1 of N). Aggregator-decoupling scaffolding: `aggregator.json` declarative configuration, the `reserved` module (namespace contract + user-vs-dev meta-command sets), `AggregatorEngine.from_project()` canonical constructor, and a verbatim-moved `dazzlecmd_lib.mode` module that any aggregator can consume. Link helpers (`create_link`/`remove_link`) join `is_linked_project` and `get_link_target` in `dazzlecmd_lib.paths`. Parameterization of the moved mode code for BLOCKERs F1-F8 lands in v0.6.10 (Tier 1 commit 2); the verbatim move and the parameterization are separate passes per the X-28 copy-don't-rewrite discipline.

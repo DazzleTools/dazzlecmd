@@ -1,0 +1,335 @@
+"""Tests for ``dazzlecmd_lib.mode`` after Pass 3 parameterization.
+
+These tests prove the senior-engineer audit BLOCKERs F2/F3/F4/F5/F7/F8 are
+resolved -- the library code works for any aggregator's tools_dir / command /
+manifest schema, not just dazzlecmd's hardcoded ``"projects/"`` / ``"dz"`` /
+``.dazzlecmd.json``.
+
+Test fixtures set up fake aggregator project roots with different
+``tools_dir`` layouts (wtf-windows-style ``"tools"``, dazzlecmd-style
+``"projects"``, custom ``"src/tools"``) and exercise the parameterized
+functions against them.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+import pytest
+
+from dazzlecmd_lib.aggregator_config import AggregatorSchema
+from dazzlecmd_lib.mode import (
+    STATE_EMBEDDED,
+    STATE_MISSING,
+    STATE_SUBMODULE,
+    _find_undiscovered_tool,
+    _resolve_remote_url,
+    _tool_dir_to_submodule_path,
+    detect_tool_state,
+    parse_gitmodules,
+)
+
+
+def _make_fake_aggregator(tmp_path: Path, tools_dir: str,
+                          submodule_paths: list = None,
+                          embedded_tools: list = None) -> Path:
+    """Create a fake aggregator project root for testing.
+
+    Args:
+        tmp_path: pytest tmp_path fixture.
+        tools_dir: Relative tools directory name (e.g., ``"tools"``).
+        submodule_paths: List of paths to declare in ``.gitmodules``
+            (e.g., ``["tools/core/restarted"]``). Creates the directories.
+        embedded_tools: List of (namespace, tool_name) for embedded tools
+            (created as plain dirs, no submodule registration).
+
+    Returns:
+        Absolute path to the fake project root.
+    """
+    project_root = tmp_path / "fake-aggregator"
+    project_root.mkdir()
+    (project_root / tools_dir).mkdir(parents=True, exist_ok=True)
+
+    if submodule_paths:
+        gitmodules = project_root / ".gitmodules"
+        with gitmodules.open("w", encoding="utf-8") as f:
+            for path in submodule_paths:
+                ns = path.split("/")[-2]
+                tool = path.split("/")[-1]
+                f.write(f'[submodule "{path}"]\n')
+                f.write(f'\tpath = {path}\n')
+                f.write(f'\turl = https://example.com/{ns}-{tool}.git\n')
+                # Create the on-disk directory too
+                (project_root / path).mkdir(parents=True, exist_ok=True)
+                # Make it look like a real submodule (has a .git file)
+                (project_root / path / ".git").write_text(
+                    f"gitdir: ../../../.git/modules/{path}\n",
+                    encoding="utf-8",
+                )
+
+    if embedded_tools:
+        for ns, tool in embedded_tools:
+            (project_root / tools_dir / ns / tool).mkdir(parents=True)
+
+    return project_root
+
+
+class TestParseGitmodulesParameterization:
+    """F2: parse_gitmodules respects tools_dir, no longer hardcodes 'projects/'."""
+
+    def test_recognizes_tools_dir_paths(self, tmp_path):
+        """wtf-windows / amdead layout -- submodules under tools/."""
+        project_root = _make_fake_aggregator(
+            tmp_path, tools_dir="tools",
+            submodule_paths=["tools/core/restarted", "tools/core/locked"],
+        )
+        mappings = parse_gitmodules(str(project_root), tools_dir="tools")
+        assert "tools/core/restarted" in mappings
+        assert "tools/core/locked" in mappings
+        assert mappings["tools/core/restarted"]["namespace"] == "core"
+        assert mappings["tools/core/restarted"]["tool_name"] == "restarted"
+
+    def test_recognizes_projects_dir_paths(self, tmp_path):
+        """dazzlecmd layout -- submodules under projects/."""
+        project_root = _make_fake_aggregator(
+            tmp_path, tools_dir="projects",
+            submodule_paths=["projects/core/listall"],
+        )
+        mappings = parse_gitmodules(str(project_root), tools_dir="projects")
+        assert "projects/core/listall" in mappings
+
+    def test_skips_non_matching_prefix(self, tmp_path):
+        """Submodules outside tools_dir are NOT included."""
+        project_root = _make_fake_aggregator(
+            tmp_path, tools_dir="tools",
+            submodule_paths=["tools/core/foo"],
+        )
+        # Add a scripts/ submodule to gitmodules manually
+        with (project_root / ".gitmodules").open("a", encoding="utf-8") as f:
+            f.write('[submodule "scripts"]\n')
+            f.write('\tpath = scripts\n')
+            f.write('\turl = https://example.com/scripts.git\n')
+
+        mappings = parse_gitmodules(str(project_root), tools_dir="tools")
+        assert "tools/core/foo" in mappings
+        assert "scripts" not in mappings  # outside tools_dir
+
+    def test_skips_non_3part_paths(self, tmp_path):
+        """Kit-level (2-part) submodule paths are skipped (handled by engine)."""
+        project_root = _make_fake_aggregator(tmp_path, tools_dir="tools")
+        # Manually write a kit-level submodule
+        (project_root / "tools").mkdir(exist_ok=True)
+        (project_root / ".gitmodules").write_text(
+            '[submodule "tools/whole-kit"]\n'
+            '\tpath = tools/whole-kit\n'
+            '\turl = https://example.com/whole-kit.git\n',
+            encoding="utf-8",
+        )
+        mappings = parse_gitmodules(str(project_root), tools_dir="tools")
+        assert mappings == {}
+
+    def test_missing_gitmodules_returns_empty(self, tmp_path):
+        project_root = _make_fake_aggregator(tmp_path, tools_dir="tools")
+        # No .gitmodules file
+        mappings = parse_gitmodules(str(project_root), tools_dir="tools")
+        assert mappings == {}
+
+
+class TestToolDirToSubmodulePathParameterization:
+    """F8: _tool_dir_to_submodule_path uses relpath instead of substring search."""
+
+    def test_resolves_for_tools_dir(self, tmp_path):
+        project_root = tmp_path / "wtf"
+        project_root.mkdir()
+        tool_dir = project_root / "tools" / "core" / "restarted"
+        tool_dir.mkdir(parents=True)
+        result = _tool_dir_to_submodule_path(
+            str(tool_dir), str(project_root), tools_dir="tools"
+        )
+        assert result == "tools/core/restarted"
+
+    def test_resolves_for_projects_dir(self, tmp_path):
+        project_root = tmp_path / "dz"
+        project_root.mkdir()
+        tool_dir = project_root / "projects" / "core" / "listall"
+        tool_dir.mkdir(parents=True)
+        result = _tool_dir_to_submodule_path(
+            str(tool_dir), str(project_root), tools_dir="projects"
+        )
+        assert result == "projects/core/listall"
+
+    def test_returns_none_when_outside_tools_dir(self, tmp_path):
+        """Tool path that isn't under tools_dir returns None."""
+        project_root = tmp_path / "agg"
+        project_root.mkdir()
+        # tool_dir is under scripts/, not tools/
+        tool_dir = project_root / "scripts" / "thing"
+        tool_dir.mkdir(parents=True)
+        result = _tool_dir_to_submodule_path(
+            str(tool_dir), str(project_root), tools_dir="tools"
+        )
+        assert result is None
+
+    def test_no_false_match_on_parent_path_substring(self, tmp_path):
+        """F8 regression: parent path containing 'projects' must not match."""
+        # parent = .../my-projects/dz/
+        parent = tmp_path / "my-projects"
+        parent.mkdir()
+        project_root = parent / "agg"
+        project_root.mkdir()
+        # The bug: substring search for "projects/" would match "my-projects/"
+        # in the absolute path and produce a wrong relative path.
+        tool_dir = project_root / "projects" / "core" / "x"
+        tool_dir.mkdir(parents=True)
+        result = _tool_dir_to_submodule_path(
+            str(tool_dir), str(project_root), tools_dir="projects"
+        )
+        # Correct anchored result -- relative to project_root, not parent
+        assert result == "projects/core/x"
+
+
+class TestDetectToolStateParameterization:
+    """detect_tool_state threads tools_dir + project_root correctly."""
+
+    def test_detects_embedded_in_tools_dir(self, tmp_path):
+        project_root = _make_fake_aggregator(
+            tmp_path, tools_dir="tools",
+            embedded_tools=[("core", "detect")],
+        )
+        tool_dir = str(project_root / "tools" / "core" / "detect")
+        state = detect_tool_state(tool_dir, {}, str(project_root), tools_dir="tools")
+        assert state == STATE_EMBEDDED
+
+    def test_detects_submodule_via_tools_dir(self, tmp_path):
+        project_root = _make_fake_aggregator(
+            tmp_path, tools_dir="tools",
+            submodule_paths=["tools/core/restarted"],
+        )
+        gitmodules = parse_gitmodules(str(project_root), tools_dir="tools")
+        tool_dir = str(project_root / "tools" / "core" / "restarted")
+        state = detect_tool_state(
+            tool_dir, gitmodules, str(project_root), tools_dir="tools"
+        )
+        assert state == STATE_SUBMODULE
+
+    def test_detects_missing(self, tmp_path):
+        project_root = _make_fake_aggregator(tmp_path, tools_dir="tools")
+        tool_dir = str(project_root / "tools" / "core" / "nonexistent")
+        state = detect_tool_state(tool_dir, {}, str(project_root), tools_dir="tools")
+        assert state == STATE_MISSING
+
+
+class TestFindUndiscoveredToolParameterization:
+    """F4: _find_undiscovered_tool respects tools_dir."""
+
+    def test_finds_in_tools_dir(self, tmp_path):
+        project_root = _make_fake_aggregator(
+            tmp_path, tools_dir="tools",
+            embedded_tools=[("core", "fix")],
+        )
+        result = _find_undiscovered_tool(
+            "fix", str(project_root), tools_dir="tools"
+        )
+        assert result is not None
+        assert result["name"] == "fix"
+        assert result["namespace"] == "core"
+
+    def test_returns_none_when_tools_dir_missing(self, tmp_path):
+        project_root = tmp_path / "agg"
+        project_root.mkdir()
+        # No tools/ directory at all
+        result = _find_undiscovered_tool(
+            "anything", str(project_root), tools_dir="tools"
+        )
+        assert result is None
+
+    def test_does_not_find_in_wrong_tools_dir(self, tmp_path):
+        """F4 regression: tool in projects/ should NOT be found when tools_dir='tools'."""
+        project_root = tmp_path / "agg"
+        project_root.mkdir()
+        # Tool in projects/ -- where dazzlecmd would put it
+        (project_root / "projects" / "core" / "old").mkdir(parents=True)
+        # Looking with tools_dir="tools"
+        result = _find_undiscovered_tool(
+            "old", str(project_root), tools_dir="tools"
+        )
+        assert result is None
+
+
+class TestResolveRemoteUrlParameterization:
+    """F7: _resolve_remote_url uses schema.remote_url_paths."""
+
+    def test_explicit_url_wins(self):
+        project = {"source": {"url": "https://from-manifest"}}
+        result = _resolve_remote_url(
+            project, explicit_url="https://from-cli"
+        )
+        assert result == "https://from-cli"
+
+    def test_default_schema_uses_source_url(self):
+        """When schema=None, defaults match dazzlecmd's historical behavior."""
+        project = {"source": {"url": "https://example.com/x.git"}}
+        result = _resolve_remote_url(project)
+        assert result == "https://example.com/x.git"
+
+    def test_custom_schema_via_dataclass(self):
+        """Aggregator with different manifest layout uses its schema."""
+        project = {"repo": {"git_url": "https://custom.example/r.git"}}
+        schema = AggregatorSchema(remote_url_paths=("repo.git_url",))
+        result = _resolve_remote_url(project, schema=schema)
+        assert result == "https://custom.example/r.git"
+
+    def test_custom_schema_via_dict(self):
+        """Dict-style schema for ad-hoc construction."""
+        project = {"upstream": "git@foo:r.git"}
+        result = _resolve_remote_url(
+            project, schema={"remote_url_paths": ["upstream"]}
+        )
+        assert result == "git@foo:r.git"
+
+    def test_fallback_chain(self):
+        """First non-empty value in the path list wins."""
+        project = {
+            "source": {"url": ""},  # empty
+            "lifecycle": {"remote": "git@fallback:r.git"},
+        }
+        result = _resolve_remote_url(project)
+        assert result == "git@fallback:r.git"
+
+    def test_graduated_to_fallback(self):
+        """lifecycle.graduated_to is always tried as final fallback."""
+        project = {"lifecycle": {"graduated_to": "https://graduated.example/r.git"}}
+        # No schema paths match -- should still find graduated_to
+        result = _resolve_remote_url(
+            project, schema=AggregatorSchema(remote_url_paths=("nonexistent.path",))
+        )
+        assert result == "https://graduated.example/r.git"
+
+    def test_none_when_no_url_anywhere(self):
+        project = {"name": "x"}
+        result = _resolve_remote_url(project)
+        assert result is None
+
+
+class TestCrossAggregatorParity:
+    """End-to-end: identical behavior across dazzlecmd / wtf-windows / amdead layouts."""
+
+    @pytest.mark.parametrize("tools_dir", ["projects", "tools", "src/tools"])
+    def test_full_chain_for_tools_dir(self, tmp_path, tools_dir):
+        """parse_gitmodules + detect_tool_state work for any tools_dir."""
+        # Note: src/tools requires path with subdirectory in .gitmodules.
+        # We test that pattern explicitly.
+        path = f"{tools_dir}/core/x"
+        project_root = _make_fake_aggregator(
+            tmp_path, tools_dir=tools_dir,
+            submodule_paths=[path],
+        )
+        mappings = parse_gitmodules(str(project_root), tools_dir=tools_dir)
+        assert path in mappings, f"submodule not found for tools_dir={tools_dir!r}"
+        tool_dir = str(project_root / path.replace("/", os.sep))
+        state = detect_tool_state(
+            tool_dir, mappings, str(project_root), tools_dir=tools_dir
+        )
+        assert state == STATE_SUBMODULE

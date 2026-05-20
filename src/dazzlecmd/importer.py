@@ -7,18 +7,29 @@ import sys
 
 
 def add_from_local(source_path, projects_dir, namespace, link_mode="copy",
-                   tool_name=None):
-    """Import a local repo/directory as a dazzlecmd project.
+                   tool_name=None, *, reserved_commands=None,
+                   manifest_name=".dazzlecmd.json", command="dz"):
+    """Import a local repo/directory as an aggregator project.
 
     Args:
-        source_path: Absolute path to source directory
-        projects_dir: Path to dazzlecmd's projects/ directory
-        namespace: Namespace to place the tool in (e.g., "core")
-        link_mode: "link" for symlink/junction, "copy" for file copy
-        tool_name: Override name (default: from manifest or dirname)
+        source_path: Absolute path to source directory.
+        projects_dir: Path to the aggregator's tools directory
+            (``projects/`` for dazzlecmd, ``tools/`` for wtf-windows etc.).
+        namespace: Namespace to place the tool in (e.g., ``"core"``).
+        link_mode: ``"link"`` for symlink/junction, ``"copy"`` for file copy.
+        tool_name: Override name (default: from manifest or dirname).
+        reserved_commands: Set of command names that may not be used as
+            tool names (BLOCKER F1 fix -- no more
+            ``from dazzlecmd.cli import RESERVED_COMMANDS`` inline).
+            Defaults to the empty set when None.
+        manifest_name: Per-tool manifest filename to look for
+            (``".dazzlecmd.json"`` / ``".wtf.json"`` / ``".amdead.json"``).
+        command: CLI command name for user-facing strings (``"dz"``,
+            ``"wtf"``, ``"amdead"``). Used in error messages so the
+            suggestion matches the user's actual CLI.
 
     Returns:
-        dict with import results, or None on failure
+        dict with import results, or None on failure.
     """
     source_path = os.path.abspath(source_path)
 
@@ -26,12 +37,12 @@ def add_from_local(source_path, projects_dir, namespace, link_mode="copy",
         print(f"Error: Path does not exist: {source_path}", file=sys.stderr)
         return None
 
-    # Check for .dazzlecmd.json
-    manifest_path = os.path.join(source_path, ".dazzlecmd.json")
+    # Check for per-tool manifest
+    manifest_path = os.path.join(source_path, manifest_name)
     if not os.path.isfile(manifest_path):
-        print(f"Error: No .dazzlecmd.json found in {source_path}",
+        print(f"Error: No {manifest_name} found in {source_path}",
               file=sys.stderr)
-        print("  Create one manually or use 'dz new' to generate a template.",
+        print(f"  Create one manually or use '{command} new' to generate a template.",
               file=sys.stderr)
         return None
 
@@ -47,9 +58,9 @@ def add_from_local(source_path, projects_dir, namespace, link_mode="copy",
     if not name:
         name = os.path.basename(source_path).lower().replace(" ", "-")
 
-    # Check reserved names
-    from dazzlecmd.cli import RESERVED_COMMANDS
-    if name in RESERVED_COMMANDS:
+    # Check reserved names against the aggregator's policy
+    reserved = reserved_commands or set()
+    if name in reserved:
         print(f"Error: '{name}' is a reserved command name.",
               file=sys.stderr)
         print("  Use --name to specify a different name.", file=sys.stderr)

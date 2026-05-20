@@ -58,8 +58,12 @@ class TestAddFromLocal:
                 manifest_path = os.path.join(source, ".dazzlecmd.json")
                 with open(manifest_path, "w") as f:
                     json.dump(manifest, f)
+                # v0.7.47+ requires the caller to pass reserved_commands
+                # explicitly (BLOCKER F1 fix). Use dazzlecmd's set.
+                from dazzlecmd.cli import RESERVED_COMMANDS
                 result = add_from_local(source, projects, "test",
-                                        link_mode="link")
+                                        link_mode="link",
+                                        reserved_commands=RESERVED_COMMANDS)
                 assert result is None
 
     def test_link_creates_accessible_dir(self):

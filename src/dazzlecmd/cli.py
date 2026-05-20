@@ -819,6 +819,7 @@ def _cmd_add(args, project_root):
         namespace=namespace,
         link_mode=link_mode,
         tool_name=args.name,
+        reserved_commands=RESERVED_COMMANDS,
     )
 
     if result is None:

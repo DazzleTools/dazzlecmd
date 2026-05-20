@@ -4,6 +4,48 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.48] - 2026-05-18
+
+Phase 3.5 Tier 1 commit 2 of N (refs #37). Parameterizes the verbatim-moved `dazzlecmd_lib.mode` module so every aggregator can use it -- closes BLOCKERs F1-F8 from the senior-engineer audit. The X-28 copy-don't-rewrite discipline split the move (v0.7.47) from the modify (this commit) so the diff for the parameterization pass is reviewable against the verbatim baseline. `src/dazzlecmd/mode.py` becomes a 111-LOC thin wrapper -- it threads dazzlecmd's `tools_dir="projects"` and `command="dz"` defaults to the library and re-exports the public API for the existing tests that `from dazzlecmd.mode import ...`. The library's mode module is now aggregator-agnostic; wtf-windows (`tools_dir="tools"`) and amdead (`tools_dir="tools"`) can adopt it without forking.
+
+### Added
+
+- 25 new tests in `packages/dazzlecmd-lib/tests/test_mode_parameterization.py`. Parametric coverage across the three observed layouts (`projects/<ns>/<tool>`, `tools/<ns>/<tool>`, `src/tools/<ns>/<tool>`): `parse_gitmodules` correctly identifies submodules under any `tools_dir`; `_tool_dir_to_submodule_path` returns the right relative path via `os.path.relpath` regardless of layout (F8 fix); `detect_tool_state` returns SUBMODULE / EMBEDDED / LOCAL_ONLY correctly per layout; `cmd_status` formats output with the aggregator's `command` name; `_resolve_remote_url` honors schema-driven lookups for custom manifest layouts (F7 fix).
+
+### Changed
+
+- `dazzlecmd_lib.mode` -- all functions parameterized. Keyword-only `tools_dir` is required for every function that previously hardcoded the string `"projects/"`. `parse_gitmodules(project_root, *, tools_dir)` uses `tools_dir.rstrip("/") + "/"` as the gitmodules prefix check. `_tool_dir_to_submodule_path(tool_dir, project_root, *, tools_dir)` now uses `os.path.relpath(tool_dir, project_root)` plus `posixpath` normalization instead of substring search on `"projects/"` (F8 fix -- the substring search broke under any layout that wasn't `projects/`). `detect_tool_state(tool_dir, gitmodules, project_root, *, tools_dir)` threads the value through; `cmd_status(projects, project_root, tool_filter, kit_filter, *, tools_dir, command)` reports paths and hint text relative to the aggregator's layout; `cmd_switch(tool_name, projects, project_root, ..., *, tools_dir, command, schema)` accepts the optional schema for `_resolve_remote_url`. `_resolve_remote_url(project, explicit_url, *, schema)` uses a new `_dotted_lookup` helper that walks dotted paths from the `AggregatorSchema.remote_url_paths` config (F7 fix -- the library no longer assumes the dazzlecmd-specific manifest key names).
+- `src/dazzlecmd/mode.py` -- rewritten as a 111-LOC thin wrapper (was 730 LOC). Re-exports state constants (`STATE_SUBMODULE`, `STATE_EMBEDDED`, `STATE_LOCAL_ONLY`, `STATE_SYMLINK`, `STATE_MISSING`, `STATE_LABELS`) and non-parameterized helpers (`load_local_config`, `save_local_config`, `cache_manifest`, `get_cached_manifest`) from `dazzlecmd_lib.mode`. Wraps the five parameterized functions (`parse_gitmodules`, `detect_tool_state`, `resolve_dev_path`, `cmd_status`, `cmd_switch`) with dazzlecmd's defaults so existing callers (`loader.py`, `cli.py`, tests) keep working unchanged. `detect_tool_state(tool_dir, gitmodules, project_root=None)` -- the optional `project_root` derives from the tool_dir via `os.path.dirname` x3, matching the standard layout, so the wrapper's contract is identical to the pre-extraction function.
+- `src/dazzlecmd/importer.py:add_from_local` -- `reserved_commands` is now a required keyword-only parameter (F1 fix). The inline `from dazzlecmd.cli import RESERVED_COMMANDS` is removed; the caller (`_cmd_add` in `cli.py`) passes the set explicitly. `command="dz"` and `manifest_name=".dazzlecmd.json"` are also keyword-only parameters defaulted for dazzlecmd's case; aggregators that override either can pass their own values.
+- `src/dazzlecmd/cli.py:_cmd_add` -- updated to pass `reserved_commands=RESERVED_COMMANDS` to `add_from_local`.
+- `tests/test_importer.py::test_reserved_name_rejected` -- updated to pass `RESERVED_COMMANDS` explicitly, matching the F1 fix's new required parameter.
+
+### Tests
+
+- 1204 passed, 14 skipped (up from 1179 / 14 in v0.7.47; +25 new). All 20 existing dazzlecmd mode tests pass via the thin wrapper, demonstrating that the parameterization preserves the public contract.
+
+### What's NOT in this commit (scheduled for v0.7.49+)
+
+- Safety primitives: dirty-tree refuse-or-force gate at every `shutil.rmtree` call site (T1-E, the CRITICAL hazard from the senior-engineer audit) and `New-Item -ItemType Junction` PowerShell replacement for `cmd.exe /c mklink` (T1-D, CLAUDE.md rule #4 self-consistency).
+- Per-aggregator `aggregator.json` deployment to dazzlecmd / wtf-windows / amdead project roots (T1-M1/M2/M3) -- the fixtures already exist; this is the rollout step.
+- `dazzlecmd_lib.mode` test migration (T1-I) from `tests/test_mode.py` to `packages/dazzlecmd-lib/tests/test_mode_*.py`.
+- Human test checklist (T1-J) covering the parameterization across the three layouts -- ships with v0.7.49 once T1-D/T1-E land alongside it.
+
+### Refs
+
+- Refs #37 (Phase 3.5 EPIC -- mode-system expansion for non-submodule tool sources). v0.7.47 + v0.7.48 jointly land the aggregator-decoupling half of the EPIC; the safety-primitive half (T1-D + T1-E) lands in v0.7.49.
+
+### Design
+
+- `2026-05-17__22-38-36__dev-workflow-process__phase-3-5-mode-system-hardening-shipped-vs-missing.md` -- live DWP with 6 addendums; the Option B decision (extract + parameterize during Tier 1, no duplication) drove the v0.7.47/v0.7.48 split.
+- `2026-05-07__00-07-55__claude-plan__0-7-x-closeout-ultraplan-with-x28-copy-dont-rewrite-addendum.md` -- the X-28 copy-don't-rewrite discipline applied (verbatim cp in v0.7.47, parameterize in v0.7.48).
+
+### Versions
+
+- dazzlecmd `0.7.47` -> `0.7.48` (PATCH -- internal refactor; the thin wrapper preserves the public `dazzlecmd.mode` API for all existing callers).
+- dazzlecmd-lib `0.6.9` -> `0.6.10` (PATCH -- additive parameterization; the library's mode module is now aggregator-agnostic).
+- dazzle-dz alias bumped to `0.7.48`; deps re-pinned to `>=0.7.48` / `>=0.6.10`.
+
 ## [0.7.47] - 2026-05-18
 
 Phase 3.5 Tier 1 commit 1 of N (refs #37). Aggregator-decoupling scaffolding for the mode-system extraction. Three additions to dazzlecmd-lib that ship together: `aggregator.json` declarative configuration; `dazzlecmd_lib.reserved` module with the namespace contract; `AggregatorEngine.from_project()` classmethod as the new canonical constructor. Link helpers (`create_link`/`remove_link`) moved from `dazzlecmd.importer` to `dazzlecmd_lib.paths` so any aggregator can use them. `dazzlecmd_lib.mode` module added as a verbatim copy of `src/dazzlecmd/mode.py` (the working version); parameterization for senior-engineer audit BLOCKERs F1-F8 lands in Tier 1 commit 2 (v0.7.48+).
@@ -1753,7 +1795,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.47...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.48...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

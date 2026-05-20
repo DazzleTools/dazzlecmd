@@ -46,11 +46,23 @@ STATE_MISSING = "missing"        # Path doesn't exist
 STATE_LOCAL_ONLY = "local-only"  # Symlink with no submodule registered
 
 
-def parse_gitmodules(project_root):
-    """Parse .gitmodules to discover submodule mappings.
+def parse_gitmodules(project_root, *, tools_dir):
+    """Parse .gitmodules to discover submodule mappings for ``tools_dir``.
 
-    Returns dict mapping submodule path (e.g. "projects/core/listall")
-    to {"url": ..., "name": ..., "namespace": ..., "tool_name": ...}.
+    Returns dict mapping submodule path (e.g. ``<tools_dir>/<ns>/<tool>``)
+    to ``{"url": ..., "path": ..., "namespace": ..., "tool_name": ...}``.
+
+    Only 3-part paths of the form ``<tools_dir>/<namespace>/<tool>`` are
+    captured -- 2-part kit-level submodule paths (an entire kit registered
+    as a submodule) are skipped here and handled separately by the
+    aggregator engine's discover_kits logic. This is the v0.7.47 BLOCKER
+    F2 fix: ``tools_dir`` is no longer hardcoded to ``"projects"``.
+
+    Args:
+        project_root: Absolute path to the aggregator's project root.
+        tools_dir: Relative directory name where tools live (e.g.,
+            ``"projects"`` for dazzlecmd, ``"tools"`` for wtf-windows /
+            amdead). From ``AggregatorConfig.tools_dir``.
     """
     gitmodules_path = os.path.join(project_root, ".gitmodules")
     if not os.path.isfile(gitmodules_path):
@@ -59,6 +71,7 @@ def parse_gitmodules(project_root):
     config = configparser.ConfigParser()
     config.read(gitmodules_path)
 
+    prefix = tools_dir.rstrip("/") + "/"
     mappings = {}
     for section in config.sections():
         if not section.startswith('submodule "'):
@@ -67,16 +80,17 @@ def parse_gitmodules(project_root):
         path = config[section].get("path", "")
         url = config[section].get("url", "")
 
-        if not path.startswith("projects/"):
+        if not path.startswith(prefix):
             continue
 
-        # Parse projects/<namespace>/<tool_name>
-        parts = path.split("/")
-        if len(parts) != 3:
+        # Parse <tools_dir>/<namespace>/<tool_name>
+        relative = path[len(prefix):]
+        parts = relative.split("/")
+        if len(parts) != 2:
             continue
 
-        namespace = parts[1]
-        tool_name = parts[2]
+        namespace = parts[0]
+        tool_name = parts[1]
 
         mappings[path] = {
             "url": url,
@@ -160,21 +174,27 @@ def get_cached_manifest(project_root, qualified_name):
     return data.get("cached_manifests", {}).get(qualified_name)
 
 
-def detect_tool_state(tool_dir, gitmodules):
+def detect_tool_state(tool_dir, gitmodules, project_root, *, tools_dir):
     """Detect the current mode of a tool.
 
     Args:
-        tool_dir: Absolute path to the tool directory
-        gitmodules: Dict from parse_gitmodules()
+        tool_dir: Absolute path to the tool directory.
+        gitmodules: Dict from ``parse_gitmodules()``.
+        project_root: Absolute path to the aggregator's project root.
+            Needed to derive the relative path for gitmodules lookup.
+        tools_dir: Relative directory name where tools live. Threads
+            through to ``_tool_dir_to_submodule_path``.
 
     Returns:
         One of: STATE_SYMLINK, STATE_SUBMODULE, STATE_EMBEDDED,
-                STATE_MISSING, STATE_LOCAL_ONLY
+                STATE_MISSING, STATE_LOCAL_ONLY.
     """
     # Build the relative path key for gitmodules lookup
-    # tool_dir looks like .../projects/<ns>/<name>
-    # We need "projects/<ns>/<name>"
-    rel_key = _tool_dir_to_submodule_path(tool_dir)
+    # tool_dir looks like .../<tools_dir>/<ns>/<name>
+    # We need "<tools_dir>/<ns>/<name>"
+    rel_key = _tool_dir_to_submodule_path(
+        tool_dir, project_root, tools_dir=tools_dir
+    )
     has_submodule = rel_key in gitmodules if rel_key else False
 
     if not os.path.exists(tool_dir):
@@ -195,28 +215,53 @@ def detect_tool_state(tool_dir, gitmodules):
     return STATE_MISSING
 
 
-def _tool_dir_to_submodule_path(tool_dir):
-    """Convert absolute tool_dir to relative submodule path.
+def _tool_dir_to_submodule_path(tool_dir, project_root, *, tools_dir):
+    """Convert absolute ``tool_dir`` to relative submodule path.
 
-    Example: C:/code/dazzlecmd/github/projects/core/listall
-          -> projects/core/listall
+    Example with ``tools_dir="projects"``::
+
+        tool_dir=C:/code/dazzlecmd/github/projects/core/listall
+        project_root=C:/code/dazzlecmd/github
+        -> "projects/core/listall"
+
+    Returns ``None`` when ``tool_dir`` is not under ``project_root/tools_dir/``.
+    This is the v0.7.47 BLOCKER F8 fix: ``os.path.relpath``-anchored
+    matching replaces the brittle substring search for ``"projects/"``.
+
+    Args:
+        tool_dir: Absolute path to a tool directory.
+        project_root: Absolute path to the aggregator's project root.
+        tools_dir: Relative directory name where tools live.
     """
-    norm = tool_dir.replace("\\", "/")
-    idx = norm.find("projects/")
-    if idx < 0:
+    try:
+        rel = os.path.relpath(tool_dir, project_root).replace("\\", "/")
+    except ValueError:
+        # Different drives on Windows -- can't compute relative path.
         return None
-    return norm[idx:]
+    expected_prefix = tools_dir.rstrip("/") + "/"
+    if not rel.startswith(expected_prefix):
+        return None
+    return rel
 
 
-def resolve_dev_path(qualified_name, project_root, explicit_path=None):
+def resolve_dev_path(qualified_name, project_root, explicit_path=None, *,
+                     tools_dir):
     """Resolve the local dev path for a tool.
 
     Resolution order:
-    1. explicit_path argument (--path flag)
-    2. mode_local.json
-    3. .gitmodules URL if it resolves to a local path
+    1. ``explicit_path`` argument (``--path`` flag).
+    2. ``mode_local.json`` ``dev_paths`` entry.
+    3. ``.gitmodules`` URL if it resolves to a local path.
 
-    Returns resolved path string or None.
+    Args:
+        qualified_name: Tool's qualified name (e.g., ``"core:listall"``).
+        project_root: Absolute path to the aggregator's project root.
+        explicit_path: User-supplied path (optional).
+        tools_dir: Relative directory name where tools live. Threads
+            through to ``parse_gitmodules``.
+
+    Returns:
+        Resolved path string or ``None``.
     """
     if explicit_path:
         path = os.path.abspath(explicit_path)
@@ -235,7 +280,7 @@ def resolve_dev_path(qualified_name, project_root, explicit_path=None):
               file=sys.stderr)
 
     # Check .gitmodules URL as local path
-    gitmodules = parse_gitmodules(project_root)
+    gitmodules = parse_gitmodules(project_root, tools_dir=tools_dir)
     for info in gitmodules.values():
         qn = f"{info['namespace']}:{info['tool_name']}"
         if qn == qualified_name:
@@ -278,30 +323,35 @@ STATE_LABELS = {
 }
 
 
-def cmd_status(projects, project_root, tool_filter=None, kit_filter=None):
+def cmd_status(projects, project_root, tool_filter=None, kit_filter=None, *,
+               tools_dir, command):
     """Show mode status for tools.
 
     Args:
-        projects: List of project dicts from discover_projects()
-        project_root: Absolute path to dazzlecmd repo root
-        tool_filter: Optional tool name to filter to
-        kit_filter: Optional kit name to filter by namespace
+        projects: List of project dicts from ``discover_projects()``.
+        project_root: Absolute path to the aggregator's project root.
+        tool_filter: Optional tool name to filter to.
+        kit_filter: Optional kit name to filter by namespace.
+        tools_dir: Relative directory name where tools live (BLOCKER F3
+            fix -- replaces hardcoded ``"projects"``).
+        command: CLI command name for user-facing strings (BLOCKER F5
+            fix -- replaces hardcoded ``"dz"``).
 
     Returns:
-        int exit code
+        int exit code.
     """
-    gitmodules = parse_gitmodules(project_root)
+    gitmodules = parse_gitmodules(project_root, tools_dir=tools_dir)
 
     # Merge discovered projects with undiscovered tools from directory scan
     # and cached manifests — ensures tools are visible even when their
-    # remote version lacks .dazzlecmd.json
+    # remote version lacks the manifest
     all_projects = list(projects)
     known_names = {p["name"] for p in all_projects}
     data = _load_full_config(project_root)
     cached = data.get("cached_manifests", {})
 
-    # Scan projects/ for directories not in discovered projects
-    projects_dir = os.path.join(project_root, "projects")
+    # Scan <tools_dir>/ for directories not in discovered projects
+    projects_dir = os.path.join(project_root, tools_dir)
     if os.path.isdir(projects_dir):
         for ns in sorted(os.listdir(projects_dir)):
             ns_dir = os.path.join(projects_dir, ns)
@@ -328,7 +378,7 @@ def cmd_status(projects, project_root, tool_filter=None, kit_filter=None):
     if tool_filter:
         filtered = [p for p in filtered if p["name"] == tool_filter]
         if not filtered:
-            print(f"Tool '{tool_filter}' not found. Use 'dz list' to see "
+            print(f"Tool '{tool_filter}' not found. Use '{command} list' to see "
                   "available tools.")
             return 1
     if kit_filter:
@@ -350,7 +400,9 @@ def cmd_status(projects, project_root, tool_filter=None, kit_filter=None):
 
     for project in filtered:
         tool_dir = project["_dir"]
-        state = detect_tool_state(tool_dir, gitmodules)
+        state = detect_tool_state(
+            tool_dir, gitmodules, project_root, tools_dir=tools_dir
+        )
         label = STATE_LABELS.get(state, state)
 
         name = project["name"]
@@ -363,7 +415,9 @@ def cmd_status(projects, project_root, tool_filter=None, kit_filter=None):
             if target:
                 details = f"-> {target}"
         elif state == STATE_SUBMODULE:
-            rel_key = _tool_dir_to_submodule_path(tool_dir)
+            rel_key = _tool_dir_to_submodule_path(
+                tool_dir, project_root, tools_dir=tools_dir
+            )
             if rel_key and rel_key in gitmodules:
                 details = gitmodules[rel_key]["url"]
 
@@ -379,20 +433,26 @@ def cmd_status(projects, project_root, tool_filter=None, kit_filter=None):
 # ============================================================================
 
 def cmd_switch(tool_name, projects, project_root, dev_path=None,
-               force_mode=None, dry_run=False, url=None):
+               force_mode=None, dry_run=False, url=None, *,
+               tools_dir, command, schema=None):
     """Toggle a tool between dev and publish mode.
 
     Args:
-        tool_name: Name of the tool to switch
-        projects: List of project dicts
-        project_root: Absolute path to dazzlecmd repo root
-        dev_path: Explicit path for dev mode (optional)
-        force_mode: "dev" or "publish" to force a specific mode
-        dry_run: If True, show what would happen without doing it
-        url: Explicit remote URL for first-time submodule registration
+        tool_name: Name of the tool to switch.
+        projects: List of project dicts.
+        project_root: Absolute path to the aggregator's project root.
+        dev_path: Explicit path for dev mode (optional).
+        force_mode: ``"dev"`` or ``"publish"`` to force a specific mode.
+        dry_run: If True, show what would happen without doing it.
+        url: Explicit remote URL for first-time submodule registration.
+        tools_dir: Relative directory name where tools live.
+        command: CLI command name for user-facing strings.
+        schema: ``AggregatorSchema`` (or dict) for resolving the remote URL
+            from a tool's manifest. If ``None``, defaults to dazzlecmd's
+            historical schema (``source.url`` then ``lifecycle.graduated_to``).
 
     Returns:
-        int exit code
+        int exit code.
     """
     # Find the tool — first in discovered projects, then by directory scan
     matches = [p for p in projects if p["name"] == tool_name]
@@ -400,9 +460,11 @@ def cmd_switch(tool_name, projects, project_root, dev_path=None,
         project = matches[0]
     else:
         # Tool not in discovered projects — scan directories and cache
-        project = _find_undiscovered_tool(tool_name, project_root)
+        project = _find_undiscovered_tool(
+            tool_name, project_root, tools_dir=tools_dir
+        )
         if project is None:
-            print(f"Error: Tool '{tool_name}' not found. Use 'dz list' "
+            print(f"Error: Tool '{tool_name}' not found. Use '{command} list' "
                   "to see available tools.", file=sys.stderr)
             return 1
 
@@ -410,8 +472,10 @@ def cmd_switch(tool_name, projects, project_root, dev_path=None,
     namespace = project.get("namespace", "")
     qualified = f"{namespace}:{tool_name}"
 
-    gitmodules = parse_gitmodules(project_root)
-    state = detect_tool_state(tool_dir, gitmodules)
+    gitmodules = parse_gitmodules(project_root, tools_dir=tools_dir)
+    state = detect_tool_state(
+        tool_dir, gitmodules, project_root, tools_dir=tools_dir
+    )
 
     if dry_run:
         print("[DRY-RUN] No changes will be made\n")
@@ -423,7 +487,7 @@ def cmd_switch(tool_name, projects, project_root, dev_path=None,
         target = _determine_target(state)
 
     if target is None:
-        _print_no_toggle(tool_name, state)
+        _print_no_toggle(tool_name, state, command=command)
         return 1
 
     print(f"Tool:    {qualified}")
@@ -432,27 +496,38 @@ def cmd_switch(tool_name, projects, project_root, dev_path=None,
     print()
 
     if target == "dev":
-        return _switch_to_dev(project, project_root, gitmodules, dev_path,
-                              dry_run)
+        return _switch_to_dev(
+            project, project_root, gitmodules, dev_path, dry_run,
+            tools_dir=tools_dir, command=command,
+        )
     else:
-        return _switch_to_publish(project, project_root, gitmodules,
-                                  dry_run, url=url)
+        return _switch_to_publish(
+            project, project_root, gitmodules, dry_run, url=url,
+            tools_dir=tools_dir, command=command, schema=schema,
+        )
 
 
-def _find_undiscovered_tool(tool_name, project_root):
-    """Find a tool by scanning projects/ directories even without a manifest.
+def _find_undiscovered_tool(tool_name, project_root, *, tools_dir):
+    """Find a tool by scanning ``<tools_dir>/`` directories even without a manifest.
 
     Used when a tool exists on disk (e.g. as a submodule) but has no
-    .dazzlecmd.json so discover_projects() didn't find it.
-    Falls back to cached manifests in mode_local.json.
+    per-tool manifest so ``discover_projects()`` didn't find it. Falls
+    back to cached manifests in ``mode_local.json``.
 
-    Returns a minimal project dict or None.
+    Args:
+        tool_name: Name of the tool to look for.
+        project_root: Absolute path to the aggregator's project root.
+        tools_dir: Relative directory name where tools live (BLOCKER F4
+            fix -- replaces hardcoded ``"projects"``).
+
+    Returns:
+        A minimal project dict or ``None``.
     """
-    projects_dir = os.path.join(project_root, "projects")
+    projects_dir = os.path.join(project_root, tools_dir)
     if not os.path.isdir(projects_dir):
         return None
 
-    # Scan projects/<namespace>/<tool_name>
+    # Scan <tools_dir>/<namespace>/<tool_name>
     for namespace in os.listdir(projects_dir):
         ns_dir = os.path.join(projects_dir, namespace)
         if not os.path.isdir(ns_dir) or namespace.startswith("."):
@@ -507,8 +582,12 @@ def _determine_target(state):
     return None
 
 
-def _print_no_toggle(tool_name, state):
-    """Print a helpful message when toggle is not possible."""
+def _print_no_toggle(tool_name, state, *, command):
+    """Print a helpful message when toggle is not possible.
+
+    The ``command`` parameter is the aggregator's CLI name (e.g., ``"dz"``,
+    ``"wtf"``, ``"amdead"``); BLOCKER F5 fix.
+    """
     if state == STATE_EMBEDDED:
         print(f"Error: '{tool_name}' is embedded (no submodule registered).",
               file=sys.stderr)
@@ -519,7 +598,7 @@ def _print_no_toggle(tool_name, state):
               "registered).", file=sys.stderr)
         print("  To enable mode switching, register a submodule first:",
               file=sys.stderr)
-        print(f"    git submodule add <url> projects/<ns>/{tool_name}",
+        print(f"    git submodule add <url> <tools-dir>/<ns>/{tool_name}",
               file=sys.stderr)
     elif state == STATE_MISSING:
         print(f"Error: '{tool_name}' is missing from disk.",
@@ -532,13 +611,19 @@ def _print_no_toggle(tool_name, state):
 
 
 def _switch_to_dev(project, project_root, gitmodules, explicit_path,
-                   dry_run):
-    """Switch a tool from publish mode (submodule) to dev mode (symlink)."""
+                   dry_run, *, tools_dir, command):
+    """Switch a tool from publish mode (submodule) to dev mode (symlink).
+
+    Threads ``tools_dir`` and ``command`` through to the parameterized
+    inner calls (BLOCKERs F2/F3/F4/F5/F8).
+    """
     tool_dir = project["_dir"]
     tool_name = project["name"]
     namespace = project.get("namespace", "")
     qualified = f"{namespace}:{tool_name}"
-    state = detect_tool_state(tool_dir, gitmodules)
+    state = detect_tool_state(
+        tool_dir, gitmodules, project_root, tools_dir=tools_dir
+    )
 
     if state == STATE_SYMLINK or state == STATE_LOCAL_ONLY:
         print("Already in dev mode (symlink).")
@@ -548,11 +633,13 @@ def _switch_to_dev(project, project_root, gitmodules, explicit_path,
         return 0
 
     # Resolve dev path
-    dev_path = resolve_dev_path(qualified, project_root, explicit_path)
+    dev_path = resolve_dev_path(
+        qualified, project_root, explicit_path, tools_dir=tools_dir
+    )
     if dev_path is None:
         print(f"Error: Cannot determine dev path for '{tool_name}'.",
               file=sys.stderr)
-        print("  Specify with: dz mode switch <tool> --path /local/repo",
+        print(f"  Specify with: {command} mode switch <tool> --path /local/repo",
               file=sys.stderr)
         print("  Or add to mode_local.json:", file=sys.stderr)
         print(f'    {{"dev_paths": {{"{qualified}": "/path/to/repo"}}}}',
@@ -596,38 +683,46 @@ def _switch_to_dev(project, project_root, gitmodules, explicit_path,
 
 
 def _switch_to_publish(project, project_root, gitmodules, dry_run,
-                       url=None):
-    """Switch a tool from dev mode (symlink) to publish mode (submodule)."""
+                       url=None, *, tools_dir, command, schema=None):
+    """Switch a tool from dev mode (symlink) to publish mode (submodule).
+
+    Threads ``tools_dir``, ``command``, and ``schema`` through to the
+    parameterized inner calls (BLOCKERs F2/F4/F5/F7/F8).
+    """
     tool_dir = project["_dir"]
     tool_name = project["name"]
     namespace = project.get("namespace", "")
 
-    state = detect_tool_state(tool_dir, gitmodules)
+    state = detect_tool_state(
+        tool_dir, gitmodules, project_root, tools_dir=tools_dir
+    )
     if state == STATE_SUBMODULE:
         print("Already in publish mode (submodule).")
         return 0
 
-    rel_key = _tool_dir_to_submodule_path(tool_dir)
+    rel_key = _tool_dir_to_submodule_path(
+        tool_dir, project_root, tools_dir=tools_dir
+    )
     if not rel_key:
-        rel_key = f"projects/{namespace}/{tool_name}"
+        rel_key = f"{tools_dir.rstrip('/')}/{namespace}/{tool_name}"
 
     has_submodule = rel_key in gitmodules
 
     # Cache the manifest before switching — the remote version may not
-    # have .dazzlecmd.json yet, so we preserve it for future discovery
+    # have the per-tool manifest yet, so we preserve it for future discovery
     qualified = f"{namespace}:{tool_name}"
     if project.get("name"):
         cache_manifest(project_root, qualified, project)
 
     if not has_submodule:
         # First-time: need to register the submodule
-        remote_url = _resolve_remote_url(project, url)
+        remote_url = _resolve_remote_url(project, url, schema=schema)
         if not remote_url:
             print(f"Error: No remote URL known for '{tool_name}'.",
                   file=sys.stderr)
-            print("  Provide one with: dz mode switch <tool> "
+            print(f"  Provide one with: {command} mode switch <tool> "
                   "--publish --url <url>", file=sys.stderr)
-            print("  Or add to .dazzlecmd.json:", file=sys.stderr)
+            print("  Or add to the tool manifest:", file=sys.stderr)
             print('    "source": {"url": "<url>"}', file=sys.stderr)
             return 1
 
@@ -712,27 +807,75 @@ def _switch_to_publish(project, project_root, gitmodules, dry_run,
     return 0
 
 
-def _resolve_remote_url(project, explicit_url=None):
-    """Resolve remote URL for a tool.
+def _resolve_remote_url(project, explicit_url=None, *, schema=None):
+    """Resolve remote URL for a tool from its manifest.
 
     Resolution order:
-    1. Explicit --url argument
-    2. .dazzlecmd.json source.url
-    3. .dazzlecmd.json lifecycle.graduated_to
-    4. None
+    1. ``explicit_url`` argument (``--url`` flag).
+    2. Each path in ``schema.remote_url_paths`` (dotted lookup into the
+       project manifest), in order. First non-empty value wins.
+    3. ``lifecycle.graduated_to`` (always tried as a final fallback;
+       semantically meaningful across schemas).
+    4. ``None``.
+
+    BLOCKER F7 fix: callers pass an ``AggregatorSchema`` (or dict-like
+    object) describing where the remote URL lives in their manifest
+    layout. When ``schema`` is ``None`` (e.g., tests or ad-hoc callers),
+    the defaults match dazzlecmd's historical behavior
+    (``source.url`` then ``lifecycle.graduated_to``).
+
+    Args:
+        project: The tool's parsed manifest dict.
+        explicit_url: User-supplied URL (optional).
+        schema: ``AggregatorSchema`` (or duck-typed object) with a
+            ``remote_url_paths`` attribute/key listing dotted paths to try.
+            Falls back to ``("source.url", "lifecycle.remote")``.
+
+    Returns:
+        Resolved URL string or ``None``.
     """
     if explicit_url:
         return explicit_url
 
-    source = project.get("source", {})
-    if source.get("url"):
-        return source["url"]
+    # Determine the list of dotted paths to probe.
+    if schema is None:
+        remote_paths = ("source.url", "lifecycle.remote")
+    else:
+        # Accept dataclass-like object or dict
+        remote_paths = getattr(
+            schema, "remote_url_paths",
+            schema.get("remote_url_paths") if isinstance(schema, dict)
+            else ("source.url", "lifecycle.remote")
+        )
 
+    for dotted in remote_paths:
+        value = _dotted_lookup(project, dotted)
+        if value:
+            return value
+
+    # Historical fallback that's outside the configurable paths because
+    # it represents tool-graduation semantics, not manifest layout.
     lifecycle = project.get("lifecycle", {})
     if lifecycle.get("graduated_to"):
         return lifecycle["graduated_to"]
 
     return None
+
+
+def _dotted_lookup(obj, dotted_path):
+    """Walk a dotted path into a nested dict. Returns the value or ``None``.
+
+    Example: ``_dotted_lookup({"source": {"url": "git@..."}}, "source.url")``
+    returns ``"git@..."``.
+    """
+    current = obj
+    for part in dotted_path.split("."):
+        if not isinstance(current, dict):
+            return None
+        current = current.get(part)
+        if current is None:
+            return None
+    return current
 
 
 def _remember_dev_path(qualified_name, dev_path, project_root):
