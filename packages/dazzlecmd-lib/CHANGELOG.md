@@ -8,6 +8,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.6.12] - 2026-05-19
+
+Ships with dazzlecmd v0.7.50 (Phase 3.5 Tier 1 commit 3 -- T1-E safety primitive). Adds a dirty-tree refuse-or-force gate at the destructive `shutil.rmtree(tool_dir)` call sites in `mode.py`, closing the CRITICAL hazard flagged by the senior-engineer audit of v0.7.48. The gate refuses by default; callers opt into the destructive behavior via the new `force` keyword parameter on `cmd_switch`.
+
+### Added
+
+- `_check_dirty_tree(tool_dir)` -- returns `git status --porcelain` output for `tool_dir` if it is its own git worktree root, else empty string. The worktree-root check (via `git rev-parse --show-toplevel` + realpath comparison) prevents the function from reporting an ancestor repo's dirty state when `tool_dir` happens to live inside one (e.g., a tool path under `$HOME` would otherwise pick up `~/.git`'s state).
+- `_print_dirty_refusal(tool_name, tool_dir, dirty_output, command)` -- prints the standard refusal message. Truncates the displayed dirty list at 10 lines and substitutes the aggregator's `command` into the recovery hint.
+
+### Changed
+
+- `cmd_switch(tool_name, projects, project_root, dev_path=None, force_mode=None, dry_run=False, url=None, *, tools_dir, command, schema=None)` -> `cmd_switch(..., url=None, force=False, *, tools_dir, command, schema=None)`. New positional-with-default `force` parameter. Default value `False` preserves the safe behavior (refuse destructive switch on dirty tree); callers opt into the destructive behavior explicitly.
+- `_switch_to_dev(project, project_root, gitmodules, explicit_path, dry_run, *, tools_dir, command)` -> `_switch_to_dev(..., dry_run, force, *, tools_dir, command)`. New required positional `force` parameter; gates the `shutil.rmtree(tool_dir)` call site.
+- `_switch_to_publish(project, project_root, gitmodules, dry_run, url=None, *, tools_dir, command, schema=None)` -> `_switch_to_publish(..., dry_run, force, url=None, *, tools_dir, command, schema=None)`. New required positional `force` parameter; gates the `shutil.rmtree(tool_dir)` call site.
+
+### Refs
+
+Ships with dazzlecmd v0.7.50. Refs dazzlecmd #37 (Phase 3.5 EPIC).
+
 ## [0.6.11] - 2026-05-19
 
 Ships with dazzlecmd v0.7.49 (Phase 3.5 Tier 1 commit 2.5). Senior-engineer audit cleanup of v0.6.10's parameterization. Two surgical fixes inside `mode.py`: thread `tools_dir` through `_print_no_toggle` so the STATE_LOCAL_ONLY hint substitutes the aggregator's tool-root directory name instead of printing a literal placeholder; restore `_resolve_remote_url`'s default probe order to match the v0.7.47 verbatim baseline byte-for-byte (drop the unintentional `lifecycle.remote` probe drift).

@@ -433,7 +433,7 @@ def cmd_status(projects, project_root, tool_filter=None, kit_filter=None, *,
 # ============================================================================
 
 def cmd_switch(tool_name, projects, project_root, dev_path=None,
-               force_mode=None, dry_run=False, url=None, *,
+               force_mode=None, dry_run=False, url=None, force=False, *,
                tools_dir, command, schema=None):
     """Toggle a tool between dev and publish mode.
 
@@ -445,6 +445,11 @@ def cmd_switch(tool_name, projects, project_root, dev_path=None,
         force_mode: ``"dev"`` or ``"publish"`` to force a specific mode.
         dry_run: If True, show what would happen without doing it.
         url: Explicit remote URL for first-time submodule registration.
+        force: If True, bypass the dirty-tree safety gate at every
+            destructive `shutil.rmtree` call site. Without this, the
+            switch refuses when the tool's working tree has uncommitted
+            changes (T1-E safety primitive). Caller is responsible for
+            surfacing the option to the user (e.g., `--force` CLI flag).
         tools_dir: Relative directory name where tools live.
         command: CLI command name for user-facing strings.
         schema: ``AggregatorSchema`` (or dict) for resolving the remote URL
@@ -497,12 +502,12 @@ def cmd_switch(tool_name, projects, project_root, dev_path=None,
 
     if target == "dev":
         return _switch_to_dev(
-            project, project_root, gitmodules, dev_path, dry_run,
+            project, project_root, gitmodules, dev_path, dry_run, force,
             tools_dir=tools_dir, command=command,
         )
     else:
         return _switch_to_publish(
-            project, project_root, gitmodules, dry_run, url=url,
+            project, project_root, gitmodules, dry_run, force, url=url,
             tools_dir=tools_dir, command=command, schema=schema,
         )
 
@@ -612,12 +617,84 @@ def _print_no_toggle(tool_name, state, *, command, tools_dir):
               file=sys.stderr)
 
 
+def _check_dirty_tree(tool_dir):
+    """Return ``git status --porcelain`` output for ``tool_dir``.
+
+    Empty string means clean OR not a git checkout (no work to lose).
+    Non-empty means the working tree has uncommitted changes (modified
+    tracked files, staged changes, untracked files, unmerged paths) --
+    blowing this away would destroy them.
+
+    Tier 1 T1-E safety primitive. The senior-engineer audit flagged the
+    `shutil.rmtree(tool_dir)` call sites in `_switch_to_dev` and
+    `_switch_to_publish` as the CRITICAL hazard of the mode subsystem:
+    a user mid-experiment in a submodule checkout (or a local-only dir
+    that happens to be its own git repo) loses everything when the
+    switch fires. Callers gate the rmtree on this check and refuse
+    unless the user opts in via ``force=True``.
+    """
+    if not os.path.isdir(tool_dir):
+        return ""
+    # Verify tool_dir is its OWN git worktree, not just inside some
+    # ancestor's repo (e.g., a parent monorepo, a user's $HOME/.git, a
+    # CI checkout). Without this guard `git status` walks up the tree
+    # and reports the ancestor's dirty state for a non-git tool_dir.
+    try:
+        toplevel = subprocess.run(
+            ["git", "-C", tool_dir, "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    if toplevel.returncode != 0:
+        return ""
+    found_top = os.path.realpath(toplevel.stdout.strip())
+    asked_top = os.path.realpath(tool_dir)
+    if found_top != asked_top:
+        # tool_dir is inside an ancestor's repo, not its own. No tracked
+        # state to preserve at this layer.
+        return ""
+    try:
+        result = subprocess.run(
+            ["git", "-C", tool_dir, "status", "--porcelain"],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        # `git` missing, or `tool_dir` somehow unreachable. Don't block
+        # on tooling we can't run; the rmtree itself will surface any
+        # actual filesystem error.
+        return ""
+    if result.returncode != 0:
+        # Not a git checkout (`fatal: not a git repository`). No tracked
+        # state to preserve, so no dirty content from git's perspective.
+        return ""
+    return result.stdout
+
+
+def _print_dirty_refusal(tool_name, tool_dir, dirty_output, command):
+    """Print the standard refusal-to-overwrite message and return 1."""
+    print(f"Error: '{tool_name}' has uncommitted changes; refusing to switch.",
+          file=sys.stderr)
+    # Limit displayed lines so the error stays readable even if dozens of
+    # files are dirty. The full output is one `git status` away.
+    lines = dirty_output.splitlines()
+    for line in lines[:10]:
+        print(f"  {line}", file=sys.stderr)
+    if len(lines) > 10:
+        print(f"  ... and {len(lines) - 10} more", file=sys.stderr)
+    print("  Either commit/stash your work in:", file=sys.stderr)
+    print(f"    git -C {tool_dir} status", file=sys.stderr)
+    print(f"  Or rerun with: {command} mode switch <tool> --force "
+          "(DATA LOSS WARNING).", file=sys.stderr)
+
+
 def _switch_to_dev(project, project_root, gitmodules, explicit_path,
-                   dry_run, *, tools_dir, command):
+                   dry_run, force, *, tools_dir, command):
     """Switch a tool from publish mode (submodule) to dev mode (symlink).
 
     Threads ``tools_dir`` and ``command`` through to the parameterized
-    inner calls (BLOCKERs F2/F3/F4/F5/F8).
+    inner calls (BLOCKERs F2/F3/F4/F5/F8). ``force`` overrides the
+    dirty-tree safety gate at the destructive `rmtree` (T1-E).
     """
     tool_dir = project["_dir"]
     tool_name = project["name"]
@@ -650,6 +727,11 @@ def _switch_to_dev(project, project_root, gitmodules, explicit_path,
 
     if dry_run:
         if os.path.exists(tool_dir):
+            if not is_linked_project(tool_dir):
+                dirty = _check_dirty_tree(tool_dir)
+                if dirty and not force:
+                    print(f"  [WARNING] Would refuse: {tool_dir} has "
+                          "uncommitted changes (rerun with --force).")
             print(f"  Would remove: {tool_dir}")
         print(f"  Would create symlink: {tool_dir} -> {dev_path}")
         _dry_run_save_path(qualified, dev_path, project_root)
@@ -660,6 +742,13 @@ def _switch_to_dev(project, project_root, gitmodules, explicit_path,
         if is_linked_project(tool_dir):
             remove_link(tool_dir)
         else:
+            # Refuse if the working tree has uncommitted changes that
+            # an rmtree would silently destroy (T1-E safety gate).
+            if not force:
+                dirty = _check_dirty_tree(tool_dir)
+                if dirty:
+                    _print_dirty_refusal(tool_name, tool_dir, dirty, command)
+                    return 1
             # Remove submodule working tree without deregistering
             import shutil
             try:
@@ -684,12 +773,14 @@ def _switch_to_dev(project, project_root, gitmodules, explicit_path,
     return 0
 
 
-def _switch_to_publish(project, project_root, gitmodules, dry_run,
+def _switch_to_publish(project, project_root, gitmodules, dry_run, force,
                        url=None, *, tools_dir, command, schema=None):
     """Switch a tool from dev mode (symlink) to publish mode (submodule).
 
     Threads ``tools_dir``, ``command``, and ``schema`` through to the
-    parameterized inner calls (BLOCKERs F2/F4/F5/F7/F8).
+    parameterized inner calls (BLOCKERs F2/F4/F5/F7/F8). ``force``
+    overrides the dirty-tree safety gate at the destructive `rmtree`
+    (T1-E).
     """
     tool_dir = project["_dir"]
     tool_name = project["name"]
@@ -731,6 +822,11 @@ def _switch_to_publish(project, project_root, gitmodules, dry_run,
         if dry_run:
             if is_linked_project(tool_dir):
                 print(f"  Would remove symlink: {tool_dir}")
+            elif os.path.isdir(tool_dir):
+                dirty = _check_dirty_tree(tool_dir)
+                if dirty and not force:
+                    print(f"  [WARNING] Would refuse: {tool_dir} has "
+                          "uncommitted changes (rerun with --force).")
             print(f"  Would run: git submodule add {remote_url} "
                   f"{rel_key}")
             print("  Note: .gitmodules will be updated (uncommitted)")
@@ -743,6 +839,13 @@ def _switch_to_publish(project, project_root, gitmodules, dry_run,
                       file=sys.stderr)
                 return 1
         elif os.path.isdir(tool_dir):
+            # Refuse if the working tree has uncommitted changes that
+            # an rmtree would silently destroy (T1-E safety gate).
+            if not force:
+                dirty = _check_dirty_tree(tool_dir)
+                if dirty:
+                    _print_dirty_refusal(tool_name, tool_dir, dirty, command)
+                    return 1
             import shutil
             try:
                 shutil.rmtree(tool_dir)

@@ -4,6 +4,49 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.50] - 2026-05-19
+
+Phase 3.5 Tier 1 commit 3 of N (refs #37). Ships the T1-E safety primitive flagged as CRITICAL by the senior-engineer audit: a dirty-tree refuse-or-force gate at every `shutil.rmtree(tool_dir)` call site in `dazzlecmd_lib.mode`. Pre-fix, `dz mode switch` would silently destroy uncommitted work in a tool subtree -- a user who had been mid-edit in a submodule checkout (or in a local-only directory that happened to be its own git repo) lost their changes the moment they ran the switch. Post-fix, the switch refuses with exit code 1 and prints the dirty file list plus an actionable hint; the new `--force` flag bypasses the check for users who genuinely want the destructive behavior.
+
+### Added
+
+- `dazzlecmd_lib.mode._check_dirty_tree(tool_dir)` -- new helper. Returns `git status --porcelain` output for `tool_dir` if it is its own git worktree root; returns the empty string (clean / no work to lose) when `tool_dir` is not a directory, not a git checkout, or is only inside an ancestor's repo. The "own worktree root" check uses `git rev-parse --show-toplevel` and compares the realpath against `tool_dir` -- without it, `git status` walks up the directory tree and reports an ancestor repo's dirty state (e.g., your `~/.git` if `tool_dir` happens to live under `$HOME`).
+- `dazzlecmd_lib.mode._print_dirty_refusal(tool_name, tool_dir, dirty_output, command)` -- new helper. Prints the standard refusal-to-overwrite message. Truncates the dirty file list at 10 lines (full list is one `git status` away). Substitutes the aggregator's `command` into the suggested `<command> mode switch <tool> --force` recovery line.
+- `--force` flag on `dz mode switch`. Threads to `cmd_switch(force=True, ...)` which threads to `_switch_to_dev(force, ...)` and `_switch_to_publish(force, ...)` to gate the `shutil.rmtree` call sites.
+
+### Changed
+
+- `dazzlecmd_lib.mode.cmd_switch(...)` signature gained `force=False`. Default behavior is the safe one: refuse to destroy uncommitted work; require explicit opt-in via `--force` or `force=True`. The dazzlecmd `cmd_switch` wrapper in `src/dazzlecmd/mode.py` accepts the new parameter and passes through.
+- `dazzlecmd_lib.mode._switch_to_dev` and `_switch_to_publish` -- each gained a required `force` positional parameter. Each gates its `shutil.rmtree(tool_dir)` call site behind `if not force: dirty = _check_dirty_tree(tool_dir); if dirty: _print_dirty_refusal(...); return 1`.
+- Dry-run output for both `_switch_to_dev` and `_switch_to_publish` now prints `[WARNING] Would refuse: <tool_dir> has uncommitted changes (rerun with --force).` ahead of the would-remove line when the tree is dirty -- users learn about the gate during dry-run instead of being surprised by the refusal during the live run.
+
+### Tests
+
+- 8 new tests in `packages/dazzlecmd-lib/tests/test_mode_parameterization.py`. `TestCheckDirtyTree` covers the 5 input shapes: non-existent path, plain non-git dir (verifies the `git rev-parse --show-toplevel` ancestor check works -- without it the test would report the home-repo's dirty state when run on a developer machine whose `%TEMP%` lives under `$HOME`), clean git repo, modified tracked file, untracked file. `TestSwitchRefusesDirty` exercises the gate end-to-end with real git fixtures: dirty submodule refuses with exit 1 and an "uncommitted changes" stderr message; the same scenario with `force=True` does NOT print the refusal; dry-run with a dirty tree prints the `[WARNING] Would refuse` line and does not delete anything.
+- Test fixture `_init_git_repo` sets `commit.gpgsign=false` and `tag.gpgsign=false` locally on every test repo immediately after `git init`. Developer machines that have global `commit.gpgsign=true` (e.g., Kleopatra-signed dev configs) previously had the fixture's `git commit` invoke GPG signing per test run; the local override prevents the pinentry popups.
+- Test totals: 1211 passed, 14 skipped (was 1203 / 14 in v0.7.49; +8 new).
+
+### What's NOT in this commit (scheduled for v0.7.51+)
+
+- T1-M1/M2/M3: deploy `aggregator.json` to dazzlecmd / wtf-windows / amdead project roots. The fixtures already exist; this is the rollout step.
+- T1-I: migrate `dazzlecmd_lib.mode` tests from `tests/test_mode.py` (thin-wrapper-based) to `packages/dazzlecmd-lib/tests/test_mode_*.py` (library-native).
+- T1-J: consolidated Phase 3.5 Tier 1 human test checklist covering v0.7.47 + v0.7.48 + v0.7.49 + v0.7.50 + the M1/M2/M3 deployment. Real end-to-end mode-switching testing requires the aggregator.json files to be in place, so the checklist makes more sense after T1-M lands.
+
+### Refs
+
+- Refs #37 (Phase 3.5 EPIC -- mode-system expansion for non-submodule tool sources). Closes the CRITICAL audit finding from v0.7.48; the remaining audit findings (MEDIUM x2 + LOW x1) were closed in v0.7.49.
+
+### Design
+
+- 2026-05-17__22-38-36__dev-workflow-process__phase-3-5-mode-system-hardening-shipped-vs-missing.md
+- 2026-05-07__00-07-55__claude-plan__0-7-x-closeout-ultraplan-with-x28-copy-dont-rewrite-addendum.md
+
+### Versions
+
+- dazzlecmd 0.7.49 -> 0.7.50 (PATCH -- additive `--force` flag; the default-behavior change is a SAFETY tightening: pre-fix the switch silently destroyed user data, post-fix it refuses by default. PATCH semantics on the basis that "stop destroying user data without consent" is universally desirable).
+- dazzlecmd-lib 0.6.11 -> 0.6.12 (PATCH -- additive `force` keyword parameter on `cmd_switch`/`_switch_to_dev`/`_switch_to_publish`; new `_check_dirty_tree` / `_print_dirty_refusal` helpers; behavioral default change is the safety-tightening above).
+- dazzle-dz alias bumped to 0.7.50; deps re-pinned to >=0.7.50 / >=0.6.12.
+
 ## [0.7.49] - 2026-05-19
 
 Phase 3.5 Tier 1 commit 2.5 of N (refs #37). Audit cleanup of the v0.7.48 mode-system parameterization. Four small surgical fixes that close audit findings without behavior regressions: tighten the `detect_tool_state` wrapper signature; thread `tools_dir` through `_print_no_toggle` so error messages no longer print the literal placeholder `<tools-dir>`; restore `_resolve_remote_url`'s default probe order to byte-match the v0.7.47 verbatim baseline (drop the unintentional `lifecycle.remote` probe drift); retire the `dazzlecmd.importer` link-helper re-export shim and update the four test files that referenced it to import from `dazzlecmd_lib.paths` directly.
@@ -1826,7 +1869,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.49...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.50...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
