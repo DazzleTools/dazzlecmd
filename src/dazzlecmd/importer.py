@@ -5,6 +5,8 @@ import os
 import subprocess
 import sys
 
+from dazzlecmd_lib.paths import create_link, is_linked_project
+
 
 def add_from_local(source_path, projects_dir, namespace, link_mode="copy",
                    tool_name=None, *, reserved_commands=None,
@@ -96,13 +98,3 @@ def add_from_local(source_path, projects_dir, namespace, link_mode="copy",
     }
 
 
-# Link helpers (create_link, remove_link, is_linked_project, get_link_target)
-# live in dazzlecmd_lib.paths as of v0.7.47 -- they're aggregator-agnostic
-# primitives any consumer of dazzlecmd_lib can use. This module re-exports
-# them for callers that import from dazzlecmd.importer.
-from dazzlecmd_lib.paths import (  # noqa: F401
-    create_link,
-    get_link_target,
-    is_linked_project,
-    remove_link,
-)

@@ -8,6 +8,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.6.11] - 2026-05-19
+
+Ships with dazzlecmd v0.7.49 (Phase 3.5 Tier 1 commit 2.5). Senior-engineer audit cleanup of v0.6.10's parameterization. Two surgical fixes inside `mode.py`: thread `tools_dir` through `_print_no_toggle` so the STATE_LOCAL_ONLY hint substitutes the aggregator's tool-root directory name instead of printing a literal placeholder; restore `_resolve_remote_url`'s default probe order to match the v0.7.47 verbatim baseline byte-for-byte (drop the unintentional `lifecycle.remote` probe drift).
+
+### Changed
+
+- `_print_no_toggle(tool_name, state, *, command)` -> `_print_no_toggle(tool_name, state, *, command, tools_dir)`. Required `tools_dir` keyword-only parameter. The STATE_LOCAL_ONLY error hint substitutes `tools_dir` into the suggested `git submodule add` command line (was a literal `<tools-dir>` placeholder). The single in-library call site in `cmd_switch` already had `tools_dir` in scope.
+- `_resolve_remote_url(project, explicit_url=None, *, schema=None)` default probe list. When `schema=None`, the function now probes only `("source.url",)` followed by the always-tried `lifecycle.graduated_to` fallback -- matches the v0.7.47 baseline. The previous `("source.url", "lifecycle.remote")` default added an undocumented probe of a new key that didn't exist in the baseline; aggregators that legitimately want a custom probe order should declare it in their `AggregatorSchema.remote_url_paths`.
+
+### Tests
+
+`tests/test_mode_parameterization.py::test_fallback_chain` updated to assert the schema-supplied path list ordering rather than the now-removed default `lifecycle.remote` probe. 1203 passed, 14 skipped (was 1204 in v0.6.10; -1 deleted shim test in the dazzlecmd test suite).
+
+### Refs
+
+Ships with dazzlecmd v0.7.49. Refs dazzlecmd #37 (Phase 3.5 EPIC).
+
 ## [0.6.10] - 2026-05-18
 
 Ships with dazzlecmd v0.7.48 (Phase 3.5 Tier 1 commit 2). Parameterizes the verbatim-moved `mode` module so every function takes the aggregator's `tools_dir` / `command` / manifest `schema` as required keyword-only parameters instead of baking dazzlecmd-specific values into the implementation. Resolves the senior-engineer audit's BLOCKERs F2/F3/F4/F5/F7/F8 + F1 (the latter via the `add_from_local` import-side fix in dazzlecmd's importer.py). 25 new tests in `tests/test_mode_parameterization.py` prove the library works for any tools_dir layout (parametric over `projects/`, `tools/`, and `src/tools/`) and any manifest schema.

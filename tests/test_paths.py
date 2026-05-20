@@ -167,12 +167,3 @@ class TestGetLinkTarget:
         assert "source" in target
 
 
-class TestLibraryReExportFromDazzlecmdImporter:
-    """v0.7.33: ``dazzlecmd.importer`` now re-exports the helpers from
-    ``dazzlecmd_lib.paths``. Importers of the old surface keep working."""
-
-    def test_dazzlecmd_importer_reexport_is_library_function(self):
-        from dazzlecmd.importer import is_linked_project as legacy_is_linked
-        from dazzlecmd.importer import get_link_target as legacy_get_target
-        assert legacy_is_linked is is_linked_project
-        assert legacy_get_target is get_link_target

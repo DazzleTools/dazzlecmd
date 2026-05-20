@@ -19,7 +19,7 @@ from dazzlecmd.mode import (
     STATE_SUBMODULE,
     STATE_SYMLINK,
 )
-from dazzlecmd.importer import is_linked_project, remove_link
+from dazzlecmd_lib.paths import is_linked_project, remove_link
 
 
 class TestDetectToolState:
@@ -27,7 +27,7 @@ class TestDetectToolState:
 
     def test_missing_path(self):
         """Non-existent path is STATE_MISSING."""
-        state = detect_tool_state("/nonexistent/path/12345", {})
+        state = detect_tool_state("/nonexistent/path/12345", {}, "/nonexistent")
         assert state == STATE_MISSING
 
     def test_plain_dir_no_submodule(self):
@@ -35,7 +35,7 @@ class TestDetectToolState:
         with tempfile.TemporaryDirectory() as tmpdir:
             tool_dir = os.path.join(tmpdir, "projects", "core", "mytool")
             os.makedirs(tool_dir)
-            state = detect_tool_state(tool_dir, {})
+            state = detect_tool_state(tool_dir, {}, tmpdir)
             assert state == STATE_EMBEDDED
 
     def test_plain_dir_with_submodule(self):
@@ -44,7 +44,7 @@ class TestDetectToolState:
             tool_dir = os.path.join(tmpdir, "projects", "core", "mytool")
             os.makedirs(tool_dir)
             gitmodules = {"projects/core/mytool": {"url": "https://example.com"}}
-            state = detect_tool_state(tool_dir, gitmodules)
+            state = detect_tool_state(tool_dir, gitmodules, tmpdir)
             assert state == STATE_SUBMODULE
 
     def test_symlink_with_submodule(self):
@@ -56,13 +56,13 @@ class TestDetectToolState:
             os.makedirs(os.path.dirname(tool_dir), exist_ok=True)
 
             # Create link
-            from dazzlecmd.importer import create_link
+            from dazzlecmd_lib.paths import create_link
             result = create_link(source, tool_dir)
             if result is None:
                 pytest.skip("Could not create link (permissions)")
 
             gitmodules = {"projects/core/mytool": {"url": "https://example.com"}}
-            state = detect_tool_state(tool_dir, gitmodules)
+            state = detect_tool_state(tool_dir, gitmodules, tmpdir)
             assert state == STATE_SYMLINK
 
             remove_link(tool_dir)
@@ -75,12 +75,12 @@ class TestDetectToolState:
             tool_dir = os.path.join(tmpdir, "projects", "core", "mytool")
             os.makedirs(os.path.dirname(tool_dir), exist_ok=True)
 
-            from dazzlecmd.importer import create_link
+            from dazzlecmd_lib.paths import create_link
             result = create_link(source, tool_dir)
             if result is None:
                 pytest.skip("Could not create link (permissions)")
 
-            state = detect_tool_state(tool_dir, {})
+            state = detect_tool_state(tool_dir, {}, tmpdir)
             assert state == STATE_LOCAL_ONLY
 
             remove_link(tool_dir)

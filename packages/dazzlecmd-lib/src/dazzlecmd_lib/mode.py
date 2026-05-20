@@ -487,7 +487,7 @@ def cmd_switch(tool_name, projects, project_root, dev_path=None,
         target = _determine_target(state)
 
     if target is None:
-        _print_no_toggle(tool_name, state, command=command)
+        _print_no_toggle(tool_name, state, command=command, tools_dir=tools_dir)
         return 1
 
     print(f"Tool:    {qualified}")
@@ -582,11 +582,13 @@ def _determine_target(state):
     return None
 
 
-def _print_no_toggle(tool_name, state, *, command):
+def _print_no_toggle(tool_name, state, *, command, tools_dir):
     """Print a helpful message when toggle is not possible.
 
     The ``command`` parameter is the aggregator's CLI name (e.g., ``"dz"``,
-    ``"wtf"``, ``"amdead"``); BLOCKER F5 fix.
+    ``"wtf"``, ``"amdead"``); ``tools_dir`` is the aggregator's tool-root
+    directory name (e.g., ``"projects"`` or ``"tools"``). Both substitute
+    into user-facing hint text; BLOCKER F5 fix.
     """
     if state == STATE_EMBEDDED:
         print(f"Error: '{tool_name}' is embedded (no submodule registered).",
@@ -598,7 +600,7 @@ def _print_no_toggle(tool_name, state, *, command):
               "registered).", file=sys.stderr)
         print("  To enable mode switching, register a submodule first:",
               file=sys.stderr)
-        print(f"    git submodule add <url> <tools-dir>/<ns>/{tool_name}",
+        print(f"    git submodule add <url> {tools_dir}/<ns>/{tool_name}",
               file=sys.stderr)
     elif state == STATE_MISSING:
         print(f"Error: '{tool_name}' is missing from disk.",
@@ -821,15 +823,15 @@ def _resolve_remote_url(project, explicit_url=None, *, schema=None):
     BLOCKER F7 fix: callers pass an ``AggregatorSchema`` (or dict-like
     object) describing where the remote URL lives in their manifest
     layout. When ``schema`` is ``None`` (e.g., tests or ad-hoc callers),
-    the defaults match dazzlecmd's historical behavior
-    (``source.url`` then ``lifecycle.graduated_to``).
+    the default is ``("source.url",)`` -- matches dazzlecmd's historical
+    behavior byte-for-byte.
 
     Args:
         project: The tool's parsed manifest dict.
         explicit_url: User-supplied URL (optional).
         schema: ``AggregatorSchema`` (or duck-typed object) with a
             ``remote_url_paths`` attribute/key listing dotted paths to try.
-            Falls back to ``("source.url", "lifecycle.remote")``.
+            Falls back to ``("source.url",)``.
 
     Returns:
         Resolved URL string or ``None``.
@@ -838,14 +840,15 @@ def _resolve_remote_url(project, explicit_url=None, *, schema=None):
         return explicit_url
 
     # Determine the list of dotted paths to probe.
+    default_paths = ("source.url",)
     if schema is None:
-        remote_paths = ("source.url", "lifecycle.remote")
+        remote_paths = default_paths
     else:
         # Accept dataclass-like object or dict
         remote_paths = getattr(
             schema, "remote_url_paths",
             schema.get("remote_url_paths") if isinstance(schema, dict)
-            else ("source.url", "lifecycle.remote")
+            else default_paths
         )
 
     for dotted in remote_paths:

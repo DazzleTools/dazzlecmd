@@ -4,6 +4,37 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.49] - 2026-05-19
+
+Phase 3.5 Tier 1 commit 2.5 of N (refs #37). Audit cleanup of the v0.7.48 mode-system parameterization. Four small surgical fixes that close audit findings without behavior regressions: tighten the `detect_tool_state` wrapper signature; thread `tools_dir` through `_print_no_toggle` so error messages no longer print the literal placeholder `<tools-dir>`; restore `_resolve_remote_url`'s default probe order to byte-match the v0.7.47 verbatim baseline (drop the unintentional `lifecycle.remote` probe drift); retire the `dazzlecmd.importer` link-helper re-export shim and update the four test files that referenced it to import from `dazzlecmd_lib.paths` directly.
+
+### Changed
+
+- `dazzlecmd.mode.detect_tool_state(tool_dir, gitmodules, project_root)` -- `project_root` is now a required positional parameter (was `project_root=None` with a fragile triple-`dirname` heuristic to derive it from `tool_dir`). The heuristic only worked for the standard `<project_root>/projects/<ns>/<tool>` layout; any non-standard layout silently returned `STATE_MISSING` instead of raising. The wrapper now matches the library's required-parameter signature 1:1. Five call sites in `tests/test_mode.py` updated to pass `project_root=tmpdir` (already in scope from the surrounding `tempfile.TemporaryDirectory()`).
+- `dazzlecmd_lib.mode._print_no_toggle(tool_name, state, *, command, tools_dir)` -- gained a required `tools_dir` keyword-only parameter so the STATE_LOCAL_ONLY hint substitutes the aggregator's tool-root directory name. Pre-fix it printed `git submodule add <url> <tools-dir>/<ns>/<tool>` with `<tools-dir>` as a literal placeholder; now it prints `git submodule add <url> projects/<ns>/<tool>` for dazzlecmd, `tools/<ns>/<tool>` for wtf-windows / amdead, etc. The single call site in `cmd_switch` already had `tools_dir` in scope.
+- `dazzlecmd_lib.mode._resolve_remote_url` default probe list is now `("source.url",)` -- matches the v0.7.47 verbatim baseline byte-for-byte. The previous v0.7.48 default `("source.url", "lifecycle.remote")` was an unintentional drift; `lifecycle.remote` was a new undocumented key that probed before the `lifecycle.graduated_to` fallback. Aggregators that legitimately want `lifecycle.remote` in their lookup chain should declare it in their `AggregatorSchema.remote_url_paths`.
+- `tests/test_mode.py` -- updated 5 `detect_tool_state` call sites to pass the now-required `project_root` argument, and switched the top-of-file `from dazzlecmd.importer import is_linked_project, remove_link` (and two inline `from dazzlecmd.importer import create_link` imports) to `from dazzlecmd_lib.paths import ...`.
+- `tests/test_importer.py` -- split the line `from dazzlecmd.importer import (add_from_local, is_linked_project, get_link_target, remove_link)` into the legitimate `from dazzlecmd.importer import add_from_local` plus a separate `from dazzlecmd_lib.paths import is_linked_project, get_link_target, remove_link`.
+- `src/dazzlecmd/importer.py` -- the bottom-of-file `from dazzlecmd_lib.paths import (...)` re-export block is replaced with a top-of-file `from dazzlecmd_lib.paths import create_link, is_linked_project` (only the two helpers actually used inside the module's own `add_from_local` function). The re-export shim is gone.
+
+### Removed
+
+- `tests/test_paths.py::TestLibraryReExportFromDazzlecmdImporter` -- the test class that existed solely to verify the `dazzlecmd.importer` re-export shim worked. It was the only consumer of the now-removed shim aside from the four test imports updated above.
+
+### Tests
+
+1203 passed, 14 skipped (was 1204 / 14 in v0.7.48; -1 deleted shim test, no regressions).
+
+### Refs
+
+- Refs #37 (Phase 3.5 EPIC). Closes the audit-cleanup follow-up surfaced by the senior-engineer review of v0.7.48.
+
+### Versions
+
+- dazzlecmd 0.7.48 -> 0.7.49 (PATCH -- internal cleanup; the tighter `detect_tool_state` signature is a contract change but the only callers were 5 dazzlecmd tests, all updated in this commit; no external consumers).
+- dazzlecmd-lib 0.6.10 -> 0.6.11 (PATCH -- additive `tools_dir` parameter on `_print_no_toggle`; default-probe behavior of `_resolve_remote_url` restored to match v0.7.47 baseline).
+- dazzle-dz alias bumped to 0.7.49; deps re-pinned to >=0.7.49 / >=0.6.11.
+
 ## [0.7.48] - 2026-05-18
 
 Phase 3.5 Tier 1 commit 2 of N (refs #37). Parameterizes the verbatim-moved `dazzlecmd_lib.mode` module so every aggregator can use it -- closes BLOCKERs F1-F8 from the senior-engineer audit. The X-28 copy-don't-rewrite discipline split the move (v0.7.47) from the modify (this commit) so the diff for the parameterization pass is reviewable against the verbatim baseline. `src/dazzlecmd/mode.py` becomes a 111-LOC thin wrapper -- it threads dazzlecmd's `tools_dir="projects"` and `command="dz"` defaults to the library and re-exports the public API for the existing tests that `from dazzlecmd.mode import ...`. The library's mode module is now aggregator-agnostic; wtf-windows (`tools_dir="tools"`) and amdead (`tools_dir="tools"`) can adopt it without forking.
@@ -1795,7 +1826,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.48...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.49...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

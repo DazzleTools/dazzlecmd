@@ -8,8 +8,8 @@ import tempfile
 
 import pytest
 
-from dazzlecmd.importer import (
-    add_from_local,
+from dazzlecmd.importer import add_from_local
+from dazzlecmd_lib.paths import (
     is_linked_project,
     get_link_target,
     remove_link,

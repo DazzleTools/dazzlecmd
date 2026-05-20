@@ -20,8 +20,6 @@ file is now a re-export shim plus 5 wrapper functions; the implementation
 is in ``packages/dazzlecmd-lib/src/dazzlecmd_lib/mode.py``.
 """
 
-import os
-
 # Re-export state constants + labels + non-parameterized functions.
 # These have identical behavior to the pre-v0.7.48 versions.
 from dazzlecmd_lib.mode import (  # noqa: F401
@@ -61,19 +59,8 @@ def parse_gitmodules(project_root):
     return _lib_parse_gitmodules(project_root, tools_dir=_TOOLS_DIR)
 
 
-def detect_tool_state(tool_dir, gitmodules, project_root=None):
-    """Detect the current mode of a tool, dazzlecmd-style.
-
-    If ``project_root`` is not supplied, it is derived from ``tool_dir``
-    assuming the standard ``<project_root>/projects/<ns>/<tool>`` layout.
-    External callers may pass it explicitly for non-standard locations.
-    """
-    if project_root is None:
-        # tool_dir = <project_root>/projects/<ns>/<tool>
-        # -> project_root is three dirname() steps up.
-        project_root = os.path.dirname(
-            os.path.dirname(os.path.dirname(tool_dir))
-        )
+def detect_tool_state(tool_dir, gitmodules, project_root):
+    """Detect the current mode of a tool, dazzlecmd-style."""
     return _lib_detect_tool_state(
         tool_dir, gitmodules, project_root, tools_dir=_TOOLS_DIR
     )

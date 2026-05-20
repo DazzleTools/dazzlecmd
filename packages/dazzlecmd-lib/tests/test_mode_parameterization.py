@@ -290,12 +290,15 @@ class TestResolveRemoteUrlParameterization:
         assert result == "git@foo:r.git"
 
     def test_fallback_chain(self):
-        """First non-empty value in the path list wins."""
+        """First non-empty value in the schema path list wins."""
         project = {
             "source": {"url": ""},  # empty
-            "lifecycle": {"remote": "git@fallback:r.git"},
+            "fallback": {"git_url": "git@fallback:r.git"},
         }
-        result = _resolve_remote_url(project)
+        schema = AggregatorSchema(
+            remote_url_paths=("source.url", "fallback.git_url")
+        )
+        result = _resolve_remote_url(project, schema=schema)
         assert result == "git@fallback:r.git"
 
     def test_graduated_to_fallback(self):
