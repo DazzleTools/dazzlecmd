@@ -1646,6 +1646,16 @@ class AggregatorEngine:
         """
         env_backup = {}
         try:
+            # Branding env vars (issue #74) -- reflect engine IDENTITY,
+            # not per-invocation context. Always injected so tool
+            # subprocesses can read $env:DZ_APP_NAME / $env:DZ_COMMAND
+            # via a shared _branding.ps1 (or equivalent in any language)
+            # instead of every aggregator hand-rolling its own
+            # AGGREGATOR_APP_NAME / AGGREGATOR_CLI_CMD bridge.
+            env_backup["DZ_APP_NAME"] = os.environ.get("DZ_APP_NAME")
+            env_backup["DZ_COMMAND"] = os.environ.get("DZ_COMMAND")
+            os.environ["DZ_APP_NAME"] = self.name or ""
+            os.environ["DZ_COMMAND"] = self.command or ""
             if context is not None:
                 # Preserve prior values so nested dispatches don't stomp
                 # each other. In practice dz only runs one tool per
@@ -1678,12 +1688,11 @@ class AggregatorEngine:
         finally:
             # Restore env vars to their prior state so dz's own process
             # environment isn't permanently modified by a tool dispatch.
-            if context is not None:
-                for key, value in env_backup.items():
-                    if value is None:
-                        os.environ.pop(key, None)
-                    else:
-                        os.environ[key] = value
+            for key, value in env_backup.items():
+                if value is None:
+                    os.environ.pop(key, None)
+                else:
+                    os.environ[key] = value
 
     def _run_escape_hatch(self, argv):
         """Escape-hatch run path: delegate parser + meta dispatch to callbacks.
@@ -1752,8 +1761,16 @@ class AggregatorEngine:
             # Inject DZ_CANONICAL_FQCN + DZ_INVOKED_FQCN env vars (v0.7.28).
             # Tools writing persistent state (caches, logs, checkpoints)
             # MUST key on DZ_CANONICAL_FQCN to avoid divergent state
-            # across invocation paths.
+            # across invocation paths. Plus DZ_APP_NAME / DZ_COMMAND
+            # (issue #74) -- engine-identity vars, always injected so
+            # subprocess tool scripts can read $env:DZ_APP_NAME /
+            # $env:DZ_COMMAND for branding strings without each
+            # aggregator hand-rolling its own bridge.
             env_backup = {}
+            env_backup["DZ_APP_NAME"] = os.environ.get("DZ_APP_NAME")
+            env_backup["DZ_COMMAND"] = os.environ.get("DZ_COMMAND")
+            os.environ["DZ_APP_NAME"] = self.name or ""
+            os.environ["DZ_COMMAND"] = self.command or ""
             if context is not None:
                 env_backup["DZ_CANONICAL_FQCN"] = os.environ.get("DZ_CANONICAL_FQCN")
                 env_backup["DZ_INVOKED_FQCN"] = os.environ.get("DZ_INVOKED_FQCN")
@@ -1762,12 +1779,11 @@ class AggregatorEngine:
             try:
                 return dispatch_tool(project, tool_argv)
             finally:
-                if context is not None:
-                    for key, value in env_backup.items():
-                        if value is None:
-                            os.environ.pop(key, None)
-                        else:
-                            os.environ[key] = value
+                for key, value in env_backup.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
 
         sys_argv_backup = sys.argv
         sys.argv = [self.command] + list(argv)

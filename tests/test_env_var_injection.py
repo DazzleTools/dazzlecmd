@@ -104,8 +104,10 @@ class TestEnvVarInjection:
         assert os.environ.get("DZ_CANONICAL_FQCN") == "pre-existing"
 
     def test_env_vars_not_set_without_context(self, monkeypatch):
-        """Backward compat: if context is not passed to _run_tool, env
-        vars are not injected (preserves legacy dispatch behavior)."""
+        """Backward compat: if context is not passed to _run_tool, the
+        FQCN vars are not injected (preserves legacy dispatch behavior).
+        Branding vars (DZ_APP_NAME/DZ_COMMAND) ARE always injected per
+        issue #74 -- tested in TestBrandingEnvVarInjection below."""
         monkeypatch.setenv("DAZZLECMD_CONFIG", "/tmp/nonexistent.json")
         # Make sure env is clean
         monkeypatch.delenv("DZ_CANONICAL_FQCN", raising=False)
@@ -115,6 +117,105 @@ class TestEnvVarInjection:
         engine = self._engine_with_capture(projects, captured)
 
         engine._run_tool(projects[0], [])  # no context
-        # Tool did not see injected vars
+        # Tool did not see injected FQCN vars
         assert captured["DZ_CANONICAL_FQCN"] is None
         assert captured["DZ_INVOKED_FQCN"] is None
+
+
+class TestBrandingEnvVarInjection:
+    """Issue #74: ``DZ_APP_NAME`` and ``DZ_COMMAND`` reflect the engine's
+    identity and are always injected before tool dispatch -- so subprocess
+    tool scripts (PowerShell, bash, Python) can read $env:DZ_APP_NAME /
+    $env:DZ_COMMAND for branding strings without each aggregator
+    hand-rolling its own AGGREGATOR_APP_NAME / AGGREGATOR_CLI_CMD bridge."""
+
+    def _engine_with_capture(self, projects, captured, *, name=None, command=None):
+        kwargs = {"is_root": True}
+        if name is not None:
+            kwargs["name"] = name
+        if command is not None:
+            kwargs["command"] = command
+        engine = AggregatorEngine(**kwargs)
+        engine.projects = list(projects)
+        engine._build_fqcn_index()
+
+        def _capturing_dispatcher(project, argv):
+            captured["DZ_APP_NAME"] = os.environ.get("DZ_APP_NAME")
+            captured["DZ_COMMAND"] = os.environ.get("DZ_COMMAND")
+            return 0
+
+        engine._dispatch_tool = _capturing_dispatcher
+        return engine
+
+    def test_branding_vars_match_engine_identity(self, monkeypatch):
+        """Tool sees engine.name in DZ_APP_NAME and engine.command in DZ_COMMAND."""
+        monkeypatch.setenv("DAZZLECMD_CONFIG", "/tmp/nonexistent.json")
+        projects = [_proj("core:rn", "rn", "core")]
+        captured = {}
+        engine = self._engine_with_capture(
+            projects, captured, name="dazzlecmd", command="dz",
+        )
+        engine._run_tool(projects[0], [])
+        assert captured["DZ_APP_NAME"] == "dazzlecmd"
+        assert captured["DZ_COMMAND"] == "dz"
+
+    def test_branding_vars_reflect_arbitrary_aggregator_identity(self, monkeypatch):
+        """A non-dazzlecmd aggregator's name/command propagate correctly."""
+        monkeypatch.setenv("DAZZLECMD_CONFIG", "/tmp/nonexistent.json")
+        projects = [_proj("core:rn", "rn", "core")]
+        captured = {}
+        engine = self._engine_with_capture(
+            projects, captured, name="wtf-windows", command="wtf",
+        )
+        engine._run_tool(projects[0], [])
+        assert captured["DZ_APP_NAME"] == "wtf-windows"
+        assert captured["DZ_COMMAND"] == "wtf"
+
+    def test_branding_vars_injected_without_context(self, monkeypatch):
+        """Branding vars are engine-identity (not per-invocation context),
+        so they're set even when _run_tool is called without context."""
+        monkeypatch.setenv("DAZZLECMD_CONFIG", "/tmp/nonexistent.json")
+        projects = [_proj("core:rn", "rn", "core")]
+        captured = {}
+        engine = self._engine_with_capture(
+            projects, captured, name="amdead", command="amdead",
+        )
+        engine._run_tool(projects[0], [])  # no context
+        assert captured["DZ_APP_NAME"] == "amdead"
+        assert captured["DZ_COMMAND"] == "amdead"
+
+    def test_branding_vars_restored_after_dispatch(self, monkeypatch):
+        """Parent process environment is restored after dispatch."""
+        monkeypatch.setenv("DAZZLECMD_CONFIG", "/tmp/nonexistent.json")
+        monkeypatch.setenv("DZ_APP_NAME", "pre-existing-app")
+        monkeypatch.setenv("DZ_COMMAND", "pre-existing-cmd")
+        projects = [_proj("core:rn", "rn", "core")]
+        captured = {}
+        engine = self._engine_with_capture(
+            projects, captured, name="dazzlecmd", command="dz",
+        )
+        engine._run_tool(projects[0], [])
+        # Tool saw the engine-set values
+        assert captured["DZ_APP_NAME"] == "dazzlecmd"
+        assert captured["DZ_COMMAND"] == "dz"
+        # After dispatch, parent env restored to pre-existing values
+        assert os.environ.get("DZ_APP_NAME") == "pre-existing-app"
+        assert os.environ.get("DZ_COMMAND") == "pre-existing-cmd"
+
+    def test_branding_vars_popped_when_not_pre_existing(self, monkeypatch):
+        """If DZ_APP_NAME/DZ_COMMAND weren't set before dispatch, they
+        are NOT left in the environment after."""
+        monkeypatch.setenv("DAZZLECMD_CONFIG", "/tmp/nonexistent.json")
+        monkeypatch.delenv("DZ_APP_NAME", raising=False)
+        monkeypatch.delenv("DZ_COMMAND", raising=False)
+        projects = [_proj("core:rn", "rn", "core")]
+        captured = {}
+        engine = self._engine_with_capture(
+            projects, captured, name="dazzlecmd", command="dz",
+        )
+        engine._run_tool(projects[0], [])
+        assert captured["DZ_APP_NAME"] == "dazzlecmd"
+        assert captured["DZ_COMMAND"] == "dz"
+        # After dispatch, env is back to "not present"
+        assert "DZ_APP_NAME" not in os.environ
+        assert "DZ_COMMAND" not in os.environ

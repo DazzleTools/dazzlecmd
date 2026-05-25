@@ -2054,20 +2054,30 @@ def dispatch_tool(project, argv):
 def main():
     """Main entry point for dazzlecmd CLI.
 
-    Thin wrapper that creates an AggregatorEngine configured for dazzlecmd
-    and delegates to engine.run(). The CLI functions (build_parser,
-    dispatch_meta, dispatch_tool) are passed as callbacks so the engine
-    never imports from cli.py — enabling clean library extraction (#27).
+    As of v0.7.51 (Phase 3.5 T1-M1), aggregator identity + layout +
+    policy are declared in ``aggregator.json`` at the project root
+    instead of hardcoded constructor kwargs. The 5-line shape below
+    is the canonical pattern for any dazzlecmd-lib-based aggregator;
+    every per-aggregator knob lives in ``aggregator.json``. Runtime
+    callbacks (``build_parser`` / ``dispatch_meta`` / ``dispatch_tool``)
+    stay in code because they ARE code -- argparse builders and
+    meta-command dispatchers can't be expressed declaratively.
     """
     from dazzlecmd.engine import AggregatorEngine
+    from dazzlecmd_lib.aggregator_config import find_aggregator_root
 
-    engine = AggregatorEngine(
-        name="dazzlecmd",
-        command="dz",
-        tools_dir="projects",
-        kits_dir="kits",
-        manifest=".dazzlecmd.json",
-        description="dazzlecmd - Unified CLI for the DazzleTools collection",
+    project_root = find_aggregator_root()
+    if project_root is None:
+        import sys
+        print(
+            "Error: could not find aggregator.json. Run from a directory "
+            "inside a dazzlecmd-pattern project.",
+            file=sys.stderr,
+        )
+        return 1
+
+    engine = AggregatorEngine.from_project(
+        project_root,
         version_info=(DISPLAY_VERSION, __version__),
         is_root=True,
         parser_builder=build_parser,

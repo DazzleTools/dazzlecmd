@@ -4,6 +4,59 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.51] - 2026-05-24
+
+Phase 3.5 Tier 1 commit 4 of N (refs #37, closes #74) -- bundles T1-M1 (dazzlecmd's own declarative-config deployment) with the resolution of issue #74. Both changes are runtime-vs-static halves of the same architectural shift: `aggregator.json` declares the aggregator's IDENTITY statically; `DZ_APP_NAME` / `DZ_COMMAND` env-var injection makes that identity flow to subprocess tool scripts at runtime. Shipping them together means downstream aggregators get one coherent declarative+runtime story instead of stair-stepped commits with a gap in between.
+
+T1-M1 retires the hardcoded-kwargs constructor in `src/dazzlecmd/cli.py:main()`. The new shape is a 5-line `find_aggregator_root() + AggregatorEngine.from_project()` pattern that's identical across aggregators -- per-aggregator knobs (name, command, tools_dir, kits_dir, manifest_name, enabled_meta_commands, extra_reserved_commands, schema, discovery) all live in the new `aggregator.json` at the project root. Closes the dazzlecmd side of T1-M; wtf-windows and amdead adopt the same pattern in their own repos as T1-M2 and T1-M3 (separate downstream commits).
+
+Issue #74 closes the symmetric runtime gap: pre-fix, downstream aggregators each hand-rolled an `os.environ["AGGREGATOR_APP_NAME"]` bridge so their PowerShell / bash / Python tool scripts could read the aggregator's branding strings. The lib now injects `DZ_APP_NAME` / `DZ_COMMAND` automatically at every subprocess dispatch site; tool scripts read `$env:DZ_APP_NAME` / `$env:DZ_COMMAND` (or equivalent) and adapt to whichever aggregator invoked them. One mechanism, all consumers benefit.
+
+### Added
+
+- `aggregator.json` at the dazzlecmd project root. Declares dazzlecmd's identity (`name: "dazzlecmd"`, `command: "dz"`, 11 fields total including layout, meta-command policy, schema, discovery patterns). Read by `AggregatorEngine.from_project()` at startup. Copied verbatim from the existing fixture at `packages/dazzlecmd-lib/tests/fixtures/aggregator-json/dazzlecmd.aggregator.json`.
+- `dazzlecmd_lib.aggregator_config.find_aggregator_root(start_path=None, max_depth=12)` -- helper that walks up from `start_path` looking for the canonical `aggregator.json` marker file. The first ancestor with the marker IS the project root. When `start_path=None`, a two-stage fallback chain runs: first `os.getcwd()` (user inside the project tree), then `os.path.dirname(__file__)` of the helper module itself (dev-mode fallback where the lib lives co-located with the project tree). This second stage preserves the pre-T1-M behavior of "dz works when invoked from any cwd in a dev-mode install" -- without it, `dz git-snapshot` invoked from a temp directory during a test (or from `C:\code\wtf-windows` for that matter) would fail because the test cwd has no `aggregator.json` ancestor.
+- `DZ_APP_NAME` and `DZ_COMMAND` environment variables injected before every tool dispatch (issue #74). Both injection sites covered: `_run_tool()` (the registry path that drives all modern aggregators) and `_run_escape_hatch()` (the backward-compat path that dazzlecmd's own `cli.py` currently uses). Restore semantics match the existing `DZ_CANONICAL_FQCN` / `DZ_INVOKED_FQCN` pattern -- prior values backed up before injection, restored in a `finally` block via `os.environ.pop(key, None)` (handles "not present before" correctly).
+
+### Changed
+
+- `src/dazzlecmd/cli.py:main()` -- rewritten as a thin wrapper around `find_aggregator_root() + AggregatorEngine.from_project()`. Was 17 lines of hardcoded constructor kwargs; now 15 lines including the project-root-not-found error path. Identity / layout / policy moved to `aggregator.json`; runtime callbacks (`build_parser` / `dispatch_meta` / `dispatch_tool`) remain code because they are code (argparse builders and dispatch logic can't be declarative). Pattern copies cleanly to wtf-windows / amdead / any future aggregator.
+- `dazzlecmd_lib.engine.AggregatorEngine._run_tool()` -- branding env-var injection block added at the start, OUTSIDE the `if context is not None:` gate. Branding vars reflect engine identity (not per-invocation context) so they're always set, regardless of whether the FQCN ResolutionContext is passed. The `env_backup` dict accumulates both branding and FQCN vars; the restore block in `finally:` iterates the whole dict, so the gate at restore time was removed too (was previously also `if context is not None:` -- safe to drop because the same dict is the source of truth in either case).
+- `dazzlecmd_lib.engine.AggregatorEngine._run_escape_hatch()` -- same branding env-var injection block added in the escape-hatch path that dazzlecmd's own legacy `dispatch_tool` callback uses today. Without this, dazzlecmd itself wouldn't see its own DZ_APP_NAME / DZ_COMMAND vars in tool subprocesses (because dazzlecmd dispatches through escape-hatch, not registry). Future commits migrating dazzlecmd to the registry path get the branding vars for free from `_run_tool()`.
+
+### Tests
+
+- 11 new tests across two files. `packages/dazzlecmd-lib/tests/test_aggregator_config.py::TestFindAggregatorRoot` (6 cases): direct-hit, walks-up-from-deep-ancestor, returns-None-on-miss, honors-max-depth, max-depth-zero-finds-self, default-falls-back-to-lib-`__file__`-when-cwd-misses. `tests/test_env_var_injection.py::TestBrandingEnvVarInjection` (5 cases): branding-vars-match-engine-identity, branding-vars-reflect-arbitrary-aggregator-identity (proves wtf-windows / amdead would get their own values), branding-vars-injected-without-context (engine identity is not context-gated), branding-vars-restored-after-dispatch, branding-vars-popped-when-not-pre-existing.
+- Test totals: 1222 passed, 14 skipped (was 1211 / 14 in v0.7.50; +11 new).
+
+### Fixed
+
+- Mid-commit regression caught + fixed: the deployed `aggregator.json` (and its fixture) listed `find`, `git`, `github`, `f`, `safedel`, `snapshot`, `fixpath` in `extra_reserved_commands`. Those names are ACTUAL TOOLS in `projects/core/` (e.g., `projects/core/find/`), not reserved-but-unused names. Post-T1-M1 the new `from_project()` path threaded that list through to the discovery layer, which silently skipped the matching tools -- so `dz find`, `dz git`, `dz safedel`, `dz fixpath`, `dz github` would have stopped working as short-name commands. Fix: clear `extra_reserved_commands` to `[]` in both the deployed file and the fixture; add a regression-guard assertion to `test_dazzlecmd_draft_parses` that `"find" not in cfg.reserved_commands`. Pre-T1-M1's hardcoded constructor never passed `extra_reserved_commands`, so the tools loaded fine then; the bug was a fixture-authoring error that only surfaced after `from_project()` read the file.
+
+### Refs
+
+- Refs #37 (Phase 3.5 EPIC -- mode-system expansion for non-submodule tool sources). T1-M1 completes the dazzlecmd-side declarative-config deployment.
+- Closes #74 (dazzlecmd-lib: inject DZ_APP_NAME / DZ_COMMAND env vars in `_run_tool()` for child-process branding access). Implements all 9 acceptance criteria items: (1+2) injection in both `_run_tool` registry path and `_run_escape_hatch`, un-gated from `context is not None`; (3) env_backup/restore-in-finally semantics match the existing `DZ_CANONICAL_FQCN` pattern; (4) env-var contract documented in `aggregator_config.py` module docstring; (6) nested-aggregator behavior documented in the same docstring (root engine's name/command reach kit-imported tool subprocesses); (7) tests assert that a tool dispatcher sees `os.environ["DZ_APP_NAME"]` equal to `engine.name` -- this is the unit-level assertion; a real-subprocess shellout test is deferred to a follow-up issue alongside item (5) the `_branding.ps1` reference template; (8) CHANGELOG entry references this issue; (9) `DZ_PROJECT_ROOT` deferral decision recorded in the env-var contract docstring (deferred to a follow-up issue; introduces tool-to-aggregator filesystem coupling that warrants a separate design pass).
+
+### What's NOT in this commit (scheduled for v0.7.52+)
+
+- T1-M2 (wtf-windows side): deploy `wtf-windows.aggregator.json` at the wtf-windows project root + rewrite wtf's `main()` to use `find_aggregator_root() + from_project()` + DELETE wtf's duplicated `mode.py` and migrate callers to `dazzlecmd_lib.mode` + optionally add `_branding.ps1` consuming the new DZ_APP_NAME/DZ_COMMAND vars. Ships as a commit in the wtf-windows repo with its own version bump.
+- T1-M3 (amdead side): same as T1-M2 in the amdead repo.
+- After both downstream commits land: dazzlecmd v0.7.52 bumps the wtf-windows submodule pointer and runs the recursive-chaining tests (`dz wtf <subtool>`) to validate the dazzlecmd <-> wtf chain end-to-end on the new declarative pattern.
+- T1-J (consolidated human test checklist) ships with v0.7.52 once the chain is real.
+
+### Design
+
+- 2026-05-17__22-38-36__dev-workflow-process__phase-3-5-mode-system-hardening-shipped-vs-missing.md
+- 2026-05-07__00-07-55__claude-plan__0-7-x-closeout-ultraplan-with-x28-copy-dont-rewrite-addendum.md
+- GitHub issue #74 (issue body documents the parallel-invention prototype from amdtoy that this commit retires)
+
+### Versions
+
+- dazzlecmd 0.7.50 -> 0.7.51 (PATCH -- internal `main()` refactor + additive env-var injection; default behavior preserved for end users; new behavior is purely additive for tool-script authors).
+- dazzlecmd-lib 0.6.12 -> 0.6.13 (PATCH -- additive `find_aggregator_root()` helper + additive branding env-var injection in two engine code paths).
+- dazzle-dz alias bumped to 0.7.51; deps re-pinned to >=0.7.51 / >=0.6.13.
+
 ## [0.7.50] - 2026-05-19
 
 Phase 3.5 Tier 1 commit 3 of N (refs #37). Ships the T1-E safety primitive flagged as CRITICAL by the senior-engineer audit: a dirty-tree refuse-or-force gate at every `shutil.rmtree(tool_dir)` call site in `dazzlecmd_lib.mode`. Pre-fix, `dz mode switch` would silently destroy uncommitted work in a tool subtree -- a user who had been mid-edit in a submodule checkout (or in a local-only directory that happened to be its own git repo) lost their changes the moment they ran the switch. Post-fix, the switch refuses with exit code 1 and prints the dirty file list plus an actionable hint; the new `--force` flag bypasses the check for users who genuinely want the destructive behavior.
@@ -1869,7 +1922,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.50...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.51...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

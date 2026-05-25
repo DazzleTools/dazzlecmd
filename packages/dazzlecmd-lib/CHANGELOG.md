@@ -8,6 +8,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.6.13] - 2026-05-24
+
+Ships with dazzlecmd v0.7.51 (Phase 3.5 T1-M1 + issue #74). Two additive helpers + two engine.py injection blocks. Together they form the runtime+static duo that makes downstream aggregator adoption a "write `aggregator.json` + 5-line main()" exercise instead of a "fork dazzlecmd's main() and edit kwargs" exercise.
+
+### Added
+
+- `find_aggregator_root(start_path=None, max_depth=12)` -- walks up looking for `aggregator.json`. The canonical project-root discovery helper for any dazzlecmd-lib-based aggregator. Two-stage fallback when `start_path` is None: first `os.getcwd()`, then `os.path.dirname(__file__)` of this module itself (covers the dev-mode case where the lib lives co-located with the project tree and the user invokes the CLI from outside that tree).
+- `DZ_APP_NAME` and `DZ_COMMAND` env-var injection in `engine.AggregatorEngine._run_tool()` and `_run_escape_hatch()`. Reflects engine identity (not per-invocation context); always injected before tool dispatch; restored to prior values in `finally`. Subprocess tool scripts read these to render branding strings without each aggregator hand-rolling its own `AGGREGATOR_APP_NAME` bridge.
+
+### Changed
+
+- `engine.AggregatorEngine._run_tool()` and `_run_escape_hatch()` -- the `env_backup` dict now accumulates branding vars (always set) plus FQCN vars (context-gated). The restore block in `finally:` is no longer gated on `context is not None` since the dict is the source of truth and may have branding entries even without a context.
+
+### Refs
+
+Ships with dazzlecmd v0.7.51. Refs dazzlecmd #37 (Phase 3.5 EPIC). Closes dazzlecmd #74 (env-var injection for child-process branding).
+
 ## [0.6.12] - 2026-05-19
 
 Ships with dazzlecmd v0.7.50 (Phase 3.5 Tier 1 commit 3 -- T1-E safety primitive). Adds a dirty-tree refuse-or-force gate at the destructive `shutil.rmtree(tool_dir)` call sites in `mode.py`, closing the CRITICAL hazard flagged by the senior-engineer audit of v0.7.48. The gate refuses by default; callers opt into the destructive behavior via the new `force` keyword parameter on `cmd_switch`.

@@ -23,6 +23,7 @@ from dazzlecmd_lib.aggregator_config import (
     AggregatorDiscovery,
     AggregatorSchema,
     CURRENT_SCHEMA_VERSION,
+    find_aggregator_root,
     load_aggregator_config,
 )
 from dazzlecmd_lib.reserved import (
@@ -65,12 +66,16 @@ class TestRealWorldDrafts:
         assert "add" in cfg.enabled_meta_commands
         assert "mode" in cfg.enabled_meta_commands
         assert "new" in cfg.enabled_meta_commands
-        # dazzlecmd's extras
-        assert "find" in cfg.reserved_commands
-        assert "git" in cfg.reserved_commands
-        assert "safedel" in cfg.reserved_commands
-        # Defaults still reserved
+        # dazzlecmd has no extras -- ``find``/``git``/``safedel`` etc. are
+        # ACTUAL TOOLS in projects/core/, not reserved-but-unused names.
+        # The DEFAULT_RESERVED_COMMANDS already cover all meta-command
+        # names; the extra_reserved_commands list is empty for dazzlecmd.
+        # Defaults are still reserved (they always are, by construction)
         assert "list" in cfg.reserved_commands
+        # Regression guard: ``find`` is an installed tool and must NOT
+        # be reserved -- pre-fix, the fixture listed it and the discovery
+        # layer silently skipped it.
+        assert "find" not in cfg.reserved_commands
         # Schema decoupling
         assert cfg.schema.remote_url_paths == ("source.url", "lifecycle.remote")
         # Discovery
@@ -234,3 +239,70 @@ class TestSchemaDecoupling:
         cfg = load_aggregator_config(str(tmp_path))
         assert cfg.schema.remote_url_paths == ("repo.url",)
         assert cfg.schema.lifecycle_path == "_lifecycle"
+
+
+# ---------------------------------------------------------------------------
+# T1-M1: find_aggregator_root() -- project-root discovery via aggregator.json
+# ---------------------------------------------------------------------------
+
+
+class TestFindAggregatorRoot:
+    """Walks up looking for aggregator.json."""
+
+    def test_returns_dir_when_aggregator_json_present(self, tmp_path):
+        """Direct hit: start_path already contains aggregator.json."""
+        (tmp_path / AGGREGATOR_CONFIG_FILENAME).write_text("{}")
+        result = find_aggregator_root(str(tmp_path))
+        assert result == os.path.abspath(str(tmp_path))
+
+    def test_walks_up_to_find_ancestor(self, tmp_path):
+        """Start deep, find marker at an ancestor."""
+        (tmp_path / AGGREGATOR_CONFIG_FILENAME).write_text("{}")
+        nested = tmp_path / "a" / "b" / "c"
+        nested.mkdir(parents=True)
+        result = find_aggregator_root(str(nested))
+        assert result == os.path.abspath(str(tmp_path))
+
+    def test_returns_none_when_marker_absent(self, tmp_path):
+        """No aggregator.json at any ancestor -> None."""
+        nested = tmp_path / "a" / "b"
+        nested.mkdir(parents=True)
+        # No marker placed -- and tmp_path is under $TEMP which on Windows
+        # is under $HOME but doesn't have an aggregator.json ancestor.
+        result = find_aggregator_root(str(nested), max_depth=3)
+        assert result is None
+
+    def test_honors_max_depth(self, tmp_path):
+        """Marker beyond max_depth ancestors is not found."""
+        (tmp_path / AGGREGATOR_CONFIG_FILENAME).write_text("{}")
+        deep = tmp_path / "a" / "b" / "c" / "d" / "e"
+        deep.mkdir(parents=True)
+        # max_depth=2 means we only check deep, deep/.., deep/../..
+        # -- never reaches tmp_path which is 5 levels up.
+        result = find_aggregator_root(str(deep), max_depth=2)
+        assert result is None
+
+    def test_returns_self_when_max_depth_zero_and_marker_present(self, tmp_path):
+        """max_depth=0 checks only start_path itself, not ancestors."""
+        (tmp_path / AGGREGATOR_CONFIG_FILENAME).write_text("{}")
+        result = find_aggregator_root(str(tmp_path), max_depth=0)
+        assert result == os.path.abspath(str(tmp_path))
+
+    def test_default_falls_back_to_lib_file_when_cwd_misses(
+            self, tmp_path, monkeypatch):
+        """When cwd has no marker, falls back to lib __file__ walk."""
+        # Set cwd to a directory with no aggregator.json ancestor.
+        empty = tmp_path / "no_marker_here"
+        empty.mkdir()
+        monkeypatch.chdir(str(empty))
+        # In dev mode (running these tests), the lib lives inside the
+        # dazzlecmd project tree, so the __file__-walk fallback should
+        # find dazzlecmd's own aggregator.json at the repo root.
+        result = find_aggregator_root()
+        # We can't assert the exact path (depends on the test runner's
+        # checkout location), but it MUST find SOMETHING -- otherwise
+        # the fallback is broken.
+        assert result is not None
+        assert os.path.isfile(
+            os.path.join(result, AGGREGATOR_CONFIG_FILENAME)
+        )

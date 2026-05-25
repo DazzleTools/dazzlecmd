@@ -51,10 +51,12 @@ Field semantics:
 - ``enabled_meta_commands``: list of meta-command names this aggregator
   registers as CLI subcommands. Subset of ``DEFAULT_RESERVED_COMMANDS``.
   Defaults to ``DEFAULT_META_COMMANDS_USER`` when omitted.
-- ``extra_reserved_commands``: additional names reserved beyond the library
-  defaults -- blocks them from being used as tool names without exposing
-  them as meta-commands (e.g., dazzlecmd reserves ``find``, ``git``,
-  ``github``, ``safedel`` because those are top-level tool commands).
+- ``extra_reserved_commands``: additional names reserved beyond
+  ``DEFAULT_RESERVED_COMMANDS``. Use sparingly -- only for names that
+  the aggregator wants to keep available as future meta-commands but
+  isn't using yet. Existing tools' names should NOT appear here (the
+  library would silently skip them during discovery; pre-v0.7.51 had
+  this regression in the dazzlecmd fixture).
 - ``schema.remote_url_paths``: ordered list of dotted paths the library
   tries when resolving a tool's remote URL. Each entry is a fallback.
   Replaces hardcoded ``project["source"]["url"]`` / ``project["lifecycle"]["remote"]``
@@ -65,6 +67,48 @@ Field semantics:
   is interpolated from the same JSON.
 - ``discovery.scan_hidden``: whether ``.dotdirs`` are scanned (default
   ``false``).
+
+Subprocess environment contract
+-------------------------------
+
+The library injects the following environment variables before invoking
+any tool subprocess. Tool scripts (PowerShell, bash, Python, etc.) can
+read these to adapt branding strings, log paths, and behavior to the
+host aggregator without each aggregator hand-rolling its own bridge:
+
+- ``DZ_APP_NAME``: the engine's ``name`` field (e.g., ``"dazzlecmd"``,
+  ``"wtf-windows"``, ``"amdead"``). Reflects engine IDENTITY, not
+  per-invocation context. Set at every dispatch site.
+- ``DZ_COMMAND``: the engine's ``command`` field (e.g., ``"dz"``,
+  ``"wtf"``, ``"amdead"``). Same semantics as ``DZ_APP_NAME``.
+- ``DZ_CANONICAL_FQCN``: canonical FQCN of the dispatched tool (e.g.,
+  ``"core:rn"``). Set only when a ``ResolutionContext`` is supplied to
+  the dispatcher. Tools writing persistent state (caches, logs,
+  checkpoints) MUST key on this to avoid divergent state across
+  alias-vs-canonical-vs-short-name invocation paths (v0.7.28).
+- ``DZ_INVOKED_FQCN``: what the user actually typed (alias, short name,
+  or canonical). Equal to ``DZ_CANONICAL_FQCN`` for canonical
+  invocations. Same gating as ``DZ_CANONICAL_FQCN``.
+
+All four vars are restored to their pre-dispatch values in a
+``finally`` block after the subprocess completes, so dz's own process
+environment is not permanently modified.
+
+Nested-aggregator behavior: when one aggregator embeds another as a kit
+(e.g., dazzlecmd embeds wtf-windows so ``dz wtf:locked`` dispatches a
+wtf tool), ``DZ_APP_NAME`` and ``DZ_COMMAND`` reflect the **ROOT
+ENGINE** (``"dazzlecmd"`` / ``"dz"``), not the kit's owning aggregator.
+This matches the user's experience (they typed ``dz``, not ``wtf``) but
+tool authors should not assume their original aggregator's identity is
+present in these vars at runtime.
+
+A ``DZ_PROJECT_ROOT`` env var was considered (would expose the
+aggregator's project_root absolute path so tools can resolve log
+destinations etc. relative to it) but is deferred to a follow-up issue.
+It introduces tool-to-aggregator filesystem coupling that warrants a
+separate design pass. Tools needing the project root today can read
+``DZ_APP_NAME`` and look the project up via ``find_aggregator_root()``
+or via configuration.
 """
 
 from __future__ import annotations
@@ -86,6 +130,65 @@ CURRENT_SCHEMA_VERSION = 1
 
 class AggregatorConfigError(Exception):
     """Raised when ``aggregator.json`` is missing, malformed, or invalid."""
+
+
+def find_aggregator_root(start_path=None, max_depth=12):
+    """Walk up from ``start_path`` to find a directory with ``aggregator.json``.
+
+    The first ancestor (including ``start_path`` itself) containing the
+    canonical marker file is the project root. This is the new
+    discovery strategy (Phase 3.5 T1-M): the presence of
+    ``aggregator.json`` itself defines the project root, instead of
+    requiring tools_dir + kits_dir hardcoded knowledge to find it.
+
+    Search strategy when ``start_path`` is ``None``:
+
+    1. Walk up from ``os.getcwd()`` -- handles the common case of the
+       user running ``dz`` from anywhere inside the project tree.
+    2. Fall back to walking up from this module's ``__file__`` --
+       handles dev-mode installs where the library lives co-located
+       with the project (``packages/dazzlecmd-lib/src/...``) and the
+       user has invoked ``dz`` from outside the project tree (e.g.,
+       from a temp directory during a test, or from a parallel
+       checkout).
+
+    In a pip-installed configuration without the source tree, BOTH
+    fallbacks return ``None`` -- there is genuinely no project root
+    to find, and the caller surfaces a clear error.
+
+    Args:
+        start_path: Directory to start the walk from. Defaults to the
+            two-stage fallback chain described above.
+        max_depth: Maximum number of parent directories to walk before
+            giving up at each stage. Defaults to 12 (deep enough for
+            any sane layout, shallow enough to terminate quickly when
+            the marker is absent).
+
+    Returns:
+        Absolute path to the project root, or ``None`` if no
+        ``aggregator.json`` was found at any ancestor of either search
+        starting point.
+    """
+    def _walk(start):
+        current = os.path.abspath(start)
+        for _ in range(max_depth + 1):
+            if os.path.isfile(os.path.join(current, AGGREGATOR_CONFIG_FILENAME)):
+                return current
+            parent = os.path.dirname(current)
+            if parent == current:
+                return None
+            current = parent
+        return None
+
+    if start_path is not None:
+        return _walk(start_path)
+
+    # Two-stage fallback: cwd first (user inside project tree), then
+    # this module's __file__ (dev-mode install with co-located lib).
+    result = _walk(os.getcwd())
+    if result is not None:
+        return result
+    return _walk(os.path.dirname(os.path.abspath(__file__)))
 
 
 @dataclass(frozen=True)
