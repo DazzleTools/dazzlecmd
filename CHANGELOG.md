@@ -4,6 +4,33 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.53] - 2026-05-27
+
+Closes the Phase 3.5 T1-M cross-aggregator loop: bumps the embedded `projects/wtf` submodule to wtf-windows `d48a334` (v0.1.5-alpha, the T1-M2 migration) and validates the recursive chain end-to-end. dazzlecmd (T1-M1) now embeds the fully-declarative wtf (T1-M2, with its own `aggregator.json`), and `dz wtf:core:locked` resolves into the nested aggregator's tool.
+
+### Changed
+
+- `projects/wtf` submodule pointer bumped `25af04e` -> `d48a334` (wtf-windows v0.1.4-alpha -> v0.1.5-alpha). The embedded wtf now carries its own `aggregator.json` and consumes `dazzlecmd_lib.mode` instead of a forked copy.
+
+### Verified (recursive-chain validation)
+
+With the `wtf` kit enabled (`dz kit enable wtf`): `dz list` shows the `wtf:core:` section (locked, restarted); `dz wtf:core:locked --help` dispatches into the nested wtf tool (`wtf-locked` usage). Confirms dazzlecmd discovers the embedded declarative aggregator and 3-tier FQCN dispatch resolves through to its tools -- the whole T1-M arc (M1 dazzlecmd + M2 wtf + the v0.7.52 impersonation fix) works as a chain, not just per-aggregator.
+
+### Notes
+
+- The `wtf` kit is opt-in (`[disabled (not in active_kits)]` by default). `dz wtf:...` only resolves after `dz kit enable wtf`; this is deliberate (wtf is a diagnostic aggregator users opt into), not a discovery failure.
+- `kits/wtf.kit.json` still carries `_override_tools_dir` / `_override_manifest` fields. Now that the embedded wtf declares those in its own `aggregator.json`, a future commit can retire the overrides and have dazzlecmd's nested-aggregator discovery read wtf's `aggregator.json` directly. Left as-is here to keep this commit a pure submodule bump.
+
+### Refs
+
+- Refs #37 (Phase 3.5 EPIC). Completes the T1-M sub-arc (M1 + M2 + the v0.7.52 fix); the embedded-wtf override cleanup is the remaining T1-M tail.
+
+### Versions
+
+- dazzlecmd 0.7.52 -> 0.7.53 (PATCH -- submodule pointer bump + recursive-chain validation; no library or CLI code change).
+- dazzlecmd-lib unchanged at 0.6.14.
+- dazzle-dz alias bumped to 0.7.53; deps re-pinned to >=0.7.53 / >=0.6.14.
+
 ## [0.7.52] - 2026-05-26
 
 Fixes the cross-aggregator impersonation regression introduced by v0.7.51's `find_aggregator_root()`, surfaced during the wtf-windows T1-M2 migration. Pre-fix, `dz` run from inside another aggregator's tree (e.g. `C:\code\wtf-windows`) loaded *that* aggregator's `aggregator.json` and became `wtf` -- `dz github` would error with `wtf: invalid choice: 'github'`. An entry point's identity must be fixed by which package it is, not by the directory it's invoked from.
@@ -1955,7 +1982,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.52...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.53...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
