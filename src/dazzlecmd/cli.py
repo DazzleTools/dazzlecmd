@@ -2056,22 +2056,30 @@ def main():
 
     As of v0.7.51 (Phase 3.5 T1-M1), aggregator identity + layout +
     policy are declared in ``aggregator.json`` at the project root
-    instead of hardcoded constructor kwargs. The 5-line shape below
-    is the canonical pattern for any dazzlecmd-lib-based aggregator;
-    every per-aggregator knob lives in ``aggregator.json``. Runtime
-    callbacks (``build_parser`` / ``dispatch_meta`` / ``dispatch_tool``)
-    stay in code because they ARE code -- argparse builders and
-    meta-command dispatchers can't be expressed declaratively.
+    instead of hardcoded constructor kwargs. The shape below is the
+    canonical pattern for any dazzlecmd-lib-based aggregator; every
+    per-aggregator knob lives in ``aggregator.json``. Runtime callbacks
+    (``build_parser`` / ``dispatch_meta`` / ``dispatch_tool``) stay in
+    code because they ARE code -- argparse builders and meta-command
+    dispatchers can't be expressed declaratively.
+
+    ``find_aggregator_root`` is anchored to THIS package's ``__file__``,
+    not cwd (v0.7.52 fix). Anchoring to cwd would make ``dz`` impersonate
+    whatever aggregator the user is standing in -- e.g., running ``dz``
+    from inside a wtf-windows checkout would load wtf's ``aggregator.json``
+    and ``dz`` would become ``wtf``. The entry point's identity is fixed
+    by which package it is (``dazzlecmd``), pinned at install time.
     """
+    import os
+    import sys
     from dazzlecmd.engine import AggregatorEngine
     from dazzlecmd_lib.aggregator_config import find_aggregator_root
 
-    project_root = find_aggregator_root()
+    project_root = find_aggregator_root(os.path.dirname(os.path.abspath(__file__)))
     if project_root is None:
-        import sys
         print(
-            "Error: could not find aggregator.json. Run from a directory "
-            "inside a dazzlecmd-pattern project.",
+            "Error: could not find aggregator.json. The dazzlecmd package "
+            "must be installed alongside its project tree.",
             file=sys.stderr,
         )
         return 1

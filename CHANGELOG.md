@@ -4,6 +4,39 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.52] - 2026-05-26
+
+Fixes the cross-aggregator impersonation regression introduced by v0.7.51's `find_aggregator_root()`, surfaced during the wtf-windows T1-M2 migration. Pre-fix, `dz` run from inside another aggregator's tree (e.g. `C:\code\wtf-windows`) loaded *that* aggregator's `aggregator.json` and became `wtf` -- `dz github` would error with `wtf: invalid choice: 'github'`. An entry point's identity must be fixed by which package it is, not by the directory it's invoked from.
+
+### Fixed
+
+- **`dz` no longer impersonates a sibling aggregator based on cwd.** `src/dazzlecmd/cli.py:main()` now anchors `find_aggregator_root()` to the dazzlecmd package's own `__file__` (`os.path.dirname(os.path.abspath(__file__))`) instead of calling it bare. Since dazzlecmd is installed (editable) from its project tree, the package `__file__` resolves to that tree, so `dz` always finds dazzlecmd's `aggregator.json` regardless of cwd. The bug was dormant in v0.7.51 (no sibling `aggregator.json` existed yet) and went live the moment T1-M2 deployed one to wtf-windows -- exactly the cross-aggregator coexistence the cwd-first default couldn't handle.
+- **`dazzlecmd_lib.aggregator_config.find_aggregator_root()` simplified** to remove the footgun. v0.7.51's `None`-default did a two-stage walk: cwd first, then the library's own `__file__`. The cwd-first stage caused the impersonation; the lib-`__file__` stage was *worse* for multi-aggregator dev (the library lives co-located with dazzlecmd, so any aggregator calling it bare resolved to dazzlecmd). Now: `start_path=None` walks cwd only (a deliberate "find from here" for tests/ad-hoc), and the documented contract is that **production entry points MUST pass their package anchor**. The original temp-dir `dz git-snapshot` test stays green because dazzlecmd's `main()` anchors to its package, found from any cwd.
+- **wtf-windows test fixture corrected.** `packages/dazzlecmd-lib/tests/fixtures/aggregator-json/wtf-windows.aggregator.json` was wrong on four fields vs wtf's actual config (discovered authoring T1-M2): `enabled_meta_commands` (had tree/setup/mode; should be `[list, info, kit, version]`), `extra_reserved_commands` (had `[]`; should be `[mode, new, add, enhance, graduate]`), `schema.remote_url_paths` (had `lifecycle.remote`; should be `[source.url]` to match wtf's real tool manifests), and `description`. Now matches what shipped to the real wtf-windows repo.
+- **Test config isolation.** Added an autouse `_isolate_user_config` fixture in `tests/conftest.py` that points `DAZZLECMD_CONFIG` at a nonexistent path for every test. Unit tests that build `AggregatorEngine(is_root=True)` without isolating config previously read the developer's real `~/.dazzlecmd/config.json`; its active-kits state varies by machine and by recently-run `dz`/`wtf` commands, making config-sensitive tests (the `render_tree` virtual-kit branches, which filter to active kits) pass/fail on ambient state. The fixture forces built-in defaults; tests that need a real config still override `DAZZLECMD_CONFIG` themselves.
+
+### Tests
+
+- `test_default_falls_back_to_lib_file_when_cwd_misses` replaced by `test_default_is_cwd_only_no_lib_fallback` (asserts the removed lib-fallback) + `test_explicit_anchor_ignores_cwd` (regression guard: an anchored call resolves to ITS project even when cwd is inside a different aggregator's tree).
+- `test_wtf_windows_draft_parses` updated for the corrected fixture (enabled_meta_commands = {list,info,kit,version}; mode/new/add/enhance/graduate reserved-not-enabled; schema = (source.url,)).
+- The 4 `render_tree` virtual-kit/shadow tests now pass deterministically (were failing on this machine due to the config leakage above).
+- 1223 passed, 14 skipped (was 1222 / 14 in v0.7.51; +1 net from the find_aggregator_root test split).
+
+### What's NOT in this commit (gated on the wtf-windows push)
+
+- Bump the `projects/wtf` submodule pointer to wtf-windows `d48a334` (the T1-M2 commit) -- requires that commit pushed to `github.com/djdarcy/wtf-windows.git` first.
+- Recursive-chain validation (`dz wtf:core:locked`) against the new declarative wtf -- meaningful only after the submodule bump.
+
+### Refs
+
+- Refs #37 (Phase 3.5 EPIC). Companion to dazzlecmd v0.7.51 (T1-M1) and wtf-windows v0.1.5-alpha (T1-M2); fixes the regression those surfaced.
+
+### Versions
+
+- dazzlecmd 0.7.51 -> 0.7.52 (PATCH -- bugfix: cwd-impersonation regression + test isolation).
+- dazzlecmd-lib 0.6.13 -> 0.6.14 (PATCH -- `find_aggregator_root` default simplified; behavior change is a footgun removal).
+- dazzle-dz alias bumped to 0.7.52; deps re-pinned to >=0.7.52 / >=0.6.14.
+
 ## [0.7.51] - 2026-05-24
 
 Phase 3.5 Tier 1 commit 4 of N (refs #37, closes #74) -- bundles T1-M1 (dazzlecmd's own declarative-config deployment) with the resolution of issue #74. Both changes are runtime-vs-static halves of the same architectural shift: `aggregator.json` declares the aggregator's IDENTITY statically; `DZ_APP_NAME` / `DZ_COMMAND` env-var injection makes that identity flow to subprocess tool scripts at runtime. Shipping them together means downstream aggregators get one coherent declarative+runtime story instead of stair-stepped commits with a gap in between.
@@ -1922,7 +1955,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.51...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.52...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -141,54 +141,50 @@ def find_aggregator_root(start_path=None, max_depth=12):
     ``aggregator.json`` itself defines the project root, instead of
     requiring tools_dir + kits_dir hardcoded knowledge to find it.
 
-    Search strategy when ``start_path`` is ``None``:
+    **Entry points MUST pass an explicit ``start_path`` anchored to their
+    own package location** -- typically
+    ``os.path.dirname(os.path.abspath(__file__))`` of the aggregator's
+    ``cli`` module. This pins the aggregator's identity to *which package
+    it is*, not *where it is invoked from*. An aggregator that calls this
+    bare (relying on the cwd default) will impersonate whatever other
+    aggregator the user happens to be standing in: running ``dz`` from
+    inside a ``wtf-windows`` checkout would load wtf's ``aggregator.json``
+    and ``dz`` would become ``wtf``. The package anchor avoids that
+    because the entry point's ``__file__`` is fixed at install time.
 
-    1. Walk up from ``os.getcwd()`` -- handles the common case of the
-       user running ``dz`` from anywhere inside the project tree.
-    2. Fall back to walking up from this module's ``__file__`` --
-       handles dev-mode installs where the library lives co-located
-       with the project (``packages/dazzlecmd-lib/src/...``) and the
-       user has invoked ``dz`` from outside the project tree (e.g.,
-       from a temp directory during a test, or from a parallel
-       checkout).
-
-    In a pip-installed configuration without the source tree, BOTH
-    fallbacks return ``None`` -- there is genuinely no project root
-    to find, and the caller surfaces a clear error.
+    When ``start_path`` is ``None`` the walk starts from ``os.getcwd()``.
+    This "find from the current directory" behavior is for tests and
+    ad-hoc tooling that genuinely want cwd-relative discovery -- NOT for
+    production entry points. (Earlier revisions also fell back to this
+    module's own ``__file__``; that was removed because the library lives
+    co-located with dazzlecmd in dev mode, so the fallback made every
+    aggregator that called this bare resolve to dazzlecmd.)
 
     Args:
-        start_path: Directory to start the walk from. Defaults to the
-            two-stage fallback chain described above.
+        start_path: Directory to start the walk from. Production entry
+            points pass their package's ``__file__`` directory. Defaults
+            to ``os.getcwd()`` (tests / ad-hoc cwd-relative discovery).
         max_depth: Maximum number of parent directories to walk before
-            giving up at each stage. Defaults to 12 (deep enough for
-            any sane layout, shallow enough to terminate quickly when
-            the marker is absent).
+            giving up. Defaults to 12 (deep enough for any sane layout,
+            shallow enough to terminate quickly when the marker is
+            absent).
 
     Returns:
         Absolute path to the project root, or ``None`` if no
-        ``aggregator.json`` was found at any ancestor of either search
-        starting point.
+        ``aggregator.json`` was found within ``max_depth`` ancestors of
+        the starting point.
     """
-    def _walk(start):
-        current = os.path.abspath(start)
-        for _ in range(max_depth + 1):
-            if os.path.isfile(os.path.join(current, AGGREGATOR_CONFIG_FILENAME)):
-                return current
-            parent = os.path.dirname(current)
-            if parent == current:
-                return None
-            current = parent
-        return None
-
-    if start_path is not None:
-        return _walk(start_path)
-
-    # Two-stage fallback: cwd first (user inside project tree), then
-    # this module's __file__ (dev-mode install with co-located lib).
-    result = _walk(os.getcwd())
-    if result is not None:
-        return result
-    return _walk(os.path.dirname(os.path.abspath(__file__)))
+    if start_path is None:
+        start_path = os.getcwd()
+    current = os.path.abspath(start_path)
+    for _ in range(max_depth + 1):
+        if os.path.isfile(os.path.join(current, AGGREGATOR_CONFIG_FILENAME)):
+            return current
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None
+        current = parent
+    return None
 
 
 @dataclass(frozen=True)

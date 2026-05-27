@@ -52,6 +52,26 @@ def _reset_runner_registry():
 
 
 @pytest.fixture(autouse=True)
+def _isolate_user_config(monkeypatch, tmp_path_factory):
+    """Point ``DAZZLECMD_CONFIG`` at a nonexistent path for every test.
+
+    Tests that build ``AggregatorEngine(is_root=True)`` without setting
+    ``DAZZLECMD_CONFIG`` themselves would otherwise read the developer's
+    real ``~/.dazzlecmd/config.json``. Its ``active_kits`` /
+    ``disabled_kits`` state varies by machine and by whatever ``dz`` /
+    ``wtf`` commands were run recently -- which made config-sensitive
+    tests (e.g. the ``render_tree`` virtual-kit branches, which filter to
+    active kits) pass or fail depending on ambient state. Pointing at a
+    nonexistent path forces the engine onto its built-in defaults.
+
+    Tests that need a real config set ``DAZZLECMD_CONFIG`` themselves;
+    their ``monkeypatch.setenv`` runs after this fixture and wins.
+    """
+    nonexistent = tmp_path_factory.mktemp("dzcfg") / "nonexistent-config.json"
+    monkeypatch.setenv("DAZZLECMD_CONFIG", str(nonexistent))
+
+
+@pytest.fixture(autouse=True)
 def _reset_user_override_root():
     """Reset per-aggregator user-override root after every test.
 

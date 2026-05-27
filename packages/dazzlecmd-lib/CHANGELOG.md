@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.6.14] - 2026-05-26
+
+Ships with dazzlecmd v0.7.52. Removes the cwd-first footgun from `find_aggregator_root()` that let an entry point impersonate a sibling aggregator based on the invocation directory.
+
+### Changed
+
+- `find_aggregator_root(start_path=None)` no longer falls back to the library's own `__file__` when cwd misses. v0.6.13's two-stage default (cwd, then lib `__file__`) caused two bugs: (1) cwd-first made `dz` load a sibling aggregator's `aggregator.json` when run from inside its tree; (2) the lib-`__file__` fallback made every aggregator that called this bare resolve to dazzlecmd (the library is co-located with dazzlecmd in dev mode). Now `start_path=None` walks `os.getcwd()` only -- a deliberate "find from here" for tests/ad-hoc. **Production entry points must pass an explicit anchor** (their package's `__file__` directory); the docstring documents this contract and the impersonation hazard of calling it bare.
+
+### Refs
+
+Ships with dazzlecmd v0.7.52. Refs dazzlecmd #37 (Phase 3.5 EPIC). Fixes the impersonation regression surfaced by the wtf-windows T1-M2 migration.
+
 ## [0.6.13] - 2026-05-24
 
 Ships with dazzlecmd v0.7.51 (Phase 3.5 T1-M1 + issue #74). Two additive helpers + two engine.py injection blocks. Together they form the runtime+static duo that makes downstream aggregator adoption a "write `aggregator.json` + 5-line main()" exercise instead of a "fork dazzlecmd's main() and edit kwargs" exercise.

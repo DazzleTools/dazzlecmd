@@ -87,10 +87,22 @@ class TestRealWorldDrafts:
         assert cfg.command == "wtf"
         assert cfg.tools_dir == "tools"
         assert cfg.manifest_name == ".wtf.json"
-        # wtf-windows opts into mode but NOT add/new
-        assert "mode" in cfg.enabled_meta_commands
-        assert "add" not in cfg.enabled_meta_commands
-        assert "new" not in cfg.enabled_meta_commands
+        # wtf's enabled lib built-ins: list/info/kit/version only. It
+        # drops tree/setup, and registers mode/new/add IMPERATIVELY with
+        # custom handlers (so they're reserved, not lib-enabled).
+        assert cfg.enabled_meta_commands == frozenset(
+            {"list", "info", "kit", "version"}
+        )
+        assert "tree" not in cfg.enabled_meta_commands
+        assert "setup" not in cfg.enabled_meta_commands
+        assert "mode" not in cfg.enabled_meta_commands
+        # mode/new/add/enhance/graduate are reserved (block tool names)
+        # but not lib-enabled meta-commands.
+        for name in ("mode", "new", "add", "enhance", "graduate"):
+            assert name in cfg.reserved_commands
+        # Schema matches wtf's real tool manifests (source.url; the lib's
+        # hardcoded lifecycle.graduated_to fallback covers the rest).
+        assert cfg.schema.remote_url_paths == ("source.url",)
         # Discovery interpolates tools/
         assert "tools/*/*" in cfg.resolved_discovery_patterns()
 
@@ -288,21 +300,39 @@ class TestFindAggregatorRoot:
         result = find_aggregator_root(str(tmp_path), max_depth=0)
         assert result == os.path.abspath(str(tmp_path))
 
-    def test_default_falls_back_to_lib_file_when_cwd_misses(
-            self, tmp_path, monkeypatch):
-        """When cwd has no marker, falls back to lib __file__ walk."""
-        # Set cwd to a directory with no aggregator.json ancestor.
+    def test_default_is_cwd_only_no_lib_fallback(self, tmp_path, monkeypatch):
+        """With start_path=None and a marker-free cwd, returns None.
+
+        v0.7.52: the old lib-``__file__`` fallback was removed. It made
+        every aggregator that called this bare resolve to dazzlecmd (the
+        lib lives co-located with dazzlecmd in dev mode). The None default
+        is now cwd-only; entry points must pass an explicit anchor.
+        """
         empty = tmp_path / "no_marker_here"
         empty.mkdir()
         monkeypatch.chdir(str(empty))
-        # In dev mode (running these tests), the lib lives inside the
-        # dazzlecmd project tree, so the __file__-walk fallback should
-        # find dazzlecmd's own aggregator.json at the repo root.
-        result = find_aggregator_root()
-        # We can't assert the exact path (depends on the test runner's
-        # checkout location), but it MUST find SOMETHING -- otherwise
-        # the fallback is broken.
-        assert result is not None
-        assert os.path.isfile(
-            os.path.join(result, AGGREGATOR_CONFIG_FILENAME)
-        )
+        assert find_aggregator_root() is None
+
+    def test_explicit_anchor_ignores_cwd(self, tmp_path, monkeypatch):
+        """An explicit start_path is honored regardless of cwd.
+
+        Regression guard for the v0.7.52 impersonation bug: an entry
+        point anchored to its own package must resolve to ITS project
+        even when invoked from inside a DIFFERENT aggregator's tree.
+        Here ``other_agg`` (with its own aggregator.json) is the cwd,
+        but the anchored call resolves to ``my_agg``.
+        """
+        my_agg = tmp_path / "my_agg"
+        my_pkg = my_agg / "src" / "mypkg"
+        my_pkg.mkdir(parents=True)
+        (my_agg / AGGREGATOR_CONFIG_FILENAME).write_text("{}")
+
+        other_agg = tmp_path / "other_agg"
+        other_agg.mkdir()
+        (other_agg / AGGREGATOR_CONFIG_FILENAME).write_text("{}")
+
+        # Stand inside the OTHER aggregator's tree...
+        monkeypatch.chdir(str(other_agg))
+        # ...but anchor to my package -> resolves to MY aggregator, not other.
+        result = find_aggregator_root(str(my_pkg))
+        assert result == os.path.abspath(str(my_agg))
