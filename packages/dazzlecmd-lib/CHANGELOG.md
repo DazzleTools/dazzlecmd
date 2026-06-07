@@ -8,6 +8,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.7.10] - 2026-06-07
+
+Ships with dazzlecmd v0.8.13 -- `mode.py` attribute sweep + the `_find_undiscovered_tool` dict-or-entity unification. Byte-identical; no API change.
+
+### Changed
+
+- `mode._find_undiscovered_tool` returns a real `Tool` entity (via `build_entity`) from all paths, so `cmd_switch`'s project is always an entity.
+- `mode` -- entity reads in the switch paths migrated to attribute access. `cache_manifest` guard kept; config/gitmodules dicts stay dict access.
+
+### Refs
+
+Ships with dazzlecmd v0.8.13. Refs dazzlecmd #37, #73, #77.
+
 ## [0.7.9] - 2026-06-07
 
 Ships with dazzlecmd v0.8.11 -- `registry` attribute sweep (runtime resolution + runner factories). Byte-identical; dispatch verified; no API change.

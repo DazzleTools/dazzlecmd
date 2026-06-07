@@ -4,6 +4,27 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.13] - 2026-06-07
+
+Phase 1 (DazzleEntity call-site migration) — Stage 6b cont.: `mode.py` attribute sweep + the dict-or-entity unification of `_find_undiscovered_tool`. Byte-identical; mode-switch behavioral tests + dispatch verified. Local-only.
+
+### Changed
+
+- `dazzlecmd_lib.mode._find_undiscovered_tool` — now returns a real `Tool` entity (via `build_entity`) from all three return paths (cached-manifest hit, minimal on-disk, orphan-cache) instead of a raw dict. This is the dict-or-entity unification for the mode-switch path: `cmd_switch`'s `project` is now always an entity.
+- `dazzlecmd_lib.mode` — entity field reads in `cmd_switch` / `_switch_to_publish` / `_switch_to_dev` migrated to attribute access (`project.directory`, `project.name`, `project.namespace`, `if project.name:`). Config/gitmodules/raw-JSON dicts stay dict access. `cache_manifest`'s `hasattr(..., "to_manifest")` guard is kept (some test callers still pass raw dicts directly).
+
+### Notes (remaining follow-ons)
+
+- `cmd_status` builds its `all_projects` list with inline raw dicts (not entities) — left as dict access; a future cleanup should route it through entity construction.
+- `_resolve_remote_url` stays shim-compatible (called from tests with raw topology dicts).
+- The clone-site `else dict(project)` guards in `registry`/`engine` and the `cache_manifest` raw-dict fallback remain until their callers are fully entity-only.
+
+### Versions
+
+- dazzlecmd 0.8.12 -> 0.8.13 (PATCH).
+- dazzlecmd-lib 0.7.9 -> 0.7.10 (PATCH -- mode.py sweep + _find_undiscovered_tool unification).
+- dazzle-dz alias -> 0.8.13; deps re-pinned to >=0.8.13 / >=0.7.10.
+
 ## [0.8.12] - 2026-06-07
 
 Phase 1 (DazzleEntity call-site migration) — Stage 6b cont.: `src/dazzlecmd/cli.py` attribute sweep (the dazzlecmd package CLI). Byte-identical; dispatch verified. Local-only. (Package-only change — `dazzlecmd-lib` unchanged.)
@@ -2237,7 +2258,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.12...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.13...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -29,6 +29,7 @@ import os
 import subprocess
 import sys
 
+from dazzlecmd_lib.entity import build_entity
 from dazzlecmd_lib.paths import (
     create_link,
     get_link_target,
@@ -479,8 +480,8 @@ def cmd_switch(tool_name, projects, project_root, dev_path=None,
                   "to see available tools.", file=sys.stderr)
             return 1
 
-    tool_dir = project["_dir"]
-    namespace = project.get("namespace", "")
+    tool_dir = project.directory
+    namespace = project.namespace
     qualified = f"{namespace}:{tool_name}"
 
     gitmodules = parse_gitmodules(project_root, tools_dir=tools_dir)
@@ -532,7 +533,9 @@ def _find_undiscovered_tool(tool_name, project_root, *, tools_dir):
             fix -- replaces hardcoded ``"projects"``).
 
     Returns:
-        A minimal project dict or ``None``.
+        A Tool entity or ``None``. All return paths return a real
+        DazzleEntity so ``cmd_switch`` and its helpers can use attribute
+        access unconditionally.
     """
     projects_dir = os.path.join(project_root, tools_dir)
     if not os.path.isdir(projects_dir):
@@ -546,20 +549,25 @@ def _find_undiscovered_tool(tool_name, project_root, *, tools_dir):
         tool_dir = os.path.join(ns_dir, tool_name)
         if os.path.exists(tool_dir) or is_linked_project(tool_dir):
             qualified = f"{namespace}:{tool_name}"
-            # Try cached manifest
+            # Try cached manifest first; build entity from it + the computed fields.
             cached = get_cached_manifest(project_root, qualified)
             if cached:
-                cached["_dir"] = tool_dir
-                cached["namespace"] = namespace
-                return cached
-            # Minimal project dict
-            return {
-                "name": tool_name,
-                "namespace": namespace,
-                "_dir": tool_dir,
-            }
+                data = dict(cached)
+                data["directory"] = tool_dir
+                data["namespace"] = namespace
+                data.setdefault("name", tool_name)
+                return build_entity(data, entity_type="tool")
+            # No manifest cached — build a minimal entity.
+            return build_entity(
+                {
+                    "name": tool_name,
+                    "namespace": namespace,
+                    "directory": tool_dir,
+                },
+                entity_type="tool",
+            )
 
-    # Check if any cached manifest matches (tool may have been removed)
+    # Check if any cached manifest matches (tool may have been removed from disk)
     data = _load_full_config(project_root)
     for qn, manifest in data.get("cached_manifests", {}).items():
         if ":" in qn:
@@ -568,9 +576,11 @@ def _find_undiscovered_tool(tool_name, project_root, *, tools_dir):
             ns, name = "", qn
         if name == tool_name:
             tool_dir = os.path.join(projects_dir, ns, name)
-            manifest["_dir"] = tool_dir
-            manifest["namespace"] = ns
-            return manifest
+            payload = dict(manifest)
+            payload["directory"] = tool_dir
+            payload["namespace"] = ns
+            payload.setdefault("name", tool_name)
+            return build_entity(payload, entity_type="tool")
 
     return None
 
@@ -702,9 +712,9 @@ def _switch_to_dev(project, project_root, gitmodules, explicit_path,
     inner calls (BLOCKERs F2/F3/F4/F5/F8). ``force`` overrides the
     dirty-tree safety gate at the destructive `rmtree` (T1-E).
     """
-    tool_dir = project["_dir"]
-    tool_name = project["name"]
-    namespace = project.get("namespace", "")
+    tool_dir = project.directory
+    tool_name = project.name
+    namespace = project.namespace
     qualified = f"{namespace}:{tool_name}"
     state = detect_tool_state(
         tool_dir, gitmodules, project_root, tools_dir=tools_dir
@@ -788,9 +798,9 @@ def _switch_to_publish(project, project_root, gitmodules, dry_run, force,
     overrides the dirty-tree safety gate at the destructive `rmtree`
     (T1-E).
     """
-    tool_dir = project["_dir"]
-    tool_name = project["name"]
-    namespace = project.get("namespace", "")
+    tool_dir = project.directory
+    tool_name = project.name
+    namespace = project.namespace
 
     state = detect_tool_state(
         tool_dir, gitmodules, project_root, tools_dir=tools_dir
@@ -810,7 +820,7 @@ def _switch_to_publish(project, project_root, gitmodules, dry_run, force,
     # Cache the manifest before switching — the remote version may not
     # have the per-tool manifest yet, so we preserve it for future discovery
     qualified = f"{namespace}:{tool_name}"
-    if project.get("name"):
+    if project.name:
         cache_manifest(project_root, qualified, project)
 
     if not has_submodule:
