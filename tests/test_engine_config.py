@@ -16,6 +16,7 @@ import pytest
 
 from dazzlecmd.engine import AggregatorEngine
 from dazzlecmd.loader import get_active_kits
+from dazzlecmd_lib.testing import make_kit
 
 
 # ---------------------------------------------------------------------------
@@ -230,12 +231,7 @@ class TestWriteUserConfig:
 
 
 def _mk_kit(name, always_active=False):
-    return {
-        "_kit_name": name,
-        "name": name,
-        "always_active": always_active,
-        "tools": [],
-    }
+    return make_kit(name=name, always_active=always_active, _kit_name=name)
 
 
 class TestGetActiveKits:

@@ -4,6 +4,21 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.10] - 2026-06-07
+
+Phase 1 (DazzleEntity call-site migration) — Stage 6b cont.: `loader.py` attribute sweep. Byte-identical. Local-only.
+
+### Changed
+
+- `dazzlecmd_lib.loader` — entity-READ sites migrated to attribute access: `get_active_kits` (`kit.kit_name or kit.name`, `kit.always_active`), `discover_projects` (`kit.tools`), `_scan_tool_dirs` (`p.namespace`, `p.name`). Raw-construction dict access (the `registry`/`kit`/`manifest`/`cached`/`inner` dicts assembled *before* `build_entity`) correctly stays dict access — it's not entity access. Extra keys (`manifest`, `tools_dir`) stay `.get()`.
+- Fixture: `tests/test_engine_config.py` `_mk_kit` helper migrated to `make_kit` (it fed raw-dict kits directly to `get_active_kits`).
+
+### Versions
+
+- dazzlecmd 0.8.9 -> 0.8.10 (PATCH).
+- dazzlecmd-lib 0.7.7 -> 0.7.8 (PATCH -- loader attribute sweep).
+- dazzle-dz alias -> 0.8.10; deps re-pinned to >=0.8.10 / >=0.7.8.
+
 ## [0.8.9] - 2026-06-07
 
 Phase 1 (DazzleEntity call-site migration) — Stage 6b cont.: completes the `default_meta_commands.py` attribute sweep by migrating `render_tree` and the virtual-kit paths (deferred in 0.8.8 because their fixtures were still plain dicts). Byte-identical. Local-only.
@@ -2193,7 +2208,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.9...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.10...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

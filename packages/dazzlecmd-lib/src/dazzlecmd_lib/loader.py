@@ -242,7 +242,7 @@ def get_active_kits(kits, user_config=None):
         requested = {k.strip() for k in env_kits.split(",") if k.strip()}
         return [
             k for k in all_kits
-            if (k.get("_kit_name") or k.get("name")) in requested
+            if (k.kit_name or k.name) in requested
         ]
 
     if user_config is None:
@@ -272,7 +272,7 @@ def get_active_kits(kits, user_config=None):
 
     result = []
     for kit in all_kits:
-        name = kit.get("_kit_name") or kit.get("name")
+        name = kit.kit_name or kit.name
         if name in disabled_set:
             # Explicitly disabled: always wins, even for always_active kits
             continue
@@ -282,7 +282,7 @@ def get_active_kits(kits, user_config=None):
             continue
         # active_kits is set: include only listed kits, but always_active
         # kits remain active unless explicitly disabled
-        if name in active_set or kit.get("always_active"):
+        if name in active_set or kit.always_active:
             result.append(kit)
 
     return result
@@ -321,7 +321,7 @@ def discover_projects(projects_dir, active_kits=None, default_manifest=".dazzlec
         kit_tools = set()
         for kit in active_kits:
             manifest_name = kit.get("manifest", default_manifest)
-            for tool_ref in kit.get("tools", []):
+            for tool_ref in kit.tools:
                 kit_tools.add(tool_ref)
                 # Track manifest name per namespace. FQCNs may have 2+
                 # segments (``core:rn`` or ``wtf:core:restarted``); the
@@ -361,7 +361,7 @@ def _scan_tool_dirs(base_dir, default_manifest, kit_tools,
     # Track already-discovered tool identities. Dedup by (namespace, tool_name)
     # to preserve distinct tools that share a short name across kits
     # (e.g., core:find and wtf:core:find).
-    seen = {(p.get("namespace", ""), p["name"]) for p in projects}
+    seen = {(p.namespace, p.name) for p in projects}
 
     for namespace in sorted(os.listdir(base_dir)):
         ns_dir = os.path.join(base_dir, namespace)
