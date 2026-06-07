@@ -348,3 +348,107 @@ class TestCliMode:
         )
         assert result.returncode == 0
         assert "tool(s)" in result.stdout
+
+
+class TestModeSwitchEntityBehavior:
+    """Drive the real cmd_switch flow with REAL DazzleEntity projects.
+
+    The Phase 0 byte-identical gate covered `dz mode status` but never
+    `dz mode switch`, and the unit tests passed dict literals -- so the
+    `cache_manifest().items()` crash on an entity shipped undetected. These
+    sandboxed behavioral tests close that gap: they pass discovered-style
+    entities through cmd_switch in --dry-run, against a temp project_root and
+    a temp config, never touching real submodules.
+    """
+
+    def _make_tool_entity(self, tmpdir):
+        from dazzlecmd_lib.entity import build_entity
+        tool_dir = os.path.join(tmpdir, "projects", "core", "mytool")
+        os.makedirs(tool_dir)
+        with open(os.path.join(tool_dir, "mytool.py"), "w") as f:
+            f.write("# placeholder")
+        return build_entity(
+            {
+                "name": "mytool",
+                "namespace": "core",
+                "version": "1.0.0",
+                "description": "sandbox tool",
+                "source": {"url": "https://example.com/mytool.git"},
+                "runtime": {"type": "python", "script_path": "mytool.py"},
+                "_dir": tool_dir,
+                "_fqcn": "core:mytool",
+            },
+            entity_type="tool",
+        )
+
+    def test_switch_to_publish_dry_run_with_entity(self):
+        """--publish --dry-run on an ENTITY runs the crash path and returns 0.
+
+        cmd_switch -> _switch_to_publish -> cache_manifest(entity) executes
+        BEFORE the dry-run gate, so this exercises the exact path that crashed
+        in v0.8.1, then returns cleanly without any git/fs mutation.
+        """
+        from dazzlecmd_lib.mode import cmd_switch, get_cached_manifest
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tool = self._make_tool_entity(tmpdir)
+            rc = cmd_switch(
+                "mytool", [tool], tmpdir,
+                force_mode="publish", dry_run=True,
+                url="https://example.com/mytool.git",
+                tools_dir="projects", command="dz", schema=None,
+            )
+            assert rc == 0
+            # cache_manifest ran with the ENTITY (the crash path) and stored it
+            cached = get_cached_manifest(tmpdir, "core:mytool")
+            assert cached is not None
+            assert cached["name"] == "mytool"
+            assert not any(k.startswith("_") for k in cached)
+
+    def test_switch_to_dev_dry_run_with_entity(self):
+        """--dev --dry-run on an ENTITY plans a symlink without mutation."""
+        from dazzlecmd_lib.mode import cmd_switch
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tool = self._make_tool_entity(tmpdir)
+            dev_src = os.path.join(tmpdir, "devsrc")
+            os.makedirs(dev_src)
+            rc = cmd_switch(
+                "mytool", [tool], tmpdir,
+                dev_path=dev_src, force_mode="dev", dry_run=True,
+                tools_dir="projects", command="dz", schema=None,
+            )
+            assert rc == 0
+
+    def test_switch_to_dev_real_mutation_with_entity(self):
+        """Non-dry-run --dev on an ENTITY actually creates the link.
+
+        The stronger guard: exercises the full _switch_to_dev mutate path
+        (rmtree the embedded dir -> create_link -> remember dev path) with a
+        real entity, not just the dry-run plan. Sandboxed entirely in a temp
+        dir; the created link is a junction/symlink to a temp source.
+        """
+        from dazzlecmd_lib.mode import cmd_switch
+        from dazzlecmd_lib.core.links import is_linked_project
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tool = self._make_tool_entity(tmpdir)
+            tool_dir = tool["_dir"]
+            dev_src = os.path.join(tmpdir, "devsrc")
+            os.makedirs(dev_src)
+            with open(os.path.join(dev_src, "mytool.py"), "w") as f:
+                f.write("# dev version")
+
+            rc = cmd_switch(
+                "mytool", [tool], tmpdir,
+                dev_path=dev_src, force_mode="dev", dry_run=False, force=True,
+                tools_dir="projects", command="dz", schema=None,
+            )
+            assert rc == 0
+            # tool_dir is now a real link...
+            assert is_linked_project(tool_dir)
+            # ...and resolves to the dev source's content
+            linked_file = os.path.join(tool_dir, "mytool.py")
+            assert os.path.exists(linked_file)
+            with open(linked_file) as f:
+                assert f.read() == "# dev version"

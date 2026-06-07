@@ -4,6 +4,21 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.3] - 2026-06-07
+
+Phase 1 (DazzleEntity call-site migration) — Stage 2: the write-path safety net. Test-only; no source change (ratchet stays off). Builds entity-fixture coverage for the mutate commands before the big attribute sweep — closing the gap that let the 0.8.1 `dz mode switch` crash ship undetected. Local-only.
+
+### Tests
+
+- `test_mode.py::TestModeSwitchEntityBehavior` — drives the real `cmd_switch` flow with REAL `DazzleEntity` projects (not dict literals), against a temp project_root + temp config (never real submodules): `test_switch_to_publish_dry_run_with_entity` exercises the exact crash path (`cmd_switch` → `_switch_to_publish` → `cache_manifest(entity)` runs before the dry-run gate) and asserts the cached manifest is written without `_`-keys; `test_switch_to_dev_dry_run_with_entity` covers the dev plan; `test_switch_to_dev_real_mutation_with_entity` runs a **non-dry-run** dev switch — actually creating a junction/symlink and verifying it resolves to the dev source — to prove the full mutate path (rmtree → `create_link` → remember) works with an entity, not just the plan.
+- Coverage note: the kit enable/disable write path is already entity-exercised via `test_cli_kit.py` (real `AggregatorEngine`); `add`/`new` carry no `.items()`-on-entity crash class. The mode-switch publish path was the one untested mutate path.
+
+### Versions
+
+- dazzlecmd 0.8.2 -> 0.8.3 (PATCH -- tests only; full suite 1252 passed / 14 skipped).
+- dazzlecmd-lib unchanged at 0.7.1 (no library source change).
+- dazzle-dz alias -> 0.8.3; deps re-pinned to >=0.8.3 / >=0.7.1.
+
 ## [0.8.2] - 2026-06-07
 
 Phase 1 (DazzleEntity call-site migration) — Stage 1. Completes the entity shim into a faithful read-Mapping and fixes a latent crash the 0.8.1 byte-identical gate missed. Local-only milestone; no push until the full 0.8.x port is verified.
@@ -2052,7 +2067,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.2...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.3...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
