@@ -4,6 +4,30 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.7.54] - 2026-06-07
+
+Final 0.7.x housekeeping commit, landed to give the 0.8.0 DazzleEntity foundational redesign a clean baseline to diff against. No new tools: the dazzletools / media / file-ops batch sitting in the working tree is parked and each ships as its own MINOR after the refactor. Pure framework / infra / test-doc cleanup.
+
+### Changed
+
+- `dazzlecmd_lib.mode._print_no_toggle` -- replaced a Unicode em dash with `--` in the embedded-tool error message (Windows codepage safety, per the no-Unicode-in-shell-output rule).
+- `pyproject.toml` -- `[tool.pytest.ini_options].norecursedirs` now includes `one-offs`, so `tests/one-offs/` (the scratchpad) is excluded from regression discovery.
+
+### Added
+
+- `tests/checklists/v0.7.54__Phase3.5__T1-J-mode-and-aggregator-chain.md` -- consolidated human checklist for the Phase 3.5 mode + cross-aggregator chain (covers v0.7.47-v0.7.53), plus its tester-unbounded run result under `tests/checklists/results/`.
+- `tests/one-offs/wrap_commit_msg.py` -- commit-message body re-wrap utility (72-col), preserving subject / blank / header / list lines.
+
+### Refs
+
+- Refs #37 (Phase 3.5 EPIC). Closes the 0.7.x housekeeping tail; 0.8.0 begins the DazzleEntity universal-polymorphic-base redesign (design + /collaborate3 validation recorded in the project's private design folder).
+
+### Versions
+
+- dazzlecmd 0.7.53 -> 0.7.54 (PATCH).
+- dazzlecmd-lib 0.6.14 -> 0.6.15 (PATCH -- the mode.py cosmetic fix).
+- dazzle-dz alias -> 0.7.54; deps re-pinned to >=0.7.54 / >=0.6.15.
+
 ## [0.7.53] - 2026-05-27
 
 Closes the Phase 3.5 T1-M cross-aggregator loop: bumps the embedded `projects/wtf` submodule to wtf-windows `d48a334` (v0.1.5-alpha, the T1-M2 migration) and validates the recursive chain end-to-end. dazzlecmd (T1-M1) now embeds the fully-declarative wtf (T1-M2, with its own `aggregator.json`), and `dz wtf:core:locked` resolves into the nested aggregator's tool.
@@ -1982,7 +2006,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.53...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.54...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

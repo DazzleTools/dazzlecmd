@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.6.15] - 2026-06-07
+
+Ships with dazzlecmd v0.7.54. Cosmetic Windows-codepage fix; no API change.
+
+### Changed
+
+- `mode._print_no_toggle()` -- replaced a Unicode em dash with `--` in the embedded-tool "no mode toggle" stderr message (codepage safety on Windows cmd / PowerShell).
+
+### Refs
+
+Ships with dazzlecmd v0.7.54. Refs dazzlecmd #37.
+
 ## [0.6.14] - 2026-05-26
 
 Ships with dazzlecmd v0.7.52. Removes the cwd-first footgun from `find_aggregator_root()` that let an entry point impersonate a sibling aggregator based on the invocation directory.

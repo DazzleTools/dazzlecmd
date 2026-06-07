@@ -62,6 +62,12 @@ include = ["dazzlecmd*"]
 "dazzlecmd" = ["templates/*"]
 
 [tool.pytest.ini_options]
+# tests/one-offs/ is a scratchpad (per the one-offs-vs-regression-tests
+# policy) -- experiments, diagnostic scripts, single-use probes. They are
+# NOT regression coverage and must not block CI / pre-push. Real regressions
+# live in tests/ (and packages/*/tests/) as conventional pytest modules.
+# Also preserve pytest's default exclusions.
+norecursedirs = [".*", "build", "dist", "CVS", "_darcs", "{arch}", "*.egg", "venv", "one-offs"]
 markers = [
     "shell_cmd: tests requiring Windows cmd.exe",
     "shell_bash: tests requiring bash in PATH",

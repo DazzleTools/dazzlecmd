@@ -598,7 +598,7 @@ def _print_no_toggle(tool_name, state, *, command, tools_dir):
     if state == STATE_EMBEDDED:
         print(f"Error: '{tool_name}' is embedded (no submodule registered).",
               file=sys.stderr)
-        print("  This tool lives directly in the repo — no mode toggle "
+        print("  This tool lives directly in the repo -- no mode toggle "
               "available.", file=sys.stderr)
     elif state == STATE_LOCAL_ONLY:
         print(f"Error: '{tool_name}' is a local-only symlink (no submodule "
