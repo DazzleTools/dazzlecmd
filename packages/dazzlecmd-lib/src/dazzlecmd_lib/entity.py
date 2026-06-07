@@ -216,14 +216,33 @@ class DazzleEntity(Groupable, BaseModel):
     # ------------------------------------------------------------------
     _warn_on_shim: ClassVar[bool] = False
 
-    def _maybe_warn_shim(self, how: str) -> None:
-        if type(self)._warn_on_shim:
-            warnings.warn(
-                f"legacy dict-style access ({how}) on a DazzleEntity; "
-                f"use attribute access instead",
-                DeprecationWarning,
-                stacklevel=3,
-            )
+    def _is_typed_key(self, key: str) -> bool:
+        """True if ``key`` (or its legacy alias) names a typed field or property.
+
+        Only typed fields/properties have a safe attribute form. Extra keys
+        (manifest data + nested blocks like ``runtime``/``always_active``/
+        ``tools``) have no attribute form -- ``entity.always_active`` raises
+        when the key is absent -- so dict access to them is legitimate and
+        permanent. The ratchet warns only for typed-key access.
+        """
+        mapped = type(self)._LEGACY_KEY_MAP.get(key, key)
+        if mapped in type(self).model_fields:
+            return True
+        return isinstance(getattr(type(self), mapped, None), property)
+
+    def _maybe_warn_shim(self, how: str, key: Optional[str] = None) -> None:
+        if not type(self)._warn_on_shim:
+            return
+        # Keyed access (getitem/setitem/get) warns only for TYPED keys; bulk
+        # Mapping methods (items/keys/values, key=None) always warn.
+        if key is not None and not self._is_typed_key(key):
+            return
+        warnings.warn(
+            f"legacy dict-style access ({how}) on a DazzleEntity; "
+            f"use attribute access instead",
+            DeprecationWarning,
+            stacklevel=3,
+        )
 
     def _raw_get(self, key: str) -> Any:
         """Dict-style lookup WITHOUT the deprecation warning.
@@ -242,11 +261,11 @@ class DazzleEntity(Groupable, BaseModel):
             raise KeyError(key)
 
     def __getitem__(self, key: str) -> Any:
-        self._maybe_warn_shim("[]")
+        self._maybe_warn_shim("[]", key)
         return self._raw_get(key)
 
     def __setitem__(self, key: str, value: Any) -> None:
-        self._maybe_warn_shim("[]=")
+        self._maybe_warn_shim("[]=", key)
         # Legacy `_`-keys route to their promoted field/property; so an
         # existing ``project["_dir"] = x`` lands in the typed `directory`
         # field, and ``project["_fqcn"] = x`` goes through the set-once C1
@@ -262,9 +281,9 @@ class DazzleEntity(Groupable, BaseModel):
             self._set_extra_field(key, value)
 
     def get(self, key: str, default: Any = None) -> Any:
-        self._maybe_warn_shim(".get()")
+        self._maybe_warn_shim(".get()", key)
         try:
-            return self[key]
+            return self._raw_get(key)
         except KeyError:
             return default
 

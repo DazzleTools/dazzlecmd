@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.7.3] - 2026-06-07
+
+Ships with dazzlecmd v0.8.5 -- Phase 1 Stage 4: the test-time migration ratchet foundation. No production behavior change (ratchet off by default).
+
+### Changed
+
+- The shim deprecation ratchet (`_warn_on_shim`) now warns **only for typed-field/property access**, not for extra/nested-block dict access (which has no safe attribute form). `get()` no longer double-warns (routes through `_raw_get`). Ratchet stays off by default, so consumers and production are unaffected.
+
+### Refs
+
+Ships with dazzlecmd v0.8.5. Refs dazzlecmd #37, #73, #77.
+
 ## [0.7.2] - 2026-06-07
 
 Ships with dazzlecmd v0.8.4 -- Phase 1 Stage 3: promote computed runtime values to typed fields. Public API unchanged; the migration is internal and a legacy-key alias map keeps dict access working, so consumers (dazzlecmd, amdead, wtf-windows) need no change.

@@ -261,6 +261,41 @@ class TestShimMapping:
         assert d["name"] == "tool1"
         assert d["script"] == "tool1.py"
 
+    def test_ratchet_warns_only_for_typed_keys(self):
+        """The ratchet flags TYPED-field shim access; extra/nested access is
+        legitimate (no safe attribute form) and stays silent."""
+        import warnings
+
+        class _RatchetTool(Tool):
+            _warn_on_shim = True
+
+        t = _RatchetTool.model_validate(_tool_manifest())
+
+        def warned(fn):
+            with warnings.catch_warnings(record=True) as w:
+                warnings.simplefilter("always")
+                fn()
+                return any(issubclass(x.category, DeprecationWarning) for x in w)
+
+        assert warned(lambda: t["name"]) is True          # typed field
+        assert warned(lambda: t["_dir"]) is True           # legacy -> directory field
+        assert warned(lambda: t.get("description")) is True
+        assert warned(lambda: t["runtime"]) is False       # extra/nested block
+        assert warned(lambda: t.get("tags")) is False      # extra
+        assert warned(lambda: "runtime" in t) is False     # contains never warns
+
+    def test_assert_no_shim_access_helper(self, assert_no_shim_access):
+        """The shared ratchet helper passes attribute/extra access and fails
+        typed-field shim access."""
+        t = Tool.model_validate(_tool_manifest())
+        # attribute access on typed fields -> OK
+        assert_no_shim_access(lambda: (t.name, t.namespace, t.description))
+        # extra/nested dict access -> OK (no attribute form)
+        assert_no_shim_access(lambda: (t["runtime"], t.get("tags")))
+        # typed-field shim access -> the helper raises
+        with pytest.raises(AssertionError):
+            assert_no_shim_access(lambda: t["name"])
+
     def test_mapping_methods_warn_under_ratchet(self):
         class _RatchetTool(Tool):
             _warn_on_shim = True

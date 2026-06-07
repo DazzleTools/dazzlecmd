@@ -4,6 +4,28 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.5] - 2026-06-07
+
+Phase 1 (DazzleEntity call-site migration) — Stage 4: the ratchet foundation. Establishes the test-time migration ratchet that the per-file attribute sweep will use. No production behavior change (the ratchet is off by default); byte-identical. Local-only.
+
+### Changed
+
+- `dazzlecmd_lib.entity` — the shim deprecation ratchet now warns **only for typed-field/property access** (`entity["name"]`, `entity["_dir"]`), not for extra/nested-block access (`entity["runtime"]`, `entity.get("tools")`). Extra keys have no safe attribute form (`entity.always_active` raises when absent), so dict access to them is legitimate and permanent — the ratchet targets exactly the access that *should* migrate. Also fixed a pre-existing double-warn in `get()` (now routes through the no-warn `_raw_get`). The ratchet stays **off by default** (`_warn_on_shim = False`), so production / wtf / amdead are unaffected (D2).
+
+### Added
+
+- `assert_no_shim_access(callable)` test fixture (in both `tests/conftest.py` and `packages/dazzlecmd-lib/tests/conftest.py`) — flips the ratchet on for one operation and asserts it triggers no typed-field shim access. This is the D2-safe enforcement mechanism (replaces the DWP's global-flip plan, which would have leaked warnings into wtf/amdead since they share the `DazzleEntity` class). The per-file sweep adds an assertion per fully-migrated operation.
+
+### Tests
+
+- `test_entity.py` — `test_ratchet_warns_only_for_typed_keys` (typed warns; extra and `in` stay silent) and `test_assert_no_shim_access_helper` (helper passes attribute/extra access, fails typed shim access).
+
+### Versions
+
+- dazzlecmd 0.8.4 -> 0.8.5 (PATCH).
+- dazzlecmd-lib 0.7.2 -> 0.7.3 (PATCH -- typed-only ratchet + `get()` double-warn fix).
+- dazzle-dz alias -> 0.8.5; deps re-pinned to >=0.8.5 / >=0.7.3.
+
 ## [0.8.4] - 2026-06-07
 
 Phase 1 (DazzleEntity call-site migration) — Stage 3: promote the computed runtime fields from `_`-prefixed extra keys to typed model fields. The first dispatch-touching stage. Byte-identical across every `dz`/`wtf`/`amdead` surface (verified); the engine and all readers are untouched — a legacy-key alias map keeps existing `project["_dir"]`/`project["_fqcn"]` access working transparently while readers migrate later. Local-only.
@@ -2092,7 +2114,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.4...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.5...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
