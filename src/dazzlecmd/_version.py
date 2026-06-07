@@ -21,13 +21,13 @@ Version levels:
 
 # Version components - edit these for version bumps
 MAJOR = 0
-MINOR = 7
-PATCH = 54
-PHASE = ""  # Per-MINOR feature set: None, "alpha", "beta", "rc1", etc.
+MINOR = 8
+PATCH = 0
+PHASE = "alpha"  # Per-MINOR feature set: None, "alpha", "beta", "rc1", etc.
 PROJECT_PHASE = "prealpha"  # Project-wide: "prealpha", "alpha", "beta", "stable"
 
 # Auto-updated by git hooks - do not edit manually
-__version__ = "0.7.54_main_87-20260607-3f02aa72"
+__version__ = "0.8.0-alpha_main_88-20260607-d2769ca6"
 __app_name__ = "dazzlecmd"
 
 
