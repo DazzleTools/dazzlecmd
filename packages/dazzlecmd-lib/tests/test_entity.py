@@ -206,3 +206,73 @@ class TestDetectType:
     def test_no_marker_hard_fails(self):
         with pytest.raises(AmbiguousEntityTypeError):
             detect_type({})
+
+
+class TestShimMapping:
+    """The shim must be a CORRECT read-Mapping: keys()/values()/items().
+
+    Regression guard for the v0.8.1 crash where `manifest.items()` on a
+    DazzleEntity (in mode.cache_manifest) raised AttributeError because only
+    __getitem__/__setitem__/get/__contains__ existed.
+    """
+
+    def test_items_covers_fields_and_extra(self):
+        t = Tool.model_validate(_tool_manifest())
+        d = dict(t.items())
+        assert d["name"] == "tool1"          # typed field
+        assert d["type"] == "tool"            # discriminator field
+        assert d["runtime"] == {"type": "python", "interpreter": "python"}  # extra/nested
+        assert d["script"] == "tool1.py"      # extra
+
+    def test_keys_values_consistent(self):
+        t = Tool.model_validate(_tool_manifest())
+        keys = list(t.keys())
+        vals = list(t.values())
+        assert len(keys) == len(vals)
+        assert "name" in keys and "script" in keys
+        assert dict(zip(keys, vals))["script"] == "tool1.py"
+
+    def test_keys_match_contains(self):
+        t = Tool.model_validate(_tool_manifest())
+        for k in t.keys():
+            assert k in t  # __contains__ agrees with the key view
+
+    def test_items_includes_computed_underscore_keys(self):
+        """cache_manifest relies on _-keys being PRESENT so it can filter them."""
+        t = Tool.model_validate(_tool_manifest())
+        t["_fqcn"] = "core:tool1"
+        t["_kit_active"] = True
+        d = dict(t.items())
+        assert d["_fqcn"] == "core:tool1"
+        assert d["_kit_active"] is True
+        # the cache_manifest pattern strips them itself:
+        clean = {k: v for k, v in t.items() if not k.startswith("_")}
+        assert not any(k.startswith("_") for k in clean)
+        assert clean["name"] == "tool1"
+
+    def test_dict_constructor_still_works(self):
+        """Pydantic's __iter__ contract must remain intact (not overridden)."""
+        t = Tool.model_validate(_tool_manifest())
+        d = dict(t)  # relies on BaseModel.__iter__ yielding (k, v)
+        assert d["name"] == "tool1"
+        assert d["script"] == "tool1.py"
+
+    def test_mapping_methods_warn_under_ratchet(self):
+        class _RatchetTool(Tool):
+            _warn_on_shim = True
+
+        t = _RatchetTool.model_validate(_tool_manifest())
+        with pytest.warns(DeprecationWarning):
+            list(t.items())
+        with pytest.warns(DeprecationWarning):
+            list(t.keys())
+        with pytest.warns(DeprecationWarning):
+            list(t.values())
+
+    def test_silent_by_default(self):
+        t = Tool.model_validate(_tool_manifest())
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            list(t.items())
+            list(t.keys())
+            list(t.values())

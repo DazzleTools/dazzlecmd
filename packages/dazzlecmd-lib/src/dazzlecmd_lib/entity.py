@@ -182,8 +182,12 @@ class DazzleEntity(Groupable, BaseModel):
                 stacklevel=3,
             )
 
-    def __getitem__(self, key: str) -> Any:
-        self._maybe_warn_shim("[]")
+    def _raw_get(self, key: str) -> Any:
+        """Dict-style lookup WITHOUT the deprecation warning.
+
+        Used by the shim Mapping methods (``items``/``values``) so they warn
+        once per call, not once per item.
+        """
         try:
             return getattr(self, key)
         except AttributeError:
@@ -191,6 +195,10 @@ class DazzleEntity(Groupable, BaseModel):
             if key in extra:
                 return extra[key]
             raise KeyError(key)
+
+    def __getitem__(self, key: str) -> Any:
+        self._maybe_warn_shim("[]")
+        return self._raw_get(key)
 
     def __setitem__(self, key: str, value: Any) -> None:
         self._maybe_warn_shim("[]=")
@@ -216,6 +224,38 @@ class DazzleEntity(Groupable, BaseModel):
         if key in type(self).model_fields:
             return True
         return key in (self.__pydantic_extra__ or {})
+
+    # --- read-Mapping methods (faithful dict view; warned under the ratchet) ---
+    # The shim must be a CORRECT Mapping while it exists: code that does
+    # ``manifest.items()`` on an entity (e.g. ``mode.cache_manifest``) used to
+    # crash with AttributeError because only __getitem__/get/__contains__ were
+    # provided. These complete the read view (keys + extra, incl computed
+    # ``_``-prefixed keys -- consistent with ``__contains__``).
+    #
+    # Deliberately NOT overriding ``__iter__``/``__len__``: pydantic v2's
+    # BaseModel.__iter__ yields (field, value) tuples and ``dict(entity)``
+    # relies on that contract; redefining it to yield keys would break
+    # ``dict(entity)``. No top-level call site iterates a single entity, so
+    # the dict-view via keys()/values()/items() is sufficient.
+    def _shim_keys(self) -> List[str]:
+        keys = list(type(self).model_fields.keys())
+        extra = self.__pydantic_extra__ or {}
+        for k in extra:
+            if k not in type(self).model_fields:
+                keys.append(k)
+        return keys
+
+    def keys(self) -> List[str]:
+        self._maybe_warn_shim(".keys()")
+        return self._shim_keys()
+
+    def values(self) -> List[Any]:
+        self._maybe_warn_shim(".values()")
+        return [self._raw_get(k) for k in self._shim_keys()]
+
+    def items(self) -> List[Any]:
+        self._maybe_warn_shim(".items()")
+        return [(k, self._raw_get(k)) for k in self._shim_keys()]
 
     # ------------------------------------------------------------------
     # Serialization: manifest fields only (strip computed `_`-keys).

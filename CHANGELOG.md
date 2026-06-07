@@ -4,6 +4,29 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.2] - 2026-06-07
+
+Phase 1 (DazzleEntity call-site migration) — Stage 1. Completes the entity shim into a faithful read-Mapping and fixes a latent crash the 0.8.1 byte-identical gate missed. Local-only milestone; no push until the full 0.8.x port is verified.
+
+### Fixed
+
+- `dz mode switch <tool>` (publish) no longer crashes. `mode.cache_manifest()` does `{k: v for k, v in manifest.items() ...}`, and for any *discovered* tool `manifest` is a `DazzleEntity` — but the shim had no `.items()`, so the common path raised `AttributeError`. The byte-identical gate covered `dz mode status`, never `dz mode switch`, and the `cache_manifest` tests passed dict literals (never an entity), so the regression was invisible.
+
+### Changed
+
+- `dazzlecmd_lib.entity.DazzleEntity` — the backward-compat shim is now a faithful read-Mapping: added `keys()` / `values()` / `items()` (plus a no-warn `_raw_get` so they warn once per call, not once per item). Each routes through the deprecation ratchet, so they're still flagged for the Phase 1 migration. `__iter__` / `__len__` are deliberately NOT overridden — pydantic v2's `BaseModel.__iter__` yields `(field, value)` tuples and `dict(entity)` relies on that contract; no top-level call site iterates a single entity.
+
+### Tests
+
+- `test_entity.py::TestShimMapping` — keys/values/items fidelity (fields + extra incl computed `_`-keys), `__contains__` agreement, `dict(entity)` still works, ratchet-warns, silent-by-default.
+- `test_mode.py::test_cache_manifest_accepts_entity` — the missing real-object regression: `cache_manifest` with an actual `Tool` entity (not a dict literal).
+
+### Versions
+
+- dazzlecmd 0.8.1 -> 0.8.2 (PATCH).
+- dazzlecmd-lib 0.7.0 -> 0.7.1 (PATCH -- shim Mapping methods on `entity.py`).
+- dazzle-dz alias -> 0.8.2; deps re-pinned to >=0.8.2 / >=0.7.1.
+
 ## [0.8.1] - 2026-06-07
 
 Foundational redesign: a typed `DazzleEntity` object model replaces anonymous dicts for tools / kits / aggregators, with the {grouping, ungrouping} primitive as a capability (`Groupable`). The 0.8.x line is a deliberate cheap-rollback fork point (the 0.7.54 baseline is the fallback). Built in staged sub-commits: 0.8.0 (Stage 1, the standalone model) and this 0.8.1 (Stages 2-5, wiring + release). Design: the DazzleEntity synthesis DWP + a 5-round /collaborate3 validation (project-private design folder). The migration boundary is the top-level entity only -- nested blocks (`runtime`, `_vars`, `volumes`, `platforms`, `setup`) stay plain dicts -- and the backward-compat shim keeps the ~252 existing dict-access call sites working unchanged, so the user-facing output of `dz` / `wtf` / `amdead` is byte-identical to 0.7.54 (verified against captured baselines; only the version string changes).
@@ -2029,7 +2052,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.2...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -209,6 +209,42 @@ class TestDiscoverProjectsCacheFallback:
             assert cached_project["_cached"] is True
             assert cached_project["description"] == "A cached tool"
 
+    def test_cache_manifest_accepts_entity(self):
+        """Regression: cache_manifest must work when passed a DazzleEntity.
+
+        The discovered-tool path (cmd_switch -> _switch_to_publish) passes a
+        Tool ENTITY, not a dict. cache_manifest does `manifest.items()`, which
+        crashed with AttributeError in v0.8.1 (the shim had no .items()). The
+        prior tests only ever passed dict literals, so the crash was invisible.
+        """
+        from dazzlecmd.mode import cache_manifest, get_cached_manifest
+        from dazzlecmd_lib.entity import build_entity
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tool = build_entity(
+                {
+                    "name": "mytool",
+                    "namespace": "core",
+                    "version": "1.0.0",
+                    "description": "Entity tool",
+                    "runtime": {"type": "python", "script_path": "mytool.py"},
+                    "_fqcn": "core:mytool",         # computed key -> must be stripped
+                    "_dir": os.path.join(tmpdir, "x"),
+                },
+                entity_type="tool",
+            )
+
+            # Must not raise (this is the regression).
+            cache_manifest(tmpdir, "core:mytool", tool)
+
+            cached = get_cached_manifest(tmpdir, "core:mytool")
+            assert cached is not None
+            assert cached["name"] == "mytool"
+            assert cached["description"] == "Entity tool"
+            assert cached["runtime"] == {"type": "python", "script_path": "mytool.py"}
+            # computed _-prefixed keys are stripped on cache (as for dicts)
+            assert not any(k.startswith("_") for k in cached)
+
     def test_on_disk_manifest_preferred_over_cache(self):
         """When .dazzlecmd.json exists on disk, cache is ignored."""
         from dazzlecmd.loader import discover_projects

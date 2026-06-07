@@ -8,6 +8,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.7.1] - 2026-06-07
+
+Ships with dazzlecmd v0.8.2 -- Phase 1 Stage 1. The `DazzleEntity` backward-compat shim becomes a faithful read-Mapping.
+
+### Fixed
+
+- A `DazzleEntity` passed where a dict was expected no longer crashes on `.items()` / `.keys()` / `.values()`. The shim previously implemented only `__getitem__` / `__setitem__` / `get` / `__contains__`; code iterating an entity as a mapping (e.g. a downstream `cache_manifest`-style `{k: v for k, v in manifest.items()}`) raised `AttributeError`.
+
+### Added
+
+- `DazzleEntity.keys()` / `values()` / `items()` — a faithful read-Mapping view (declared fields + extra, including computed `_`-prefixed keys, consistent with `__contains__`). Each routes through the deprecation ratchet (`_warn_on_shim`). A no-warn `_raw_get` backs them so they warn once per call. `__iter__` / `__len__` are intentionally NOT overridden, preserving pydantic's `dict(model)` contract.
+
+### Refs
+
+Ships with dazzlecmd v0.8.2. Refs dazzlecmd #37, #73, #77 (the DazzleEntity Phase 1 migration arc).
+
 ## [0.7.0] - 2026-06-07
 
 Ships with dazzlecmd v0.8.1 -- the DazzleEntity foundational redesign. The library gains a typed object model; the aggregator-facing public API is unchanged (the migration is internal, and a backward-compat shim keeps existing dict access working), so consumers (dazzlecmd, amdead, wtf-windows) need no code change to adopt 0.7.0.
