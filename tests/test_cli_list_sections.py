@@ -19,20 +19,20 @@ from types import SimpleNamespace
 import pytest
 
 from dazzlecmd.cli import _cmd_list
+from dazzlecmd_lib.testing import make_tool, make_kit
 
 
 def _proj(fqcn, short, kit, description="", **extra):
-    p = {
-        "_fqcn": fqcn,
-        "_short_name": short,
-        "_kit_import_name": kit,
-        "name": short,
-        "namespace": kit,
-        "description": description or f"{short} description",
-        "platform": "cross-platform",
-    }
-    p.update(extra)
-    return p
+    return make_tool(
+        _fqcn=fqcn,
+        _short_name=short,
+        _kit_import_name=kit,
+        name=short,
+        namespace=kit,
+        description=description or f"{short} description",
+        platform="cross-platform",
+        **extra,
+    )
 
 
 def _args(**kwargs):
@@ -62,12 +62,12 @@ def _build_engine(projects, virtual_kits=None, monkeypatch=None, tmp_path=None):
     ]
     canonical_kit_names = sorted({p["_kit_import_name"] for p in projects})
     for name in canonical_kit_names:
-        engine.kits.append({
-            "name": name,
-            "_kit_name": name,
-            "tools": [],
-            "always_active": True,
-        })
+        engine.kits.append(make_kit(
+            name=name,
+            _kit_name=name,
+            tools=[],
+            always_active=True,
+        ))
     if virtual_kits:
         for vk in virtual_kits:
             engine.kits.append(vk)
@@ -99,18 +99,18 @@ class TestSectionedRendering:
             _proj("demo:tool-gamma", "tool-gamma", "demo", "Gamma tool"),
             _proj("core:rn", "rn", "core", "Rename files"),
         ]
-        virtual_kits = [{
-            "_kit_name": "grouped",
-            "name": "grouped",
-            "virtual": True,
-            "always_active": True,
-            "_kit_active": True,
-            "tools": ["demo:tool-alpha", "demo:tool-beta"],
-            "name_rewrite": {
+        virtual_kits = [make_kit(
+            _kit_name="grouped",
+            name="grouped",
+            virtual=True,
+            always_active=True,
+            _kit_active=True,
+            tools=["demo:tool-alpha", "demo:tool-beta"],
+            name_rewrite={
                 "demo:tool-alpha": "alpha",
                 "demo:tool-beta": "beta",
             },
-        }]
+        )]
         return _build_engine(projects, virtual_kits, monkeypatch, tmp_path), projects
 
     def test_default_view_has_section_headers(self, monkeypatch, tmp_path, capsys):
@@ -204,18 +204,18 @@ class TestSectionedRendering:
             _proj("demo:tool-beta", "tool-beta", "demo"),
             _proj("zebra:zz", "zz", "zebra"),  # alphabetically AFTER demo:claude
         ]
-        virtual_kits = [{
-            "_kit_name": "grouped",
-            "name": "grouped",
-            "virtual": True,
-            "always_active": True,
-            "_kit_active": True,
-            "tools": ["demo:tool-alpha", "demo:tool-beta"],
-            "name_rewrite": {
+        virtual_kits = [make_kit(
+            _kit_name="grouped",
+            name="grouped",
+            virtual=True,
+            always_active=True,
+            _kit_active=True,
+            tools=["demo:tool-alpha", "demo:tool-beta"],
+            name_rewrite={
                 "demo:tool-alpha": "alpha",
                 "demo:tool-beta": "beta",
             },
-        }]
+        )]
         engine = _build_engine(projects, virtual_kits, monkeypatch, tmp_path)
         _cmd_list(_args(show="canonical"), projects, engine=engine)  # warm-up to ensure sort
         capsys.readouterr()  # drain
@@ -262,18 +262,18 @@ class TestSingleSectionFlatFallback:
             _proj("demo:tool-alpha", "tool-alpha", "demo"),
             _proj("demo:tool-beta", "tool-beta", "demo"),
         ]
-        virtual_kits = [{
-            "_kit_name": "grouped",
-            "name": "grouped",
-            "virtual": True,
-            "always_active": True,
-            "_kit_active": True,
-            "tools": ["demo:tool-alpha", "demo:tool-beta"],
-            "name_rewrite": {
+        virtual_kits = [make_kit(
+            _kit_name="grouped",
+            name="grouped",
+            virtual=True,
+            always_active=True,
+            _kit_active=True,
+            tools=["demo:tool-alpha", "demo:tool-beta"],
+            name_rewrite={
                 "demo:tool-alpha": "alpha",
                 "demo:tool-beta": "beta",
             },
-        }]
+        )]
         engine = _build_engine(projects, virtual_kits, monkeypatch, tmp_path)
         rc = _cmd_list(_args(kit="grouped"), projects, engine=engine)
         out = capsys.readouterr().out
@@ -296,15 +296,15 @@ class TestFooterCounts:
             _proj("demo:tool-beta", "tool-beta", "demo"),
             _proj("demo:tool-gamma", "tool-gamma", "demo"),
         ]
-        virtual_kits = [{
-            "_kit_name": "grouped",
-            "name": "grouped",
-            "virtual": True,
-            "always_active": True,
-            "_kit_active": True,
-            "tools": ["demo:tool-alpha"],
-            "name_rewrite": {"demo:tool-alpha": "alpha"},
-        }]
+        virtual_kits = [make_kit(
+            _kit_name="grouped",
+            name="grouped",
+            virtual=True,
+            always_active=True,
+            _kit_active=True,
+            tools=["demo:tool-alpha"],
+            name_rewrite={"demo:tool-alpha": "alpha"},
+        )]
         return _build_engine(projects, virtual_kits, monkeypatch, tmp_path), projects
 
     def test_default_footer_counts(self, monkeypatch, tmp_path, capsys):
@@ -345,15 +345,15 @@ class TestFooterCounts:
 class TestVirtualKitAnnotation:
     def test_annotation_shows_virtual_kit_local_name(self, monkeypatch, tmp_path, capsys):
         projects = [_proj("dz:claude-cleanup", "claude-cleanup", "dz")]
-        virtual_kits = [{
-            "_kit_name": "claude",
-            "name": "claude",
-            "virtual": True,
-            "always_active": True,
-            "_kit_active": True,
-            "tools": ["dz:claude-cleanup"],
-            "name_rewrite": {"dz:claude-cleanup": "cleanup"},
-        }]
+        virtual_kits = [make_kit(
+            _kit_name="claude",
+            name="claude",
+            virtual=True,
+            always_active=True,
+            _kit_active=True,
+            tools=["dz:claude-cleanup"],
+            name_rewrite={"dz:claude-cleanup": "cleanup"},
+        )]
         # Add a SECOND project so we have multi-section output
         projects.append(_proj("core:rn", "rn", "core"))
         engine = _build_engine(projects, virtual_kits, monkeypatch, tmp_path)
@@ -392,15 +392,15 @@ class TestShowEmptyVirtualKitsConfig:
         engine._build_fqcn_index()
         # Build kits but mark `dz` kit as INACTIVE so its tools won't surface
         engine.kits = [
-            {"name": "dz", "_kit_name": "dz", "tools": [],
-             "always_active": False, "_kit_active": False},
-            {"name": "core", "_kit_name": "core", "tools": [],
-             "always_active": True, "_kit_active": True},
+            make_kit(name="dz", _kit_name="dz", tools=[],
+                     always_active=False, _kit_active=False),
+            make_kit(name="core", _kit_name="core", tools=[],
+                     always_active=True, _kit_active=True),
             # Virtual kit -- active itself, but its target kit (dz) is disabled
-            {"_kit_name": "claude", "name": "claude", "virtual": True,
-             "always_active": True, "_kit_active": True,
-             "tools": ["dz:claude-cleanup"],
-             "name_rewrite": {"dz:claude-cleanup": "cleanup"}},
+            make_kit(_kit_name="claude", name="claude", virtual=True,
+                     always_active=True, _kit_active=True,
+                     tools=["dz:claude-cleanup"],
+                     name_rewrite={"dz:claude-cleanup": "cleanup"}),
         ]
         engine.active_kits = [k for k in engine.kits if k.get("_kit_active", True)]
         # Filter projects: kit dz is inactive, so claude-cleanup shouldn't surface

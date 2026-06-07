@@ -8,6 +8,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from dazzlecmd import cli
+from dazzlecmd_lib.testing import make_tool
 
 
 def _fake_engine(projects):
@@ -33,12 +34,12 @@ class TestBug1StdoutFlushBeforeSubprocess:
         from dazzlecmd import cli
 
         # Minimal fake project that passes the earlier _cmd_setup checks
-        project = {
-            "name": "flush-test",
-            "_fqcn": "test:flush-test",
-            "_dir": str(tmp_path),
-            "setup": {"command": "echo hi"},
-        }
+        project = make_tool(
+            name="flush-test",
+            _fqcn="test:flush-test",
+            _dir=str(tmp_path),
+            setup={"command": "echo hi"},
+        )
 
         # Fake engine exposing resolve_command + all_projects
         fake_engine = MagicMock()
@@ -83,8 +84,8 @@ class TestListingModeV0721:
 
     def test_no_tools_with_setup_prints_empty_message(self, capsys):
         engine = _fake_engine([
-            {"name": "a", "_fqcn": "kit:a", "_dir": "/tmp/a"},
-            {"name": "b", "_fqcn": "kit:b", "_dir": "/tmp/b", "setup": {}},
+            make_tool(name="a", _fqcn="kit:a", _dir="/tmp/a"),
+            make_tool(name="b", _fqcn="kit:b", _dir="/tmp/b", setup={}),
         ])
         exit_code = cli._cmd_setup(_Args(), engine)
         out = capsys.readouterr().out
@@ -93,12 +94,12 @@ class TestListingModeV0721:
 
     def test_tool_with_only_command_detected(self, capsys):
         engine = _fake_engine([
-            {
-                "name": "t",
-                "_fqcn": "kit:t",
-                "_dir": "/tmp/t",
-                "setup": {"command": "pip install foo", "note": "Simple install"},
-            },
+            make_tool(
+                name="t",
+                _fqcn="kit:t",
+                _dir="/tmp/t",
+                setup={"command": "pip install foo", "note": "Simple install"},
+            ),
         ])
         exit_code = cli._cmd_setup(_Args(), engine)
         out = capsys.readouterr().out
@@ -111,12 +112,12 @@ class TestListingModeV0721:
         # Tool with ONLY platform-specific setup, no top-level command --
         # the v0.7.20 listing missed this; v0.7.21 polish catches it.
         engine = _fake_engine([
-            {
-                "name": "t",
-                "_fqcn": "kit:t",
-                "_dir": "/tmp/t",
-                "setup": {"platforms": {"linux": {"command": "apt install foo"}}},
-            },
+            make_tool(
+                name="t",
+                _fqcn="kit:t",
+                _dir="/tmp/t",
+                setup={"platforms": {"linux": {"command": "apt install foo"}}},
+            ),
         ])
         exit_code = cli._cmd_setup(_Args(), engine)
         out = capsys.readouterr().out
@@ -125,13 +126,13 @@ class TestListingModeV0721:
 
     def test_tool_without_setup_not_listed(self, capsys):
         engine = _fake_engine([
-            {"name": "a", "_fqcn": "kit:a", "_dir": "/tmp/a"},  # no setup
-            {
-                "name": "b",
-                "_fqcn": "kit:b",
-                "_dir": "/tmp/b",
-                "setup": {"command": "pip install"},
-            },
+            make_tool(name="a", _fqcn="kit:a", _dir="/tmp/a"),  # no setup
+            make_tool(
+                name="b",
+                _fqcn="kit:b",
+                _dir="/tmp/b",
+                setup={"command": "pip install"},
+            ),
         ])
         exit_code = cli._cmd_setup(_Args(), engine)
         out = capsys.readouterr().out
@@ -141,9 +142,9 @@ class TestListingModeV0721:
 
     def test_output_sorted_alphabetically_by_fqcn(self, capsys):
         engine = _fake_engine([
-            {"name": "z", "_fqcn": "kit:z", "_dir": "/t", "setup": {"command": "x"}},
-            {"name": "a", "_fqcn": "kit:a", "_dir": "/t", "setup": {"command": "x"}},
-            {"name": "m", "_fqcn": "kit:m", "_dir": "/t", "setup": {"command": "x"}},
+            make_tool(name="z", _fqcn="kit:z", _dir="/t", setup={"command": "x"}),
+            make_tool(name="a", _fqcn="kit:a", _dir="/t", setup={"command": "x"}),
+            make_tool(name="m", _fqcn="kit:m", _dir="/t", setup={"command": "x"}),
         ])
         cli._cmd_setup(_Args(), engine)
         out = capsys.readouterr().out
@@ -154,12 +155,12 @@ class TestListingModeV0721:
 
     def test_note_shown_when_present(self, capsys):
         engine = _fake_engine([
-            {
-                "name": "t",
-                "_fqcn": "kit:t",
-                "_dir": "/t",
-                "setup": {"command": "pip", "note": "Installs the thing"},
-            },
+            make_tool(
+                name="t",
+                _fqcn="kit:t",
+                _dir="/t",
+                setup={"command": "pip", "note": "Installs the thing"},
+            ),
         ])
         cli._cmd_setup(_Args(), engine)
         out = capsys.readouterr().out
@@ -167,12 +168,12 @@ class TestListingModeV0721:
 
     def test_missing_note_shown_as_dash(self, capsys):
         engine = _fake_engine([
-            {
-                "name": "t",
-                "_fqcn": "kit:t",
-                "_dir": "/t",
-                "setup": {"command": "pip"},
-            },
+            make_tool(
+                name="t",
+                _fqcn="kit:t",
+                _dir="/t",
+                setup={"command": "pip"},
+            ),
         ])
         cli._cmd_setup(_Args(), engine)
         out = capsys.readouterr().out
@@ -185,8 +186,8 @@ class TestListingModeV0721:
     def test_column_width_adapts_to_longest_fqcn(self, capsys):
         long_fqcn = "very-long-kit-name:very-long-tool-name"
         engine = _fake_engine([
-            {"name": "t", "_fqcn": long_fqcn, "_dir": "/t", "setup": {"command": "x", "note": "n"}},
-            {"name": "s", "_fqcn": "kit:short", "_dir": "/t", "setup": {"command": "x", "note": "m"}},
+            make_tool(name="t", _fqcn=long_fqcn, _dir="/t", setup={"command": "x", "note": "n"}),
+            make_tool(name="s", _fqcn="kit:short", _dir="/t", setup={"command": "x", "note": "m"}),
         ])
         cli._cmd_setup(_Args(), engine)
         out = capsys.readouterr().out
@@ -198,7 +199,7 @@ class TestListingModeV0721:
 
     def test_run_hint_printed(self, capsys):
         engine = _fake_engine([
-            {"name": "t", "_fqcn": "kit:t", "_dir": "/t", "setup": {"command": "x"}},
+            make_tool(name="t", _fqcn="kit:t", _dir="/t", setup={"command": "x"}),
         ])
         cli._cmd_setup(_Args(), engine)
         out = capsys.readouterr().out
@@ -214,10 +215,10 @@ class TestMalformedOverrideCleanError:
         (tmp_path / "setup").mkdir()
         (tmp_path / "setup" / "kit__t.json").write_text("{not valid json")
 
-        project = {
-            "name": "t", "_fqcn": "kit:t", "_dir": "/t",
-            "setup": {"command": "pip install foo"},
-        }
+        project = make_tool(
+            name="t", _fqcn="kit:t", _dir="/t",
+            setup={"command": "pip install foo"},
+        )
         engine = _fake_engine([project])
         engine.resolve_command.return_value = (project, None)
 
@@ -240,15 +241,15 @@ class TestInvalidSetupBlockCleanError:
     """
 
     def test_xor_violation_top_level_clean_error(self, tmp_path, capsys):
-        project = {
-            "name": "badxor",
-            "_fqcn": "test:badxor",
-            "_dir": str(tmp_path),
-            "setup": {
+        project = make_tool(
+            name="badxor",
+            _fqcn="test:badxor",
+            _dir=str(tmp_path),
+            setup={
                 "command": "echo cmd",
                 "script": "oops.sh",  # XOR violation at top level
             },
-        }
+        )
         engine = _fake_engine([project])
         engine.resolve_command.return_value = (project, None)
 
@@ -262,11 +263,11 @@ class TestInvalidSetupBlockCleanError:
         assert "File \"" not in captured.err
 
     def test_xor_violation_per_platform_clean_error(self, tmp_path, capsys):
-        project = {
-            "name": "badxor2",
-            "_fqcn": "test:badxor2",
-            "_dir": str(tmp_path),
-            "setup": {
+        project = make_tool(
+            name="badxor2",
+            _fqcn="test:badxor2",
+            _dir=str(tmp_path),
+            setup={
                 "platforms": {
                     "windows": {
                         "command": "echo cmd",
@@ -274,7 +275,7 @@ class TestInvalidSetupBlockCleanError:
                     },
                 },
             },
-        }
+        )
         engine = _fake_engine([project])
         engine.resolve_command.return_value = (project, None)
 

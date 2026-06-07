@@ -4,6 +4,28 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.7] - 2026-06-07
+
+Phase 1 (DazzleEntity call-site migration) — Stage 6a: the test-fixture migration. Adds the public `dazzlecmd_lib.testing` entity factory and ports test fixtures from ad-hoc dict literals to real entities, so the upcoming prod attribute-sweep won't break dict-based tests. Test-only + a new test-support module; byte-identical (no prod call-site changes). Local-only.
+
+### Added
+
+- `dazzlecmd_lib.testing` — public, permanent test factory: `make_tool(**fields)` / `make_kit(**fields)` / `make_aggregator(**fields)` build real `DazzleEntity` objects via `build_entity`, normalizing legacy `_`-prefixed keys (`_dir`→`directory`, etc.) and applying the set-once `fqcn`. The blessed way to construct test entities — for dazzlecmd and any consumer (wtf, amdead, third-party aggregators). Not a transitional shim; it stays.
+
+### Changed
+
+- Test fixtures migrated from dict literals to `make_tool`/`make_kit` in: `tests/test_engine_recursive.py`, `tests/test_cli_helpers.py`, `tests/test_cli_list_sections.py`, `tests/test_cli_setup.py`, `tests/test_cli_kit.py`, `tests/test_library.py`, `packages/dazzlecmd-lib/tests/test_mode_parameterization.py`. Only genuine tool/kit ENTITY fixtures were converted; non-entity dicts (runtime/condition/template/setup blocks, resolver inputs, JSON-written-to-disk, config, expected-output) intentionally remain dicts. Nine candidate files were confirmed to contain no entity fixtures (no change).
+
+### Notes
+
+- Groundwork for the prod attribute-sweep (Stage 6b+): with fixtures now producing real entities, prod call sites can migrate `entity["x"]` → `entity.x` without breaking dict-based tests. Resolver/runner-factory test inputs (`test_resolve_runtime`, `test_docker_runner`, `_resolve_remote_url`, etc.) stay dicts until those specific prod paths are swept.
+
+### Versions
+
+- dazzlecmd 0.8.6 -> 0.8.7 (PATCH).
+- dazzlecmd-lib 0.7.4 -> 0.7.5 (PATCH -- new `testing` factory module).
+- dazzle-dz alias -> 0.8.7; deps re-pinned to >=0.8.7 / >=0.7.5.
+
 ## [0.8.6] - 2026-06-07
 
 Phase 1 (DazzleEntity call-site migration) — Stage 5: type the full manifest schema. The foundation for the complete dict→attribute migration (the project is now committed to removing the dict shim entirely, not keeping it indefinitely). Additive and byte-identical: manifest keys move from `extra` to typed fields, so attribute access (`entity.runtime`, `entity.taxonomy`) is always safe — while the shim keeps working. No call-site changes yet. Local-only.
@@ -2137,7 +2159,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.6...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.7...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

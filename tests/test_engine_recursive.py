@@ -15,6 +15,7 @@ import os
 import pytest
 
 from dazzlecmd.engine import AggregatorEngine, CircularDependencyError
+from dazzlecmd_lib.testing import make_kit, make_tool
 
 
 # ---------------------------------------------------------------------------
@@ -354,14 +355,14 @@ class TestRerootHint:
         """A project with 4+ FQCN segments triggers the rerooting hint."""
         engine = AggregatorEngine(is_root=True)
         engine.projects = [
-            {
-                "name": "leaf",
-                "_fqcn": "a:b:c:d:leaf",
-                "_short_name": "leaf",
-                "_kit_import_name": "a",
-                "_dir": "/fake",
-                "description": "deep tool",
-            }
+            make_tool(
+                name="leaf",
+                _fqcn="a:b:c:d:leaf",
+                _short_name="leaf",
+                _kit_import_name="a",
+                _dir="/fake",
+                description="deep tool",
+            )
         ]
         engine._maybe_emit_reroot_hint()
         captured = capsys.readouterr()
@@ -379,14 +380,14 @@ class TestRerootHint:
         """
         engine = AggregatorEngine(command="wtf", is_root=True)
         engine.projects = [
-            {
-                "name": "leaf",
-                "_fqcn": "a:b:c:d:leaf",
-                "_short_name": "leaf",
-                "_kit_import_name": "a",
-                "_dir": "/fake",
-                "description": "deep tool",
-            }
+            make_tool(
+                name="leaf",
+                _fqcn="a:b:c:d:leaf",
+                _short_name="leaf",
+                _kit_import_name="a",
+                _dir="/fake",
+                description="deep tool",
+            )
         ]
         engine._maybe_emit_reroot_hint()
         captured = capsys.readouterr()
@@ -399,14 +400,14 @@ class TestRerootHint:
         monkeypatch.setenv("DZ_QUIET", "1")
         engine = AggregatorEngine(is_root=True)
         engine.projects = [
-            {
-                "name": "leaf",
-                "_fqcn": "a:b:c:d:leaf",
-                "_short_name": "leaf",
-                "_kit_import_name": "a",
-                "_dir": "/fake",
-                "description": "deep tool",
-            }
+            make_tool(
+                name="leaf",
+                _fqcn="a:b:c:d:leaf",
+                _short_name="leaf",
+                _kit_import_name="a",
+                _dir="/fake",
+                description="deep tool",
+            )
         ]
         engine._maybe_emit_reroot_hint()
         captured = capsys.readouterr()
@@ -417,14 +418,14 @@ class TestRerootHint:
         only the top-level engine does."""
         engine = AggregatorEngine(is_root=False)
         engine.projects = [
-            {
-                "name": "leaf",
-                "_fqcn": "a:b:c:d:leaf",
-                "_short_name": "leaf",
-                "_kit_import_name": "a",
-                "_dir": "/fake",
-                "description": "deep tool",
-            }
+            make_tool(
+                name="leaf",
+                _fqcn="a:b:c:d:leaf",
+                _short_name="leaf",
+                _kit_import_name="a",
+                _dir="/fake",
+                description="deep tool",
+            )
         ]
         engine._maybe_emit_reroot_hint()
         captured = capsys.readouterr()
@@ -679,14 +680,14 @@ class TestPhase3SilencingAndShadowing:
         """When the only deeply-nested tool is silenced, no hint fires."""
         engine = AggregatorEngine(is_root=True)
         engine.projects = [
-            {
-                "name": "leaf",
-                "_fqcn": "a:b:c:d:leaf",
-                "_short_name": "leaf",
-                "_kit_import_name": "a",
-                "_dir": "/fake",
-                "description": "deep tool",
-            }
+            make_tool(
+                name="leaf",
+                _fqcn="a:b:c:d:leaf",
+                _short_name="leaf",
+                _kit_import_name="a",
+                _dir="/fake",
+                description="deep tool",
+            )
         ]
         config_path = tmp_path / "dz-config.json"
         config_path.write_text(
@@ -713,14 +714,14 @@ class TestPhase3SilencingAndShadowing:
         monkeypatch.setenv("DAZZLECMD_CONFIG", str(config_path))
         engine = AggregatorEngine(is_root=True)
         engine.projects = [
-            {
-                "name": "leaf",
-                "_fqcn": "deepkit:sub:core:leaf",
-                "_short_name": "leaf",
-                "_kit_import_name": "deepkit",
-                "_dir": "/fake",
-                "description": "deep tool",
-            }
+            make_tool(
+                name="leaf",
+                _fqcn="deepkit:sub:core:leaf",
+                _short_name="leaf",
+                _kit_import_name="deepkit",
+                _dir="/fake",
+                description="deep tool",
+            )
         ]
         engine._maybe_emit_reroot_hint()
         captured = capsys.readouterr()
@@ -738,22 +739,22 @@ class TestPhase3SilencingAndShadowing:
         monkeypatch.setenv("DAZZLECMD_CONFIG", str(config_path))
         engine = AggregatorEngine(is_root=True)
         engine.projects = [
-            {
-                "name": "silenced",
-                "_fqcn": "a:b:c:d:silenced",
-                "_short_name": "silenced",
-                "_kit_import_name": "a",
-                "_dir": "/fake",
-                "description": "silenced tool",
-            },
-            {
-                "name": "notsilenced",
-                "_fqcn": "x:y:z:w:notsilenced",
-                "_short_name": "notsilenced",
-                "_kit_import_name": "x",
-                "_dir": "/fake",
-                "description": "other deep tool",
-            },
+            make_tool(
+                name="silenced",
+                _fqcn="a:b:c:d:silenced",
+                _short_name="silenced",
+                _kit_import_name="a",
+                _dir="/fake",
+                description="silenced tool",
+            ),
+            make_tool(
+                name="notsilenced",
+                _fqcn="x:y:z:w:notsilenced",
+                _short_name="notsilenced",
+                _kit_import_name="x",
+                _dir="/fake",
+                description="other deep tool",
+            ),
         ]
         engine._maybe_emit_reroot_hint()
         captured = capsys.readouterr()
@@ -888,19 +889,19 @@ class TestModuleDispatch:
 
 
 def _make_project(fqcn, tool_dir, name=None):
-    """Construct a minimal project dict for _build_fqcn_index tests."""
+    """Construct a minimal project entity for _build_fqcn_index tests."""
     short = name or fqcn.rsplit(":", 1)[-1]
     kit = fqcn.split(":", 1)[0]
-    return {
-        "name": short,
-        "_fqcn": fqcn,
-        "_short_name": short,
-        "_kit_import_name": kit,
-        "_dir": tool_dir,
-        "_kit_active": True,
-        "description": f"Tool {short}",
-        "runtime": {"type": "python"},
-    }
+    return make_tool(
+        name=short,
+        _fqcn=fqcn,
+        _short_name=short,
+        _kit_import_name=kit,
+        _dir=tool_dir,
+        _kit_active=True,
+        description=f"Tool {short}",
+        runtime={"type": "python"},
+    )
 
 
 class TestRealpathDedup:
@@ -1053,14 +1054,16 @@ class TestRealpathDedup:
         engine._build_fqcn_index()
         # dz:wtf:core:locked is now an alias of wtf:core:locked.
         # A virtual kit targets the demoted FQCN — should resolve to the canonical.
-        virtual_kits = [{
-            "name": "dz:claude",
-            "_kit_name": "dz:claude",
-            "_kit_active": True,
-            "virtual": True,
-            "tools": ["dz:wtf:core:locked"],
-            "name_rewrite": {"dz:wtf:core:locked": "why-locked"},
-        }]
+        virtual_kits = [
+            make_kit(
+                name="dz:claude",
+                _kit_name="dz:claude",
+                _kit_active=True,
+                virtual=True,
+                tools=["dz:wtf:core:locked"],
+                name_rewrite={"dz:wtf:core:locked": "why-locked"},
+            )
+        ]
         engine._apply_virtual_kits(virtual_kits)
         # The virtual-kit alias should be registered with the actual canonical.
         assert engine.fqcn_index.alias_index.get("dz:claude:why-locked") == "wtf:core:locked"

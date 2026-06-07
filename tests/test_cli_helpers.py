@@ -7,6 +7,7 @@ import pytest
 
 from dazzlecmd_lib import cli_helpers as h
 from dazzlecmd_lib.meta_command_registry import MetaCommandRegistry
+from dazzlecmd_lib.testing import make_tool, make_kit
 
 
 # ---------------------------------------------------------------------------
@@ -19,8 +20,8 @@ class TestBuildToolSubparsers:
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers(dest="command")
         projects = [
-            {"name": "alpha", "description": "First"},
-            {"name": "beta", "description": "Second"},
+            make_tool(name="alpha", description="First"),
+            make_tool(name="beta", description="Second"),
         ]
         result = h.build_tool_subparsers(subparsers, projects)
         assert len(result) == 2
@@ -36,8 +37,8 @@ class TestBuildToolSubparsers:
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers(dest="command")
         projects = [
-            {"name": "list", "description": "conflicts!"},
-            {"name": "mytool", "description": "OK"},
+            make_tool(name="list", description="conflicts!"),
+            make_tool(name="mytool", description="OK"),
         ]
         result = h.build_tool_subparsers(
             subparsers, projects, reserved_commands={"list"}
@@ -49,7 +50,7 @@ class TestBuildToolSubparsers:
     def test_warn_on_conflict_false_suppresses_warning(self, capsys):
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers(dest="command")
-        projects = [{"name": "list"}]
+        projects = [make_tool(name="list")]
         h.build_tool_subparsers(
             subparsers, projects,
             reserved_commands={"list"},
@@ -62,8 +63,8 @@ class TestBuildToolSubparsers:
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers(dest="command")
         projects = [
-            {"name": "shared", "description": "First"},
-            {"name": "shared", "description": "Second"},  # duplicate
+            make_tool(name="shared", description="First"),
+            make_tool(name="shared", description="Second"),  # duplicate
         ]
         result = h.build_tool_subparsers(subparsers, projects)
         # Only one subparser registered (first wins)
@@ -73,8 +74,8 @@ class TestBuildToolSubparsers:
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers(dest="command")
         projects = [
-            {"description": "no name"},
-            {"name": "ok"},
+            {"description": "no name"},  # left as dict: make_tool() would inject name="tool", defeating the no-name test
+            make_tool(name="ok"),
         ]
         result = h.build_tool_subparsers(subparsers, projects)
         assert len(result) == 1
@@ -89,7 +90,7 @@ class TestBuildToolSubparsers:
         """If reserved_commands not passed, nothing is reserved."""
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers(dest="command")
-        projects = [{"name": "list"}]  # would conflict if reserved
+        projects = [make_tool(name="list")]  # would conflict if reserved
         result = h.build_tool_subparsers(subparsers, projects)
         assert len(result) == 1
 
@@ -97,7 +98,7 @@ class TestBuildToolSubparsers:
         """Per #56: aggregator-overridden conflicts don't warn (override is the ack)."""
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers(dest="command")
-        projects = [{"name": "setup", "description": "amdead probe"}]
+        projects = [make_tool(name="setup", description="amdead probe")]
         h.build_tool_subparsers(
             subparsers, projects,
             reserved_commands={"setup"},
@@ -112,8 +113,8 @@ class TestBuildToolSubparsers:
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers(dest="command")
         projects = [
-            {"name": "setup", "description": "overridden"},
-            {"name": "list", "description": "NOT overridden"},
+            make_tool(name="setup", description="overridden"),
+            make_tool(name="list", description="NOT overridden"),
         ]
         h.build_tool_subparsers(
             subparsers, projects,
@@ -128,7 +129,7 @@ class TestBuildToolSubparsers:
         """Regression guard: without exempt_from_warning, behavior unchanged."""
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers(dest="command")
-        projects = [{"name": "list", "description": "conflicts"}]
+        projects = [make_tool(name="list", description="conflicts")]
         h.build_tool_subparsers(
             subparsers, projects,
             reserved_commands={"list"},
@@ -140,7 +141,7 @@ class TestBuildToolSubparsers:
         (No override == no acknowledgment == warning is helpful.)"""
         parser = argparse.ArgumentParser()
         subparsers = parser.add_subparsers(dest="command")
-        projects = [{"name": "foo", "description": "extra-reserved"}]
+        projects = [make_tool(name="foo", description="extra-reserved")]
         h.build_tool_subparsers(
             subparsers, projects,
             reserved_commands={"foo"},

@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.7.5] - 2026-06-07
+
+Ships with dazzlecmd v0.8.7 -- Phase 1 Stage 6a: the entity test factory. Test-support addition; no runtime API change.
+
+### Added
+
+- `dazzlecmd_lib.testing` -- public test factory (`make_tool` / `make_kit` / `make_aggregator`) wrapping `build_entity` for concise typed-entity construction in tests. Normalizes legacy `_`-prefixed keys and applies the set-once `fqcn`. Permanent (not a transitional shim); usable by any consumer's test suite.
+
+### Refs
+
+Ships with dazzlecmd v0.8.7. Refs dazzlecmd #37, #73, #77.
+
 ## [0.7.4] - 2026-06-07
 
 Ships with dazzlecmd v0.8.6 -- Phase 1 Stage 5: type the full manifest schema. Additive + byte-identical; the shim still works, attribute access now also works for every modeled field.

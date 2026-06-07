@@ -10,6 +10,7 @@ import os
 import pytest
 
 from dazzlecmd.engine import AggregatorEngine
+from dazzlecmd_lib.testing import make_tool, make_kit
 from dazzlecmd.cli import (
     _cmd_kit_enable,
     _cmd_kit_disable,
@@ -46,10 +47,10 @@ def _engine(tmp_path, monkeypatch):
     engine = AggregatorEngine()
     # Pre-populate discovered kits for warnings/focus tests
     engine.kits = [
-        {"_kit_name": "core", "name": "core", "always_active": True, "tools": []},
-        {"_kit_name": "dazzletools", "name": "dazzletools", "always_active": True, "tools": []},
-        {"_kit_name": "wtf", "name": "wtf", "always_active": False, "tools": []},
-        {"_kit_name": "extra", "name": "extra", "always_active": False, "tools": []},
+        make_kit(_kit_name="core", name="core", always_active=True, tools=[]),
+        make_kit(_kit_name="dazzletools", name="dazzletools", always_active=True, tools=[]),
+        make_kit(_kit_name="wtf", name="wtf", always_active=False, tools=[]),
+        make_kit(_kit_name="extra", name="extra", always_active=False, tools=[]),
     ]
     return engine
 
@@ -233,10 +234,10 @@ def _engine_with_canonical(tmp_path, monkeypatch, canonicals=(), aliases=()):
     """
     engine = _engine(tmp_path, monkeypatch)
     for fqcn in canonicals:
-        project = {
-            "name": fqcn.rsplit(":", 1)[-1] if ":" in fqcn else fqcn,
-            "_fqcn": fqcn,
-        }
+        project = make_tool(
+            name=fqcn.rsplit(":", 1)[-1] if ":" in fqcn else fqcn,
+            _fqcn=fqcn,
+        )
         engine.fqcn_index.canonical_index[fqcn] = project
         engine.fqcn_index.short_index.setdefault(project["name"], []).append(fqcn)
     for alias_fqcn, canonical_fqcn in aliases:
@@ -559,12 +560,12 @@ class TestKitStatusDisplay:
 
         kits = [
             # Dazzlecmd's own core kit
-            {"name": "core", "_kit_name": "core", "tools": ["core:a", "core:b"],
-             "always_active": True},
+            make_kit(name="core", _kit_name="core", tools=["core:a", "core:b"],
+                     always_active=True),
             # Wtf imported as "wtf" but its in-repo manifest has name="core"
-            {"name": "core", "_kit_name": "wtf",
-             "tools": ["wtf:core:locked", "wtf:core:restarted"],
-             "always_active": True},
+            make_kit(name="core", _kit_name="wtf",
+                     tools=["wtf:core:locked", "wtf:core:restarted"],
+                     always_active=True),
         ]
         rc = _cmd_kit_status(kits)
         assert rc == 0
@@ -580,7 +581,7 @@ class TestKitStatusDisplay:
         from dazzlecmd.cli import _cmd_kit_status
 
         kits = [
-            {"name": "legacy", "tools": ["legacy:a"], "always_active": True},
+            make_kit(name="legacy", tools=["legacy:a"], always_active=True),
         ]
         rc = _cmd_kit_status(kits)
         assert rc == 0
@@ -604,20 +605,20 @@ class TestKitListDrillInColumnWidths:
 
         ``tool_specs`` is a list of (short_name, platform, description) tuples.
         """
-        kit = {
-            "_kit_name": kit_name,
-            "name": kit_name,
-            "always_active": True,
-            "tools": [f"{kit_name}:{name}" for name, _, _ in tool_specs],
-        }
+        kit = make_kit(
+            _kit_name=kit_name,
+            name=kit_name,
+            always_active=True,
+            tools=[f"{kit_name}:{name}" for name, _, _ in tool_specs],
+        )
         projects = [
-            {
-                "name": name,
-                "namespace": kit_name,
-                "_fqcn": f"{kit_name}:{name}",
-                "platform": platform,
-                "description": desc,
-            }
+            make_tool(
+                name=name,
+                namespace=kit_name,
+                _fqcn=f"{kit_name}:{name}",
+                platform=platform,
+                description=desc,
+            )
             for name, platform, desc in tool_specs
         ]
         return [kit], projects
@@ -720,12 +721,12 @@ class TestKitListDrillInColumnWidths:
         # When a tool ref doesn't match any discovered project, the row
         # should render with "(not found)" in the description column.
         engine = _engine(tmp_path, monkeypatch)
-        kit = {
-            "_kit_name": "kit",
-            "name": "kit",
-            "always_active": True,
-            "tools": ["kit:ghost"],
-        }
+        kit = make_kit(
+            _kit_name="kit",
+            name="kit",
+            always_active=True,
+            tools=["kit:ghost"],
+        )
         rc = _cmd_kit_list(
             _Args(name="kit"), [kit], projects=[], engine=engine
         )

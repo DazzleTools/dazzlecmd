@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from dazzlecmd_lib.aggregator_config import AggregatorSchema
+from dazzlecmd_lib.testing import make_tool, make_kit
 from dazzlecmd_lib.mode import (
     STATE_EMBEDDED,
     STATE_MISSING,
@@ -442,11 +443,11 @@ class TestSwitchRefusesDirty:
         dev_path = tmp_path / "dev_target"
         dev_path.mkdir()
 
-        project = {
-            "name": "mytool",
-            "namespace": "core",
-            "_dir": str(tool_path),
-        }
+        project = make_tool(
+            name="mytool",
+            namespace="core",
+            _dir=str(tool_path),
+        )
         rc = cmd_switch(
             tool_name="mytool",
             projects=[project],
@@ -490,11 +491,11 @@ class TestSwitchRefusesDirty:
         dev_path = tmp_path / "dev_target"
         dev_path.mkdir()
 
-        project = {
-            "name": "mytool",
-            "namespace": "core",
-            "_dir": str(tool_path),
-        }
+        project = make_tool(
+            name="mytool",
+            namespace="core",
+            _dir=str(tool_path),
+        )
         cmd_switch(
             tool_name="mytool",
             projects=[project],
@@ -529,11 +530,11 @@ class TestSwitchRefusesDirty:
         dev_path = tmp_path / "dev_target"
         dev_path.mkdir()
 
-        project = {
-            "name": "mytool",
-            "namespace": "core",
-            "_dir": str(tool_path),
-        }
+        project = make_tool(
+            name="mytool",
+            namespace="core",
+            _dir=str(tool_path),
+        )
         rc = cmd_switch(
             tool_name="mytool",
             projects=[project],

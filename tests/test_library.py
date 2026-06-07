@@ -17,6 +17,8 @@ import sys
 
 import pytest
 
+from dazzlecmd_lib.testing import make_tool, make_kit
+
 
 # ---------------------------------------------------------------------------
 # Direct library imports
@@ -136,7 +138,7 @@ class TestRunnerRegistry:
 
     def test_resolve_unknown_type_returns_none(self, capsys):
         from dazzlecmd_lib.registry import RunnerRegistry
-        project = {"name": "test", "runtime": {"type": "nonexistent"}, "_dir": "."}
+        project = make_tool(name="test", runtime={"type": "nonexistent"}, _dir=".")
         result = RunnerRegistry.resolve(project)
         assert result is None
         captured = capsys.readouterr()
@@ -150,7 +152,7 @@ class TestRunnerRegistry:
 
         RunnerRegistry.register("_test_custom", custom_factory)
         try:
-            project = {"name": "test", "runtime": {"type": "_test_custom"}, "_dir": "."}
+            project = make_tool(name="test", runtime={"type": "_test_custom"}, _dir=".")
             runner = RunnerRegistry.resolve(project)
             assert runner is not None
             assert runner([]) == 42
