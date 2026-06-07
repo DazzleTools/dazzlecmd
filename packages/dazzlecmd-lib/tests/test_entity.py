@@ -237,18 +237,22 @@ class TestShimMapping:
         for k in t.keys():
             assert k in t  # __contains__ agrees with the key view
 
-    def test_items_includes_computed_underscore_keys(self):
-        """cache_manifest relies on _-keys being PRESENT so it can filter them."""
+    def test_items_view_after_field_promotion(self):
+        """Post-promotion: `_fqcn` stays extra-backed (yields `_fqcn`); a
+        promoted computed key like `_kit_active` lands in its typed field and
+        yields the FIELD name (`kit_active`). to_manifest() strips the computed
+        fields and the `_`-runtime keys."""
         t = Tool.model_validate(_tool_manifest())
-        t["_fqcn"] = "core:tool1"
-        t["_kit_active"] = True
+        t["_fqcn"] = "core:tool1"     # property-backed -> extra["_fqcn"]
+        t["_kit_active"] = True       # alias map -> kit_active field
         d = dict(t.items())
-        assert d["_fqcn"] == "core:tool1"
-        assert d["_kit_active"] is True
-        # the cache_manifest pattern strips them itself:
-        clean = {k: v for k, v in t.items() if not k.startswith("_")}
-        assert not any(k.startswith("_") for k in clean)
-        assert clean["name"] == "tool1"
+        assert d["_fqcn"] == "core:tool1"     # extra key, surfaced as-is
+        assert d["kit_active"] is True         # promoted field, surfaced by field name
+        # to_manifest drops both the computed field and the _-runtime key:
+        m = t.to_manifest()
+        assert "kit_active" not in m
+        assert "_fqcn" not in m
+        assert m["name"] == "tool1"
 
     def test_dict_constructor_still_works(self):
         """Pydantic's __iter__ contract must remain intact (not overridden)."""

@@ -4,6 +4,31 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.4] - 2026-06-07
+
+Phase 1 (DazzleEntity call-site migration) — Stage 3: promote the computed runtime fields from `_`-prefixed extra keys to typed model fields. The first dispatch-touching stage. Byte-identical across every `dz`/`wtf`/`amdead` surface (verified); the engine and all readers are untouched — a legacy-key alias map keeps existing `project["_dir"]`/`project["_fqcn"]` access working transparently while readers migrate later. Local-only.
+
+### Changed
+
+- `dazzlecmd_lib.entity.DazzleEntity` — 11 computed runtime values are now typed fields instead of `_`-prefixed extra keys: `short_name`, `kit_import_name`, `directory` (was `_dir`), `manifest_path`, `cached`, `kit_source` (was `_source` — renamed to avoid colliding with the manifest `source` block), `kit_name`, `kit_active`, `auto_realpath_alias`, `canonical_fqcn`, `original_name`. The canonical `fqcn` stays a set-once property (C1). A `_LEGACY_KEY_MAP` routes legacy dict access (`["_dir"]`, `.get("_kit_active")`, `["_fqcn"] = ...`) — read and write — to the promoted field/property, so no reader had to change yet. `to_manifest()` strips the computed fields (via `_COMPUTED_FIELDS`) so they never leak into a serialized manifest.
+- `dazzlecmd_lib.loader` — discovery now writes the promoted field names (`directory`/`manifest_path`/`cached`/`kit_source`/`kit_name`) into the manifest dict before `build_entity`, so validation populates the typed fields.
+- `dazzlecmd_lib.mode.cache_manifest` — uses `manifest.to_manifest()` for entities (and the legacy `_`-prefix filter for the dict path), so the now-non-underscore computed fields are not cached as manifest data.
+
+### Notes
+
+- Behavior change (internal): `"_cached" in entity` (and other promoted keys) is now always true because the field always exists — membership should check the value (`entity["_cached"] is False`). The only production membership check is on `_fqcn`, which remains a property (extra-backed), so its membership semantics are unchanged. `_vars` (manifest data that starts with `_`) is still stripped by `to_manifest`/`cache_manifest` as before — rescuing it is a separate, deferred fix.
+
+### Tests
+
+- `test_entity.py::TestShimMapping::test_items_view_after_field_promotion` — promoted keys surface under their field names; `_fqcn` stays extra-backed; `to_manifest` strips both.
+- `test_mode.py` — the entity behavioral tests + the cache-fallback test updated for the field-based model (`cached` value check instead of key membership).
+
+### Versions
+
+- dazzlecmd 0.8.3 -> 0.8.4 (PATCH).
+- dazzlecmd-lib 0.7.1 -> 0.7.2 (PATCH -- entity field promotion + loader/mode wiring).
+- dazzle-dz alias -> 0.8.4; deps re-pinned to >=0.8.4 / >=0.7.2.
+
 ## [0.8.3] - 2026-06-07
 
 Phase 1 (DazzleEntity call-site migration) — Stage 2: the write-path safety net. Test-only; no source change (ratchet stays off). Builds entity-fixture coverage for the mutate commands before the big attribute sweep — closing the gap that let the 0.8.1 `dz mode switch` crash ship undetected. Local-only.
@@ -2067,7 +2092,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.3...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.4...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

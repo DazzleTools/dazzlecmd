@@ -159,8 +159,14 @@ def cache_manifest(project_root, qualified_name, manifest):
     have the manifest file yet.
     """
     data = _load_full_config(project_root)
-    # Strip internal keys (start with _)
-    clean = {k: v for k, v in manifest.items() if not k.startswith("_")}
+    # Strip computed/internal keys. For a DazzleEntity use to_manifest()
+    # (drops promoted computed fields like `directory`/`kit_active` AND
+    # `_`-prefixed runtime keys); for a plain dict (undiscovered-tool path)
+    # fall back to the legacy `_`-prefix filter.
+    if hasattr(manifest, "to_manifest"):
+        clean = manifest.to_manifest()
+    else:
+        clean = {k: v for k, v in manifest.items() if not k.startswith("_")}
     data["cached_manifests"][qualified_name] = clean
     _save_full_config(project_root, data)
 

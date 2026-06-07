@@ -82,8 +82,8 @@ def discover_kits(kits_dir, projects_dir=None):
         kit["name"] = kit_name
         kit.setdefault("always_active", False)
         kit.setdefault("tools", [])
-        kit["_source"] = filepath
-        kit["_kit_name"] = kit_name
+        kit["kit_source"] = filepath        # promoted computed field (was "_source")
+        kit["kit_name"] = kit_name          # promoted computed field (was "_kit_name")
         # Tag virtual kits and preserve their alias-rewrite map so the
         # engine's _apply_virtual_kits pass can process them after the
         # canonical FQCN index is built.
@@ -436,8 +436,8 @@ def _load_manifest(manifest_path, namespace, tool_name, tool_dir):
         return None
 
     manifest["namespace"] = namespace
-    manifest["_dir"] = tool_dir
-    manifest["_manifest_path"] = manifest_path
+    manifest["directory"] = tool_dir            # promoted computed field (was "_dir")
+    manifest["manifest_path"] = manifest_path   # promoted computed field (was "_manifest_path")
 
     # Defaults
     manifest.setdefault("version", "0.0.0")
@@ -487,9 +487,9 @@ def _load_cached_manifest(projects_dir, namespace, tool_name, tool_dir):
         if cached is None:
             return None
         cached["namespace"] = namespace
-        cached["_dir"] = tool_dir
-        cached["_manifest_path"] = None
-        cached["_cached"] = True
+        cached["directory"] = tool_dir          # promoted computed field (was "_dir")
+        cached["manifest_path"] = None          # promoted computed field (was "_manifest_path")
+        cached["cached"] = True                 # promoted computed field (was "_cached")
         cached.setdefault("version", "0.0.0")
         cached.setdefault("description", "")
         cached.setdefault("platform", "cross-platform")

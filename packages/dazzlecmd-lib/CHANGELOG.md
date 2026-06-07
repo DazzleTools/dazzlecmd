@@ -8,6 +8,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.7.2] - 2026-06-07
+
+Ships with dazzlecmd v0.8.4 -- Phase 1 Stage 3: promote computed runtime values to typed fields. Public API unchanged; the migration is internal and a legacy-key alias map keeps dict access working, so consumers (dazzlecmd, amdead, wtf-windows) need no change.
+
+### Changed
+
+- `DazzleEntity` — 11 computed runtime values promoted from `_`-prefixed extra keys to typed fields: `short_name`, `kit_import_name`, `directory`, `manifest_path`, `cached`, `kit_source`, `kit_name`, `kit_active`, `auto_realpath_alias`, `canonical_fqcn`, `original_name`. `fqcn` stays a set-once property. `_LEGACY_KEY_MAP` routes legacy `["_dir"]`/`["_fqcn"]` access (read + write) to the promoted field/property; `_COMPUTED_FIELDS` drives `to_manifest()` stripping so computed values never serialize as manifest data.
+- `loader` — writes promoted field names into the manifest dict before `build_entity` so validation populates the fields.
+- `mode.cache_manifest` — uses `to_manifest()` for entities so computed fields aren't cached.
+
+### Notes
+
+- Internal behavior change: `"<promoted_key>" in entity` is now always true (the field exists) — check the value, not membership. `_fqcn` stays a property, so its membership semantics are unchanged.
+
+### Refs
+
+Ships with dazzlecmd v0.8.4. Refs dazzlecmd #37, #73, #77.
+
 ## [0.7.1] - 2026-06-07
 
 Ships with dazzlecmd v0.8.2 -- Phase 1 Stage 1. The `DazzleEntity` backward-compat shim becomes a faithful read-Mapping.

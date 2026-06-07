@@ -131,6 +131,49 @@ class DazzleEntity(Groupable, BaseModel):
     description: str = ""
     version: str = "0.0.0"
 
+    # --- computed runtime fields (Phase 1 Stage 3) ---
+    # Promoted from the `_`-prefixed extra keys so they are typed and
+    # attribute-accessible. These are NOT manifest data -- to_manifest()
+    # strips them (see _COMPUTED_FIELDS). Legacy dict access
+    # (``project["_dir"]`` / ``project["_fqcn"]``) keeps working via
+    # _LEGACY_KEY_MAP until every reader migrates to attribute access.
+    short_name: Optional[str] = None            # was "_short_name"
+    kit_import_name: Optional[str] = None        # was "_kit_import_name"
+    directory: Optional[str] = None              # was "_dir"
+    manifest_path: Optional[str] = None          # was "_manifest_path"
+    cached: bool = False                          # was "_cached"
+    kit_source: Optional[str] = None             # was "_source" (kit .kit.json path; renamed -- "source" is a manifest block)
+    kit_name: Optional[str] = None               # was "_kit_name"
+    kit_active: bool = True                       # was "_kit_active"
+    auto_realpath_alias: bool = False            # was "_auto_realpath_alias"
+    canonical_fqcn: Optional[str] = None         # was "_canonical_fqcn"
+    original_name: Optional[str] = None          # was "_original_name"
+
+    # Legacy dict-era key -> promoted field/property name. Keeps existing
+    # ``entity["_dir"]`` / ``entity["_fqcn"]`` call sites (read AND write)
+    # working while they migrate to attribute access. (`_fqcn` -> the set-once
+    # `fqcn` property.) Removed once all in-scope readers are migrated.
+    _LEGACY_KEY_MAP: ClassVar[Dict[str, str]] = {
+        "_fqcn": "fqcn",
+        "_short_name": "short_name",
+        "_kit_import_name": "kit_import_name",
+        "_dir": "directory",
+        "_manifest_path": "manifest_path",
+        "_cached": "cached",
+        "_source": "kit_source",
+        "_kit_name": "kit_name",
+        "_kit_active": "kit_active",
+        "_auto_realpath_alias": "auto_realpath_alias",
+        "_canonical_fqcn": "canonical_fqcn",
+        "_original_name": "original_name",
+    }
+    # Computed (non-manifest) field names -- stripped by to_manifest().
+    _COMPUTED_FIELDS: ClassVar[frozenset] = frozenset({
+        "short_name", "kit_import_name", "directory", "manifest_path",
+        "cached", "kit_source", "kit_name", "kit_active",
+        "auto_realpath_alias", "canonical_fqcn", "original_name",
+    })
+
     # ------------------------------------------------------------------
     # C1: set-once canonical FQCN (the axis-invariant identity)
     # ------------------------------------------------------------------
@@ -186,10 +229,12 @@ class DazzleEntity(Groupable, BaseModel):
         """Dict-style lookup WITHOUT the deprecation warning.
 
         Used by the shim Mapping methods (``items``/``values``) so they warn
-        once per call, not once per item.
+        once per call, not once per item. Legacy ``_``-prefixed keys route to
+        their promoted field/property via _LEGACY_KEY_MAP.
         """
+        mapped = type(self)._LEGACY_KEY_MAP.get(key, key)
         try:
-            return getattr(self, key)
+            return getattr(self, mapped)
         except AttributeError:
             extra = self.__pydantic_extra__ or {}
             if key in extra:
@@ -202,14 +247,17 @@ class DazzleEntity(Groupable, BaseModel):
 
     def __setitem__(self, key: str, value: Any) -> None:
         self._maybe_warn_shim("[]=")
-        # Route through a set-once property if one exists for this key
-        # (so item-assignment can't bypass C1). `_fqcn` -> the `fqcn` property.
-        prop = getattr(type(self), key.lstrip("_"), None)
+        # Legacy `_`-keys route to their promoted field/property; so an
+        # existing ``project["_dir"] = x`` lands in the typed `directory`
+        # field, and ``project["_fqcn"] = x`` goes through the set-once C1
+        # property (item-assignment can't bypass C1).
+        mapped = type(self)._LEGACY_KEY_MAP.get(key, key)
+        prop = getattr(type(self), mapped, None)
         if isinstance(prop, property) and prop.fset is not None:
             prop.fset(self, value)
             return
-        if key in type(self).model_fields:
-            object.__setattr__(self, key, value)
+        if mapped in type(self).model_fields:
+            object.__setattr__(self, mapped, value)
         else:
             self._set_extra_field(key, value)
 
@@ -221,7 +269,8 @@ class DazzleEntity(Groupable, BaseModel):
             return default
 
     def __contains__(self, key: str) -> bool:
-        if key in type(self).model_fields:
+        mapped = type(self)._LEGACY_KEY_MAP.get(key, key)
+        if mapped in type(self).model_fields:
             return True
         return key in (self.__pydantic_extra__ or {})
 
@@ -263,8 +312,13 @@ class DazzleEntity(Groupable, BaseModel):
     # ------------------------------------------------------------------
     def to_manifest(self) -> Dict[str, Any]:
         data = self.model_dump()
+        computed = type(self)._COMPUTED_FIELDS
         for key in list(data):
-            if key.startswith("_"):
+            # Strip computed runtime fields (promoted, non-underscore) and any
+            # `_`-prefixed runtime key (e.g. `_fqcn`). Note: `_vars` is manifest
+            # data that merely starts with `_` and is stripped here too -- that
+            # pre-existing behavior is unchanged; rescuing it is a separate fix.
+            if key in computed or key.startswith("_"):
                 data.pop(key, None)
         return data
 

@@ -274,7 +274,11 @@ class TestDiscoverProjectsCacheFallback:
             found = discover_projects(projects_dir)
             project = [p for p in found if p["name"] == "mytool"][0]
             assert project["description"] == "On-disk version"
-            assert "_cached" not in project
+            # `cached` is now a promoted typed field (default False) -- an
+            # on-disk tool is not loaded from cache. (Pre-promotion this was
+            # `"_cached" not in project`; the field always exists now, so check
+            # the value.)
+            assert project["_cached"] is False
 
     def test_empty_dir_no_cache_skipped(self):
         """A tool dir with no manifest and no cache is skipped."""
@@ -375,8 +379,8 @@ class TestModeSwitchEntityBehavior:
                 "description": "sandbox tool",
                 "source": {"url": "https://example.com/mytool.git"},
                 "runtime": {"type": "python", "script_path": "mytool.py"},
-                "_dir": tool_dir,
-                "_fqcn": "core:mytool",
+                "directory": tool_dir,   # promoted computed field (was "_dir")
+                "_fqcn": "core:mytool",  # property-backed; stays in extra
             },
             entity_type="tool",
         )
