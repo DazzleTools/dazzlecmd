@@ -157,26 +157,26 @@ def render_list(args, projects, engine=None) -> int:
         tag = getattr(args, "tag", None)
         kit = getattr(args, "kit", None)
         if ns:
-            filtered = [p for p in filtered if p.get("namespace") == ns]
+            filtered = [p for p in filtered if p.namespace == ns]
         if plat:
             filtered = [
                 p for p in filtered
-                if p.get("platform", "cross-platform") == plat
+                if (p.platform or "cross-platform") == plat
             ]
         if tag:
             filtered = [
                 p for p in filtered
-                if tag in p.get("taxonomy", {}).get("tags", [])
+                if tag in p.taxonomy.get("tags", [])
             ]
         if kit:
-            filtered = [p for p in filtered if p.get("_kit_import_name") == kit]
+            filtered = [p for p in filtered if p.kit_import_name == kit]
         if not filtered:
             print("No tools found.")
             return 0
-        name_width = max(len(p["name"]) for p in filtered)
+        name_width = max(len(p.name) for p in filtered)
         name_width = max(name_width, len("Name"))
         kit_col_width = max(
-            (len(p.get("_kit_import_name", "")) for p in filtered),
+            (len(p.kit_import_name or "") for p in filtered),
             default=0,
         )
         kit_col_width = max(kit_col_width, len("Kit"))
@@ -184,9 +184,9 @@ def render_list(args, projects, engine=None) -> int:
         print(header)
         print("  " + "-" * (len(header) - 2))
         for project in filtered:
-            name = project["name"]
-            kit_name = project.get("_kit_import_name", "")
-            desc = project.get("description", "")
+            name = project.name
+            kit_name = project.kit_import_name or ""
+            desc = project.description or ""
             if len(desc) > 60:
                 desc = desc[:57] + "..."
             print(f"  {name:<{name_width}}  {kit_name:<{kit_col_width}}  {desc}")
@@ -553,26 +553,26 @@ def build_list_entries(projects, engine, show_mode, kit_filter):
             # Skip projects whose FQCN was demoted to an auto-realpath
             # alias (issue #65): they appear under their canonical's row
             # in the alias section, never as duplicate canonical rows.
-            if p.get("_auto_realpath_alias"):
+            if p.auto_realpath_alias:
                 continue
-            kit_name = p.get("_kit_import_name", "")
+            kit_name = p.kit_import_name or ""
             if kit_filter is not None:
                 if kit_name != kit_filter:
                     continue
-            fqcn = p.get("_fqcn", "")
+            fqcn = p.fqcn or ""  # matches old .get("_fqcn", ""); fqcn is Optional
             # Section key: kit_path = FQCN minus the last segment
             if ":" in fqcn:
                 section_key = fqcn.rsplit(":", 1)[0]
             else:
                 section_key = kit_name or "(unknown)"
             entries.append({
-                "name": p["name"],
+                "name": p.name,
                 "kit": kit_name,
-                "description": p.get("description", ""),
+                "description": p.description or "",
                 "entry_type": "canonical",
-                "namespace": p.get("namespace"),
-                "platform": p.get("platform", "cross-platform"),
-                "tags": p.get("taxonomy", {}).get("tags", []),
+                "namespace": p.namespace,
+                "platform": p.platform or "cross-platform",
+                "tags": p.taxonomy.get("tags", []),
                 "_fqcn": fqcn,
                 "_canonical_fqcn": fqcn,
                 "section_key": section_key,
@@ -587,7 +587,7 @@ def build_list_entries(projects, engine, show_mode, kit_filter):
         else:
             # Map canonical FQCN -> project, for description lookup
             canonical_by_fqcn = {
-                p.get("_fqcn"): p for p in projects if p.get("_fqcn")
+                p.fqcn: p for p in projects if p.fqcn
             }
             alias_sources = getattr(engine.fqcn_index, "_alias_sources", {})
             # Iterate every alias and build its entry
@@ -609,7 +609,7 @@ def build_list_entries(projects, engine, show_mode, kit_filter):
                     target_project = canonical_by_fqcn.get(canonical_fqcn)
                     if target_project is None:
                         continue
-                    if target_project.get("_kit_import_name") != kit_filter:
+                    if target_project.kit_import_name != kit_filter:
                         continue
 
                 target_project = canonical_by_fqcn.get(canonical_fqcn)
@@ -628,7 +628,7 @@ def build_list_entries(projects, engine, show_mode, kit_filter):
                     if ":" in canonical_fqcn:
                         canonical_kit_path = canonical_fqcn.rsplit(":", 1)[0]
                     else:
-                        canonical_kit_path = target_project.get("_kit_import_name", "")
+                        canonical_kit_path = target_project.kit_import_name or ""
                     section_key = (
                         f"{canonical_kit_path}:{vk_name}"
                         if canonical_kit_path else vk_name
@@ -638,11 +638,11 @@ def build_list_entries(projects, engine, show_mode, kit_filter):
                 entries.append({
                     "name": alias_short,
                     "kit": vk_name,  # legacy column for flat fallback
-                    "description": target_project.get("description", ""),
+                    "description": target_project.description or "",
                     "entry_type": "alias",
-                    "namespace": target_project.get("namespace"),
-                    "platform": target_project.get("platform", "cross-platform"),
-                    "tags": target_project.get("taxonomy", {}).get("tags", []),
+                    "namespace": target_project.namespace,
+                    "platform": target_project.platform or "cross-platform",
+                    "tags": target_project.taxonomy.get("tags", []),
                     "_fqcn": alias_fqcn,
                     "_canonical_fqcn": canonical_fqcn,
                     "section_key": section_key,
@@ -798,7 +798,7 @@ def _print_runtime_resolved(project):
     from dazzlecmd_lib.platform_detect import get_platform_info
     from dazzlecmd_lib.templates import has_template_refs
 
-    raw_runtime = project.get("runtime", {})
+    raw_runtime = project.runtime or {}
     # BUG-3 fix: also trigger resolution when the manifest contains any
     # `{{var}}` references -- catching unresolved vars at inspection time
     # rather than silently passing through. Includes manifest-top _vars
@@ -844,7 +844,7 @@ def _print_runtime_resolved(project):
 
 def _print_runtime_raw(project):
     """--raw view: show the manifest as declared, no resolution."""
-    runtime = project.get("runtime", {})
+    runtime = project.runtime or {}
     runtime_type = runtime.get("type", "python")
     print(f"Runtime:     {runtime_type}  (raw, unresolved)")
     _print_runtime_dispatch_fields(runtime)
@@ -916,7 +916,7 @@ def _print_runtime_platform_preview(project, spec):
         os=os_name, subtype=subtype, arch="preview", is_wsl=False, version=None
     )
 
-    raw_runtime = project.get("runtime", {})
+    raw_runtime = project.runtime or {}
     base_runtime = {k: v for k, v in raw_runtime.items() if k != "platforms"}
     platforms = raw_runtime.get("platforms")
     effective = resolve_platform_block(base_runtime, platforms, pi)
@@ -1014,7 +1014,7 @@ def render_info(args, projects, engine) -> int:
     # default takes precedence at parse time; if the aggregator has
     # called engine.meta_registry.override(<short>, handler=...) the
     # override is the chain-the-default acknowledgment (per issue #56).
-    short = project.get("name", "")
+    short = project.name or ""
     reserved = getattr(engine, "reserved_commands", frozenset())
     if short and short in reserved:
         meta_registry = getattr(engine, "meta_registry", None)
@@ -1027,7 +1027,7 @@ def render_info(args, projects, engine) -> int:
         print()
         print(f"{_warn('Shadow status:')} name '{short}' is registered as both")
         print(f"  - library default meta-command: {short}")
-        print(f"  - aggregator tool: {project.get('_fqcn', short)}")
+        print(f"  - aggregator tool: {project.fqcn or short}")
         print(f"The library default takes precedence at parse time.")
         if is_overridden:
             print(
@@ -1039,33 +1039,33 @@ def render_info(args, projects, engine) -> int:
             print(
                 f"The aggregator has NOT overridden the handler. "
                 f"The tool is unreachable via short name '{short}' -- "
-                f"dispatch via FQCN: {project.get('_fqcn', short)}"
+                f"dispatch via FQCN: {project.fqcn or short}"
             )
         print()
 
-    print(f"Name:        {project['name']}")
-    if project.get("_fqcn"):
-        print(f"FQCN:        {project['_fqcn']}")
-    if project.get("_kit_import_name"):
-        print(f"Kit:         {project['_kit_import_name']}")
-    if project.get("namespace"):
-        print(f"Namespace:   {project['namespace']}")
-    print(f"Version:     {project.get('version', 'unknown')}")
+    print(f"Name:        {project.name}")
+    if project.fqcn:
+        print(f"FQCN:        {project.fqcn}")
+    if project.kit_import_name:
+        print(f"Kit:         {project.kit_import_name}")
+    if project.namespace:
+        print(f"Namespace:   {project.namespace}")
+    print(f"Version:     {project.version or 'unknown'}")
     # v0.7.37: wrap Description to terminal width with continuation-line
     # indent aligned to the start of the value column. Matches the layout
     # discipline established by render_list / render_kit_list (#48 / #NN).
     _label = "Description: "
     _indent = " " * len(_label)
-    _desc = project.get("description", "")
+    _desc = project.description or ""
     _term_width = _shutil.get_terminal_size((80, 24)).columns
     _wrap_width = max(20, _term_width - len(_label))
     _wrapped = _wrap_description(_desc, _wrap_width)
     print(f"{_label}{_wrapped[0]}")
     for _line in _wrapped[1:]:
         print(f"{_indent}{_line}")
-    print(f"Platform:    {project.get('platform', 'cross-platform')}")
-    if project.get("language"):
-        print(f"Language:    {project['language']}")
+    print(f"Platform:    {project.platform or 'cross-platform'}")
+    if project.language:
+        print(f"Language:    {project.language}")
 
     # Runtime dispatch: --raw shows the manifest unresolved; --platform
     # SPEC previews per-platform resolution; default resolves for the
@@ -1081,20 +1081,20 @@ def render_info(args, projects, engine) -> int:
     else:
         _print_runtime_resolved(project)
 
-    if project.get("pass_through"):
+    if project.pass_through:
         print(f"Pass-through: yes")
 
-    taxonomy = project.get("taxonomy", {})
+    taxonomy = project.taxonomy
     if taxonomy.get("category"):
         print(f"Category:    {taxonomy['category']}")
     if taxonomy.get("tags"):
         print(f"Tags:        {', '.join(taxonomy['tags'])}")
 
-    deps = project.get("dependencies", {})
+    deps = project.dependencies or {}
     if isinstance(deps, dict) and deps.get("python"):
         print(f"Python deps: {', '.join(deps['python'])}")
 
-    setup = project.get("setup")
+    setup = project.setup
     if setup:
         note = setup.get("note") if isinstance(setup, dict) else None
         cmd_preview = None
@@ -1106,7 +1106,7 @@ def render_info(args, projects, engine) -> int:
         # CLI prog name (``dz`` for dazzlecmd, ``amdead`` for amdead,
         # etc.) so the hint matches whichever aggregator the user is
         # running.
-        fqcn_for_setup = project.get("_fqcn", project.get("name", ""))
+        fqcn_for_setup = project.fqcn or project.name or ""
         cmd_name = getattr(engine, "command", None) or "dz"
         if fqcn_for_setup:
             print(f"             Run: {cmd_name} setup {fqcn_for_setup}")
@@ -1118,7 +1118,7 @@ def render_info(args, projects, engine) -> int:
     # for any library consumer (amdead, wtf-windows, sysdiagnose, ...)
     # without dazzlecmd-package coupling.
     from dazzlecmd_lib.paths import is_linked_project, get_link_target
-    tool_dir = project.get("_dir")
+    tool_dir = project.directory
     if tool_dir and is_linked_project(tool_dir):
         target = get_link_target(tool_dir)
         print(f"Linked to:   {target or 'unknown'}")
@@ -1130,7 +1130,7 @@ def render_info(args, projects, engine) -> int:
     # uses. Multi-line content is preserved -- each input line wraps
     # independently and blank input lines render as blank output lines
     # (paragraph breaks).
-    long_desc = project.get("long_description", "")
+    long_desc = project.long_description or ""
     if isinstance(long_desc, str) and long_desc.strip():
         print()
         details_header = (
@@ -1207,23 +1207,23 @@ def render_kit_list(args, kits, projects) -> int:
     if kit_name:
         matching = [
             k for k in kits
-            if (k.get("_kit_name") or k.get("name")) == kit_name
+            if (k.kit_name or k.name) == kit_name
         ]
         if not matching:
             print(f"Kit {kit_name!r} not found. Available kits:")
             for k in kits:
-                print(f"  {k.get('_kit_name') or k.get('name')}")
+                print(f"  {k.kit_name or k.name}")
             return 1
 
         kit = matching[0]
-        name = kit.get("_kit_name") or kit.get("name")
-        active = _dim(" (always active)") if kit.get("always_active") else ""
+        name = kit.kit_name or kit.name
+        active = _dim(" (always active)") if kit.always_active else ""
         print(f"Kit: {_bold(name)}{active}")
-        if kit.get("description"):
-            print(f"  {kit['description']}")
+        if kit.description:
+            print(f"  {kit.description}")
         print()
 
-        tool_refs = kit.get("tools", [])
+        tool_refs = kit.tools or []
         if not tool_refs:
             print("  No tools in this kit.")
             return 0
@@ -1233,11 +1233,11 @@ def render_kit_list(args, kits, projects) -> int:
             # ``engine._discover_aggregator``'s post-recursion populate
             # (e.g., ``dz:core:find``, ``wtf:core:locked``). Match by
             # ``_fqcn`` directly so multi-segment FQCNs resolve.
-            match = [p for p in projects if p.get("_fqcn") == ref]
+            match = [p for p in projects if p.fqcn == ref]
             if match:
                 # Display the leaf name; the namespace is implicit from kit.
                 p = match[0]
-                display_name = p["name"]
+                display_name = p.name
             else:
                 # Legacy fallback: parse ref as ``ns:name`` for existing
                 # kit manifests that use 2-segment refs (e.g.,
@@ -1248,16 +1248,16 @@ def render_kit_list(args, kits, projects) -> int:
                     ns, name_part = "", ref
                 match = [
                     p for p in projects
-                    if p["name"] == name_part
-                    and (not ns or p.get("namespace") == ns)
+                    if p.name == name_part
+                    and (not ns or p.namespace == ns)
                 ]
                 display_name = name_part
             if match:
                 p = match[0]
-                desc = p.get("description", "")
+                desc = p.description or ""
                 if len(desc) > 55:
                     desc = desc[:52] + "..."
-                platform = p.get("platform", "")
+                platform = p.platform or ""
                 # DIM "cross-platform"; leave OS-specific values plain so
                 # they stand out (windows / linux / macos).
                 platform_styled = (
@@ -1275,12 +1275,12 @@ def render_kit_list(args, kits, projects) -> int:
     for i, kit in enumerate(kits):
         if i > 0:
             print()
-        name = kit.get("_kit_name") or kit.get("name")
-        active = _dim(" (always active)") if kit.get("always_active") else ""
-        tool_count = len(kit.get("tools", []))
+        name = kit.kit_name or kit.name
+        active = _dim(" (always active)") if kit.always_active else ""
+        tool_count = len(kit.tools or [])
         print(f"  {_bold(f'{name:<16}')} {tool_count} tool(s){active}")
-        if kit.get("description"):
-            print(f"    {kit['description']}")
+        if kit.description:
+            print(f"    {kit.description}")
     return 0
 
 
@@ -1291,11 +1291,11 @@ def render_kit_status(kits) -> int:
     def _bold(s):
         return _colors.colorize(s, _colors.BOLD) if _use_color else s
 
-    active = [k for k in kits if k.get("always_active")] or list(kits)
+    active = [k for k in kits if k.always_active] or list(kits)
     print(f"Active kits: {len(active)}")
     for kit in active:
-        name = kit.get("_kit_name") or kit.get("name")
-        tool_count = len(kit.get("tools", []))
+        name = kit.kit_name or kit.name
+        tool_count = len(kit.tools or [])
         print(f"  {_bold(name)}: {tool_count} tool(s)")
     return 0
 
@@ -1653,7 +1653,7 @@ def render_setup_listing(projects) -> int:
     Used when ``setup`` is invoked without a tool argument.
     """
     def _has_setup(project):
-        setup = project.get("setup")
+        setup = project.setup
         if not isinstance(setup, dict):
             return False
         if setup.get("command"):
@@ -1672,16 +1672,16 @@ def render_setup_listing(projects) -> int:
         print("No tools have setup declared.")
         return 0
 
-    with_setup.sort(key=lambda p: p.get("_fqcn", p.get("name", "")))
+    with_setup.sort(key=lambda p: p.fqcn or p.name or "")
     longest = max(
-        len(p.get("_fqcn", p.get("name", ""))) for p in with_setup
+        len(p.fqcn or p.name or "") for p in with_setup
     )
     col_width = max(20, min(50, longest))
 
     print("Tools with setup declared:\n")
     for project in with_setup:
-        fqcn = project.get("_fqcn", project.get("name", ""))
-        setup = project.get("setup", {})
+        fqcn = project.fqcn or project.name or ""
+        setup = project.setup or {}
         note = setup.get("note") if isinstance(setup, dict) else None
         note = note or "-"
         print(f"  {fqcn:<{col_width}}  {note}")
@@ -1716,15 +1716,15 @@ def setup_handler(args, engine, projects, kits, project_root) -> int:
     if len(matches) > 1:
         print(_colors.warn(f"Multiple tools named {tool_name!r}:"), file=_sys.stderr)
         for p in matches:
-            print(f"  {p.get('_fqcn', p['name'])}", file=_sys.stderr)
+            print(f"  {p.fqcn or p.name}", file=_sys.stderr)
         return 1
 
     project = matches[0]
-    setup = project.get("setup")
+    setup = project.setup
     if not setup:
         print(
             _colors.warn(
-                f"Tool {project.get('_fqcn', project['name'])!r} has no setup declared."
+                f"Tool {project.fqcn or project.name!r} has no setup declared."
             ),
             file=_sys.stderr,
         )
@@ -1755,7 +1755,7 @@ def setup_handler(args, engine, projects, kits, project_root) -> int:
     if resolved is None:
         print(
             _colors.warn(
-                f"Tool {project.get('_fqcn', project['name'])!r} has no executable setup."
+                f"Tool {project.fqcn or project.name!r} has no executable setup."
             ),
             file=_sys.stderr,
         )
@@ -1765,7 +1765,7 @@ def setup_handler(args, engine, projects, kits, project_root) -> int:
     if not command:
         print(
             _colors.warn(
-                f"Tool {project.get('_fqcn', project['name'])!r} has no setup command "
+                f"Tool {project.fqcn or project.name!r} has no setup command "
                 f"for this platform."
             ),
             file=_sys.stderr,
@@ -1776,11 +1776,11 @@ def setup_handler(args, engine, projects, kits, project_root) -> int:
     # we run the author-declared command via the platform shell.
     import subprocess as _subprocess
 
-    print(f"Running setup for {project.get('_fqcn', project['name'])}...")
+    print(f"Running setup for {project.fqcn or project.name}...")
     print(f"  {command}")
     _sys.stdout.flush()  # flush before subprocess to avoid output interleaving
 
-    result = _subprocess.run(command, shell=True, cwd=project.get("_dir"))
+    result = _subprocess.run(command, shell=True, cwd=project.directory)
     return result.returncode
 
 

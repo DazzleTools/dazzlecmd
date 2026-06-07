@@ -4,6 +4,25 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.8] - 2026-06-07
+
+Phase 1 (DazzleEntity call-site migration) — Stage 6b (first prod file): the `default_meta_commands.py` attribute sweep. Migrates dict-style entity access in the list/info/kit/setup render paths to typed attribute access. Byte-identical (the byte-gate is the per-site oracle); no behavior change. Local-only.
+
+### Changed
+
+- `dazzlecmd_lib.default_meta_commands` — entity access migrated from dict-style (`project["name"]`, `project.get("_fqcn")`, `.get("description", "")`) to attribute access (`project.name`, `project.fqcn`, `project.description`) across `render_list`, `build_list_entries`, `render_info`, `render_kit_list`, `render_kit_status`, `render_setup_listing`, `setup_handler`, and the runtime-print helpers (~50 logical sites). Nested-block values stay dict access (`entity.runtime["type"]`, `entity.taxonomy.get("tags")`); extra keys (`_vars`, `source`, etc.) stay `.get()`; `.get(key, default)` on `Optional` fields became `entity.field or default` to preserve exact semantics. Companion fixtures in `tests/test_default_meta_commands.py` migrated to the `make_tool`/`make_kit` factories (fully-annotated entities mirroring production; `short_name == name`), with the `_engine_with` `.setdefault` helper replaced by attribute assignment and a membership assertion changed to a value check.
+
+### Notes
+
+- `render_tree` (and the virtual-kit `engine.kits` iteration in `build_list_entries`) is intentionally **deferred**: its tests (`test_cli_tree.py`, `_engine_with_virtual_kit`) still pass plain-dict fixtures, so attribute access there would break them. That's the next follow-on (migrate those fixtures → sweep `render_tree`). The green-gate caught this automatically.
+- The bulk of this sweep was produced by a senior-engineer agent under a precise rule + the dual oracle (full suite + byte-gate), then reviewed: scope verified (only `default_meta_commands.py`), both oracles independently re-run green, one `.get`-default site tightened (`p.fqcn or ""`).
+
+### Versions
+
+- dazzlecmd 0.8.7 -> 0.8.8 (PATCH).
+- dazzlecmd-lib 0.7.5 -> 0.7.6 (PATCH -- default_meta_commands attribute sweep).
+- dazzle-dz alias -> 0.8.8; deps re-pinned to >=0.8.8 / >=0.7.6.
+
 ## [0.8.7] - 2026-06-07
 
 Phase 1 (DazzleEntity call-site migration) — Stage 6a: the test-fixture migration. Adds the public `dazzlecmd_lib.testing` entity factory and ports test fixtures from ad-hoc dict literals to real entities, so the upcoming prod attribute-sweep won't break dict-based tests. Test-only + a new test-support module; byte-identical (no prod call-site changes). Local-only.
@@ -2159,7 +2178,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.7...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.8...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

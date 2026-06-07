@@ -25,6 +25,7 @@ import pytest
 
 from dazzlecmd_lib import default_meta_commands as dmc
 from dazzlecmd_lib.meta_command_registry import MetaCommandRegistry
+from dazzlecmd_lib.testing import make_kit, make_tool
 
 
 # ---------------------------------------------------------------------------
@@ -41,26 +42,30 @@ def _project(
     fqcn=None,
     **extra,
 ):
-    return {
-        "name": name,
-        "namespace": namespace,
-        "_kit_import_name": kit,
-        "_fqcn": fqcn or f"{kit}:{name}",
-        "_dir": f"/tmp/{kit}/{name}",
-        "description": description,
-        "platform": platform,
+    # A fully-annotated tool entity, mirroring what discovery +
+    # engine._annotate_project_fqcn produce in production: short_name == name,
+    # kit_import_name == kit, fqcn set, directory set.
+    return make_tool(
+        name=name,
+        namespace=namespace,
+        short_name=name,
+        kit_import_name=kit,
+        fqcn=fqcn or f"{kit}:{name}",
+        directory=f"/tmp/{kit}/{name}",
+        description=description,
+        platform=platform,
         **extra,
-    }
+    )
 
 
 def _kit(name, tools=None, description="", always_active=False):
-    return {
-        "name": name,
-        "_kit_name": name,
-        "description": description,
-        "tools": tools or [],
-        "always_active": always_active,
-    }
+    return make_kit(
+        name=name,
+        _kit_name=name,
+        description=description,
+        tools=tools or [],
+        always_active=always_active,
+    )
 
 
 def _args(**kwargs):
@@ -112,9 +117,10 @@ def _engine_with(projects):
     """
     from dazzlecmd_lib.engine import AggregatorEngine
     engine = AggregatorEngine(is_root=True)
+    # Fixtures are already fully-annotated entities (see _project), so no
+    # short_name backfill is needed -- _build_fqcn_index consumes the
+    # annotation production sets during discovery.
     engine.projects = list(projects)
-    for p in projects:
-        p.setdefault("_short_name", p["name"])
     engine._build_fqcn_index()
     return engine
 
@@ -940,10 +946,10 @@ class TestRenderInfoLongDescription:
             "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
             lambda fallback=(80, 24): type("S", (), {"columns": 80})(),
         )
-        # _project helper builds the dict without long_description by default.
+        # _project builds a tool without long_description -> the typed field
+        # defaults to "" (effectively absent; no Details block should render).
         projects = [_project("alpha", description="x", fqcn="k:alpha")]
-        # Make sure the field really is absent (sanity check):
-        assert "long_description" not in projects[0]
+        assert projects[0].long_description == ""
         engine = _engine_with(projects)
         dmc.render_info(_args(tool="alpha"), projects, engine=engine)
         out = capsys.readouterr().out
