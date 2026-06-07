@@ -4,6 +4,29 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.6] - 2026-06-07
+
+Phase 1 (DazzleEntity call-site migration) — Stage 5: type the full manifest schema. The foundation for the complete dict→attribute migration (the project is now committed to removing the dict shim entirely, not keeping it indefinitely). Additive and byte-identical: manifest keys move from `extra` to typed fields, so attribute access (`entity.runtime`, `entity.taxonomy`) is always safe — while the shim keeps working. No call-site changes yet. Local-only.
+
+### Changed
+
+- `dazzlecmd_lib.entity.DazzleEntity` — the known manifest schema is now typed fields (defaults chosen to match each field's dominant `.get(key, default)` call site, so adding them is byte-identical): `language`, `platform` (`"cross-platform"`), `runtime`/`taxonomy`/`lifecycle`/`dependencies`/`name_rewrite` (dict), `platforms` (list of supported-platform names — distinct from the per-platform dict nested under `runtime`), `tools` (list), `pass_through`/`always_active`/`virtual` (bool), `setup` (`Optional[dict]`), `long_description` (str). `extra="allow"` stays, so novel/tool-specific keys still round-trip — read via `entity.model_extra` (the explicit no-shim path). `source` is intentionally left in `extra`: it's polymorphic (a kit's is a URL string, a tool's is a `{"url": ...}` dict) and can't be one typed field on the shared base. `_`-prefixed manifest keys (`_vars`, `_schema_version`) stay in `extra` too (Pydantic can't have `_`-prefixed fields).
+
+### Notes
+
+- Internal: `"runtime" in entity` (and other now-typed keys) is always true (the field exists). The shim ratchet now warns for these as typed-field access. Membership-on-typed-key checks should test the value.
+- This is additive only — the per-file attribute sweep (converting `entity["x"]` → `entity.x`) and the test-fixture migration (dict literals → `build_entity`) are the following stages.
+
+### Tests
+
+- `test_entity.py` ratchet tests updated: `runtime`/`taxonomy` are now typed (shim access warns); a novel key like `script`/`tags` is the `extra` example.
+
+### Versions
+
+- dazzlecmd 0.8.5 -> 0.8.6 (PATCH).
+- dazzlecmd-lib 0.7.3 -> 0.7.4 (PATCH -- typed manifest schema on the entity model).
+- dazzle-dz alias -> 0.8.6; deps re-pinned to >=0.8.6 / >=0.7.4.
+
 ## [0.8.5] - 2026-06-07
 
 Phase 1 (DazzleEntity call-site migration) — Stage 4: the ratchet foundation. Establishes the test-time migration ratchet that the per-file attribute sweep will use. No production behavior change (the ratchet is off by default); byte-identical. Local-only.
@@ -2114,7 +2137,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.5...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.6...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

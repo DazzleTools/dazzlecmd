@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.7.4] - 2026-06-07
+
+Ships with dazzlecmd v0.8.6 -- Phase 1 Stage 5: type the full manifest schema. Additive + byte-identical; the shim still works, attribute access now also works for every modeled field.
+
+### Changed
+
+- `DazzleEntity` now declares the known manifest fields as typed fields (`language`, `platform`, `runtime`, `pass_through`, `taxonomy`, `lifecycle`, `platforms` [list], `dependencies`, `setup`, `long_description`, `always_active`, `virtual`, `tools`, `name_rewrite`) with defaults matching their dominant `.get(key, default)` call sites. `extra="allow"` retained for novel keys (read via `model_extra`); `source` left in extra (polymorphic str-vs-dict across kit/tool); `_`-prefixed manifest keys stay in extra.
+
+### Refs
+
+Ships with dazzlecmd v0.8.6. Refs dazzlecmd #37, #73, #77.
+
 ## [0.7.3] - 2026-06-07
 
 Ships with dazzlecmd v0.8.5 -- Phase 1 Stage 4: the test-time migration ratchet foundation. No production behavior change (ratchet off by default).

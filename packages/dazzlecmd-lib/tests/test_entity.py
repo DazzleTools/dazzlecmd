@@ -280,9 +280,10 @@ class TestShimMapping:
         assert warned(lambda: t["name"]) is True          # typed field
         assert warned(lambda: t["_dir"]) is True           # legacy -> directory field
         assert warned(lambda: t.get("description")) is True
-        assert warned(lambda: t["runtime"]) is False       # extra/nested block
-        assert warned(lambda: t.get("tags")) is False      # extra
-        assert warned(lambda: "runtime" in t) is False     # contains never warns
+        assert warned(lambda: t.get("runtime")) is True    # runtime is now a typed field too
+        assert warned(lambda: t["script"]) is False        # extra (novel manifest key)
+        assert warned(lambda: t.get("tags")) is False      # extra (novel manifest key)
+        assert warned(lambda: "script" in t) is False      # contains never warns
 
     def test_assert_no_shim_access_helper(self, assert_no_shim_access):
         """The shared ratchet helper passes attribute/extra access and fails
@@ -290,8 +291,8 @@ class TestShimMapping:
         t = Tool.model_validate(_tool_manifest())
         # attribute access on typed fields -> OK
         assert_no_shim_access(lambda: (t.name, t.namespace, t.description))
-        # extra/nested dict access -> OK (no attribute form)
-        assert_no_shim_access(lambda: (t["runtime"], t.get("tags")))
+        # extra/novel dict access -> OK (no attribute form)
+        assert_no_shim_access(lambda: (t["script"], t.get("tags")))
         # typed-field shim access -> the helper raises
         with pytest.raises(AssertionError):
             assert_no_shim_access(lambda: t["name"])

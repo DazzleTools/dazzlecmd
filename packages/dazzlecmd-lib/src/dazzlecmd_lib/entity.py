@@ -131,6 +131,37 @@ class DazzleEntity(Groupable, BaseModel):
     description: str = ""
     version: str = "0.0.0"
 
+    # --- declared manifest fields (Phase 1 Stage 5) ---
+    # The known manifest schema, typed so attribute access (entity.runtime,
+    # entity.always_active) is always safe -- no AttributeError on absent keys.
+    # Structured blocks stay dict/list valued (their internals are still dicts;
+    # nested Pydantic models are a future refinement). Defaults match each
+    # field's dominant `.get(key, default)` call site so adding them is
+    # byte-identical. Novel/unmodeled manifest keys still land in extra
+    # (extra="allow") and are read via model_extra. `_`-prefixed manifest keys
+    # (_vars, _schema_version) CANNOT be fields (Pydantic private-attr trap) --
+    # they stay extra, accessed via model_extra.
+    # Tool-oriented:
+    language: Optional[str] = None
+    platform: str = "cross-platform"
+    runtime: dict = Field(default_factory=dict)
+    pass_through: bool = False
+    taxonomy: dict = Field(default_factory=dict)
+    lifecycle: dict = Field(default_factory=dict)
+    platforms: list = Field(default_factory=list)   # top-level: list of supported platform names (runtime.platforms is a separate per-platform dict)
+    dependencies: dict = Field(default_factory=dict)
+    setup: Optional[dict] = None
+    # NOTE: `source` is intentionally NOT typed -- it is polymorphic across
+    # entity types (a kit's `source` is a URL string; a tool's is a
+    # `{"url": ...}` dict). It stays in extra (extra="allow"); read it via
+    # `.get("source")` / `model_extra`. Typing it per-subtype is a later option.
+    long_description: str = ""
+    # Kit-oriented (Optional/empty on tools):
+    always_active: bool = False
+    virtual: bool = False
+    tools: list = Field(default_factory=list)
+    name_rewrite: dict = Field(default_factory=dict)
+
     # --- computed runtime fields (Phase 1 Stage 3) ---
     # Promoted from the `_`-prefixed extra keys so they are typed and
     # attribute-accessible. These are NOT manifest data -- to_manifest()
