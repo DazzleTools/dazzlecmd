@@ -237,17 +237,17 @@ def render_list(args, projects, engine=None) -> int:
     if show_empty_virtuals and show_mode in ("alias", "all", "default") and engine is not None:
         kit_filter = getattr(args, "kit", None)
         for k in getattr(engine, "kits", []):
-            if not k.get("virtual"):
+            if not k.virtual:
                 continue
-            if not k.get("_kit_active", True):
+            if not k.kit_active:
                 continue
-            vk_name = k.get("_kit_name") or k.get("name")
+            vk_name = k.kit_name or k.name
             if not vk_name:
                 continue
             if kit_filter is not None and kit_filter != vk_name:
                 continue
             # Compute the section key this virtual kit WOULD have.
-            tools_list = k.get("tools") or []
+            tools_list = k.tools or []
             if ":" in vk_name:
                 section_key = vk_name
                 vk_local = vk_name.rsplit(":", 1)[-1]
@@ -530,8 +530,8 @@ def build_list_entries(projects, engine, show_mode, kit_filter):
     virtual_kit_metadata = {}
     if engine is not None:
         for k in getattr(engine, "kits", []):
-            if k.get("virtual"):
-                vk_name = k.get("_kit_name") or k.get("name")
+            if k.virtual:
+                vk_name = k.kit_name or k.name
                 if vk_name:
                     virtual_kit_names.add(vk_name)
                     virtual_kit_metadata[vk_name] = k
@@ -1399,7 +1399,7 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
 
     by_kit: dict[str, list] = {}
     for project in projects:
-        kit_name = project.get("_kit_import_name", "?")
+        kit_name = project.kit_import_name or "?"
         by_kit.setdefault(kit_name, []).append(project)
 
     # Build a kit info dict for metadata (always_active, is_aggregator).
@@ -1410,14 +1410,14 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
     tools_dir = getattr(engine, "tools_dir", "tools")
     proj_root = getattr(engine, "project_root", project_root) or ""
     for kit in getattr(engine, "kits", []):
-        name = kit.get("_kit_name") or kit.get("name")
+        name = kit.kit_name or kit.name
         if not name:
             continue
         tools_path = _os.path.join(proj_root, tools_dir)
         candidate_root = _os.path.join(tools_path, name)
         is_aggregator = _os.path.isdir(_os.path.join(candidate_root, "kits"))
         kit_info[name] = {
-            "always_active": bool(kit.get("always_active")),
+            "always_active": bool(kit.always_active),
             "is_aggregator": is_aggregator,
         }
 
@@ -1468,11 +1468,11 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
         for kit_name in kit_names:
             info = kit_info.get(kit_name, {})
             tools_data = []
-            for project in sorted(by_kit[kit_name], key=lambda p: p.get("_fqcn", "")):
+            for project in sorted(by_kit[kit_name], key=lambda p: p.fqcn or ""):
                 tools_data.append({
-                    "fqcn": project.get("_fqcn", ""),
-                    "short": project.get("_short_name", project.get("name", "")),
-                    "description": project.get("description", ""),
+                    "fqcn": project.fqcn or "",
+                    "short": project.short_name or project.name or "",
+                    "description": project.description or "",
                 })
             result["kits"][kit_name] = {
                 "name": kit_name,
@@ -1511,16 +1511,16 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
     # includes both canonical and virtual after Phase 4e).
     virtual_kits = [
         k for k in getattr(engine, "kits", [])
-        if k.get("virtual") and (
+        if k.virtual and (
             show_disabled or
-            _kit_state(k.get("_kit_name") or k.get("name")) not in ("disabled", "disabled (not in active_kits)")
+            _kit_state(k.kit_name or k.name) not in ("disabled", "disabled (not in active_kits)")
         )
     ]
     # Respect --kit filter for virtual kits too
     if kit_filter:
         virtual_kits = [
             k for k in virtual_kits
-            if (k.get("_kit_name") or k.get("name")) == kit_filter
+            if (k.kit_name or k.name) == kit_filter
         ]
 
     total_tools = 0
@@ -1549,7 +1549,7 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
 
         print(f"{kit_prefix}{_bold(kit_name)}{marker_str}")
 
-        tools = sorted(by_kit[kit_name], key=lambda p: p.get("_fqcn", ""))
+        tools = sorted(by_kit[kit_name], key=lambda p: p.fqcn or "")
         total_tools += len(tools)
 
         if depth_limit is not None and depth_limit < 2:
@@ -1559,14 +1559,14 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
         for j, project in enumerate(tools):
             is_last_tool = (j == len(tools) - 1)
             tool_prefix = "\\-- " if is_last_tool else "+-- "
-            fqcn = project.get("_fqcn", project.get("name", ""))
-            desc = project.get("description", "")
+            fqcn = project.fqcn or project.name or ""
+            desc = project.description or ""
             if len(desc) > 60:
                 desc = desc[:57] + "..."
             # Shadow marker: tools whose short name is reserved by a
             # meta-command are flagged in tree output (per issue #56).
             # BOLD+RED to draw attention, consistent with render_list [*].
-            short = project.get("name", "")
+            short = project.name or ""
             shadow_marker = _shadow(" [shadowed]") if short and short in reserved else ""
             print(f"{branch_indent}{tool_prefix}{fqcn}{shadow_marker}  {desc}")
 
@@ -1583,11 +1583,11 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
         branch_idx += 1
         is_last_branch = (branch_idx == all_branches)
         kit_prefix = "\\-- " if is_last_branch else "+-- "
-        vk_name = vkit.get("_kit_name") or vkit.get("name")
+        vk_name = vkit.kit_name or vkit.name
         state = _kit_state(vk_name)
 
         markers = ["virtual"]
-        if vkit.get("always_active"):
+        if vkit.always_active:
             markers.append("always_active")
         if "disabled" in state:
             markers.append("disabled")

@@ -8,6 +8,7 @@ import pytest
 
 from dazzlecmd.engine import AggregatorEngine, FQCNIndex
 from dazzlecmd.cli import _cmd_tree
+from dazzlecmd_lib.testing import make_kit, make_tool
 
 
 class _Args:
@@ -26,31 +27,31 @@ def _mk_engine_with_projects(tmp_path, monkeypatch):
     )
     engine.project_root = str(tmp_path)
     engine.kits = [
-        {"_kit_name": "core", "name": "core", "always_active": True, "tools": []},
-        {"_kit_name": "wtf", "name": "wtf", "always_active": False, "tools": []},
+        make_kit(_kit_name="core", name="core", always_active=True, tools=[]),
+        make_kit(_kit_name="wtf", name="wtf", always_active=False, tools=[]),
     ]
     engine.projects = [
-        {
-            "name": "fixpath",
-            "_fqcn": "core:fixpath",
-            "_short_name": "fixpath",
-            "_kit_import_name": "core",
-            "description": "Fix mangled paths",
-        },
-        {
-            "name": "rn",
-            "_fqcn": "core:rn",
-            "_short_name": "rn",
-            "_kit_import_name": "core",
-            "description": "Rename files using regex",
-        },
-        {
-            "name": "locked",
-            "_fqcn": "wtf:core:locked",
-            "_short_name": "locked",
-            "_kit_import_name": "wtf",
-            "description": "Windows lockout diagnostics",
-        },
+        make_tool(
+            name="fixpath",
+            _fqcn="core:fixpath",
+            _short_name="fixpath",
+            _kit_import_name="core",
+            description="Fix mangled paths",
+        ),
+        make_tool(
+            name="rn",
+            _fqcn="core:rn",
+            _short_name="rn",
+            _kit_import_name="core",
+            description="Rename files using regex",
+        ),
+        make_tool(
+            name="locked",
+            _fqcn="wtf:core:locked",
+            _short_name="locked",
+            _kit_import_name="wtf",
+            description="Windows lockout diagnostics",
+        ),
     ]
     return engine
 

@@ -4,6 +4,21 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.9] - 2026-06-07
+
+Phase 1 (DazzleEntity call-site migration) — Stage 6b cont.: completes the `default_meta_commands.py` attribute sweep by migrating `render_tree` and the virtual-kit paths (deferred in 0.8.8 because their fixtures were still plain dicts). Byte-identical. Local-only.
+
+### Changed
+
+- `dazzlecmd_lib.default_meta_commands` — `render_tree` (ASCII + JSON output paths, sort lambdas), the virtual-kit `engine.kits` iteration in `build_list_entries`, and the empty-virtual-kit injection block in `render_list` migrated from dict access to typed attribute access (`project.fqcn or ""`, `kit.kit_name or kit.name`, `kit.virtual`, `kit.kit_active`, `kit.tools or []`, etc.). Display-dict keys (`result`, `tools_data`, `info`, `by_kit`) stay dict access. **`default_meta_commands.py` is now fully swept.**
+- Fixtures: `tests/test_cli_tree.py` (3 tools + 2 kits) and the `_engine_with_virtual_kit` helper in `tests/test_default_meta_commands.py` migrated to the `make_tool`/`make_kit` factories.
+
+### Versions
+
+- dazzlecmd 0.8.8 -> 0.8.9 (PATCH).
+- dazzlecmd-lib 0.7.6 -> 0.7.7 (PATCH -- render_tree + virtual-kit attribute sweep).
+- dazzle-dz alias -> 0.8.9; deps re-pinned to >=0.8.9 / >=0.7.7.
+
 ## [0.8.8] - 2026-06-07
 
 Phase 1 (DazzleEntity call-site migration) — Stage 6b (first prod file): the `default_meta_commands.py` attribute sweep. Migrates dict-style entity access in the list/info/kit/setup render paths to typed attribute access. Byte-identical (the byte-gate is the per-site oracle); no behavior change. Local-only.
@@ -2178,7 +2193,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.8...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.9...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -94,14 +94,14 @@ def _engine_with_virtual_kit(canonical_projects, vk_name, alias_map):
     """
     engine = _engine_with(canonical_projects)
     # Add a virtual-kit entry to engine.kits so render_tree finds it
-    engine.kits.append({
-        "name": vk_name,
-        "_kit_name": vk_name,
-        "virtual": True,
-        "_kit_active": True,
-        "always_active": False,
-        "tools": list(alias_map.keys()),
-    })
+    engine.kits.append(make_kit(
+        name=vk_name,
+        _kit_name=vk_name,
+        virtual=True,
+        _kit_active=True,
+        always_active=False,
+        tools=list(alias_map.keys()),
+    ))
     # Inject aliases into the FQCN index
     for alias_fqcn, canonical_fqcn in alias_map.items():
         engine.fqcn_index.alias_index[alias_fqcn] = canonical_fqcn

@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.7.7] - 2026-06-07
+
+Ships with dazzlecmd v0.8.9 -- completes the `default_meta_commands` attribute sweep (`render_tree` + virtual-kit paths, deferred in 0.7.6). Byte-identical; no API change.
+
+### Changed
+
+- `default_meta_commands` -- `render_tree` (ASCII + JSON), the `build_list_entries` virtual-kit iteration, and the `render_list` empty-virtual-kit injection migrated to attribute access. `default_meta_commands.py` is now fully migrated off the dict shim for entity access.
+
+### Refs
+
+Ships with dazzlecmd v0.8.9. Refs dazzlecmd #37, #73, #77.
+
 ## [0.7.6] - 2026-06-07
 
 Ships with dazzlecmd v0.8.8 -- Phase 1 Stage 6b (first prod file): the `default_meta_commands` attribute sweep. Byte-identical; no API change.
