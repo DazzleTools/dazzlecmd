@@ -4,6 +4,29 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.1] - 2026-06-07
+
+Foundational redesign: a typed `DazzleEntity` object model replaces anonymous dicts for tools / kits / aggregators, with the {grouping, ungrouping} primitive as a capability (`Groupable`). The 0.8.x line is a deliberate cheap-rollback fork point (the 0.7.54 baseline is the fallback). Built in staged sub-commits: 0.8.0 (Stage 1, the standalone model) and this 0.8.1 (Stages 2-5, wiring + release). Design: the DazzleEntity synthesis DWP + a 5-round /collaborate3 validation (project-private design folder). The migration boundary is the top-level entity only -- nested blocks (`runtime`, `_vars`, `volumes`, `platforms`, `setup`) stay plain dicts -- and the backward-compat shim keeps the ~252 existing dict-access call sites working unchanged, so the user-facing output of `dz` / `wtf` / `amdead` is byte-identical to 0.7.54 (verified against captured baselines; only the version string changes).
+
+### Added
+
+- `dazzlecmd_lib.entity` -- the object model. `Groupable` (the universal grouping/ungrouping capability mixin: the 5 verbs GROUP/UNGROUP/HIDE/EXPOSE/REBIND + the C1/C2/C3 canonical-identity contract); `DazzleEntity(Groupable, BaseModel)` (base for on-tree co-level occupants -- `extra="allow"` + a backward-compat shim so existing dict access keeps working, set-once canonical FQCN, `to_manifest`); the `Tool`/`Kit`/`Aggregator` discriminated union (open for future `Property`/`Environment`) with `detect_type`/`build_entity` and `AmbiguousEntityTypeError` (hard-fail on ambiguous markers). Standalone in Stage 1 -- not yet wired into the loader/engine. (Stage 1)
+- `dazzlecmd_lib.core.links` -- the first inhabitant of the constitutional `dazzlecmd_lib.core` namespace. The four public link primitives (`is_linked_project`, `get_link_target`, `create_link`, `remove_link`) relocated verbatim from `dazzlecmd_lib.paths`; `paths` re-exports them (import identity preserved) so existing `from dazzlecmd_lib.paths import is_linked_project` call sites keep working. (Stage 5)
+- `AggregatorConfig.presentation` -- reserved `Optional[dict]` slot for the "skin" half of same-bones (per-aggregator presentation / projection config). Parsed and validated-as-object when present, but not yet consumed; the projection layer that interprets it lands in a later release. (Stage 5)
+
+### Changed
+
+- `dazzlecmd_lib.aggregator_config` -- `AggregatorConfig` / `AggregatorSchema` / `AggregatorDiscovery` converted from frozen dataclasses to frozen Pydantic models (uniform validation + JSON-Schema export; composable into the `Aggregator` entity). Public API (`config.schema.remote_url_paths`, etc.) and all validation / error messages unchanged. (Stage 2)
+- `dazzlecmd_lib.loader` -- discovery now constructs typed `DazzleEntity` instances instead of returning bare dicts: `discover_kits` builds `Kit` entities and `_load_manifest` / `_load_cached_manifest` build `Tool` entities via `build_entity`. The loader is the sole author of entities (one canonical instance per canonical FQCN). (Stage 3)
+- `dazzlecmd_lib.registry` / `dazzlecmd_lib.engine` -- entity-clone sites switched from `dict(project)` (which would silently drop a BaseModel to its field names) to `model_copy()`, guarded for the transitional dict-or-entity period. (Stages 3-4)
+- `dazzlecmd_lib.engine._annotate_project_fqcn` -- now calls `reserve_field_axis(...)`, the single enforcement point that rejects `.` in any name / namespace segment. This reserves `.` for the future field-access axis (two-axis FQCN: `:` for hierarchy, `.` for field descent) without touching the ~13 scattered `:`-parse sites. (Stage 4)
+
+### Versions
+
+- dazzlecmd 0.8.0 -> 0.8.1 (PATCH -- completes the object-model redesign begun in 0.8.0; user-facing output unchanged. The 0.7 -> 0.8 MINOR bump landed at 0.8.0).
+- dazzlecmd-lib 0.6.15 -> 0.7.0 (MINOR -- new `entity` + `core.links` modules; `aggregator_config` internals reworked, public API unchanged. First library release carrying the entity model).
+- dazzle-dz alias -> 0.8.1; deps re-pinned to >=0.8.1 / >=0.7.0.
+
 ## [0.7.54] - 2026-06-07
 
 Final 0.7.x housekeeping commit, landed to give the 0.8.0 DazzleEntity foundational redesign a clean baseline to diff against. No new tools: the dazzletools / media / file-ops batch sitting in the working tree is parked and each ships as its own MINOR after the refactor. Pure framework / infra / test-doc cleanup.
@@ -2006,7 +2029,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.0a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -109,51 +109,6 @@ def translate_wsl_path(path: str, direction: str) -> str:
     )
 
 
-def is_linked_project(tool_dir):
-    """Check if a project directory is a symlink or junction.
-
-    Returns True for both symlinks and Windows junctions.
-
-    Cross-platform: on Windows, uses
-    ``ctypes.windll.kernel32.GetFileAttributesW`` to detect the
-    ``FILE_ATTRIBUTE_REPARSE_POINT`` flag (catches both symlinks AND
-    junctions). Falls back to ``os.path.islink`` if the ctypes call
-    fails. On POSIX, uses ``os.path.islink`` directly.
-
-    Ported verbatim from dazzlecmd ``importer.py:141`` to dazzlecmd-lib
-    in v0.7.33 so library ``render_info`` can surface "Linked to:"
-    status without dazzlecmd-package coupling. dazzlecmd-internal and
-    wtf-windows callers continue to import from their respective
-    package's ``importer`` module (which now re-exports from here).
-    """
-    if sys.platform == "win32":
-        try:
-            import ctypes
-            attrs = ctypes.windll.kernel32.GetFileAttributesW(str(tool_dir))
-            if attrs == -1:  # INVALID_FILE_ATTRIBUTES
-                return False
-            return bool(attrs & 0x400)  # FILE_ATTRIBUTE_REPARSE_POINT
-        except (OSError, AttributeError):
-            return os.path.islink(tool_dir)
-    return os.path.islink(tool_dir)
-
-
-def get_link_target(tool_dir):
-    """Get the target of a symlink/junction.
-
-    Returns the target path string, or None if not a link.
-
-    Ported verbatim from dazzlecmd ``importer.py:158`` to dazzlecmd-lib
-    in v0.7.33 alongside :func:`is_linked_project`.
-    """
-    if not is_linked_project(tool_dir):
-        return None
-    try:
-        return os.readlink(tool_dir)
-    except OSError:
-        return None
-
-
 def which_with_pathext(name: str) -> Optional[str]:
     """Locate an executable on PATH. Returns full path or None.
 
@@ -170,77 +125,16 @@ def which_with_pathext(name: str) -> Optional[str]:
     return shutil.which(name)
 
 
-def create_link(source_path, target_path):
-    """Create a directory symlink or junction.
-
-    Tries symlink first, falls back to junction on Windows.
-    Returns the actual link mode used, or None on failure.
-    """
-    if sys.platform == "win32":
-        return _create_link_windows(source_path, target_path)
-    else:
-        return _create_link_unix(source_path, target_path)
-
-
-def _create_link_windows(source_path, target_path):
-    """Create directory link on Windows: mklink /D -> mklink /J fallback."""
-    # Try symbolic link first
-    try:
-        result = subprocess.run(
-            ["cmd", "/c", "mklink", "/D", target_path, source_path],
-            capture_output=True, text=True, timeout=10
-        )
-        if result.returncode == 0:
-            return "symlink"
-    except (OSError, subprocess.TimeoutExpired):
-        pass
-
-    # Fall back to junction (no admin required)
-    try:
-        result = subprocess.run(
-            ["cmd", "/c", "mklink", "/J", target_path, source_path],
-            capture_output=True, text=True, timeout=10
-        )
-        if result.returncode == 0:
-            return "junction"
-    except (OSError, subprocess.TimeoutExpired):
-        pass
-
-    print(f"Error: Could not create link: {target_path} -> {source_path}",
-          file=sys.stderr)
-    print("  mklink /D failed (may need admin). mklink /J also failed.",
-          file=sys.stderr)
-    return None
-
-
-def _create_link_unix(source_path, target_path):
-    """Create directory symlink on Unix."""
-    try:
-        os.symlink(source_path, target_path)
-        return "symlink"
-    except OSError as exc:
-        print(f"Error: Could not create symlink: {exc}", file=sys.stderr)
-        return None
-
-
-def remove_link(target_path):
-    """Remove a symlink/junction without affecting the source.
-
-    On Windows, uses rmdir to remove the junction point.
-    On Unix, uses os.unlink.
-    """
-    if not is_linked_project(target_path):
-        return False
-
-    try:
-        if sys.platform == "win32":
-            result = subprocess.run(
-                ["cmd", "/c", "rmdir", target_path],
-                capture_output=True, text=True, timeout=10
-            )
-            return result.returncode == 0
-        else:
-            os.unlink(target_path)
-            return True
-    except (OSError, subprocess.TimeoutExpired):
-        return False
+# Link primitives relocated to the constitutional namespace
+# ``dazzlecmd_lib.core.links`` in v0.8.0. Re-exported here for backward
+# compatibility -- existing ``from dazzlecmd_lib.paths import is_linked_project``
+# (mode.py, default_meta_commands.py, dazzlecmd/importer.py, wtf-windows) keep
+# working, and import identity is preserved (the re-exported objects ARE the
+# core.links functions). Removal of these re-exports is deferred to a future
+# release with a deprecation note.
+from dazzlecmd_lib.core.links import (  # noqa: E402,F401  (intentional re-export)
+    create_link,
+    get_link_target,
+    is_linked_project,
+    remove_link,
+)

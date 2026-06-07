@@ -8,6 +8,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.7.0] - 2026-06-07
+
+Ships with dazzlecmd v0.8.1 -- the DazzleEntity foundational redesign. The library gains a typed object model; the aggregator-facing public API is unchanged (the migration is internal, and a backward-compat shim keeps existing dict access working), so consumers (dazzlecmd, amdead, wtf-windows) need no code change to adopt 0.7.0.
+
+### Added
+
+- `dazzlecmd_lib.entity` -- the object model. `Groupable` (the universal grouping/ungrouping capability mixin: 5 verbs + the C1/C2/C3 canonical-identity contract); `DazzleEntity(Groupable, BaseModel)` (base for on-tree co-level occupants; `extra="allow"` + a backward-compat dict shim, set-once canonical FQCN, `to_manifest`); the `Tool`/`Kit`/`Aggregator` discriminated union (open for future `Property`/`Environment`) with `detect_type` / `build_entity` and `AmbiguousEntityTypeError`.
+- `dazzlecmd_lib.core` -- the constitutional namespace, with `core.links` as its first inhabitant: the four public link primitives (`is_linked_project`, `get_link_target`, `create_link`, `remove_link`) relocated verbatim from `paths`. `paths` re-exports them with import identity preserved, so existing `from dazzlecmd_lib.paths import is_linked_project` keeps working.
+- `AggregatorConfig.presentation` -- reserved `Optional[dict]` slot for future per-aggregator presentation / projection config. Parsed + validated-as-object when present; not yet consumed.
+
+### Changed
+
+- `aggregator_config` -- `AggregatorConfig` / `AggregatorSchema` / `AggregatorDiscovery` converted from frozen dataclasses to frozen Pydantic models. Field names, defaults, validation, and error messages unchanged; `config.schema.*` / `config.discovery.*` access is identical.
+- `loader` -- `discover_kits` / `_load_manifest` / `_load_cached_manifest` construct typed `DazzleEntity` instances (via `build_entity`) instead of bare dicts. The loader is the sole entity author (one canonical instance per canonical FQCN).
+- `engine` -- `FQCNIndex` carries entities; `_annotate_project_fqcn` calls `reserve_field_axis(...)`, the single point that rejects `.` in name / namespace segments, reserving `.` for the future field-access axis. Entity-clone sites use `model_copy()` instead of `dict()`.
+
+### Refs
+
+Ships with dazzlecmd v0.8.1. Refs dazzlecmd #37, #73, #77 (the co-level / DazzleEntity design arc).
+
 ## [0.6.15] - 2026-06-07
 
 Ships with dazzlecmd v0.7.54. Cosmetic Windows-codepage fix; no API change.

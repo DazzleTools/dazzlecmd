@@ -115,8 +115,10 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, field
+import warnings
 from typing import List, Optional, Set, Tuple
+
+from pydantic import BaseModel, ConfigDict
 
 from dazzlecmd_lib.reserved import (
     DEFAULT_META_COMMANDS_USER,
@@ -126,6 +128,13 @@ from dazzlecmd_lib.reserved import (
 
 AGGREGATOR_CONFIG_FILENAME = "aggregator.json"
 CURRENT_SCHEMA_VERSION = 1
+
+# Defaults referenced by BOTH the model fields and the parse helpers, so the
+# parse helpers don't reach into model internals (the old code read
+# ``__dataclass_fields__[...].default``, which Pydantic models don't expose).
+_DEFAULT_REMOTE_URL_PATHS = ("source.url", "lifecycle.remote")
+_DEFAULT_LIFECYCLE_PATH = "lifecycle"
+_DEFAULT_TOOL_PATTERNS = ("${tools_dir}/*/*",)
 
 
 class AggregatorConfigError(Exception):
@@ -187,53 +196,74 @@ def find_aggregator_root(start_path=None, max_depth=12):
     return None
 
 
-@dataclass(frozen=True)
-class AggregatorSchema:
+class AggregatorSchema(BaseModel):
     """How the engine reads tool-manifest values.
 
     Decouples library code from any single manifest format
     (.dazzlecmd.json vs .wtf.json vs .amdead.json).
     """
 
-    remote_url_paths: Tuple[str, ...] = ("source.url", "lifecycle.remote")
-    lifecycle_path: str = "lifecycle"
+    model_config = ConfigDict(frozen=True)
+
+    remote_url_paths: Tuple[str, ...] = _DEFAULT_REMOTE_URL_PATHS
+    lifecycle_path: str = _DEFAULT_LIFECYCLE_PATH
 
 
-@dataclass(frozen=True)
-class AggregatorDiscovery:
+class AggregatorDiscovery(BaseModel):
     """Glob patterns + flags for finding tools beyond the standard layout."""
 
-    tool_patterns: Tuple[str, ...] = ("${tools_dir}/*/*",)
+    model_config = ConfigDict(frozen=True)
+
+    tool_patterns: Tuple[str, ...] = _DEFAULT_TOOL_PATTERNS
     scan_hidden: bool = False
 
 
-@dataclass(frozen=True)
-class AggregatorConfig:
-    """Parsed ``aggregator.json``.
+# The ``schema`` field name deliberately shadows Pydantic's deprecated
+# ``BaseModel.schema()`` (callers use ``config.schema`` throughout). Suppress
+# the one benign class-definition UserWarning so it never reaches a ``dz``
+# user's stderr (which would also break the byte-identical output baseline).
+# The model functions correctly -- verified empirically on pydantic 2.11.7.
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        message=r'Field name "schema".*shadows an attribute.*',
+        category=UserWarning,
+    )
 
-    Constructed by ``load_aggregator_config(project_root)``. Frozen so it
-    can be safely passed around as engine state.
-    """
+    class AggregatorConfig(BaseModel):
+        """Parsed ``aggregator.json``.
 
-    project_root: str
-    schema_version: int
-    name: str
-    command: str
-    description: str
-    tools_dir: str
-    kits_dir: str
-    manifest_name: str
-    enabled_meta_commands: frozenset
-    reserved_commands: frozenset
-    schema: AggregatorSchema
-    discovery: AggregatorDiscovery
+        Constructed by ``load_aggregator_config(project_root)``. Frozen so it
+        can be safely passed around as engine state.
+        """
 
-    def resolved_discovery_patterns(self) -> Tuple[str, ...]:
-        """Return ``discovery.tool_patterns`` with ``${tools_dir}`` expanded."""
-        return tuple(
-            pattern.replace("${tools_dir}", self.tools_dir)
-            for pattern in self.discovery.tool_patterns
-        )
+        model_config = ConfigDict(frozen=True)
+
+        project_root: str
+        schema_version: int
+        name: str
+        command: str
+        description: str
+        tools_dir: str
+        kits_dir: str
+        manifest_name: str
+        enabled_meta_commands: frozenset
+        reserved_commands: frozenset
+        schema: AggregatorSchema
+        discovery: AggregatorDiscovery
+        # Reserved slot (v0.8.0): the "skin" half of same-bones -- per-aggregator
+        # presentation/projection config (visibility frames, render hints). Read
+        # but not yet consumed; the grouping/ungrouping projection layer that
+        # interprets it lands in a later release. Kept as a plain dict so the
+        # eventual schema can evolve without a config-format migration.
+        presentation: Optional[dict] = None
+
+        def resolved_discovery_patterns(self) -> Tuple[str, ...]:
+            """Return ``discovery.tool_patterns`` with ``${tools_dir}`` expanded."""
+            return tuple(
+                pattern.replace("${tools_dir}", self.tools_dir)
+                for pattern in self.discovery.tool_patterns
+            )
 
 
 def _require(data: dict, key: str, source: str) -> object:
@@ -285,12 +315,12 @@ def _parse_schema(data: dict, source: str) -> AggregatorSchema:
         )
     remote_paths = _optional_list_of_str(
         block, "remote_url_paths",
-        list(AggregatorSchema.__dataclass_fields__["remote_url_paths"].default),
+        list(_DEFAULT_REMOTE_URL_PATHS),
         f"{source}: schema",
     )
     lifecycle_path = _optional_str(
         block, "lifecycle_path",
-        AggregatorSchema.__dataclass_fields__["lifecycle_path"].default,
+        _DEFAULT_LIFECYCLE_PATH,
     )
     return AggregatorSchema(
         remote_url_paths=tuple(remote_paths),
@@ -306,7 +336,7 @@ def _parse_discovery(data: dict, source: str) -> AggregatorDiscovery:
         )
     patterns = _optional_list_of_str(
         block, "tool_patterns",
-        list(AggregatorDiscovery.__dataclass_fields__["tool_patterns"].default),
+        list(_DEFAULT_TOOL_PATTERNS),
         f"{source}: discovery",
     )
     scan_hidden = block.get("scan_hidden", False)
@@ -399,6 +429,13 @@ def load_aggregator_config(project_root: str) -> AggregatorConfig:
     schema = _parse_schema(data, source)
     discovery = _parse_discovery(data, source)
 
+    presentation = data.get("presentation")
+    if presentation is not None and not isinstance(presentation, dict):
+        raise AggregatorConfigError(
+            f"{source}: 'presentation' must be an object "
+            f"(got {type(presentation).__name__})"
+        )
+
     return AggregatorConfig(
         project_root=project_root,
         schema_version=schema_version,
@@ -412,4 +449,5 @@ def load_aggregator_config(project_root: str) -> AggregatorConfig:
         reserved_commands=reserved_commands,
         schema=schema,
         discovery=discovery,
+        presentation=presentation,
     )

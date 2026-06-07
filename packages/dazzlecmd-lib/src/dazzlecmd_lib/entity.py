@@ -141,11 +141,14 @@ class DazzleEntity(Groupable, BaseModel):
 
     @fqcn.setter
     def fqcn(self, value: str) -> None:
-        extra = self.__pydantic_extra__
-        if extra and extra.get("_fqcn") is not None:
+        # Set-once (C1): the canonical FQCN must never CHANGE. Re-setting the
+        # SAME value is an idempotent no-op (tolerates a harmless re-annotation
+        # pass); re-setting a DIFFERENT value is the violation that raises.
+        current = (self.__pydantic_extra__ or {}).get("_fqcn")
+        if current is not None and current != value:
             raise RuntimeError(
-                f"canonical FQCN already set to {extra['_fqcn']!r}; "
-                f"cannot reset to {value!r} (C1: canonical identity is set-once)"
+                f"canonical FQCN already set to {current!r}; cannot reset to "
+                f"{value!r} (C1: canonical identity is set-once)"
             )
         self._set_extra_field("_fqcn", value)
 
@@ -306,3 +309,21 @@ def build_entity(data: Dict[str, Any], *, entity_type: Optional[str] = None) -> 
             f"expected one of {sorted(_VALID_TYPES)}"
         )
     return ENTITY_ADAPTER.validate_python(payload)
+
+
+def reserve_field_axis(name: str = "", namespace: str = "") -> None:
+    """Reject ``.`` in FQCN name segments -- it's reserved for the field axis.
+
+    Two-axis FQCN (#77 Decision #7): ``:`` navigates the hierarchy; ``.`` will
+    descend into an entity's record fields (e.g. ``find:srch.template``) once
+    that lands post-0.8.x. No current tool/kit/namespace name uses ``.``;
+    rejecting it now -- at a single enforcement point -- keeps the two axes
+    unambiguous so consumers never start writing dotted names against ``:``.
+    """
+    for label, seg in (("name", name), ("namespace", namespace)):
+        if seg and "." in seg:
+            raise ValueError(
+                f"invalid {label} {seg!r}: '.' is reserved for the field-access "
+                f"axis; use '-' or '_' in entity names "
+                f"(two-axis FQCN: ':' is hierarchy, '.' is field access)"
+            )

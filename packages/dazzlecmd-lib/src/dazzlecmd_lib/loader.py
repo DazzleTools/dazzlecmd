@@ -8,6 +8,8 @@ import json
 import os
 import sys
 
+from dazzlecmd_lib.entity import build_entity
+
 
 def discover_kits(kits_dir, projects_dir=None):
     """Discover kits using hybrid approach: in-repo manifests + registry pointers.
@@ -88,7 +90,7 @@ def discover_kits(kits_dir, projects_dir=None):
         if is_virtual:
             kit["virtual"] = True
             kit.setdefault("name_rewrite", registry.get("name_rewrite", {}))
-        kits.append(kit)
+        kits.append(build_entity(kit, entity_type="kit"))
 
     return kits
 
@@ -448,7 +450,7 @@ def _load_manifest(manifest_path, namespace, tool_name, tool_dir):
     if "pass_through" not in manifest:
         manifest["pass_through"] = runtime.pop("pass_through", False)
 
-    return manifest
+    return build_entity(manifest, entity_type="tool")
 
 
 # Module-level hook for manifest caching. The dazzlecmd CLI sets this
@@ -493,7 +495,7 @@ def _load_cached_manifest(projects_dir, namespace, tool_name, tool_dir):
         cached.setdefault("platform", "cross-platform")
         cached.setdefault("pass_through", False)
         cached.setdefault("runtime", {"type": "python"})
-        return cached
+        return build_entity(cached, entity_type="tool")
     except Exception:
         return None
 

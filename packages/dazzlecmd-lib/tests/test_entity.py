@@ -22,6 +22,7 @@ from dazzlecmd_lib.entity import (
     Tool,
     build_entity,
     detect_type,
+    reserve_field_axis,
 )
 
 
@@ -173,6 +174,23 @@ class TestGroupable:
         for verb in ("group", "ungroup", "hide", "expose", "rebind"):
             with pytest.raises(NotImplementedError):
                 getattr(t, verb)()
+
+
+class TestReserveFieldAxis:
+    def test_clean_name_ok(self):
+        reserve_field_axis(name="claude-cleanup", namespace="dazzletools")  # no raise
+
+    def test_dot_in_name_rejected(self):
+        with pytest.raises(ValueError, match="reserved for the field-access axis"):
+            reserve_field_axis(name="find.recipe")
+
+    def test_dot_in_namespace_rejected(self):
+        with pytest.raises(ValueError, match="reserved for the field-access axis"):
+            reserve_field_axis(name="rn", namespace="core.x")
+
+    def test_underscore_and_hyphen_allowed(self):
+        reserve_field_axis(name="md_rm_img")
+        reserve_field_axis(name="claude-session-metadata")
 
 
 class TestDetectType:

@@ -25,6 +25,7 @@ import json
 import os
 import sys
 
+from dazzlecmd_lib.entity import reserve_field_axis
 from dazzlecmd_lib.loader import (
     discover_kits,
     discover_projects,
@@ -1058,7 +1059,7 @@ class AggregatorEngine:
 
         Returns a new dict; does not mutate ``vk``.
         """
-        rewritten = dict(vk)
+        rewritten = vk.model_copy() if hasattr(vk, "model_copy") else dict(vk)
         if not kit_prefix:
             return rewritten
 
@@ -1237,6 +1238,10 @@ class AggregatorEngine:
         """
         namespace = project.get("namespace", "")
         short = project["name"]
+
+        # Reserve `.` for the field-access axis (two-axis FQCN, #77 Decision #7).
+        reserve_field_axis(name=short, namespace=namespace)
+
         local = f"{namespace}:{short}" if namespace else short
 
         if kit_prefix:
