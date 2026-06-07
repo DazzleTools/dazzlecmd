@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.12] - 2026-06-07
+
+Phase 1 (DazzleEntity call-site migration) — Stage 6b cont.: `src/dazzlecmd/cli.py` attribute sweep (the dazzlecmd package CLI). Byte-identical; dispatch verified. Local-only. (Package-only change — `dazzlecmd-lib` unchanged.)
+
+### Changed
+
+- `dazzlecmd.cli` — entity field reads in the parser registration, help epilog (`_build_categorized_help`), `_cmd_kit_list` / kit-status / kit-focus / virtual-kit rendering, `_cmd_add`, the setup listing/handler, and tool dispatch migrated from dict access to attribute access (`project.name`, `project.fqcn or tool_name`, `project.directory or "."`, `kit.kit_name or kit.name`, `kit.always_active`, `kit.tools or []`, `(p.setup or {}).get("note")`, etc.). Raw-JSON kit dicts (`json.load` in `_register_in_kit`), nested setup-block dicts, user-config dicts (`engine._get_user_config()`), and `add_from_local` result dicts correctly stay dict access. No test files needed changes (cli fixtures were already migrated).
+
+### Versions
+
+- dazzlecmd 0.8.11 -> 0.8.12 (PATCH).
+- dazzlecmd-lib unchanged at 0.7.9 (cli.py is package code, not library).
+- dazzle-dz alias -> 0.8.12; deps re-pinned to >=0.8.12 / >=0.7.9.
+
 ## [0.8.11] - 2026-06-07
 
 Phase 1 (DazzleEntity call-site migration) — Stage 6b cont.: `registry.py` attribute sweep (the dispatch-critical runtime-resolution + runner-factory module). Byte-identical; dispatch verified. Local-only.
@@ -2223,7 +2237,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.11...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.12...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

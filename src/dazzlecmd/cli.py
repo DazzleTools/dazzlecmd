@@ -83,7 +83,7 @@ def build_parser(projects, engine=None):
 
     # Register discovered tool commands
     for project in projects:
-        name = project["name"]
+        name = project.name
         if name in reserved:
             print(
                 f"Warning: Tool '{name}' conflicts with reserved command, skipping",
@@ -91,7 +91,7 @@ def build_parser(projects, engine=None):
             )
             continue
 
-        desc = project.get("description", "")
+        desc = project.description or ""
         sub = subparsers.add_parser(
             name,
             help=desc,
@@ -127,11 +127,11 @@ def _build_categorized_help(projects):
     # Group tools by kit import name (the top-level kit a tool belongs to)
     namespaces = {}
     for project in projects:
-        name = project["name"]
+        name = project.name
         if name in RESERVED_COMMANDS:
             continue
-        kit = project.get("_kit_import_name") or project.get("namespace", "other")
-        desc = project.get("description", "")
+        kit = project.kit_import_name or project.namespace or "other"
+        desc = project.description or ""
         namespaces.setdefault(kit, []).append((name, desc))
 
     # Detect terminal width for description truncation
@@ -592,10 +592,10 @@ def _cmd_kit_list(args, kits, projects, engine=None):
             disabled_set = set(disabled_list)
 
     def _kit_status(kit):
-        name = kit.get("_kit_name") or kit.get("name")
+        name = kit.kit_name or kit.name
         if name in disabled_set:
             return "disabled"
-        if kit.get("always_active"):
+        if kit.always_active:
             return "always active"
         if enabled_set and name not in enabled_set:
             return "disabled (not in active_kits)"
@@ -603,21 +603,21 @@ def _cmd_kit_list(args, kits, projects, engine=None):
 
     if kit_name:
         # Show tools in a specific kit
-        matching = [k for k in kits if (k.get("_kit_name") or k.get("name")) == kit_name]
+        matching = [k for k in kits if (k.kit_name or k.name) == kit_name]
         if not matching:
             print(f"Kit '{kit_name}' not found. Available kits:")
             for k in kits:
-                print(f"  {k.get('_kit_name') or k.get('name')}")
+                print(f"  {k.kit_name or k.name}")
             return 1
 
         kit = matching[0]
-        name = kit.get("_kit_name") or kit.get("name")
+        name = kit.kit_name or kit.name
         status = _kit_status(kit)
-        is_virtual = kit.get("virtual") is True
+        is_virtual = kit.virtual is True
         label = "virtual, " + status if is_virtual else status
         print(f"Kit: {name} [{label}]")
-        if kit.get("description"):
-            print(f"  {kit['description']}")
+        if kit.description:
+            print(f"  {kit.description}")
         print()
 
         # Virtual-kit drill-in: show alias FQCN + canonical target +
@@ -627,7 +627,7 @@ def _cmd_kit_list(args, kits, projects, engine=None):
         if is_virtual:
             return _render_virtual_kit_aliases(kit, projects, engine)
 
-        tool_refs = kit.get("tools", [])
+        tool_refs = kit.tools or []
         if not tool_refs:
             print("  No tools in this kit.")
             return 0
@@ -641,10 +641,10 @@ def _cmd_kit_list(args, kits, projects, engine=None):
             # ``engine._discover_aggregator``'s post-recursion populate
             # (e.g., ``wtf:core:locked``). Match by ``_fqcn`` directly so
             # multi-segment FQCNs resolve.
-            match = [p for p in projects if p.get("_fqcn") == ref]
+            match = [p for p in projects if p.fqcn == ref]
             if match:
                 p = match[0]
-                ref_name = p["name"]
+                ref_name = p.name
             else:
                 # Legacy fallback: parse ref as ``ns:name`` for existing
                 # kit manifests that use 2-segment refs.
@@ -654,13 +654,13 @@ def _cmd_kit_list(args, kits, projects, engine=None):
                     ns, ref_name = "", ref
                 match = [
                     p for p in projects
-                    if p["name"] == ref_name
-                    and (not ns or p.get("namespace") == ns)
+                    if p.name == ref_name
+                    and (not ns or p.namespace == ns)
                 ]
             if match:
                 p = match[0]
                 rows.append(
-                    (ref_name, p.get("platform", ""), p.get("description", ""))
+                    (ref_name, p.platform or "", p.description or "")
                 )
             else:
                 rows.append((ref_name, "", "(not found)"))
@@ -692,12 +692,12 @@ def _cmd_kit_list(args, kits, projects, engine=None):
     for i, kit in enumerate(kits):
         if i > 0:
             print()  # blank line separator for readability
-        name = kit.get("_kit_name") or kit.get("name")
+        name = kit.kit_name or kit.name
         status = _kit_status(kit)
-        tool_count = len(kit.get("tools", []))
+        tool_count = len(kit.tools or [])
         print(f"  {name:<16} {tool_count} tool(s)  [{status}]")
-        if kit.get("description"):
-            print(f"    {kit['description']}")
+        if kit.description:
+            print(f"    {kit.description}")
     return 0
 
 
@@ -711,9 +711,9 @@ def _render_virtual_kit_aliases(kit, projects, engine):
     no engine is available (which shouldn't happen in practice but
     makes the code robust).
     """
-    vk_name = kit.get("_kit_name") or kit.get("name")
-    name_rewrite = kit.get("name_rewrite", {}) or {}
-    tools = kit.get("tools", []) or []
+    vk_name = kit.kit_name or kit.name
+    name_rewrite = kit.name_rewrite or {}
+    tools = kit.tools or []
 
     # Build (alias_fqcn, canonical_fqcn, alias_short) rows
     rows = []
@@ -737,7 +737,7 @@ def _render_virtual_kit_aliases(kit, projects, engine):
     rows.sort(key=lambda r: r[2])  # sort by alias short
 
     # Build project lookup for descriptions
-    by_fqcn = {p.get("_fqcn"): p for p in projects if p.get("_fqcn")}
+    by_fqcn = {p.fqcn: p for p in projects if p.fqcn}
 
     # Column widths
     alias_width = max(len(r[0]) for r in rows)
@@ -756,7 +756,7 @@ def _render_virtual_kit_aliases(kit, projects, engine):
 
     for alias_fqcn, canonical_fqcn, _alias_short in rows:
         target_project = by_fqcn.get(canonical_fqcn)
-        desc = target_project.get("description", "") if target_project else "(canonical not discovered)"
+        desc = (target_project.description or "") if target_project else "(canonical not discovered)"
         wrapped = _wrap_description(desc, desc_max)
         arrow_target = f"-> {canonical_fqcn}"
         print(f"  {alias_fqcn:<{alias_width}}  {arrow_target:<{target_width}}  {wrapped[0]}")
@@ -785,9 +785,9 @@ def _cmd_kit_status(kits):
         # (which may reflect an embedded sub-kit's own inner name, e.g. wtf's
         # own core.kit.json declares name="core" but is imported as "wtf").
         # See #45.
-        name = kit.get("_kit_name") or kit["name"]
-        tool_count = len(kit.get("tools", []))
-        label = "alias(es)" if kit.get("virtual") else "tool(s)"
+        name = kit.kit_name or kit.name
+        tool_count = len(kit.tools or [])
+        label = "alias(es)" if kit.virtual else "tool(s)"
         print(f"  {name}: {tool_count} {label}")
     return 0
 
@@ -1200,7 +1200,7 @@ def _layer_extras(tool_dir, name, args):
 def _kit_exists(kits, name):
     """Return True if a kit with the given name is discovered."""
     return any(
-        (k.get("_kit_name") or k.get("name")) == name for k in kits
+        (k.kit_name or k.name) == name for k in kits
     )
 
 
@@ -1281,10 +1281,10 @@ def _cmd_kit_focus(args, kits, engine):
     new_disabled = []
     preserved = []
     for kit in kits:
-        kname = kit.get("_kit_name") or kit.get("name")
+        kname = kit.kit_name or kit.name
         if kname == name:
             continue
-        if kit.get("always_active"):
+        if kit.always_active:
             preserved.append(kname)
             continue
         new_disabled.append(kname)
@@ -1807,7 +1807,7 @@ def _cmd_setup(args, engine):
         source = getattr(engine, "all_projects", engine.projects)
 
         def _has_setup(p):
-            setup = p.get("setup")
+            setup = p.setup
             if not setup or not isinstance(setup, dict):
                 return False
             if setup.get("command"):
@@ -1823,18 +1823,18 @@ def _cmd_setup(args, engine):
             return 0
 
         # Sort alphabetically by FQCN for stable output
-        has_setup.sort(key=lambda p: p.get("_fqcn", p.get("name", "")))
+        has_setup.sort(key=lambda p: p.fqcn or p.name or "")
 
         # Dynamic column width: longest FQCN, with sane floor/ceiling
         max_fqcn_width = max(
-            len(p.get("_fqcn", p.get("name", ""))) for p in has_setup
+            len(p.fqcn or p.name or "") for p in has_setup
         )
         fqcn_width = max(20, min(max_fqcn_width, 50))
 
         print("Tools with setup declared:")
         for p in has_setup:
-            fqcn = p.get("_fqcn", p.get("name", "?"))
-            note = p.get("setup", {}).get("note") or "-"
+            fqcn = p.fqcn or p.name or "?"
+            note = (p.setup or {}).get("note") or "-"
             print(f"  {fqcn:<{fqcn_width}}  {note}")
         print(f"\nRun: dz setup <tool> to execute a tool's setup.")
         return 0
@@ -1846,7 +1846,7 @@ def _cmd_setup(args, engine):
     if project is None:
         # Try all_projects for disabled-kit tools
         source = getattr(engine, "all_projects", engine.projects)
-        matches = [p for p in source if p.get("name") == tool_name or p.get("_fqcn") == tool_name]
+        matches = [p for p in source if p.name == tool_name or p.fqcn == tool_name]
         if matches:
             project = matches[0]
         else:
@@ -1856,8 +1856,8 @@ def _cmd_setup(args, engine):
             )
             return 1
 
-    if not project.get("setup"):
-        print(f"Tool '{project.get('_fqcn', tool_name)}' has no setup command declared.")
+    if not project.setup:
+        print(f"Tool '{project.fqcn or tool_name}' has no setup command declared.")
         print("Add a 'setup' block to the tool's manifest to enable this.")
         return 0
 
@@ -1902,8 +1902,8 @@ def _cmd_setup(args, engine):
     cmd_str = effective.get("command") if effective else None
     script_path = effective.get("script") if effective else None
 
-    tool_dir = project.get("_dir", ".")
-    fqcn = project.get("_fqcn", tool_name)
+    tool_dir = project.directory or "."
+    fqcn = project.fqcn or tool_name
 
     if not cmd_str and not script_path:
         from dazzlecmd_lib.platform_detect import get_platform_info
@@ -2033,7 +2033,7 @@ def dispatch_tool(project, argv):
         return 1
 
     if runner is None:
-        print(f"Error: Could not resolve entry point for '{project['name']}'", file=sys.stderr)
+        print(f"Error: Could not resolve entry point for '{project.name}'", file=sys.stderr)
         return 1
 
     try:
@@ -2047,7 +2047,7 @@ def dispatch_tool(project, argv):
     except KeyboardInterrupt:
         return 130
     except Exception as exc:
-        print(f"Error running '{project['name']}': {exc}", file=sys.stderr)
+        print(f"Error running '{project.name}': {exc}", file=sys.stderr)
         return 1
 
 
