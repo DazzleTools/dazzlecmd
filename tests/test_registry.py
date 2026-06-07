@@ -21,6 +21,7 @@ from dazzlecmd_lib.registry import (
     make_script_runner,
     make_shell_runner,
 )
+from dazzlecmd_lib.testing import make_tool
 
 
 FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "shells")
@@ -32,16 +33,16 @@ NODE_FIXTURE_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "node")
 # ---------------------------------------------------------------------------
 
 def _make_project(tool_dir, runtime_overrides=None):
-    """Build a minimal project dict for binary runner tests."""
-    base = {
-        "name": "test-binary-tool",
-        "_dir": str(tool_dir),
-        "_fqcn": "test:test-binary-tool",
-        "runtime": {"type": "binary", "script_path": "my-tool"},
-    }
+    """Build a minimal project entity for binary runner tests."""
+    runtime = {"type": "binary", "script_path": "my-tool"}
     if runtime_overrides:
-        base["runtime"].update(runtime_overrides)
-    return base
+        runtime.update(runtime_overrides)
+    return make_tool(
+        name="test-binary-tool",
+        _dir=str(tool_dir),
+        _fqcn="test:test-binary-tool",
+        runtime=runtime,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -233,25 +234,25 @@ class TestRunnerRegistryBinaryResolution:
 
 
 def _make_shell_project(tool_dir, shell, script_name="hello.sh", runtime_overrides=None):
-    """Build a shell-type project dict. Copies fixture script into tool_dir."""
+    """Build a shell-type project entity. Copies fixture script into tool_dir."""
     fixture = os.path.join(FIXTURE_DIR, script_name)
     dest = os.path.join(str(tool_dir), script_name)
     if os.path.isfile(fixture):
         import shutil as _sh
         _sh.copy(fixture, dest)
-    project = {
-        "name": "test-shell-tool",
-        "_dir": str(tool_dir),
-        "_fqcn": "test:test-shell-tool",
-        "runtime": {
-            "type": "shell",
-            "shell": shell,
-            "script_path": script_name,
-        },
+    runtime = {
+        "type": "shell",
+        "shell": shell,
+        "script_path": script_name,
     }
     if runtime_overrides:
-        project["runtime"].update(runtime_overrides)
-    return project
+        runtime.update(runtime_overrides)
+    return make_tool(
+        name="test-shell-tool",
+        _dir=str(tool_dir),
+        _fqcn="test:test-shell-tool",
+        runtime=runtime,
+    )
 
 
 class TestShellProfiles:
@@ -714,11 +715,11 @@ class TestShellRealEnvChain:
         import shutil as _sh
         _sh.copy(os.path.join(FIXTURE_DIR, "env_setup.sh"), str(tmp_path))
         _sh.copy(os.path.join(FIXTURE_DIR, "check_env.sh"), str(tmp_path))
-        project = {
-            "name": "env-chain-test",
-            "_dir": str(tmp_path),
-            "_fqcn": "test:env-chain-test",
-            "runtime": {
+        project = make_tool(
+            name="env-chain-test",
+            _dir=str(tmp_path),
+            _fqcn="test:env-chain-test",
+            runtime={
                 "type": "shell",
                 "shell": "bash",
                 "script_path": "check_env.sh",
@@ -727,7 +728,7 @@ class TestShellRealEnvChain:
                     "args": [],
                 },
             },
-        }
+        )
         # Use subprocess.run capturing stdout to verify env propagated
         from unittest.mock import patch
         captured = {}
@@ -755,24 +756,22 @@ class TestShellRealEnvChain:
 
 
 def _make_node_project(tool_dir, script_name=None, **runtime_fields):
-    """Build a node-type project dict; optionally copy fixture script into tool_dir."""
+    """Build a node-type project entity; optionally copy fixture script into tool_dir."""
     if script_name:
         fixture = os.path.join(NODE_FIXTURE_DIR, script_name)
         if os.path.isfile(fixture):
             import shutil as _sh
             _sh.copy(fixture, str(tool_dir))
-    project = {
-        "name": "test-node-tool",
-        "_dir": str(tool_dir),
-        "_fqcn": "test:test-node-tool",
-        "runtime": {
-            "type": "node",
-        },
-    }
+    runtime = {"type": "node"}
     if script_name:
-        project["runtime"]["script_path"] = script_name
-    project["runtime"].update(runtime_fields)
-    return project
+        runtime["script_path"] = script_name
+    runtime.update(runtime_fields)
+    return make_tool(
+        name="test-node-tool",
+        _dir=str(tool_dir),
+        _fqcn="test:test-node-tool",
+        runtime=runtime,
+    )
 
 
 class TestNodeInterpreterProfiles:
@@ -923,24 +922,24 @@ class TestNodeTypeScriptRejectsWithoutInterpreter:
     def test_tsx_file_without_interpreter_errors(self, tmp_path):
         import shutil as _sh
         (tmp_path / "hello.tsx").write_text("")
-        project = {
-            "name": "test-node-tool",
-            "_dir": str(tmp_path),
-            "_fqcn": "test:test-node-tool",
-            "runtime": {"type": "node", "script_path": "hello.tsx"},
-        }
+        project = make_tool(
+            name="test-node-tool",
+            _dir=str(tmp_path),
+            _fqcn="test:test-node-tool",
+            runtime={"type": "node", "script_path": "hello.tsx"},
+        )
         runner = make_node_runner(project)
         result = runner([])
         assert result == 1
 
     def test_mts_extension_requires_interpreter(self, tmp_path):
         (tmp_path / "tool.mts").write_text("")
-        project = {
-            "name": "test-node-tool",
-            "_dir": str(tmp_path),
-            "_fqcn": "test:test-node-tool",
-            "runtime": {"type": "node", "script_path": "tool.mts"},
-        }
+        project = make_tool(
+            name="test-node-tool",
+            _dir=str(tmp_path),
+            _fqcn="test:test-node-tool",
+            runtime={"type": "node", "script_path": "tool.mts"},
+        )
         runner = make_node_runner(project)
         result = runner([])
         assert result == 1
@@ -948,13 +947,13 @@ class TestNodeTypeScriptRejectsWithoutInterpreter:
     def test_ts_check_fires_before_file_existence(self, tmp_path, capsys):
         """Regression for v0.7.18 Bug 2: TS-without-interpreter error must
         fire even when the .ts file doesn't exist yet (tool authoring case)."""
-        project = {
-            "name": "test-node-tool",
-            "_dir": str(tmp_path),
-            "_fqcn": "test:test-node-tool",
+        project = make_tool(
+            name="test-node-tool",
+            _dir=str(tmp_path),
+            _fqcn="test:test-node-tool",
             # hello.ts deliberately NOT created
-            "runtime": {"type": "node", "script_path": "hello.ts"},
-        }
+            runtime={"type": "node", "script_path": "hello.ts"},
+        )
         runner = make_node_runner(project)
         result = runner([])
         assert result == 1
@@ -970,12 +969,12 @@ class TestNpmScriptDispatch:
 
     def test_npm_script_argv_shape(self, tmp_path):
         from unittest.mock import patch
-        project = {
-            "name": "test-node-tool",
-            "_dir": str(tmp_path),
-            "_fqcn": "test:test-node-tool",
-            "runtime": {"type": "node", "npm_script": "build"},
-        }
+        project = make_tool(
+            name="test-node-tool",
+            _dir=str(tmp_path),
+            _fqcn="test:test-node-tool",
+            runtime={"type": "node", "npm_script": "build"},
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
             runner = make_node_runner(project)
@@ -985,12 +984,12 @@ class TestNpmScriptDispatch:
 
     def test_npm_script_cwd_is_tool_dir(self, tmp_path):
         from unittest.mock import patch
-        project = {
-            "name": "test-node-tool",
-            "_dir": str(tmp_path),
-            "_fqcn": "test:test-node-tool",
-            "runtime": {"type": "node", "npm_script": "start"},
-        }
+        project = make_tool(
+            name="test-node-tool",
+            _dir=str(tmp_path),
+            _fqcn="test:test-node-tool",
+            runtime={"type": "node", "npm_script": "start"},
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
             runner = make_node_runner(project)
@@ -1003,12 +1002,12 @@ class TestNpxDispatch:
 
     def test_npx_argv_shape(self, tmp_path):
         from unittest.mock import patch
-        project = {
-            "name": "test-node-tool",
-            "_dir": str(tmp_path),
-            "_fqcn": "test:test-node-tool",
-            "runtime": {"type": "node", "npx": "@org/toolpkg"},
-        }
+        project = make_tool(
+            name="test-node-tool",
+            _dir=str(tmp_path),
+            _fqcn="test:test-node-tool",
+            runtime={"type": "node", "npx": "@org/toolpkg"},
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
             runner = make_node_runner(project)
@@ -1021,58 +1020,58 @@ class TestNodeMutualExclusion:
     """Exactly one dispatch mode must be declared."""
 
     def test_none_declared_errors(self, tmp_path):
-        project = {
-            "name": "test-node-tool",
-            "_dir": str(tmp_path),
-            "_fqcn": "test:test-node-tool",
-            "runtime": {"type": "node"},
-        }
+        project = make_tool(
+            name="test-node-tool",
+            _dir=str(tmp_path),
+            _fqcn="test:test-node-tool",
+            runtime={"type": "node"},
+        )
         runner = make_node_runner(project)
         result = runner([])
         assert result == 1
 
     def test_script_path_and_npm_script_errors(self, tmp_path):
-        project = {
-            "name": "test-node-tool",
-            "_dir": str(tmp_path),
-            "_fqcn": "test:test-node-tool",
-            "runtime": {
+        project = make_tool(
+            name="test-node-tool",
+            _dir=str(tmp_path),
+            _fqcn="test:test-node-tool",
+            runtime={
                 "type": "node",
                 "script_path": "tool.js",
                 "npm_script": "build",
             },
-        }
+        )
         runner = make_node_runner(project)
         result = runner([])
         assert result == 1
 
     def test_npm_script_and_npx_errors(self, tmp_path):
-        project = {
-            "name": "test-node-tool",
-            "_dir": str(tmp_path),
-            "_fqcn": "test:test-node-tool",
-            "runtime": {
+        project = make_tool(
+            name="test-node-tool",
+            _dir=str(tmp_path),
+            _fqcn="test:test-node-tool",
+            runtime={
                 "type": "node",
                 "npm_script": "build",
                 "npx": "@org/pkg",
             },
-        }
+        )
         runner = make_node_runner(project)
         result = runner([])
         assert result == 1
 
     def test_all_three_declared_errors(self, tmp_path):
-        project = {
-            "name": "test-node-tool",
-            "_dir": str(tmp_path),
-            "_fqcn": "test:test-node-tool",
-            "runtime": {
+        project = make_tool(
+            name="test-node-tool",
+            _dir=str(tmp_path),
+            _fqcn="test:test-node-tool",
+            runtime={
                 "type": "node",
                 "script_path": "tool.js",
                 "npm_script": "build",
                 "npx": "@org/pkg",
             },
-        }
+        )
         runner = make_node_runner(project)
         result = runner([])
         assert result == 1
@@ -1101,17 +1100,17 @@ class TestScriptRunnerInterpreterArgs:
         """JScript via cscript //Nologo //B tool.js"""
         from unittest.mock import patch
         (tmp_path / "tool.js").write_text("")
-        project = {
-            "name": "test-script-tool",
-            "_dir": str(tmp_path),
-            "_fqcn": "test:test-script-tool",
-            "runtime": {
+        project = make_tool(
+            name="test-script-tool",
+            _dir=str(tmp_path),
+            _fqcn="test:test-script-tool",
+            runtime={
                 "type": "script",
                 "interpreter": "cscript",
                 "interpreter_args": ["//Nologo", "//B"],
                 "script_path": "tool.js",
             },
-        }
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
             runner = make_script_runner(project)
@@ -1125,17 +1124,17 @@ class TestScriptRunnerInterpreterArgs:
         """perl -w -T tool.pl"""
         from unittest.mock import patch
         (tmp_path / "tool.pl").write_text("")
-        project = {
-            "name": "test-script-tool",
-            "_dir": str(tmp_path),
-            "_fqcn": "test:test-script-tool",
-            "runtime": {
+        project = make_tool(
+            name="test-script-tool",
+            _dir=str(tmp_path),
+            _fqcn="test:test-script-tool",
+            runtime={
                 "type": "script",
                 "interpreter": "perl",
                 "interpreter_args": ["-w", "-T"],
                 "script_path": "tool.pl",
             },
-        }
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
             runner = make_script_runner(project)
@@ -1147,16 +1146,16 @@ class TestScriptRunnerInterpreterArgs:
         """When interpreter_args is absent, argv is [interpreter, script, argv]."""
         from unittest.mock import patch
         (tmp_path / "tool.py").write_text("")
-        project = {
-            "name": "test-script-tool",
-            "_dir": str(tmp_path),
-            "_fqcn": "test:test-script-tool",
-            "runtime": {
+        project = make_tool(
+            name="test-script-tool",
+            _dir=str(tmp_path),
+            _fqcn="test:test-script-tool",
+            runtime={
                 "type": "script",
                 "interpreter": "python",
                 "script_path": "tool.py",
             },
-        }
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = subprocess.CompletedProcess(args=[], returncode=0)
             runner = make_script_runner(project)
@@ -1237,15 +1236,15 @@ class TestPythonPackageModeRelativeImports:
             "    return 0\n"
         )
 
-        project = {
-            "name": "mypkg",
-            "_dir": str(tool_dir),
-            "runtime": {
+        project = make_tool(
+            name="mypkg",
+            _dir=str(tool_dir),
+            runtime={
                 "type": "python",
                 "entry_point": "main",
                 "script_path": "main.py",
             },
-        }
+        )
 
         runner = make_python_runner(project)
         import sys as _sys
@@ -1274,15 +1273,15 @@ class TestPythonPackageModeRelativeImports:
             "def main(argv=None):\n    return 7\n"
         )
 
-        project = {
-            "name": "flatmod",
-            "_dir": str(tool_dir),
-            "runtime": {
+        project = make_tool(
+            name="flatmod",
+            _dir=str(tool_dir),
+            runtime={
                 "type": "python",
                 "entry_point": "main",
                 "script_path": "flatmod.py",
             },
-        }
+        )
 
         runner = make_python_runner(project)
         import sys as _sys
@@ -1309,12 +1308,12 @@ class TestRuntimeVenvShorthand:
             "script_path": "tool.py",
         }
         runtime.update(runtime_overrides)
-        return {
-            "name": "tool",
-            "_fqcn": "test:tool",
-            "_dir": str(tool_dir),
-            "runtime": runtime,
-        }
+        return make_tool(
+            name="tool",
+            _fqcn="test:tool",
+            _dir=str(tool_dir),
+            runtime=runtime,
+        )
 
     def _stub_venv(self, tool_dir, platform):
         """Create a stub venv that the resolver will treat as 'present'."""
@@ -1427,15 +1426,13 @@ class TestSetupRequiredError:
             "interpreter": interpreter,
             "script_path": "tool.py",
         }
-        project = {
-            "name": "tool",
-            "_fqcn": "test:tool",
-            "_dir": str(tool_dir),
-            "runtime": runtime,
-        }
-        if with_setup:
-            project["setup"] = {"command": "python -m venv .venv"}
-        return project
+        return make_tool(
+            name="tool",
+            _fqcn="test:tool",
+            _dir=str(tool_dir),
+            runtime=runtime,
+            setup={"command": "python -m venv .venv"} if with_setup else None,
+        )
 
     def test_missing_relative_interpreter_with_setup_raises(self, tmp_path):
         from dazzlecmd_lib.registry import (
@@ -1528,17 +1525,17 @@ class TestSetupRequiredError:
         (tool_dir / "tool.py").write_text("def main():\n    return 0\n")
         # No venv directory present on disk.
 
-        project = {
-            "name": "tool",
-            "_fqcn": "test:tool",
-            "_dir": str(tool_dir),
-            "runtime": {
+        project = make_tool(
+            name="tool",
+            _fqcn="test:tool",
+            _dir=str(tool_dir),
+            runtime={
                 "type": "python",
                 "script_path": "tool.py",
                 "venv": ".venv",
             },
-            "setup": {"command": "python -m venv .venv"},
-        }
+            setup={"command": "python -m venv .venv"},
+        )
         runner = make_python_runner(project)
         with pytest.raises(SetupRequiredError) as excinfo:
             runner([])

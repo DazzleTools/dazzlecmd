@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.7.9] - 2026-06-07
+
+Ships with dazzlecmd v0.8.11 -- `registry` attribute sweep (runtime resolution + runner factories). Byte-identical; dispatch verified; no API change.
+
+### Changed
+
+- `registry` -- entity field reads in `resolve_runtime` + runner factories migrated to attribute access. Nested-block manipulation, clone-site guards, the post-clone `["runtime"]=` write (entity-or-dict duality), and `_vars` (.get) stay as-is.
+
+### Refs
+
+Ships with dazzlecmd v0.8.11. Refs dazzlecmd #37, #73, #77.
+
 ## [0.7.8] - 2026-06-07
 
 Ships with dazzlecmd v0.8.10 -- `loader` attribute sweep. Byte-identical; no API change.

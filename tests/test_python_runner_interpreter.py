@@ -13,6 +13,7 @@ from dazzlecmd_lib.registry import (
     make_python_runner,
     _make_python_interpreter_runner,
 )
+from dazzlecmd_lib.testing import make_tool
 
 
 class TestInterpreterDispatch:
@@ -21,15 +22,14 @@ class TestInterpreterDispatch:
     def test_interpreter_triggers_subprocess_dispatch(self, tmp_path):
         script = tmp_path / "tool.py"
         script.write_text("import sys; sys.exit(0)")
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={
                 "type": "python",
                 "script_path": "tool.py",
                 "interpreter": sys.executable,
             },
-        }
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             runner = make_python_runner(project)
@@ -45,15 +45,14 @@ class TestInterpreterDispatch:
         """When interpreter is declared, importlib.import_module is NOT called."""
         script = tmp_path / "tool.py"
         script.write_text("pass")
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={
                 "type": "python",
                 "script_path": "tool.py",
                 "interpreter": sys.executable,
             },
-        }
+        )
         with patch("subprocess.run") as mock_run, \
              patch("importlib.import_module") as mock_import:
             mock_run.return_value = MagicMock(returncode=0)
@@ -72,16 +71,15 @@ class TestInterpreterDispatch:
         """
         script = tmp_path / "tool.py"
         script.write_text("pass")
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "pass_through": True,
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            pass_through=True,
+            runtime={
                 "type": "python",
                 "script_path": "tool.py",
                 "interpreter": sys.executable,
             },
-        }
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             runner = make_python_runner(project)
@@ -103,11 +101,10 @@ class TestInterpreterPathResolution:
         """
         script = tmp_path / "tool.py"
         script.write_text("pass")
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {"script_path": "tool.py", "interpreter": sys.executable},
-        }
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={"script_path": "tool.py", "interpreter": sys.executable},
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             make_python_runner(project)([])
@@ -122,14 +119,13 @@ class TestInterpreterPathResolution:
 
         script = tmp_path / "tool.py"
         script.write_text("pass")
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={
                 "script_path": "tool.py",
                 "interpreter": ".venv/bin/python",
             },
-        }
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             make_python_runner(project)([])
@@ -147,14 +143,13 @@ class TestInterpreterPathResolution:
 
         script = tmp_path / "tool.py"
         script.write_text("pass")
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={
                 "script_path": "tool.py",
                 "interpreter": ".venv/bin/python",  # doesn't exist
             },
-        }
+        )
         runner = make_python_runner(project)
         with pytest.raises(SetupRequiredError):
             runner([])
@@ -163,11 +158,10 @@ class TestInterpreterPathResolution:
         """`python3.11` or similar bare names are handled by subprocess PATH lookup."""
         script = tmp_path / "tool.py"
         script.write_text("pass")
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {"script_path": "tool.py", "interpreter": "python3.11"},
-        }
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={"script_path": "tool.py", "interpreter": "python3.11"},
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             make_python_runner(project)([])
@@ -176,14 +170,13 @@ class TestInterpreterPathResolution:
     def test_env_var_prefix_passes_through(self, tmp_path):
         script = tmp_path / "tool.py"
         script.write_text("pass")
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={
                 "script_path": "tool.py",
                 "interpreter": "%USERPROFILE%\\.venv\\python.exe",
             },
-        }
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             make_python_runner(project)([])
@@ -194,11 +187,10 @@ class TestScriptPathResolution:
     def test_relative_script_joined_against_tool_dir(self, tmp_path):
         script = tmp_path / "tool.py"
         script.write_text("pass")
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {"script_path": "tool.py", "interpreter": sys.executable},
-        }
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={"script_path": "tool.py", "interpreter": sys.executable},
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             make_python_runner(project)([])
@@ -209,22 +201,20 @@ class TestScriptPathResolution:
     def test_absolute_script_used_as_is(self, tmp_path):
         script = tmp_path / "tool.py"
         script.write_text("pass")
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {"script_path": str(script), "interpreter": sys.executable},
-        }
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={"script_path": str(script), "interpreter": sys.executable},
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             make_python_runner(project)([])
         assert mock_run.call_args[0][0][1] == str(script)
 
     def test_missing_script_errors(self, tmp_path, capsys):
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {"script_path": "nonexistent.py", "interpreter": sys.executable},
-        }
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={"script_path": "nonexistent.py", "interpreter": sys.executable},
+        )
         runner = make_python_runner(project)
         exit_code = runner([])
         assert exit_code == 1
@@ -233,14 +223,13 @@ class TestScriptPathResolution:
 
 class TestModuleMode:
     def test_module_path_dispatches_via_dash_m(self, tmp_path):
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={
                 "module": "mypkg.tool",
                 "interpreter": sys.executable,
             },
-        }
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             make_python_runner(project)(["arg"])
@@ -255,11 +244,10 @@ class TestExitCodePropagation:
     def test_nonzero_exit_code_returned(self, tmp_path):
         script = tmp_path / "tool.py"
         script.write_text("pass")
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {"script_path": "tool.py", "interpreter": sys.executable},
-        }
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={"script_path": "tool.py", "interpreter": sys.executable},
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=42)
             exit_code = make_python_runner(project)([])
@@ -271,11 +259,10 @@ class TestBackwardsCompat:
         """Legacy path: default python runner behavior unchanged when interpreter absent."""
         script = tmp_path / "tool.py"
         script.write_text("def main(argv=None): return 0")
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {"type": "python", "script_path": "tool.py"},
-        }
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={"type": "python", "script_path": "tool.py"},
+        )
         with patch("subprocess.run") as mock_run, \
              patch("importlib.import_module") as mock_import:
             # Mock successful import with a main()
@@ -292,12 +279,11 @@ class TestBackwardsCompat:
         """Pass-through path: subprocess via sys.executable."""
         script = tmp_path / "tool.py"
         script.write_text("pass")
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "pass_through": True,
-            "runtime": {"type": "python", "script_path": "tool.py"},
-        }
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            pass_through=True,
+            runtime={"type": "python", "script_path": "tool.py"},
+        )
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0)
             runner = make_python_runner(project)

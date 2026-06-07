@@ -26,6 +26,7 @@ from pathlib import Path
 import pytest
 
 from dazzlecmd_lib.registry import make_docker_runner, resolve_runtime
+from dazzlecmd_lib.testing import make_tool
 
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "docker_tool"
@@ -119,9 +120,14 @@ def project_dict():
     """Load the fixture manifest + set _dir."""
     manifest_path = FIXTURE_DIR / ".dazzlecmd.json"
     with open(manifest_path, "r", encoding="utf-8") as f:
-        project = json.load(f)
-    project["_dir"] = str(FIXTURE_DIR)
-    project["_fqcn"] = "test:docker-test-tool"
+        manifest = json.load(f)
+    # Extract _vars before constructing entity (can't be constructor kwarg)
+    top_vars = manifest.pop("_vars", None)
+    manifest["_dir"] = str(FIXTURE_DIR)
+    manifest["_fqcn"] = "test:docker-test-tool"
+    project = make_tool(**manifest)
+    if top_vars:
+        project["_vars"] = top_vars
     return project
 
 
@@ -240,18 +246,17 @@ class TestDockerIntegration:
 
     def test_exit_code_propagates(self, docker_image, capfd):
         """Simulate a container that exits nonzero; runner should forward the code."""
-        # Build a throwaway project dict with a command that always exits 7
-        project = {
-            "name": "exit-code-test",
-            "_fqcn": "test:exit-code-test",
-            "_dir": str(FIXTURE_DIR),
-            "runtime": {
+        # Build a throwaway project entity with a command that always exits 7
+        project = make_tool(
+            name="exit-code-test", _fqcn="test:exit-code-test",
+            _dir=str(FIXTURE_DIR),
+            runtime={
                 "type": "docker",
                 "image": docker_image,
                 # Override entrypoint via docker_args
                 "docker_args": ["--rm", "--entrypoint", "/bin/sh"],
             },
-        }
+        )
         runner = make_docker_runner(project)
         # Pass `-c "exit 7"` -- these become argv appended after the image
         exit_code = runner(["-c", "exit 7"])

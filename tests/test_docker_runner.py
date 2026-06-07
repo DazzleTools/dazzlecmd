@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from dazzlecmd_lib.registry import make_docker_runner, RunnerRegistry
+from dazzlecmd_lib.testing import make_tool
 
 
 # ---------------------------------------------------------------------------
@@ -54,7 +55,7 @@ class TestDockerRegistration:
 
 class TestMissingImage:
     def test_missing_image_returns_error_runner(self, tmp_path, capsys):
-        project = {"name": "t", "_dir": str(tmp_path), "runtime": {"type": "docker"}}
+        project = make_tool(name="t", _dir=str(tmp_path), runtime={"type": "docker"})
         runner = make_docker_runner(project)
         exit_code = runner([])
         assert exit_code == 1
@@ -69,23 +70,20 @@ class TestMissingImage:
 
 class TestPreflight:
     def test_image_present_proceeds_to_run(self, tmp_path):
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {"type": "docker", "image": "myimg:latest"},
-        }
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={"type": "docker", "image": "myimg:latest"},
+        )
         runner = make_docker_runner(project)
         with patch("subprocess.run", side_effect=_mock_subprocess_run_preflight_then_runtime()):
             exit_code = runner([])
         assert exit_code == 0
 
     def test_image_missing_prints_setup_hint(self, tmp_path, capsys):
-        project = {
-            "name": "t",
-            "_fqcn": "mykit:t",
-            "_dir": str(tmp_path),
-            "runtime": {"type": "docker", "image": "notpresent:latest"},
-        }
+        project = make_tool(
+            name="t", _fqcn="mykit:t", _dir=str(tmp_path),
+            runtime={"type": "docker", "image": "notpresent:latest"},
+        )
         runner = make_docker_runner(project)
         with patch("subprocess.run", side_effect=_mock_subprocess_run_preflight_then_runtime(preflight_stdout="")):
             exit_code = runner([])
@@ -95,11 +93,10 @@ class TestPreflight:
         assert "dz setup mykit:t" in captured.err
 
     def test_docker_binary_missing_prints_install_hint(self, tmp_path, capsys):
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {"type": "docker", "image": "myimg:latest"},
-        }
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={"type": "docker", "image": "myimg:latest"},
+        )
         runner = make_docker_runner(project)
         with patch("subprocess.run", side_effect=FileNotFoundError("docker")):
             exit_code = runner([])
@@ -108,11 +105,10 @@ class TestPreflight:
         assert "'docker' command not found" in captured.err or "not found" in captured.err
 
     def test_daemon_error_surfaced(self, tmp_path, capsys):
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {"type": "docker", "image": "myimg:latest"},
-        }
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={"type": "docker", "image": "myimg:latest"},
+        )
         preflight = MagicMock()
         preflight.returncode = 1
         preflight.stdout = ""
@@ -132,11 +128,10 @@ class TestPreflight:
 
 class TestArgvBasic:
     def test_minimal_argv(self, tmp_path):
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {"type": "docker", "image": "myimg:1.0"},
-        }
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={"type": "docker", "image": "myimg:1.0"},
+        )
         runner = make_docker_runner(project)
         call_tracker = []
 
@@ -161,15 +156,14 @@ class TestArgvBasic:
         assert run_cmd[-2:] == ["--flag", "value"]
 
     def test_docker_args_inserted(self, tmp_path):
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={
                 "type": "docker",
                 "image": "myimg",
                 "docker_args": ["--rm", "--network", "host"],
             },
-        }
+        )
         runner = make_docker_runner(project)
         call_tracker = []
         def side_effect(*args, **kwargs):
@@ -196,15 +190,14 @@ class TestArgvBasic:
 
 class TestVolumes:
     def test_single_volume_with_mode(self, tmp_path):
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={
                 "type": "docker",
                 "image": "myimg",
                 "volumes": [{"host": "/host/path", "container": "/work", "mode": "rw"}],
             },
-        }
+        )
         runner = make_docker_runner(project)
         call_tracker = []
         def side_effect(*args, **kwargs):
@@ -222,10 +215,9 @@ class TestVolumes:
         assert run_cmd[v_idx + 1] == "/host/path:/work:rw"
 
     def test_multiple_volumes(self, tmp_path):
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={
                 "type": "docker",
                 "image": "myimg",
                 "volumes": [
@@ -233,7 +225,7 @@ class TestVolumes:
                     {"host": "/b", "container": "/y", "mode": "ro"},
                 ],
             },
-        }
+        )
         runner = make_docker_runner(project)
         call_tracker = []
         def side_effect(*args, **kwargs):
@@ -255,15 +247,14 @@ class TestVolumes:
     def test_relative_volume_host_resolved_against_tool_dir(self, tmp_path):
         marker = tmp_path / "data.json"
         marker.write_text("{}")
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={
                 "type": "docker",
                 "image": "myimg",
                 "volumes": [{"host": "data.json", "container": "/config.json"}],
             },
-        }
+        )
         runner = make_docker_runner(project)
         call_tracker = []
         def side_effect(*args, **kwargs):
@@ -282,11 +273,10 @@ class TestVolumes:
         assert "data.json:/config.json" in v_spec
 
     def test_malformed_volume_entry_errors(self, tmp_path, capsys):
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {"type": "docker", "image": "myimg", "volumes": ["/not/a/dict"]},
-        }
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={"type": "docker", "image": "myimg", "volumes": ["/not/a/dict"]},
+        )
         runner = make_docker_runner(project)
         with patch("subprocess.run", side_effect=_mock_subprocess_run_preflight_then_runtime()):
             exit_code = runner([])
@@ -295,15 +285,14 @@ class TestVolumes:
         assert "volumes" in captured.err
 
     def test_volume_missing_host_errors(self, tmp_path, capsys):
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={
                 "type": "docker",
                 "image": "myimg",
                 "volumes": [{"container": "/app"}],
             },
-        }
+        )
         runner = make_docker_runner(project)
         with patch("subprocess.run", side_effect=_mock_subprocess_run_preflight_then_runtime()):
             exit_code = runner([])
@@ -314,15 +303,14 @@ class TestVolumes:
 
 class TestEnv:
     def test_env_dict_stitched(self, tmp_path):
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={
                 "type": "docker",
                 "image": "myimg",
                 "env": {"LOG_LEVEL": "info", "TZ": "UTC"},
             },
-        }
+        )
         runner = make_docker_runner(project)
         call_tracker = []
         def side_effect(*args, **kwargs):
@@ -346,15 +334,14 @@ class TestEnv:
 class TestEnvPassthrough:
     def test_passthrough_present_env_var(self, tmp_path, monkeypatch):
         monkeypatch.setenv("TEST_TOKEN", "secret-value")
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={
                 "type": "docker",
                 "image": "myimg",
                 "env_passthrough": ["TEST_TOKEN"],
             },
-        }
+        )
         runner = make_docker_runner(project)
         call_tracker = []
         def side_effect(*args, **kwargs):
@@ -376,15 +363,14 @@ class TestEnvPassthrough:
 
     def test_passthrough_missing_env_var_skipped(self, tmp_path, monkeypatch):
         monkeypatch.delenv("MISSING_VAR", raising=False)
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={
                 "type": "docker",
                 "image": "myimg",
                 "env_passthrough": ["MISSING_VAR"],
             },
-        }
+        )
         runner = make_docker_runner(project)
         call_tracker = []
         def side_effect(*args, **kwargs):
@@ -402,15 +388,14 @@ class TestEnvPassthrough:
 
 class TestInnerRuntimeIsInformational:
     def test_inner_runtime_does_not_affect_dispatch(self, tmp_path):
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={
                 "type": "docker",
                 "image": "myimg",
                 "inner_runtime": {"type": "python", "script_path": "/app/tool.py"},
             },
-        }
+        )
         runner = make_docker_runner(project)
         call_tracker = []
         def side_effect(*args, **kwargs):
@@ -433,11 +418,10 @@ class TestInnerRuntimeIsInformational:
 
 class TestExitCodePropagation:
     def test_nonzero_subprocess_exit_returned(self, tmp_path):
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "runtime": {"type": "docker", "image": "myimg"},
-        }
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={"type": "docker", "image": "myimg"},
+        )
         runner = make_docker_runner(project)
         with patch(
             "subprocess.run",
@@ -454,14 +438,13 @@ class TestVarsSubstitution:
         pipeline."""
         from dazzlecmd_lib.registry import resolve_runtime
 
-        project = {
-            "name": "t",
-            "_dir": str(tmp_path),
-            "_vars": {"org": "myorg", "tag": "1.0"},
-            "runtime": {
+        project = make_tool(
+            name="t", _dir=str(tmp_path),
+            runtime={
                 "type": "docker",
                 "image": "{{org}}/mytool:{{tag}}",
             },
-        }
+        )
+        project["_vars"] = {"org": "myorg", "tag": "1.0"}
         resolved = resolve_runtime(project)
         assert resolved["runtime"]["image"] == "myorg/mytool:1.0"

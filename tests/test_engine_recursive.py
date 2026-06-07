@@ -803,12 +803,12 @@ class TestModuleDispatch:
         os.makedirs(tool_dir)
         pkg = self._build_package_tool(tool_dir)
 
-        project = {
-            "name": "test-tool",
-            "runtime": {"type": "python", "script_path": f"{pkg}/cli.py"},
-            "pass_through": True,
-            "_dir": tool_dir,
-        }
+        project = make_tool(
+            name="test-tool",
+            runtime={"type": "python", "script_path": f"{pkg}/cli.py"},
+            pass_through=True,
+            _dir=tool_dir,
+        )
 
         runner = _make_subprocess_runner(project)
         result = runner(["--version"])  # arbitrary args
@@ -823,16 +823,16 @@ class TestModuleDispatch:
         os.makedirs(tool_dir)
         pkg = self._build_package_tool(tool_dir)
 
-        project = {
-            "name": "test-tool",
-            "runtime": {
+        project = make_tool(
+            name="test-tool",
+            runtime={
                 "type": "python",
                 "script_path": f"{pkg}/cli.py",
                 "module": f"{pkg}.cli",
             },
-            "pass_through": True,
-            "_dir": tool_dir,
-        }
+            pass_through=True,
+            _dir=tool_dir,
+        )
 
         runner = _make_subprocess_runner(project)
         result = runner([])
@@ -849,12 +849,12 @@ class TestModuleDispatch:
         with open(os.path.join(tool_dir, "flat_tool.py"), "w") as f:
             f.write("import sys\nprint('flat works')\nsys.exit(0)\n")
 
-        project = {
-            "name": "flat-tool",
-            "runtime": {"type": "python", "script_path": "flat_tool.py"},
-            "pass_through": True,
-            "_dir": tool_dir,
-        }
+        project = make_tool(
+            name="flat-tool",
+            runtime={"type": "python", "script_path": "flat_tool.py"},
+            pass_through=True,
+            _dir=tool_dir,
+        )
 
         runner = _make_subprocess_runner(project)
         result = runner([])
@@ -868,15 +868,15 @@ class TestModuleDispatch:
         os.makedirs(tool_dir)
         pkg = self._build_package_tool(tool_dir)
 
-        project = {
-            "name": "test-tool",
-            "runtime": {
+        project = make_tool(
+            name="test-tool",
+            runtime={
                 "type": "python",
                 "script_path": f"{pkg}/cli.py",
                 "entry_point": "main",
             },
-            "_dir": tool_dir,
-        }
+            _dir=tool_dir,
+        )
 
         runner = _make_python_runner(project)
         result = runner([])

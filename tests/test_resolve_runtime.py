@@ -14,6 +14,7 @@ from dazzlecmd_lib.registry import (
 )
 from dazzlecmd_lib.platform_detect import PlatformInfo
 from dazzlecmd_lib.schema_version import UnsupportedSchemaVersionError
+from dazzlecmd_lib.testing import make_tool
 
 
 @pytest.fixture
@@ -39,31 +40,31 @@ def linux_arch():
 
 class TestFastPath:
     def test_no_platforms_no_prefer_returns_original(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {"type": "python", "script_path": "tool.py"},
-        }
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={"type": "python", "script_path": "tool.py"},
+        )
         result = resolve_runtime(project, platform_info=linux_debian)
         assert result is project  # same object, fast path
 
     def test_empty_runtime_returns_original(self, linux_debian, tmp_path):
-        project = {"name": "x", "_dir": str(tmp_path), "runtime": {}}
+        project = make_tool(name="x", _dir=str(tmp_path), runtime={})
         result = resolve_runtime(project, platform_info=linux_debian)
         assert result is project
 
     def test_no_runtime_key_returns_original(self, linux_debian, tmp_path):
-        project = {"name": "x", "_dir": str(tmp_path)}
+        project = make_tool(name="x", _dir=str(tmp_path))
         result = resolve_runtime(project, platform_info=linux_debian)
         assert result is project
 
 
 class TestPlatformsOverride:
     def test_platform_block_overrides_base(self, windows_win11, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "node",
                 "script_path": "tool.js",
                 "platforms": {
@@ -74,7 +75,7 @@ class TestPlatformsOverride:
                     },
                 },
             },
-        }
+        )
         result = resolve_runtime(project, platform_info=windows_win11)
         rt = result["runtime"]
         assert rt["type"] == "script"
@@ -84,10 +85,10 @@ class TestPlatformsOverride:
         assert "platforms" not in rt
 
     def test_no_matching_platform_falls_through(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "python",
                 "script_path": "tool.py",
                 "platforms": {
@@ -95,7 +96,7 @@ class TestPlatformsOverride:
                     "macos": {"interpreter": "python3"},
                 },
             },
-        }
+        )
         result = resolve_runtime(project, platform_info=linux_debian)
         rt = result["runtime"]
         assert rt["type"] == "python"
@@ -103,10 +104,10 @@ class TestPlatformsOverride:
         assert "interpreter" not in rt
 
     def test_subtype_match_overrides_general(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "platforms": {
                     "linux": {
@@ -115,15 +116,15 @@ class TestPlatformsOverride:
                     }
                 },
             },
-        }
+        )
         result = resolve_runtime(project, platform_info=linux_debian)
         assert result["runtime"]["script_path"] == "debian.sh"
 
     def test_subtype_fallback_to_general(self, linux_arch, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "platforms": {
                     "linux": {
@@ -132,7 +133,7 @@ class TestPlatformsOverride:
                     }
                 },
             },
-        }
+        )
         result = resolve_runtime(project, platform_info=linux_arch)
         assert result["runtime"]["script_path"] == "generic.sh"
 
@@ -140,47 +141,47 @@ class TestPlatformsOverride:
 class TestPreferIteration:
     def test_first_match_wins(self, linux_debian, tmp_path):
         # python is definitely on PATH (running these tests); first entry picks it.
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [
                     {"interpreter": "python"},
                     {"interpreter": "this-is-not-on-path-xyz"},
                 ],
             },
-        }
+        )
         result = resolve_runtime(project, platform_info=linux_debian)
         assert result["runtime"]["interpreter"] == "python"
 
     def test_fallthrough_to_second_entry(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [
                     {"interpreter": "this-is-not-on-path-xyz"},
                     {"interpreter": "python"},
                 ],
             },
-        }
+        )
         result = resolve_runtime(project, platform_info=linux_debian)
         assert result["runtime"]["interpreter"] == "python"
 
     def test_no_entry_matches_raises(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [
                     {"interpreter": "this-is-not-on-path-xyz"},
                     {"interpreter": "also-not-on-path-abc"},
                 ],
             },
-        }
+        )
         with pytest.raises(NoRuntimeResolutionError) as exc:
             resolve_runtime(project, platform_info=linux_debian)
         msg = str(exc.value)
@@ -191,17 +192,17 @@ class TestPreferIteration:
     def test_script_path_must_exist(self, linux_debian, tmp_path):
         # First entry declares a script that doesn't exist; second has no script_path
         # but an interpreter on PATH (python).
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [
                     {"interpreter": "python", "script_path": "does-not-exist.py"},
                     {"interpreter": "python"},
                 ],
             },
-        }
+        )
         result = resolve_runtime(project, platform_info=linux_debian)
         # Second entry picked (no script_path precondition to fail)
         assert result["runtime"]["interpreter"] == "python"
@@ -210,31 +211,31 @@ class TestPreferIteration:
     def test_script_path_absolute_resolves(self, linux_debian, tmp_path):
         real_script = tmp_path / "real.py"
         real_script.write_text("# test")
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [
                     {"interpreter": "python", "script_path": str(real_script)},
                 ],
             },
-        }
+        )
         result = resolve_runtime(project, platform_info=linux_debian)
         assert result["runtime"]["script_path"] == str(real_script)
 
     def test_selected_entry_merged_into_effective(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "interpreter_args": ["-u"],  # base field preserved
                 "prefer": [
                     {"interpreter": "python"},
                 ],
             },
-        }
+        )
         result = resolve_runtime(project, platform_info=linux_debian)
         rt = result["runtime"]
         assert rt["interpreter"] == "python"
@@ -244,10 +245,10 @@ class TestPreferIteration:
 
 class TestDetectWhenInPrefer:
     def test_detect_when_fails_skips_entry(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [
                     {
@@ -257,17 +258,17 @@ class TestDetectWhenInPrefer:
                     {"interpreter": "python"},
                 ],
             },
-        }
+        )
         result = resolve_runtime(project, platform_info=linux_debian)
         # First entry's detect_when didn't match on linux, fell through
         assert result["runtime"]["interpreter"] == "python"
         assert "detect_when" not in result["runtime"]
 
     def test_detect_when_passes_and_preconditions_pass(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [
                     {
@@ -276,15 +277,15 @@ class TestDetectWhenInPrefer:
                     },
                 ],
             },
-        }
+        )
         result = resolve_runtime(project, platform_info=linux_debian)
         assert result["runtime"]["interpreter"] == "python"
 
     def test_detect_when_passes_but_preconditions_fail(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [
                     {
@@ -293,17 +294,17 @@ class TestDetectWhenInPrefer:
                     },
                 ],
             },
-        }
+        )
         with pytest.raises(NoRuntimeResolutionError):
             resolve_runtime(project, platform_info=linux_debian)
 
 
 class TestPlatformsPlusPreferComposed:
     def test_platforms_override_then_prefer(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "platforms": {
                     "linux": {
@@ -318,15 +319,15 @@ class TestPlatformsPlusPreferComposed:
                     },
                 },
             },
-        }
+        )
         result = resolve_runtime(project, platform_info=linux_debian)
         assert result["runtime"]["interpreter"] == "python"
 
     def test_base_prefer_replaced_by_platform_prefer(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [
                     {"interpreter": "generic-interp-not-on-path"},
@@ -337,75 +338,75 @@ class TestPlatformsPlusPreferComposed:
                     },
                 },
             },
-        }
+        )
         result = resolve_runtime(project, platform_info=linux_debian)
         assert result["runtime"]["interpreter"] == "python"
 
 
 class TestSchemaVersionCheck:
     def test_unsupported_version_raises(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "_schema_version": "999",
                 "type": "python",
                 "script_path": "tool.py",
             },
-        }
+        )
         with pytest.raises(UnsupportedSchemaVersionError):
             resolve_runtime(project, platform_info=linux_debian)
 
     def test_version_1_passes(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "_schema_version": "1",
                 "type": "python",
                 "script_path": "tool.py",
             },
-        }
+        )
         result = resolve_runtime(project, platform_info=linux_debian)
         assert result["runtime"]["type"] == "python"
 
     def test_no_version_defaults_and_passes(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {"type": "python", "script_path": "tool.py"},
-        }
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={"type": "python", "script_path": "tool.py"},
+        )
         result = resolve_runtime(project, platform_info=linux_debian)
         assert result["runtime"]["type"] == "python"
 
 
 class TestProjectNotMutated:
     def test_original_project_unchanged(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "platforms": {"linux": {"interpreter": "python"}},
             },
-        }
-        original_runtime = dict(project["runtime"])
-        original_platforms = dict(project["runtime"]["platforms"])
+        )
+        original_runtime = dict(project.runtime)
+        original_platforms = dict(project.runtime["platforms"])
         _ = resolve_runtime(project, platform_info=linux_debian)
-        assert project["runtime"] == original_runtime
-        assert project["runtime"]["platforms"] == original_platforms
+        assert project.runtime == original_runtime
+        assert project.runtime["platforms"] == original_platforms
 
 
 class TestErrorMessageQuality:
     def test_trace_includes_platform_info(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [{"interpreter": "not-a-real-cmd-xyz"}],
             },
-        }
+        )
         with pytest.raises(NoRuntimeResolutionError) as exc:
             resolve_runtime(project, platform_info=linux_debian)
         msg = str(exc.value)
@@ -414,10 +415,10 @@ class TestErrorMessageQuality:
         assert "x86_64" in msg
 
     def test_trace_lists_each_attempt(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [
                     {"interpreter": "fake-one"},
@@ -425,7 +426,7 @@ class TestErrorMessageQuality:
                     {"interpreter": "fake-three"},
                 ],
             },
-        }
+        )
         with pytest.raises(NoRuntimeResolutionError) as exc:
             resolve_runtime(project, platform_info=linux_debian)
         msg = str(exc.value)
@@ -434,14 +435,14 @@ class TestErrorMessageQuality:
         assert "fake-three" in msg
 
     def test_trace_includes_fix_hint(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [{"interpreter": "not-real-xyz"}],
             },
-        }
+        )
         with pytest.raises(NoRuntimeResolutionError) as exc:
             resolve_runtime(project, platform_info=linux_debian)
         msg = str(exc.value).lower()
@@ -450,14 +451,14 @@ class TestErrorMessageQuality:
 
 class TestInvalidPreferType:
     def test_non_list_prefer_raises(self, linux_debian, tmp_path):
-        project = {
-            "name": "mytool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="mytool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": "not a list",
             },
-        }
+        )
         with pytest.raises(ValueError):
             resolve_runtime(project, platform_info=linux_debian)
 
@@ -474,28 +475,28 @@ class TestDispatchToolCatchesResolutionError:
     def test_dispatch_tool_returns_1_on_no_resolution(self, tmp_path, capsys):
         from dazzlecmd.cli import dispatch_tool
 
-        project = {
-            "name": "unresolvable",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="unresolvable",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [{"interpreter": "definitely-not-on-path-xyz-12345"}],
             },
-        }
+        )
         result = dispatch_tool(project, [])
         assert result == 1
 
     def test_dispatch_tool_prints_clean_error_without_traceback(self, tmp_path, capsys):
         from dazzlecmd.cli import dispatch_tool
 
-        project = {
-            "name": "unresolvable",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="unresolvable",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [{"interpreter": "definitely-not-on-path-xyz-12345"}],
             },
-        }
+        )
         dispatch_tool(project, [])
         captured = capsys.readouterr()
         # Error trace content is present
@@ -509,15 +510,15 @@ class TestDispatchToolCatchesResolutionError:
     def test_dispatch_tool_catches_unsupported_schema_version(self, tmp_path, capsys):
         from dazzlecmd.cli import dispatch_tool
 
-        project = {
-            "name": "bad-schema",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="bad-schema",
+            _dir=str(tmp_path),
+            runtime={
                 "_schema_version": "999",
                 "type": "python",
                 "script_path": "tool.py",
             },
-        }
+        )
         result = dispatch_tool(project, [])
         captured = capsys.readouterr()
         assert result == 1
@@ -528,14 +529,14 @@ class TestDispatchToolCatchesResolutionError:
         """BUG-4 regression: UnresolvedTemplateVariableError must not escape as traceback."""
         from dazzlecmd.cli import dispatch_tool
 
-        project = {
-            "name": "broken",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="broken",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "python",
                 "interpreter": "{{undefined}}/python",
             },
-        }
+        )
         result = dispatch_tool(project, [])
         captured = capsys.readouterr()
         assert result == 1
@@ -547,15 +548,18 @@ class TestDispatchToolCatchesResolutionError:
         """BUG-4 regression: TemplateRecursionError must not escape as traceback."""
         from dazzlecmd.cli import dispatch_tool
 
-        project = {
-            "name": "cyclic",
-            "_dir": str(tmp_path),
-            "_vars": {"a": "{{b}}", "b": "{{a}}"},
-            "runtime": {
+        # _vars is a _-prefixed manifest key; pass via model_extra using the
+        # legacy-key shim by providing it as a keyword argument to make_tool.
+        project = make_tool(
+            name="cyclic",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "python",
                 "interpreter": "{{a}}/python",
             },
-        }
+        )
+        # Set _vars via the shim so it lands in model_extra where resolve_runtime reads it.
+        project["_vars"] = {"a": "{{b}}", "b": "{{a}}"}
         result = dispatch_tool(project, [])
         captured = capsys.readouterr()
         assert result == 1
@@ -573,12 +577,12 @@ class TestDispatchToolCatchesResolutionError:
         (tmp_path / "runtime").mkdir()
         (tmp_path / "runtime" / "kit__mytool.json").write_text("{not valid json")
 
-        project = {
-            "name": "mytool",
-            "_fqcn": "kit:mytool",
-            "_dir": str(tmp_path),
-            "runtime": {"type": "python", "script_path": "tool.py"},
-        }
+        project = make_tool(
+            name="mytool",
+            _fqcn="kit:mytool",
+            _dir=str(tmp_path),
+            runtime={"type": "python", "script_path": "tool.py"},
+        )
         result = dispatch_tool(project, [])
         captured = capsys.readouterr()
         assert result == 1

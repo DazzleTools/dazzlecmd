@@ -12,6 +12,7 @@ from dazzlecmd_lib.setup_resolve import resolve_setup_block
 from dazzlecmd_lib.registry import resolve_runtime
 from dazzlecmd_lib.platform_detect import PlatformInfo
 from dazzlecmd_lib.schema_version import UnsupportedSchemaVersionError
+from dazzlecmd_lib.testing import make_tool
 
 
 @pytest.fixture
@@ -170,10 +171,10 @@ class TestSetupOverrideMalformed:
 
 class TestRuntimeOverrideBasic:
     def test_no_override_file_no_change(self, override_root, linux_debian, tmp_path):
-        project = {
-            "name": "t", "_fqcn": "kit:t", "_dir": str(tmp_path),
-            "runtime": {"type": "python", "script_path": "tool.py"},
-        }
+        project = make_tool(
+            name="t", _fqcn="kit:t", _dir=str(tmp_path),
+            runtime={"type": "python", "script_path": "tool.py"},
+        )
         resolved = resolve_runtime(project, platform_info=linux_debian)
         assert resolved["runtime"]["type"] == "python"
         assert resolved["runtime"].get("interpreter") is None
@@ -182,10 +183,10 @@ class TestRuntimeOverrideBasic:
         _write_override(override_root, "runtime", "kit:t", {
             "interpreter": "/opt/my-venv/bin/python",
         })
-        project = {
-            "name": "t", "_fqcn": "kit:t", "_dir": str(tmp_path),
-            "runtime": {"type": "python", "script_path": "tool.py"},
-        }
+        project = make_tool(
+            name="t", _fqcn="kit:t", _dir=str(tmp_path),
+            runtime={"type": "python", "script_path": "tool.py"},
+        )
         resolved = resolve_runtime(project, platform_info=linux_debian)
         assert resolved["runtime"]["interpreter"] == "/opt/my-venv/bin/python"
 
@@ -195,15 +196,15 @@ class TestRuntimeOverrideVarsMerge:
         _write_override(override_root, "runtime", "kit:t", {
             "_vars": {"venv_path": "/opt/user-venv"},
         })
-        project = {
-            "name": "t", "_fqcn": "kit:t", "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _fqcn="kit:t", _dir=str(tmp_path),
+            runtime={
                 "type": "python",
                 "_vars": {"venv_path": ".venv"},
                 "interpreter": "{{venv_path}}/bin/python",
                 "script_path": "tool.py",
             },
-        }
+        )
         resolved = resolve_runtime(project, platform_info=linux_debian)
         assert resolved["runtime"]["interpreter"] == "/opt/user-venv/bin/python"
 
@@ -215,10 +216,10 @@ class TestRuntimeOverrideIsolationFromSetup:
         _write_override(override_root, "setup", "kit:t", {
             "command": "setup override",
         })
-        project = {
-            "name": "t", "_fqcn": "kit:t", "_dir": str(tmp_path),
-            "runtime": {"type": "python", "script_path": "tool.py"},
-        }
+        project = make_tool(
+            name="t", _fqcn="kit:t", _dir=str(tmp_path),
+            runtime={"type": "python", "script_path": "tool.py"},
+        )
         resolved = resolve_runtime(project, platform_info=linux_debian)
         # Runtime unchanged
         assert resolved["runtime"] == {"type": "python", "script_path": "tool.py"}
@@ -243,14 +244,14 @@ class TestRuntimeOverridePlatforms:
                 "linux": {"debian": {"interpreter": "/usr/bin/python3.11"}},
             },
         })
-        project = {
-            "name": "t", "_fqcn": "kit:t", "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _fqcn="kit:t", _dir=str(tmp_path),
+            runtime={
                 "type": "python",
                 "script_path": "tool.py",
                 "platforms": {"linux": {"general": {"interpreter": "/usr/bin/python3"}}},
             },
-        }
+        )
         resolved = resolve_runtime(project, platform_info=linux_debian)
         # Override's debian branch wins over manifest's general
         assert resolved["runtime"]["interpreter"] == "/usr/bin/python3.11"
@@ -261,16 +262,16 @@ class TestRuntimeOverridePrefer:
         _write_override(override_root, "runtime", "kit:t", {
             "prefer": [{"interpreter": "python"}],
         })
-        project = {
-            "name": "t", "_fqcn": "kit:t", "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="t", _fqcn="kit:t", _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [
                     {"interpreter": "not-on-path-1"},
                     {"interpreter": "not-on-path-2"},
                 ],
             },
-        }
+        )
         # Deep-merge: arrays REPLACED. Override's prefer wins entirely.
         resolved = resolve_runtime(project, platform_info=linux_debian)
         assert resolved["runtime"]["interpreter"] == "python"
@@ -282,11 +283,11 @@ class TestCrossLayerIndependence:
         _write_override(override_root, "runtime", "kit:t", {
             "interpreter": "/user/python",
         })
-        project = {
-            "name": "t", "_fqcn": "kit:t", "_dir": str(tmp_path),
-            "setup": {"command": "default setup"},
-            "runtime": {"type": "python", "script_path": "tool.py"},
-        }
+        project = make_tool(
+            name="t", _fqcn="kit:t", _dir=str(tmp_path),
+            setup={"command": "default setup"},
+            runtime={"type": "python", "script_path": "tool.py"},
+        )
         setup_result = resolve_setup_block(project, platform_info=linux_debian)
         runtime_result = resolve_runtime(project, platform_info=linux_debian)
         assert setup_result["command"] == "user setup"

@@ -66,7 +66,7 @@ def _setup_required_message(project, missing_what):
     """Build a SetupRequiredError message for the given project.
 
     Args:
-        project: The project dict (must contain ``_fqcn`` or ``name`` and
+        project: The project entity (must expose ``fqcn``/``name`` and
             optionally ``setup``).
         missing_what: One-line description of what was missing (e.g.
             ``"Interpreter not found: .venv/Scripts/python.exe"``).
@@ -74,8 +74,8 @@ def _setup_required_message(project, missing_what):
     Returns:
         Pre-formatted multi-line message string ready for stderr.
     """
-    fqcn = project.get("_fqcn") or project.get("name", "?")
-    has_setup = bool(project.get("setup"))
+    fqcn = project.fqcn or project.name or "?"
+    has_setup = bool(project.setup)
     if has_setup:
         hint = f"Run: dz setup {fqcn}"
     else:
@@ -133,7 +133,7 @@ class RunnerRegistry:
             return factory(project)
 
         print(
-            f"Warning: Unknown runtime type '{runtime_type}' for {project.get('name', '?')}",
+            f"Warning: Unknown runtime type '{runtime_type}' for {project.name or '?'}",
             file=sys.stderr,
         )
         return None
@@ -205,7 +205,7 @@ def make_python_runner(project):
        b. Flat mode: import the script basename with its parent directory
           on ``sys.path``.
     """
-    runtime = project.get("runtime", {})
+    runtime = project.runtime
     interpreter = runtime.get("interpreter")
     venv = runtime.get("venv")
 
@@ -225,13 +225,13 @@ def make_python_runner(project):
     if interpreter:
         return _make_python_interpreter_runner(project, interpreter)
 
-    if project.get("pass_through", False):
+    if project.pass_through:
         return make_subprocess_runner(project)
 
     entry_point = runtime.get("entry_point", "main")
     script_path = runtime.get("script_path")
     module_path = runtime.get("module")
-    tool_dir = project["_dir"]
+    tool_dir = project.directory
 
     def runner(argv):
         if script_path:
@@ -297,7 +297,7 @@ def make_python_runner(project):
                 return 1
 
             old_argv = sys.argv
-            sys.argv = [project["name"]] + list(argv)
+            sys.argv = [project.name] + list(argv)
             try:
                 result = func(argv) if _accepts_args(func) else func()
                 return result if isinstance(result, int) else 0
@@ -334,10 +334,10 @@ def _make_python_interpreter_runner(project, interpreter):
     from subprocess -- caught by cli.dispatch_tool's generic handler and
     printed to stderr.
     """
-    runtime = project.get("runtime", {})
+    runtime = project.runtime
     script_path = runtime.get("script_path")
     module_path = runtime.get("module")
-    tool_dir = project["_dir"]
+    tool_dir = project.directory
 
     def _resolve_interpreter(interp):
         if not interp:
@@ -373,8 +373,8 @@ def _make_python_interpreter_runner(project, interpreter):
                         project,
                         f"Interpreter not found: {resolved_interp}",
                     ),
-                    fqcn=project.get("_fqcn") or project.get("name"),
-                    has_setup=bool(project.get("setup")),
+                    fqcn=project.fqcn or project.name,
+                    has_setup=bool(project.setup),
                 )
 
         # Module-path form: python -m package.module args
@@ -388,15 +388,15 @@ def _make_python_interpreter_runner(project, interpreter):
                         project,
                         f"Interpreter not found: {resolved_interp}",
                     ),
-                    fqcn=project.get("_fqcn") or project.get("name"),
-                    has_setup=bool(project.get("setup")),
+                    fqcn=project.fqcn or project.name,
+                    has_setup=bool(project.setup),
                 )
             return result.returncode
 
         if not script_path:
             print(
                 f"Error: runtime.interpreter declared without script_path or module "
-                f"for {project.get('name', '?')}",
+                f"for {project.name or '?'}",
                 file=sys.stderr,
             )
             return 1
@@ -420,8 +420,8 @@ def _make_python_interpreter_runner(project, interpreter):
                     project,
                     f"Interpreter not found: {resolved_interp}",
                 ),
-                fqcn=project.get("_fqcn") or project.get("name"),
-                has_setup=bool(project.get("setup")),
+                fqcn=project.fqcn or project.name,
+                has_setup=bool(project.setup),
             )
         return result.returncode
 
@@ -435,10 +435,10 @@ def make_subprocess_runner(project):
     tools with relative imports, and script mode (``python script.py``)
     for flat scripts.
     """
-    runtime = project.get("runtime", {})
+    runtime = project.runtime
     script_path = runtime.get("script_path")
     module_path = runtime.get("module")
-    tool_dir = project["_dir"]
+    tool_dir = project.directory
 
     def runner(argv):
         use_module = module_path
@@ -459,7 +459,7 @@ def make_subprocess_runner(project):
             return result.returncode
 
         if not script_path:
-            print(f"Error: No script_path for pass-through tool {project['name']}", file=sys.stderr)
+            print(f"Error: No script_path for pass-through tool {project.name}", file=sys.stderr)
             return 1
         full_path = os.path.join(tool_dir, script_path)
         if not os.path.isfile(full_path):
@@ -602,24 +602,24 @@ def make_shell_runner(project):
           the shell. No return to dz. Platform caveat: on Windows, Python
           emulates exec by spawning and exiting, so PIDs differ.
     """
-    runtime = project.get("runtime", {})
+    runtime = project.runtime
     script_path = runtime.get("script_path")
     shell = runtime.get("shell", "bash")
     shell_args = runtime.get("shell_args")
     shell_env = runtime.get("shell_env")
     interactive = runtime.get("interactive", False)
-    tool_dir = project["_dir"]
+    tool_dir = project.directory
 
     def runner(argv):
         if not script_path:
-            print(f"Error: No script_path for shell tool {project['name']}", file=sys.stderr)
+            print(f"Error: No script_path for shell tool {project.name}", file=sys.stderr)
             return 1
 
         profile = SHELL_PROFILES.get(shell)
         if profile is None:
             supported = ", ".join(sorted(SHELL_PROFILES.keys()))
             print(
-                f"Error: Unknown shell '{shell}' for {project['name']}. "
+                f"Error: Unknown shell '{shell}' for {project.name}. "
                 f"Supported shells: {supported}. "
                 f"For scripting-language interpreters (perl, ruby, lua, "
                 f"etc.), use runtime.type: \"script\" with interpreter: "
@@ -659,7 +659,7 @@ def make_shell_runner(project):
             env_args = shell_env.get("args", [])
             if not env_script:
                 print(
-                    f"Error: shell_env must include 'script' field for {project['name']}",
+                    f"Error: shell_env must include 'script' field for {project.name}",
                     file=sys.stderr,
                 )
                 return 1
@@ -748,15 +748,15 @@ def make_script_runner(project):
     When absent, dispatches as ``[interpreter, script, args]`` (original
     behavior preserved).
     """
-    runtime = project.get("runtime", {})
+    runtime = project.runtime
     script_path = runtime.get("script_path")
     interpreter = runtime.get("interpreter", "python")
     interpreter_args = runtime.get("interpreter_args", [])
-    tool_dir = project["_dir"]
+    tool_dir = project.directory
 
     def runner(argv):
         if not script_path:
-            print(f"Error: No script_path for script tool {project['name']}", file=sys.stderr)
+            print(f"Error: No script_path for script tool {project.name}", file=sys.stderr)
             return 1
         full_path = os.path.join(tool_dir, script_path)
         if not os.path.isfile(full_path):
@@ -795,14 +795,14 @@ def make_binary_runner(project):
             }
         }
     """
-    runtime = project.get("runtime", {})
+    runtime = project.runtime
     script_path = runtime.get("script_path")
     dev_command = runtime.get("dev_command")
-    tool_dir = project["_dir"]
+    tool_dir = project.directory
 
     def runner(argv):
         if not script_path:
-            print(f"Error: No binary path for {project['name']}", file=sys.stderr)
+            print(f"Error: No binary path for {project.name}", file=sys.stderr)
             return 1
         full_path = os.path.join(tool_dir, script_path)
 
@@ -888,13 +888,13 @@ def make_node_runner(project):
     (``--allow-read``), node memory flags (``--max-old-space-size=4096``),
     bun options, etc.
     """
-    runtime = project.get("runtime", {})
+    runtime = project.runtime
     script_path = runtime.get("script_path")
     npm_script = runtime.get("npm_script")
     npx_target = runtime.get("npx")
     interpreter = runtime.get("interpreter")
     interpreter_args = runtime.get("interpreter_args", [])
-    tool_dir = project["_dir"]
+    tool_dir = project.directory
 
     # Validate mutual exclusion: exactly one dispatch mode
     declared = [
@@ -904,7 +904,7 @@ def make_node_runner(project):
     if len(declared) == 0:
         def error_runner(argv):
             print(
-                f"Error: node runtime for {project['name']} declares no "
+                f"Error: node runtime for {project.name} declares no "
                 f"dispatch mode. Set exactly one of: script_path, npm_script, npx.",
                 file=sys.stderr,
             )
@@ -913,7 +913,7 @@ def make_node_runner(project):
     if len(declared) > 1:
         def error_runner(argv):
             print(
-                f"Error: node runtime for {project['name']} declares multiple "
+                f"Error: node runtime for {project.name} declares multiple "
                 f"dispatch modes ({', '.join(declared)}). Set exactly one of: "
                 f"script_path, npm_script, npx.",
                 file=sys.stderr,
@@ -964,7 +964,7 @@ def make_node_runner(project):
         if profile is None:
             print(
                 f"Warning: Unknown node interpreter '{effective_interpreter}' "
-                f"for {project['name']}. Dispatching as "
+                f"for {project.name}. Dispatching as "
                 f"'{effective_interpreter} <args> <script> <argv>'. "
                 f"Known interpreters: {', '.join(sorted(NODE_INTERPRETERS.keys()))}.",
                 file=sys.stderr,
@@ -1033,7 +1033,7 @@ def _format_trace_as_error(trace, project):
     DATA is shared but RENDERING is per-layer. The setup layer will have its
     own renderer with install-flavored phrasing.
     """
-    name = project.get("name", "?")
+    name = project.name or "?"
     pi = trace.platform_info
     lines = [
         f"No runtime dispatch matched for {name!r} on this host.",
@@ -1085,7 +1085,7 @@ def resolve_runtime(project, *, platform_info=None):
             matches the current host.
         UnsupportedSchemaVersionError: when ``_schema_version`` is unsupported.
     """
-    runtime = project.get("runtime", {})
+    runtime = project.runtime
     if not isinstance(runtime, dict) or not runtime:
         return project
 
@@ -1095,7 +1095,7 @@ def resolve_runtime(project, *, platform_info=None):
     # Override wins on collision; permissive scoping (override can introduce
     # new subtype branches or prefer entries the manifest didn't declare).
     # Missing override file = no change.
-    fqcn = project.get("_fqcn")
+    fqcn = project.fqcn
     if fqcn:
         override = load_override("runtime", fqcn)
         if override:
@@ -1110,13 +1110,13 @@ def resolve_runtime(project, *, platform_info=None):
 
     # Schema version check (cheap; runs on every dispatch)
     check_schema_version(
-        runtime, context=f"runtime for {project.get('name', '?')}"
+        runtime, context=f"runtime for {project.name or '?'}"
     )
 
     has_platforms = "platforms" in runtime
     has_prefer = "prefer" in runtime
     has_runtime_vars = isinstance(runtime.get("_vars"), dict) and runtime["_vars"]
-    has_manifest_vars = isinstance(project.get("_vars"), dict) and project["_vars"]
+    has_manifest_vars = isinstance(project.get("_vars"), dict) and project.get("_vars")
     # Even without _vars declarations anywhere, a stray `{{name}}` reference
     # in the runtime block must surface as UnresolvedTemplateVariableError at
     # resolve time -- not as a cryptic "interpreter '{{x}}' not found" at
@@ -1158,7 +1158,7 @@ def resolve_runtime(project, *, platform_info=None):
             raise ValueError(
                 f"runtime.prefer must be a list, got {type(prefer).__name__}"
             )
-        tool_dir = project.get("_dir", "")
+        tool_dir = project.directory or ""
         trace = ResolutionTrace(platform_info=platform_info, layer="runtime")
 
         for i, entry in enumerate(prefer):
@@ -1260,19 +1260,19 @@ def make_docker_runner(project):
     exit code. Missing ``image`` field, missing docker binary, or unreachable
     daemon each surface a clean error with exit code 1.
     """
-    runtime = project.get("runtime", {})
+    runtime = project.runtime
     image = runtime.get("image")
     volumes = runtime.get("volumes") or []
     env = runtime.get("env") or {}
     env_passthrough = runtime.get("env_passthrough") or []
     docker_args = runtime.get("docker_args") or []
-    tool_dir = project.get("_dir", "")
+    tool_dir = project.directory or ""
 
     if not image:
         def error_runner(argv):
             print(
                 f"Error: runtime.image required for docker runtime "
-                f"({project.get('name', '?')})",
+                f"({project.name or '?'})",
                 file=sys.stderr,
             )
             return 1
@@ -1306,7 +1306,7 @@ def make_docker_runner(project):
                 )
             return 1
         if not check.stdout.strip():
-            fqcn = project.get("_fqcn", project.get("name", "?"))
+            fqcn = project.fqcn or project.name or "?"
             print(
                 f"Error: Docker image {image!r} not found locally.\n"
                 f"       Try: dz setup {fqcn}",
@@ -1331,7 +1331,7 @@ def make_docker_runner(project):
             if not host or not container:
                 print(
                     f"Error: runtime.volumes entry missing 'host' or "
-                    f"'container' ({project.get('name', '?')})",
+                    f"'container' ({project.name or '?'})",
                     file=sys.stderr,
                 )
                 return 1

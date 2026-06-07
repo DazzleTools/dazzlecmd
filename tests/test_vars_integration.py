@@ -17,6 +17,7 @@ from dazzlecmd_lib.templates import (
     UnresolvedTemplateVariableError,
     TemplateRecursionError,
 )
+from dazzlecmd_lib.testing import make_tool
 
 
 @pytest.fixture
@@ -207,50 +208,50 @@ class TestRuntimeVars:
     def test_manifest_top_vars_in_runtime(self, linux_debian, tmp_path):
         script = tmp_path / "tool.py"
         script.write_text("")
-        project = {
-            "name": "tool",
-            "_dir": str(tmp_path),
-            "_vars": {"venv_bin": ".venv/bin"},
-            "runtime": {
+        project = make_tool(
+            name="tool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "python",
                 "script_path": "tool.py",
                 "platforms": {
                     "linux": {"interpreter": "{{venv_bin}}/python"}
                 }
-            }
-        }
+            },
+        )
+        project["_vars"] = {"venv_bin": ".venv/bin"}
         resolved = resolve_runtime(project, platform_info=linux_debian)
         assert resolved["runtime"]["interpreter"] == ".venv/bin/python"
 
     def test_runtime_vars_local_to_runtime_block(self, linux_debian, tmp_path):
         script = tmp_path / "tool.py"
         script.write_text("")
-        project = {
-            "name": "tool",
-            "_dir": str(tmp_path),
-            "runtime": {
+        project = make_tool(
+            name="tool",
+            _dir=str(tmp_path),
+            runtime={
                 "_vars": {"my_interp": "python3"},
                 "type": "python",
                 "script_path": "tool.py",
                 "platforms": {
                     "linux": {"interpreter": "{{my_interp}}"}
                 }
-            }
-        }
+            },
+        )
         resolved = resolve_runtime(project, platform_info=linux_debian)
         assert resolved["runtime"]["interpreter"] == "python3"
 
     def test_setup_vars_NOT_visible_in_runtime(self, linux_debian, tmp_path):
         """setup._vars is scoped to setup -- runtime can't see them."""
-        project = {
-            "name": "tool",
-            "_dir": str(tmp_path),
-            "setup": {"_vars": {"x": "setup-only"}, "command": "echo {{x}}"},
-            "runtime": {
+        project = make_tool(
+            name="tool",
+            _dir=str(tmp_path),
+            setup={"_vars": {"x": "setup-only"}, "command": "echo {{x}}"},
+            runtime={
                 "type": "python",
                 "interpreter": "{{x}}"   # should fail -- x not in runtime scope
-            }
-        }
+            },
+        )
         with pytest.raises(UnresolvedTemplateVariableError):
             resolve_runtime(project, platform_info=linux_debian)
 
@@ -260,18 +261,18 @@ class TestRuntimePreferSubstitution:
         self, linux_debian, tmp_path
     ):
         """Prefer iteration must check preconditions on substituted values."""
-        project = {
-            "name": "tool",
-            "_dir": str(tmp_path),
-            "_vars": {"py": "python"},   # python is on PATH
-            "runtime": {
+        project = make_tool(
+            name="tool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [
                     {"interpreter": "definitely-not-on-path"},
                     {"interpreter": "{{py}}"}   # substituted to "python"
                 ]
-            }
-        }
+            },
+        )
+        project["_vars"] = {"py": "python"}   # python is on PATH
         resolved = resolve_runtime(project, platform_info=linux_debian)
         # Second entry should win after substitution: interpreter=python
         assert resolved["runtime"]["interpreter"] == "python"
@@ -279,11 +280,10 @@ class TestRuntimePreferSubstitution:
     def test_detect_when_values_substituted(self, linux_debian, tmp_path):
         marker = tmp_path / ".marker"
         marker.write_text("")
-        project = {
-            "name": "tool",
-            "_dir": str(tmp_path),
-            "_vars": {"marker_path": str(marker)},
-            "runtime": {
+        project = make_tool(
+            name="tool",
+            _dir=str(tmp_path),
+            runtime={
                 "type": "script",
                 "prefer": [
                     {
@@ -291,8 +291,9 @@ class TestRuntimePreferSubstitution:
                         "interpreter": "python"
                     }
                 ]
-            }
-        }
+            },
+        )
+        project["_vars"] = {"marker_path": str(marker)}
         resolved = resolve_runtime(project, platform_info=linux_debian)
         assert resolved["runtime"]["interpreter"] == "python"
 
@@ -302,26 +303,23 @@ class TestCrossBlockSharing:
         """The primary use case -- venv path shared between install and dispatch."""
         script = tmp_path / "tool.py"
         script.write_text("")
-        project = {
-            "name": "tool",
-            "_dir": str(tmp_path),
-            "_vars": {
-                "venv_dir": ".venv",
-                "venv_bin": "{{venv_dir}}/bin"
-            },
-            "setup": {
+        project = make_tool(
+            name="tool",
+            _dir=str(tmp_path),
+            setup={
                 "platforms": {
                     "linux": {"command": "python3 -m venv {{venv_dir}} && {{venv_bin}}/pip install -r requirements.txt"}
                 }
             },
-            "runtime": {
+            runtime={
                 "type": "python",
                 "script_path": "tool.py",
                 "platforms": {
                     "linux": {"interpreter": "{{venv_bin}}/python"}
                 }
-            }
-        }
+            },
+        )
+        project["_vars"] = {"venv_dir": ".venv", "venv_bin": "{{venv_dir}}/bin"}
         setup_result = resolve_setup_block(project, platform_info=linux_debian)
         runtime_result = resolve_runtime(project, platform_info=linux_debian)
         assert setup_result["command"] == (
@@ -333,11 +331,11 @@ class TestCrossBlockSharing:
 class TestFastPath:
     def test_no_vars_no_platforms_no_prefer_fast_path(self, linux_debian, tmp_path):
         """Manifest without any of (_vars, platforms, prefer) returns unchanged."""
-        project = {
-            "name": "tool",
-            "_dir": str(tmp_path),
-            "runtime": {"type": "python", "script_path": "tool.py"}
-        }
+        project = make_tool(
+            name="tool",
+            _dir=str(tmp_path),
+            runtime={"type": "python", "script_path": "tool.py"},
+        )
         resolved = resolve_runtime(project, platform_info=linux_debian)
         assert resolved is project  # same reference
 

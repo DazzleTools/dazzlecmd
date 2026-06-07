@@ -4,6 +4,21 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.11] - 2026-06-07
+
+Phase 1 (DazzleEntity call-site migration) — Stage 6b cont.: `registry.py` attribute sweep (the dispatch-critical runtime-resolution + runner-factory module). Byte-identical; dispatch verified. Local-only.
+
+### Changed
+
+- `dazzlecmd_lib.registry` — entity field reads in `resolve_runtime` and the runner factories (`make_docker_runner`, `_make_subprocess_runner`, `_make_python_runner`) migrated to attribute access (`project.runtime`, `project.directory`, `project.name`, `project.pass_through`, etc.). Nested-block manipulation (`runtime`/`effective`/`selected`/`env`/`platforms`, `.pop`/`.items`/comprehensions) stays dict access. The clone-site guards (`project.model_copy() if hasattr(...) else dict(project)`) and the subsequent `project["runtime"] = ...` stay as-is — they straddle the entity-or-dict duality until the unification stage. `_vars` stays `.get("_vars")` (extra key).
+- Fixtures migrated to `make_tool`: `tests/test_registry.py`, `test_resolve_runtime.py`, `test_vars_integration.py`, `test_user_override_integration.py` (runtime-resolver classes), `test_venv_integration.py`, `test_docker_runner.py`, `test_docker_integration.py`, `test_python_runner_interpreter.py`, and `test_engine_recursive.py` (`TestModuleDispatch`) — the resolver/runner inputs the earlier fixture pass deferred.
+
+### Versions
+
+- dazzlecmd 0.8.10 -> 0.8.11 (PATCH).
+- dazzlecmd-lib 0.7.8 -> 0.7.9 (PATCH -- registry attribute sweep).
+- dazzle-dz alias -> 0.8.11; deps re-pinned to >=0.8.11 / >=0.7.9.
+
 ## [0.8.10] - 2026-06-07
 
 Phase 1 (DazzleEntity call-site migration) — Stage 6b cont.: `loader.py` attribute sweep. Byte-identical. Local-only.
@@ -2208,7 +2223,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.10...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.11...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

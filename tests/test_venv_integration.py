@@ -35,6 +35,7 @@ import pytest
 
 from dazzlecmd_lib.registry import make_python_runner, resolve_runtime
 from dazzlecmd_lib.setup_resolve import resolve_setup_block
+from dazzlecmd_lib.testing import make_tool
 
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "venv_exercise"
@@ -56,11 +57,12 @@ def venv_fixture(tmp_path_factory):
         else:
             shutil.copy2(src, work_dir / src.name)
 
-    # Build the project dict the way dazzlecmd-lib would
+    # Build the project entity the way dazzlecmd-lib would
     manifest_path = work_dir / ".dazzlecmd.json"
     with open(manifest_path, "r", encoding="utf-8") as f:
-        project = json.load(f)
-    project["_dir"] = str(work_dir)
+        manifest = json.load(f)
+    manifest["_dir"] = str(work_dir)
+    project = make_tool(**manifest)
 
     # Resolve setup for the current platform
     effective_setup = resolve_setup_block(project)
