@@ -463,10 +463,19 @@ def cmd_switch(tool_name, projects, project_root, dev_path=None,
     Returns:
         int exit code.
     """
-    # Find the tool — first in discovered projects, then by directory scan
-    matches = [p for p in projects if p["name"] == tool_name]
+    # Find the tool — first in discovered projects (by short name OR exact
+    # FQCN), then by directory scan. Exact-match only: `mode switch` rewrites a
+    # submodule, so it must act on exactly what was named and never follow the
+    # fuzzy precedence/favorites resolver to a different tool.
+    matches = [
+        p for p in projects
+        if p.name == tool_name or (p.fqcn or "") == tool_name
+    ]
     if matches:
         project = matches[0]
+        # Normalize an FQCN argument to the resolved short name so the
+        # downstream qualified-name and directory logic is unchanged.
+        tool_name = project.name
     else:
         # Tool not in discovered projects — scan directories and cache
         project = _find_undiscovered_tool(

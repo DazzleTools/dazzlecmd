@@ -8,6 +8,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.7.14] - 2026-06-07
+
+Ships with dazzlecmd v0.8.17 -- fixes two pre-existing bugs.
+
+### Fixed
+
+- `default_meta_commands.render_kit_status` filtered by the manifest `always_active` flag only, so it ignored `active_kits` / `disabled_kits`. `kit_status_handler` now passes `engine.active_kits` (the config-resolved active set) and `render_kit_status` is a pure renderer of the set it's given — matching `kit list`.
+- `mode.cmd_switch` matched `p.name == tool_name` only, so a fully-qualified name (e.g. `core:find`) wasn't accepted. It now also matches an exact `p.fqcn` (exact match only — never the fuzzy resolver, since `mode switch` rewrites a submodule) and normalizes the argument to the resolved short name. Also fixes a leftover `p["name"]` dict-shim access.
+
+### Refs
+
+Ships with dazzlecmd v0.8.17. Refs dazzlecmd #37.
+
 ## [0.7.13] - 2026-06-07
 
 Ships with dazzlecmd v0.8.16 -- Phase 1 Stage 2 cleanups. Byte-identical; no API change beyond a tightened internal contract (the functions below now require DazzleEntity inputs, which all loader/engine-produced values already are).

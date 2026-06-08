@@ -476,7 +476,7 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
     elif meta == "kit_list":
         return _cmd_kit_list(args, kits, projects, engine=engine)
     elif meta == "kit_status":
-        return _cmd_kit_status(kits)
+        return _cmd_kit_status(kits, engine=engine)
     elif meta == "kit":
         # bare "dz kit" with no subcommand
         return _cmd_kit_list(args, kits, projects, engine=engine)
@@ -768,7 +768,7 @@ def _render_virtual_kit_aliases(kit, projects, engine):
     return 0
 
 
-def _cmd_kit_status(kits):
+def _cmd_kit_status(kits, engine=None):
     """Show active kits summary.
 
     Virtual kits report 'alias(es)' instead of 'tool(s)' to reflect
@@ -777,8 +777,17 @@ def _cmd_kit_status(kits):
     + canonical kit with 12 tools don't sum to 16 unique tools because
     the 4 aliases REFER TO 4 of those canonical tools). See the
     'alias discoverability gap' note in private/claude/notes/cli/.
+
+    The active set honors the user config (``active_kits`` / ``disabled_kits``)
+    so the summary matches ``dz kit list`` — without the engine's config,
+    ``get_active_kits`` falls back to its legacy all-active default.
     """
-    active = get_active_kits(kits)
+    user_config = (
+        engine._get_user_config()
+        if engine is not None and hasattr(engine, "_get_user_config")
+        else None
+    )
+    active = get_active_kits(kits, user_config=user_config)
     print(f"Active kits: {len(active)}")
     for kit in active:
         # Prefer _kit_name (set from filename in registry pointer) over kit["name"]

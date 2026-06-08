@@ -588,6 +588,63 @@ class TestKitStatusDisplay:
         assert "legacy: 1 tool(s)" in capsys.readouterr().out
 
 
+class TestKitStatusActiveFilter:
+    """`dz kit status` must honor the user config (active_kits /
+    disabled_kits), matching `dz kit list`. Regression: `_cmd_kit_status`
+    used to call `get_active_kits(kits)` without the engine's config, so it
+    showed every discovered kit (e.g. a disabled `media` still appeared
+    under "Active kits").
+    """
+
+    def test_kit_status_excludes_disabled_kit(self, tmp_path, monkeypatch, capsys):
+        from dazzlecmd.cli import _cmd_kit_status
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(
+            json.dumps({"disabled_kits": ["dazzletools"]}), encoding="utf-8"
+        )
+        monkeypatch.setenv("DAZZLECMD_CONFIG", str(config_path))
+        engine = _engine(tmp_path, monkeypatch)
+
+        rc = _cmd_kit_status(engine.kits, engine=engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        # disabled_kits wins even over an always_active kit
+        assert "dazzletools" not in out
+        assert "core" in out
+
+    def test_kit_status_honors_active_kits_allowlist(self, tmp_path, monkeypatch, capsys):
+        from dazzlecmd.cli import _cmd_kit_status
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(
+            json.dumps({"active_kits": ["wtf"]}), encoding="utf-8"
+        )
+        monkeypatch.setenv("DAZZLECMD_CONFIG", str(config_path))
+        engine = _engine(tmp_path, monkeypatch)
+
+        rc = _cmd_kit_status(engine.kits, engine=engine)
+        assert rc == 0
+        out = capsys.readouterr().out
+        # wtf is allow-listed; core/dazzletools stay active (always_active);
+        # extra is neither -> excluded.
+        assert "wtf" in out
+        assert "extra" not in out
+
+    def test_kit_status_without_engine_shows_all(self, capsys):
+        """No engine/config -> legacy all-active fallback (back-compat)."""
+        from dazzlecmd.cli import _cmd_kit_status
+
+        kits = [
+            make_kit(_kit_name="core", name="core", always_active=True, tools=["core:a"]),
+            make_kit(_kit_name="extra", name="extra", always_active=False, tools=["extra:b"]),
+        ]
+        rc = _cmd_kit_status(kits)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "core" in out and "extra" in out
+
+
 # ---------------------------------------------------------------------------
 # dz kit list <kit> drill-in column-width parity (#48, v0.7.36)
 # ---------------------------------------------------------------------------

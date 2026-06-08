@@ -1284,14 +1284,20 @@ def render_kit_list(args, kits, projects) -> int:
     return 0
 
 
-def render_kit_status(kits) -> int:
-    """Show a summary of active kits."""
+def render_kit_status(active_kits) -> int:
+    """Show a summary of the active kits.
+
+    ``active_kits`` is the already-resolved active set (e.g.
+    ``engine.active_kits``, which honors ``active_kits`` / ``disabled_kits``
+    config); every kit passed is shown. The resolution lives in the handler
+    so this stays a pure renderer.
+    """
     _use_color = _colors.should_use_color()
 
     def _bold(s):
         return _colors.colorize(s, _colors.BOLD) if _use_color else s
 
-    active = [k for k in kits if k.always_active] or list(kits)
+    active = list(active_kits)
     print(f"Active kits: {len(active)}")
     for kit in active:
         name = kit.kit_name or kit.name
@@ -1305,7 +1311,12 @@ def kit_list_handler(args, engine, projects, kits, project_root) -> int:
 
 
 def kit_status_handler(args, engine, projects, kits, project_root) -> int:
-    return render_kit_status(kits)
+    # Use the engine's config-resolved active set (active_kits/disabled_kits),
+    # matching `kit list`; fall back to all discovered kits if unavailable.
+    active = getattr(engine, "active_kits", None)
+    if active is None:
+        active = kits
+    return render_kit_status(active)
 
 
 # ---------------------------------------------------------------------------

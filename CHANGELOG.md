@@ -4,6 +4,26 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.17] - 2026-06-07
+
+Fixes two pre-existing bugs surfaced during the engine-sweep verification (neither related to the DazzleEntity migration): `dz kit status` ignored the user's kit config, and `dz mode switch` didn't accept a fully-qualified tool name.
+
+### Fixed
+
+- `dz kit status` now honors `active_kits` / `disabled_kits` — its active set matches `dz kit list`. Root cause: `dazzlecmd.cli._cmd_kit_status` called `get_active_kits(kits)` without the engine's user config, hitting the legacy "all kits active" default. It now threads `engine._get_user_config()` through. The parallel lib renderer `dazzlecmd_lib.default_meta_commands.render_kit_status` (used by lib-based aggregators via `kit_status_handler`) had the same class of bug — it filtered by the manifest `always_active` flag only; the handler now passes `engine.active_kits` (the config-resolved set) and the renderer just displays what it's given.
+- `dz mode switch <fqcn>` now resolves an exact FQCN (e.g. `core:find`) in addition to the short name. Root cause: `dazzlecmd_lib.mode.cmd_switch` matched `p.name == tool_name` only, so an FQCN argument fell through to the undiscovered-tool directory scan and errored with "not found". It now also matches an exact `p.fqcn` and normalizes the argument to the resolved short name. Match is **exact** (short name OR exact FQCN) — `mode switch` deliberately does NOT use the fuzzy precedence/favorites resolver, since it rewrites a submodule and must act on exactly the named tool. (This also fixes a leftover `p["name"]` dict-shim access the mode.py sweep missed.)
+
+### Tests
+
+- `tests/test_cli_kit.py` — `TestKitStatusActiveFilter`: `kit status` excludes a `disabled_kits` entry (even an `always_active` one), honors an `active_kits` allowlist, and falls back to all-active when no engine/config is supplied.
+- `tests/test_mode.py` — `cmd_switch` resolves an exact FQCN argument (`core:mytool`), and an unknown FQCN still errors cleanly (no false match).
+
+### Versions
+
+- dazzlecmd 0.8.16 -> 0.8.17 (PATCH).
+- dazzlecmd-lib 0.7.13 -> 0.7.14 (PATCH -- kit-status active-filter + mode-switch FQCN fixes).
+- dazzle-dz alias -> 0.8.17; deps re-pinned to >=0.8.17 / >=0.7.14.
+
 ## [0.8.16] - 2026-06-07
 
 Phase 1 (DazzleEntity call-site migration) — Stage 2 cleanups. Byte-identical refactor: removes the last dead `else dict(...)` entity-or-dict duality guards and the `cache_manifest` dict fallback now that all entity construction flows through the loader/engine. No user-visible change.
@@ -2322,7 +2342,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.16...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.17...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

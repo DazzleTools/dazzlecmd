@@ -426,6 +426,43 @@ class TestModeSwitchEntityBehavior:
             )
             assert rc == 0
 
+    def test_switch_accepts_fqcn_argument(self):
+        """cmd_switch resolves an exact FQCN (e.g. 'core:mytool'), not just the
+        short name.
+
+        Regression: it matched ``p["name"] == tool_name`` only, so an FQCN
+        argument fell through to the undiscovered-tool directory scan and
+        errored with 'not found'. Now it also matches an exact ``p.fqcn``.
+        """
+        from dazzlecmd_lib.mode import cmd_switch, get_cached_manifest
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tool = self._make_tool_entity(tmpdir)  # name=mytool, fqcn=core:mytool
+            rc = cmd_switch(
+                "core:mytool", [tool], tmpdir,   # FQCN argument, not "mytool"
+                force_mode="publish", dry_run=True,
+                url="https://example.com/mytool.git",
+                tools_dir="projects", command="dz", schema=None,
+            )
+            assert rc == 0
+            # Resolved to the right tool: cache is keyed by its canonical FQCN.
+            cached = get_cached_manifest(tmpdir, "core:mytool")
+            assert cached is not None
+            assert cached["name"] == "mytool"
+
+    def test_switch_unknown_fqcn_still_errors(self):
+        """An FQCN that matches nothing still fails cleanly (no false match)."""
+        from dazzlecmd_lib.mode import cmd_switch
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tool = self._make_tool_entity(tmpdir)
+            rc = cmd_switch(
+                "core:ghost", [tool], tmpdir,
+                force_mode="publish", dry_run=True,
+                tools_dir="projects", command="dz", schema=None,
+            )
+            assert rc == 1
+
     def test_switch_to_dev_real_mutation_with_entity(self):
         """Non-dry-run --dev on an ENTITY actually creates the link.
 
