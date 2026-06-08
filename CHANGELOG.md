@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.19] - 2026-06-08
+
+Phase 1 (DazzleEntity migration) — Stage 4: the `wtf` consumer is migrated. Bumps the `projects/wtf` submodule pointer to wtf-windows v0.1.6-alpha, whose CLI now reads engine-produced entities via typed attribute access instead of the dict shim (19 sites in `cli.py`; wtf's own 7 smoke tests stay green). One of the two external consumers is now shim-free; `amdead` (separate repo) is the remaining one before the shim can be deleted.
+
+### Changed
+
+- `projects/wtf` submodule → wtf-windows `00c601f` (v0.1.6-alpha). wtf-specific manifest extensions (the `diagnostics` block, nested `taxonomy.tags`) correctly remain dict access; wtf now pins `dazzlecmd-lib>=0.7.15`. Local-only (held; the wtf commit is ahead of its origin until the coordinated un-hold push).
+
+### Versions
+
+- dazzlecmd 0.8.18 -> 0.8.19 (PATCH).
+- dazzlecmd-lib unchanged at 0.7.15 (submodule-pointer + consumer change, no library code change).
+- dazzle-dz alias -> 0.8.19; dep re-pinned to >=0.8.19 (lib dep stays >=0.7.15).
+
 ## [0.8.18] - 2026-06-08
 
 Phase 1 (DazzleEntity call-site migration) — Stage 3: ratchet enforcement. Phase 1 is now provably complete for in-scope production code — every key `dz` operation reaches its entities' typed fields via attribute access, with a regression gate to keep it that way.
@@ -2361,7 +2375,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.18...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.19...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
