@@ -8,6 +8,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.7.13] - 2026-06-07
+
+Ships with dazzlecmd v0.8.16 -- Phase 1 Stage 2 cleanups. Byte-identical; no API change beyond a tightened internal contract (the functions below now require DazzleEntity inputs, which all loader/engine-produced values already are).
+
+### Changed
+
+- `engine._rewrite_virtual_kit` + `registry.resolve_runtime` — dropped the dead `else dict(...)` clone-guard branches; clone+write is now `x.model_copy()` + attribute writes (`.name`/`.tools`/`.name_rewrite`/`.runtime`/...).
+- `mode.cache_manifest` — dropped the dict fallback; `clean = manifest.to_manifest()` (entity-only).
+- `mode.cmd_status` — undiscovered-tool entries are built as `Tool` entities via `build_entity`; status reads use attribute access.
+
+### Refs
+
+Ships with dazzlecmd v0.8.16. Refs dazzlecmd #37, #73, #77.
+
 ## [0.7.12] - 2026-06-07
 
 Ships with dazzlecmd v0.8.15 -- completes the `engine.py` sweep (the FQCN-index core). Byte-identical; no API change. All six production files are now entity-native.

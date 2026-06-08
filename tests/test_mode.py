@@ -177,6 +177,7 @@ class TestDiscoverProjectsCacheFallback:
         """A tool dir with no .dazzlecmd.json is found via manifest cache."""
         from dazzlecmd.loader import discover_projects
         from dazzlecmd.mode import cache_manifest
+        from dazzlecmd_lib.testing import make_tool
 
         with tempfile.TemporaryDirectory() as tmpdir:
             # Create project structure: projects/core/mytool/ (no manifest)
@@ -193,12 +194,12 @@ class TestDiscoverProjectsCacheFallback:
             assert "mytool" not in names
 
             # Cache a manifest
-            cache_manifest(tmpdir, "core:mytool", {
-                "name": "mytool",
-                "version": "1.0.0",
-                "description": "A cached tool",
-                "runtime": {"type": "python", "script_path": "mytool.py"},
-            })
+            cache_manifest(tmpdir, "core:mytool", make_tool(
+                name="mytool",
+                version="1.0.0",
+                description="A cached tool",
+                runtime={"type": "python", "script_path": "mytool.py"},
+            ))
 
             # Now discover_projects should find it via cache
             found = discover_projects(projects_dir)
@@ -249,6 +250,7 @@ class TestDiscoverProjectsCacheFallback:
         """When .dazzlecmd.json exists on disk, cache is ignored."""
         from dazzlecmd.loader import discover_projects
         from dazzlecmd.mode import cache_manifest
+        from dazzlecmd_lib.testing import make_tool
 
         with tempfile.TemporaryDirectory() as tmpdir:
             projects_dir = os.path.join(tmpdir, "projects")
@@ -265,11 +267,11 @@ class TestDiscoverProjectsCacheFallback:
                 json.dump(manifest, f)
 
             # Also cache a different version
-            cache_manifest(tmpdir, "core:mytool", {
-                "name": "mytool",
-                "version": "1.0.0",
-                "description": "Cached version",
-            })
+            cache_manifest(tmpdir, "core:mytool", make_tool(
+                name="mytool",
+                version="1.0.0",
+                description="Cached version",
+            ))
 
             found = discover_projects(projects_dir)
             project = [p for p in found if p["name"] == "mytool"][0]

@@ -919,7 +919,7 @@ class AggregatorEngine:
         for vk in local_virtual_kits:
             vk_name = vk.kit_name or vk.name
             rewritten = self._rewrite_virtual_kit(vk, kit_prefix)
-            rewritten["_kit_active"] = vk_name in active_kit_names
+            rewritten.kit_active = vk_name in active_kit_names
             collected_virtuals.append(rewritten)
 
         # Recursive discovery for nested aggregators. Each nested call
@@ -1055,22 +1055,22 @@ class AggregatorEngine:
         wtf, unambiguous from root's perspective, and unable to collide
         with dazzlecmd's own root-level virtual kits.
 
-        Returns a new dict; does not mutate ``vk``.
+        Returns a new entity; does not mutate ``vk``.
         """
-        rewritten = vk.model_copy() if hasattr(vk, "model_copy") else dict(vk)
+        rewritten = vk.model_copy()
         if not kit_prefix:
             return rewritten
 
         prefix = f"{kit_prefix}:"
         original_name = vk.kit_name or vk.name or ""
-        rewritten["name"] = f"{prefix}{original_name}"
-        rewritten["_kit_name"] = rewritten["name"]
-        rewritten["_original_name"] = original_name
+        rewritten.name = f"{prefix}{original_name}"
+        rewritten.kit_name = rewritten.name
+        rewritten.original_name = original_name
 
-        rewritten["tools"] = [
+        rewritten.tools = [
             f"{prefix}{t}" for t in (vk.tools or [])
         ]
-        rewritten["name_rewrite"] = {
+        rewritten.name_rewrite = {
             f"{prefix}{k}": v for k, v in (vk.name_rewrite or {}).items()
         }
         return rewritten

@@ -160,14 +160,10 @@ def cache_manifest(project_root, qualified_name, manifest):
     have the manifest file yet.
     """
     data = _load_full_config(project_root)
-    # Strip computed/internal keys. For a DazzleEntity use to_manifest()
-    # (drops promoted computed fields like `directory`/`kit_active` AND
-    # `_`-prefixed runtime keys); for a plain dict (undiscovered-tool path)
-    # fall back to the legacy `_`-prefix filter.
-    if hasattr(manifest, "to_manifest"):
-        clean = manifest.to_manifest()
-    else:
-        clean = {k: v for k, v in manifest.items() if not k.startswith("_")}
+    # Strip computed/internal keys. manifest is always a DazzleEntity;
+    # to_manifest() drops promoted computed fields (directory, kit_active,
+    # etc.) and any _-prefixed runtime keys.
+    clean = manifest.to_manifest()
     data["cached_manifests"][qualified_name] = clean
     _save_full_config(project_root, data)
 
@@ -353,7 +349,7 @@ def cmd_status(projects, project_root, tool_filter=None, kit_filter=None, *,
     # and cached manifests — ensures tools are visible even when their
     # remote version lacks the manifest
     all_projects = list(projects)
-    known_names = {p["name"] for p in all_projects}
+    known_names = {p.name for p in all_projects}
     data = _load_full_config(project_root)
     cached = data.get("cached_manifests", {})
 
@@ -372,32 +368,33 @@ def cmd_status(projects, project_root, tool_filter=None, kit_filter=None, *,
                     continue
                 qualified = f"{ns}:{name}"
                 if qualified in cached:
-                    entry = dict(cached[qualified])
+                    payload = dict(cached[qualified])
                 else:
-                    entry = {"name": name, "description": "(no manifest)"}
-                entry["_dir"] = tool_dir
-                entry["namespace"] = ns
-                entry.setdefault("name", name)
+                    payload = {"name": name, "description": "(no manifest)"}
+                payload["directory"] = tool_dir
+                payload["namespace"] = ns
+                payload.setdefault("name", name)
+                entry = build_entity(payload, entity_type="tool")
                 all_projects.append(entry)
                 known_names.add(name)
 
     filtered = all_projects
     if tool_filter:
-        filtered = [p for p in filtered if p["name"] == tool_filter]
+        filtered = [p for p in filtered if p.name == tool_filter]
         if not filtered:
             print(f"Tool '{tool_filter}' not found. Use '{command} list' to see "
                   "available tools.")
             return 1
     if kit_filter:
-        filtered = [p for p in filtered if p.get("namespace") == kit_filter]
+        filtered = [p for p in filtered if p.namespace == kit_filter]
 
     if not filtered:
         print("No tools found.")
         return 0
 
     # Calculate column widths
-    name_width = max(len(p["name"]) for p in filtered)
-    ns_width = max(len(p.get("namespace", "")) for p in filtered)
+    name_width = max(len(p.name) for p in filtered)
+    ns_width = max(len(p.namespace) for p in filtered)
 
     print()
     header = (f"  {'Name':<{name_width}}  {'Namespace':<{ns_width}}  "
@@ -406,14 +403,14 @@ def cmd_status(projects, project_root, tool_filter=None, kit_filter=None, *,
     print("  " + "-" * (len(header) - 2))
 
     for project in filtered:
-        tool_dir = project["_dir"]
+        tool_dir = project.directory
         state = detect_tool_state(
             tool_dir, gitmodules, project_root, tools_dir=tools_dir
         )
         label = STATE_LABELS.get(state, state)
 
-        name = project["name"]
-        ns = project.get("namespace", "")
+        name = project.name
+        ns = project.namespace
 
         # Build details column
         details = ""

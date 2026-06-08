@@ -1105,8 +1105,8 @@ def resolve_runtime(project, *, platform_info=None):
             # resolution actually runs.
             # We also need to propagate the merged runtime back to project for
             # downstream consumers.
-            project = project.model_copy() if hasattr(project, "model_copy") else dict(project)
-            project["runtime"] = runtime
+            project = project.model_copy()
+            project.runtime = runtime
 
     # Schema version check (cheap; runs on every dispatch)
     check_schema_version(
@@ -1209,8 +1209,8 @@ def resolve_runtime(project, *, platform_info=None):
         }
         effective = deep_merge(effective_without_prefer, selected_dispatch)
 
-    resolved_project = project.model_copy() if hasattr(project, "model_copy") else dict(project)
-    resolved_project["runtime"] = effective
+    resolved_project = project.model_copy()
+    resolved_project.runtime = effective
     return resolved_project
 
 

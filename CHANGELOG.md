@@ -4,6 +4,27 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.16] - 2026-06-07
+
+Phase 1 (DazzleEntity call-site migration) — Stage 2 cleanups. Byte-identical refactor: removes the last dead `else dict(...)` entity-or-dict duality guards and the `cache_manifest` dict fallback now that all entity construction flows through the loader/engine. No user-visible change.
+
+### Changed
+
+- `dazzlecmd_lib.engine._rewrite_virtual_kit` — dropped the dead `vk.model_copy() if hasattr(...) else dict(vk)` clone guard (`vk` is always an entity); migrated the `rewritten[...]` writes to attribute access (`rewritten.name`/`.kit_name`/`.original_name`/`.tools`/`.name_rewrite`, and the `rewritten.kit_active` write in `_discover_aggregator`).
+- `dazzlecmd_lib.registry.resolve_runtime` — dropped both `project.model_copy() if hasattr(...) else dict(project)` clone guards; the runtime writes are now `project.runtime = ...` / `resolved_project.runtime = ...`. (`_vars` reads stay dict access — manifest data in extra.)
+- `dazzlecmd_lib.mode.cache_manifest` — dropped the `hasattr(manifest, "to_manifest")` dict fallback; `manifest` is always a DazzleEntity, so it's now `clean = manifest.to_manifest()`.
+- `dazzlecmd_lib.mode.cmd_status` — the inline undiscovered-tool raw dict is now built as a `Tool` entity via `build_entity(..., entity_type="tool")` (legacy `_dir` → the promoted `directory` field), and the status reads migrated to attribute access (`p.name`, `p.namespace`, `p.directory`).
+
+### Tests
+
+- `tests/test_mode.py` — the two `cache_manifest` callers that passed raw dict literals now pass `make_tool(...)` entities (the dict fallback they relied on is gone).
+
+### Versions
+
+- dazzlecmd 0.8.15 -> 0.8.16 (PATCH).
+- dazzlecmd-lib 0.7.12 -> 0.7.13 (PATCH -- Stage 2 cleanups).
+- dazzle-dz alias -> 0.8.16; deps re-pinned to >=0.8.16 / >=0.7.13.
+
 ## [0.8.15] - 2026-06-07
 
 Phase 1 (DazzleEntity call-site migration) — completes the `engine.py` sweep: the FQCN-index core (`FQCNIndex.insert_canonical`, `_build_fqcn_index`) is now entity-native, after its direct-call test fixtures moved to entities (fixtures-first). With this, **all six production files are fully swept** — no typed-field dict access remains in the dispatch path. Byte-identical; suite + byte-gate green. Local-only.
@@ -2301,7 +2322,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.15...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.16...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
