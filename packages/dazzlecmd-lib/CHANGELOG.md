@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.7.15] - 2026-06-08
+
+Ships with dazzlecmd v0.8.18 -- Phase 1 Stage 3 (ratchet enforcement). Byte-identical.
+
+### Changed
+
+- `registry.RunnerRegistry.resolve` -- `project.get("runtime", {})` -> `project.runtime` (the last typed-field shim straggler on the dispatch path). With this, no in-scope production code reaches an entity's typed fields via the dict shim; a test-time ratchet gate (`tests/test_ratchet_enforcement.py` in the dazzlecmd repo) enforces it going forward.
+
+### Refs
+
+Ships with dazzlecmd v0.8.18. Refs dazzlecmd #37, #73, #77.
+
 ## [0.7.14] - 2026-06-07
 
 Ships with dazzlecmd v0.8.17 -- fixes two pre-existing bugs.

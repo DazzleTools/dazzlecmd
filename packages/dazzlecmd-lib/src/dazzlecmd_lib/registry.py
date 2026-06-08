@@ -125,7 +125,7 @@ class RunnerRegistry:
         entry matches the current host.
         """
         project = resolve_runtime(project)
-        runtime = project.get("runtime", {})
+        runtime = project.runtime
         runtime_type = runtime.get("type", "python")
 
         factory = cls._factories.get(runtime_type)

@@ -4,6 +4,25 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.18] - 2026-06-08
+
+Phase 1 (DazzleEntity call-site migration) — Stage 3: ratchet enforcement. Phase 1 is now provably complete for in-scope production code — every key `dz` operation reaches its entities' typed fields via attribute access, with a regression gate to keep it that way.
+
+### Changed
+
+- `dazzlecmd_lib.registry.RunnerRegistry.resolve` — the last typed-field shim straggler on the dispatch path: `project.get("runtime", {})` → `project.runtime` (typed field, default `{}`; byte-identical). Found by flipping the `_warn_on_shim` ratchet over the dispatch path.
+
+### Tests
+
+- `tests/test_ratchet_enforcement.py` (NEW) — drives each key operation (list, list --show all, info, tree, mode status, kit list, kit status, dispatch by short name, dispatch by FQCN) through the real CLI with `DazzleEntity._warn_on_shim` ON and asserts NO production typed-field shim `DeprecationWarning` fires. D2-safe: only dazzlecmd's own suite flips the ratchet; wtf/amdead run with it off. 9 parametrized cases.
+- `tests/one-offs/ratchet_recon.py` (NEW) — the manual end-to-end diagnostic that measures production stragglers (the in-suite gate above is its sibling).
+
+### Versions
+
+- dazzlecmd 0.8.17 -> 0.8.18 (PATCH).
+- dazzlecmd-lib 0.7.14 -> 0.7.15 (PATCH -- last dispatch-path straggler + ratchet gate).
+- dazzle-dz alias -> 0.8.18; deps re-pinned to >=0.8.18 / >=0.7.15.
+
 ## [0.8.17] - 2026-06-07
 
 Fixes two pre-existing bugs surfaced during the engine-sweep verification (neither related to the DazzleEntity migration): `dz kit status` ignored the user's kit config, and `dz mode switch` didn't accept a fully-qualified tool name.
@@ -2342,7 +2361,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.17...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.18...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
