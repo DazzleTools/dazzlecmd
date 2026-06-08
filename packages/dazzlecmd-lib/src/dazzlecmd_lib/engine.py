@@ -720,7 +720,7 @@ class AggregatorEngine:
         # and the FQCN index). Shadowing is already applied to `all_discovered`
         # at the top level of _discover_aggregator.
         self.all_projects = all_discovered
-        self.projects = [p for p in all_discovered if p.get("_kit_active", True)]
+        self.projects = [p for p in all_discovered if p.kit_active]
         self.all_virtual_kits = all_virtual_kits
 
         # Make cross-aggregator virtual kits visible to `dz kit list` and
@@ -730,13 +730,13 @@ class AggregatorEngine:
         # prefixed by _rewrite_virtual_kit; append them so the display
         # path sees every virtual kit regardless of where it was declared.
         root_kit_names = {
-            k.get("_kit_name") or k.get("name") for k in self.kits
+            k.kit_name or k.name for k in self.kits
         }
         for vk in all_virtual_kits:
-            vk_name = vk.get("_kit_name") or vk.get("name")
+            vk_name = vk.kit_name or vk.name
             if vk_name and vk_name not in root_kit_names:
                 self.kits.append(vk)
-                if vk.get("_kit_active", True):
+                if vk.kit_active:
                     self.active_kits.append(vk)
                 root_kit_names.add(vk_name)
 
@@ -748,7 +748,7 @@ class AggregatorEngine:
         # project per physical script and get duplicate-free output for
         # free.
         self.projects = [
-            p for p in self.projects if not p.get("_auto_realpath_alias")
+            p for p in self.projects if not p.auto_realpath_alias
         ]
         # Second pass: install alias FQCNs from virtual kits. Runs AFTER
         # canonical index is complete so aliases can validate their
@@ -869,7 +869,7 @@ class AggregatorEngine:
         user_config = self._get_user_config() if (depth == 0 and self.is_root) else None
         active_kits = get_active_kits(kits, user_config=user_config)
         active_kit_names = {
-            k.get("_kit_name") or k.get("name") for k in active_kits
+            k.kit_name or k.name for k in active_kits
         }
 
         # Expose discovered kits at the top level (for meta-commands like
@@ -886,10 +886,10 @@ class AggregatorEngine:
         nested = []  # list of (kit_dict, candidate_root_dir)
         local_virtual_kits = []
         for kit in kits:
-            if kit.get("virtual") is True:
+            if kit.virtual is True:
                 local_virtual_kits.append(kit)
                 continue
-            kit_name = kit.get("_kit_name") or kit.get("name")
+            kit_name = kit.kit_name or kit.name
             candidate_root = os.path.join(tools_path, kit_name)
             if os.path.isdir(os.path.join(candidate_root, "kits")):
                 nested.append((kit, candidate_root))
@@ -905,8 +905,8 @@ class AggregatorEngine:
         # Annotate flat projects with FQCN metadata and active status
         for project in projects:
             self._annotate_project_fqcn(project, kit_prefix)
-            kit = project.get("_kit_import_name", "")
-            project["_kit_active"] = kit in active_kit_names
+            kit = project.kit_import_name or ""
+            project.kit_active = kit in active_kit_names
 
         # Rewrite local virtual kits into the root FQCN namespace (adds
         # kit_prefix to their own name, to each target in `tools`, and to
@@ -917,7 +917,7 @@ class AggregatorEngine:
         # aliasing `wtf:core:locked` (not `core:locked`).
         collected_virtuals = []
         for vk in local_virtual_kits:
-            vk_name = vk.get("_kit_name") or vk.get("name")
+            vk_name = vk.kit_name or vk.name
             rewritten = self._rewrite_virtual_kit(vk, kit_prefix)
             rewritten["_kit_active"] = vk_name in active_kit_names
             collected_virtuals.append(rewritten)
@@ -926,14 +926,14 @@ class AggregatorEngine:
         # returns both projects and virtual-kit manifests; we collect
         # both and tag them with the parent's view of active status.
         for kit, nested_root in nested:
-            kit_name = kit.get("_kit_name") or kit.get("name")
+            kit_name = kit.kit_name or kit.name
             try:
                 nested_projects, nested_virtuals = self._recurse_into_nested(
                     kit, nested_root, new_stack, depth, kit_prefix
                 )
                 kit_is_active = kit_name in active_kit_names
                 for p in nested_projects:
-                    p["_kit_active"] = kit_is_active
+                    p.kit_active = kit_is_active
                 projects.extend(nested_projects)
                 # Populate the aggregator-as-kit's tools list with FQCNs of
                 # the projects it contributed. This is a derived view that
@@ -942,21 +942,19 @@ class AggregatorEngine:
                 # ``_load_in_repo_kit_manifest`` merge accidentally populated
                 # this from an inner kit's tools list; now we compute it
                 # honestly from what was discovered.
-                kit["tools"] = [
-                    p["_fqcn"] for p in nested_projects if p.get("_fqcn")
-                ]
+                kit.tools = [p.fqcn for p in nested_projects if p.fqcn]
                 # A nested virtual kit is active only if its containing
                 # aggregator is active at the parent's level. This
                 # overrides whatever the child determined; the parent's
                 # view of kit activation is authoritative.
                 for vk in nested_virtuals:
-                    vk["_kit_active"] = kit_is_active and vk.get("_kit_active", True)
+                    vk.kit_active = kit_is_active and vk.kit_active
                 collected_virtuals.extend(nested_virtuals)
             except CircularDependencyError:
                 # Propagate cycle errors — these are unrecoverable
                 raise
             except Exception as exc:
-                kit_name = kit.get("_kit_name") or kit.get("name", "?")
+                kit_name = kit.kit_name or kit.name
                 print(
                     f"Warning: failed to discover nested aggregator "
                     f"'{kit_name}' at {nested_root}: {exc}",
@@ -977,7 +975,7 @@ class AggregatorEngine:
                 shadowed_set = set(shadowed)
                 projects = [
                     p for p in projects
-                    if p.get("_fqcn", "") not in shadowed_set
+                    if (p.fqcn or "") not in shadowed_set
                 ]
 
         return projects, collected_virtuals
@@ -995,7 +993,7 @@ class AggregatorEngine:
         the child's own ``_discover_aggregator`` calls ``_rewrite_virtual_kit``
         during its partition pass.
         """
-        kit_name = kit.get("_kit_name") or kit.get("name")
+        kit_name = kit.kit_name or kit.name
 
         # Determine the child's tools_dir and manifest. Order of preference:
         #   1. Parent's registry pointer override (_override_tools_dir)
@@ -1064,16 +1062,16 @@ class AggregatorEngine:
             return rewritten
 
         prefix = f"{kit_prefix}:"
-        original_name = vk.get("_kit_name") or vk.get("name") or ""
+        original_name = vk.kit_name or vk.name or ""
         rewritten["name"] = f"{prefix}{original_name}"
         rewritten["_kit_name"] = rewritten["name"]
         rewritten["_original_name"] = original_name
 
         rewritten["tools"] = [
-            f"{prefix}{t}" for t in (vk.get("tools") or [])
+            f"{prefix}{t}" for t in (vk.tools or [])
         ]
         rewritten["name_rewrite"] = {
-            f"{prefix}{k}": v for k, v in (vk.get("name_rewrite") or {}).items()
+            f"{prefix}{k}": v for k, v in (vk.name_rewrite or {}).items()
         }
         return rewritten
 
@@ -1115,17 +1113,17 @@ class AggregatorEngine:
         disabled_kit_set = set(self._get_config_list("disabled_kits", default=[]) or [])
 
         for vk in virtual_kits:
-            if not vk.get("_kit_active", True):
+            if not vk.kit_active:
                 continue
 
-            vk_name = vk.get("_kit_name") or vk.get("name")
+            vk_name = vk.kit_name or vk.name
             if not vk_name:
                 continue
 
             # Rule 9a (kit-name shadow) -- still per-vk and structurally
             # distinct from per-alias errors.
             if vk_name in canonical_kit_names and vk_name not in silenced_kit_set:
-                original = vk.get("_original_name") or vk_name
+                original = vk.original_name or vk_name
                 print(
                     f"Warning: virtual kit '{vk_name}' shares its name "
                     f"with a canonical kit. Rule 9b still catches "
@@ -1136,9 +1134,9 @@ class AggregatorEngine:
                     file=sys.stderr,
                 )
 
-            tools = vk.get("tools") or []
-            rewrites = vk.get("name_rewrite") or {}
-            source = vk.get("_source")
+            tools = vk.tools or []
+            rewrites = vk.name_rewrite or {}
+            source = vk.kit_source
 
             # Collect failures rather than warning per-alias.
             missing_targets = []  # KeyError -- canonical not in index
@@ -1236,8 +1234,8 @@ class AggregatorEngine:
         ``kit_prefix`` is the accumulated parent FQCN path, or ``None`` at
         the top level.
         """
-        namespace = project.get("namespace", "")
-        short = project["name"]
+        namespace = project.namespace
+        short = project.name
 
         # Reserve `.` for the field-access axis (two-axis FQCN, #77 Decision #7).
         reserve_field_axis(name=short, namespace=namespace)
@@ -1251,9 +1249,9 @@ class AggregatorEngine:
             fqcn = local
             import_kit = namespace or short
 
-        project["_fqcn"] = fqcn
-        project["_short_name"] = short
-        project["_kit_import_name"] = import_kit
+        project.fqcn = fqcn
+        project.short_name = short
+        project.kit_import_name = import_kit
 
     def _build_fqcn_index(self):
         """Populate ``self.fqcn_index`` from ``self.projects``.
@@ -1371,20 +1369,20 @@ class AggregatorEngine:
 
         candidates = [
             p for p in self.projects
-            if p.get("_fqcn", "") not in silenced_tool_set
-            and p.get("_kit_import_name", "") not in silenced_kit_set
+            if (p.fqcn or "") not in silenced_tool_set
+            and (p.kit_import_name or "") not in silenced_kit_set
         ]
         if not candidates:
             return
 
-        max_colons = max(p.get("_fqcn", "").count(":") for p in candidates)
+        max_colons = max((p.fqcn or "").count(":") for p in candidates)
         if max_colons < 3:
             return
 
         deepest = max(
-            candidates, key=lambda p: p.get("_fqcn", "").count(":")
+            candidates, key=lambda p: (p.fqcn or "").count(":")
         )
-        fqcn = deepest["_fqcn"]
+        fqcn = deepest.fqcn
         segments = max_colons + 1
         cmd = self.command
         print(
@@ -1676,7 +1674,7 @@ class AggregatorEngine:
             runner = RunnerRegistry.resolve(project)
             if runner is None:
                 print(
-                    f"Error: could not resolve runtime for {project.get('name', '?')}",
+                    f"Error: could not resolve runtime for {project.name}",
                     file=sys.stderr,
                 )
                 return 1
@@ -1686,7 +1684,7 @@ class AggregatorEngine:
                 return 130
             except Exception as exc:
                 print(
-                    f"Error running {project.get('name', '?')}: {exc}",
+                    f"Error running {project.name}: {exc}",
                     file=sys.stderr,
                 )
                 return 1

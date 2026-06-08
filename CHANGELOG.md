@@ -4,6 +4,25 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.14] - 2026-06-07
+
+Phase 1 (DazzleEntity call-site migration) — `engine.py` attribute sweep (the last production file). The discovery-pipeline entity sites in the dispatch core are now typed attribute access; byte-identical; full suite + byte-gate green. Local-only.
+
+### Changed
+
+- `dazzlecmd_lib.engine` — entity field reads/writes across `discover()`/partition, `_discover_aggregator`, `_recurse_into_nested`, `_rewrite_virtual_kit`, `_apply_virtual_kits`, `_annotate_project_fqcn`, the reroot-hint scan, and tool dispatch migrated from dict access to attribute access (`p.kit_active`, `k.kit_name or k.name`, `kit.virtual is True`, `project.kit_import_name or ""`, `kit.tools = [p.fqcn for ...]`, `project.fqcn = fqcn` via the set-once C1 property, `(p.fqcn or "")`, `project.name`, etc.). The `.get(k, "")`/`.get(k, "?")` string-default sites became `entity.attr or default`; bool fields with a True default (`_kit_active`) became plain `entity.kit_active`; the `"_fqcn" not in project` membership check became the value check `project.fqcn is None`.
+
+### Notes (remaining follow-ons)
+
+- `FQCNIndex.insert_canonical` and `_build_fqcn_index` are intentionally left on dict-style access in this commit: several tests (`test_engine_fqcn`, `test_fqcn_index_alias`, `test_path_form_convergence`, `test_stale_favorites_warning`, `test_env_var_injection`) call them directly with raw dict fixtures. They migrate in the next commit after those fixtures move to entities (the established fixtures-first sequencing).
+- The clone-site `else dict(...)` guards (`_rewrite_virtual_kit` writes on `rewritten`, the `rewritten["_kit_active"]` write) stay until the guard-drop cleanup; extra/manifest keys (`tools_dir`, `manifest`, `_override_*`) correctly stay dict access.
+
+### Versions
+
+- dazzlecmd 0.8.13 -> 0.8.14 (PATCH).
+- dazzlecmd-lib 0.7.10 -> 0.7.11 (PATCH -- engine.py discovery-pipeline sweep).
+- dazzle-dz alias -> 0.8.14; deps re-pinned to >=0.8.14 / >=0.7.11.
+
 ## [0.8.13] - 2026-06-07
 
 Phase 1 (DazzleEntity call-site migration) — Stage 6b cont.: `mode.py` attribute sweep + the dict-or-entity unification of `_find_undiscovered_tool`. Byte-identical; mode-switch behavioral tests + dispatch verified. Local-only.
@@ -2258,7 +2277,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.13...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.14...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

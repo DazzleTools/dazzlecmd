@@ -8,6 +8,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.7.11] - 2026-06-07
+
+Ships with dazzlecmd v0.8.14 -- `engine.py` attribute sweep (the last production file). Byte-identical; no API change.
+
+### Changed
+
+- `engine` -- discovery-pipeline entity reads/writes migrated to attribute access across `discover()`, `_discover_aggregator`, `_recurse_into_nested`, `_rewrite_virtual_kit`, `_apply_virtual_kits`, `_annotate_project_fqcn`, the reroot-hint scan, and dispatch. `project.fqcn = ...` goes through the set-once C1 property. Clone-guard `rewritten[...]` writes and extra keys (`tools_dir`/`manifest`/`_override_*`) stay dict access.
+- `FQCNIndex.insert_canonical` + `_build_fqcn_index` deferred to the next commit (their direct-call tests use raw dict fixtures; fixtures-first).
+
+### Refs
+
+Ships with dazzlecmd v0.8.14. Refs dazzlecmd #37, #73, #77.
+
 ## [0.7.10] - 2026-06-07
 
 Ships with dazzlecmd v0.8.13 -- `mode.py` attribute sweep + the `_find_undiscovered_tool` dict-or-entity unification. Byte-identical; no API change.
