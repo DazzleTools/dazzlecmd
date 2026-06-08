@@ -1,0 +1,13 @@
+Name:        claude-cleanup
+FQCN:        dazzletools:claude-cleanup
+Kit:         dazzletools
+Namespace:   dazzletools
+Version:     0.2.0
+Description: Stage and commit Claude Code state files -- noise (transient) or
+             user (configs, skills, session logs)
+Platform:    cross-platform
+Language:    python
+Runtime:     python
+Script:      claude_cleanup.py
+Category:    dev-tools
+Tags:        claude-code, git, cleanup, dotclaude

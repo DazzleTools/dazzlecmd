@@ -1,0 +1,15 @@
+Name:        listall
+FQCN:        core:listall
+Kit:         core
+Namespace:   core
+Version:     0.0.2
+Description: Flexible directory structure listing with sorting, collection
+             modes, and output formatting
+Platform:    cross-platform
+Language:    python
+Runtime:     python
+Script:      listall.py
+Pass-through: yes
+Category:    file-tools
+Tags:        directory, listing, tree, files, sorting
+Python deps: pyperclip

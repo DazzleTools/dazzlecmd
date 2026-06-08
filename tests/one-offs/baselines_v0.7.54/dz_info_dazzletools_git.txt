@@ -1,0 +1,13 @@
+Name:        git
+FQCN:        dazzletools:git
+Kit:         dazzletools
+Namespace:   dazzletools
+Version:     0.1.0
+Description: Git repo state inspector -- composition, workspace, and form at a
+             glance
+Platform:    cross-platform
+Language:    python
+Runtime:     python
+Script:      git.py
+Category:    dev-tools
+Tags:        git, repo, submodules, worktrees, composition, inspect

@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.7.12] - 2026-06-07
+
+Ships with dazzlecmd v0.8.15 -- completes the `engine.py` sweep (the FQCN-index core). Byte-identical; no API change. All six production files are now entity-native.
+
+### Changed
+
+- `FQCNIndex.insert_canonical` + `_build_fqcn_index` migrated to attribute access (set-once `project.fqcn`, `(p.fqcn or "")` realpath-dedup reads, `project.fqcn is None` first-pass check, `alias_project.auto_realpath_alias`/`.canonical_fqcn` writes). Their direct-call test fixtures moved to `dazzlecmd_lib.testing.make_tool` entities first (fixtures-first).
+
+### Refs
+
+Ships with dazzlecmd v0.8.15. Refs dazzlecmd #37, #73, #77.
+
 ## [0.7.11] - 2026-06-07
 
 Ships with dazzlecmd v0.8.14 -- `engine.py` attribute sweep (the last production file). Byte-identical; no API change.

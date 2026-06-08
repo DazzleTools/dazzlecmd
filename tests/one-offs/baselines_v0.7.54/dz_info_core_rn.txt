@@ -1,0 +1,13 @@
+Name:        rn
+FQCN:        core:rn
+Kit:         core
+Namespace:   core
+Version:     0.5.0
+Description: Rename files using regular expressions
+Platform:    cross-platform
+Language:    python
+Runtime:     python
+Script:      rn.py
+Pass-through: yes
+Category:    file-tools
+Tags:        rename, regex, batch, files

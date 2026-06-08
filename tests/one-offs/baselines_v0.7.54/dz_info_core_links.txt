@@ -1,0 +1,13 @@
+Name:        links
+FQCN:        core:links
+Kit:         core
+Namespace:   core
+Version:     0.1.0
+Description: Detect and display filesystem links (symlinks, junctions,
+             hardlinks, dazzlelinks)
+Platform:    cross-platform
+Language:    python
+Runtime:     python
+Script:      links.py
+Category:    file-tools
+Tags:        links, symlink, junction, hardlink, shortcut, filesystem

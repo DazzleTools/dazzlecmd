@@ -22,19 +22,19 @@ import pytest
 
 from dazzlecmd_lib.engine import FQCNCollisionError, FQCNIndex
 from dazzlecmd_lib.resolution_context import ResolutionContext
+from dazzlecmd_lib.testing import make_tool
 
 
 def _proj(fqcn, short, kit, **extra):
-    """Minimal project dict for unit tests."""
-    p = {
+    """Minimal project entity for unit tests."""
+    return make_tool(**{
         "_fqcn": fqcn,
         "_short_name": short,
         "_kit_import_name": kit,
         "name": short,
         "namespace": kit,
-    }
-    p.update(extra)
-    return p
+        **extra,
+    })
 
 
 # ---------------------------------------------------------------------------

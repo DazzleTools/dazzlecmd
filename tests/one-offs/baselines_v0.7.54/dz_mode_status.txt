@@ -1,0 +1,47 @@
+
+  Name                     Namespace    Mode                            Details
+  -----------------------------------------------------------------------------
+  f-cp                     core         EMBEDDED                        
+  f-mv                     core         EMBEDDED                        
+  find                     core         EMBEDDED                        
+  fixpath                  core         EMBEDDED                        
+  links                    core         EMBEDDED                        
+  listall                  core         PUBLISH (submodule)             https://github.com/DazzleTools/listall.git
+  rn                       core         EMBEDDED                        
+  safedel                  core         EMBEDDED                        
+  claude-cleanup           dazzletools  EMBEDDED                        
+  claude-session-metadata  dazzletools  EMBEDDED                        
+  claude-sesslog-datefix   dazzletools  EMBEDDED                        
+  claudeview               dazzletools  EMBEDDED                        
+  delete-nul               dazzletools  EMBEDDED                        
+  dos2unix                 dazzletools  EMBEDDED                        
+  extract-all              dazzletools  EMBEDDED                        
+  fixuser                  dazzletools  EMBEDDED                        
+  git                      dazzletools  EMBEDDED                        
+  git-snapshot             dazzletools  EMBEDDED                        
+  github                   dazzletools  EMBEDDED                        
+  md-rm-img                dazzletools  EMBEDDED                        
+  private-init             dazzletools  EMBEDDED                        
+  redact-msinfo            dazzletools  EMBEDDED                        
+  safe-icacls              dazzletools  EMBEDDED                        
+  split                    dazzletools  EMBEDDED                        
+  srch-path                dazzletools  EMBEDDED                        
+  img2vid                  media        EMBEDDED                        
+  mp3me                    media        EMBEDDED                        
+  song-to-vid              media        EMBEDDED                        
+  vid-preview-maker        media        EMBEDDED                        
+  vid2gif                  media        EMBEDDED                        
+  vid2img                  media        EMBEDDED                        
+  vidresize                media        EMBEDDED                        
+  locked                   core         EMBEDDED                        
+  restarted                core         EMBEDDED                        
+  _f_common                core         EMBEDDED                        
+  config                   wtf          EMBEDDED                        
+  docs                     wtf          EMBEDDED                        
+  kits                     wtf          EMBEDDED                        
+  scripts                  wtf          EMBEDDED                        
+  src                      wtf          EMBEDDED                        
+  tests                    wtf          EMBEDDED                        
+  tools                    wtf          EMBEDDED                        
+
+  42 tool(s)

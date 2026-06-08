@@ -114,15 +114,15 @@ class FQCNIndex:
         Raises ``FQCNCollisionError`` if the FQCN is already present as
         canonical OR alias (§9b mirror).
         """
-        fqcn = project["_fqcn"]
-        short = project["_short_name"]
-        kit = project["_kit_import_name"]
+        fqcn = project.fqcn
+        short = project.short_name
+        kit = project.kit_import_name
 
         if fqcn in self.canonical_index:
             existing = self.canonical_index[fqcn]
             raise FQCNCollisionError(
                 f"Duplicate canonical FQCN '{fqcn}': "
-                f"{existing.get('_dir', '?')} vs {project.get('_dir', '?')}"
+                f"{existing.directory or '?'} vs {project.directory or '?'}"
             )
         # §9b mirror: canonicals cannot collide with existing aliases.
         # (Canonicals typically load first in practice, but this closes
@@ -1276,7 +1276,7 @@ class AggregatorEngine:
         # First pass: annotate any projects whose FQCN wasn't set during
         # discovery (unit-test path constructs projects directly).
         for project in self.projects:
-            if "_fqcn" not in project:
+            if project.fqcn is None:
                 self._annotate_project_fqcn(project, kit_prefix=None)
 
         # Group projects by realpath of their _dir. Projects without _dir
@@ -1284,14 +1284,14 @@ class AggregatorEngine:
         # bucket keyed by their FQCN, so they're processed individually.
         groups = {}
         for project in self.projects:
-            tool_dir = project.get("_dir")
+            tool_dir = project.directory
             if tool_dir:
                 try:
                     key = os.path.realpath(tool_dir)
                 except OSError:
                     key = tool_dir
             else:
-                key = f"__no_dir__::{project.get('_fqcn', id(project))}"
+                key = f"__no_dir__::{project.fqcn or id(project)}"
             groups.setdefault(key, []).append(project)
 
         # Per group: shortest FQCN wins canonical, alphabetical tiebreak.
@@ -1301,7 +1301,7 @@ class AggregatorEngine:
         for key, group_projects in groups.items():
             if len(group_projects) > 1:
                 group_projects.sort(
-                    key=lambda p: (p.get("_fqcn", "").count(":"), p.get("_fqcn", ""))
+                    key=lambda p: ((p.fqcn or "").count(":"), p.fqcn or "")
                 )
             winner = group_projects[0]
             try:
@@ -1310,11 +1310,11 @@ class AggregatorEngine:
                 print(f"Warning: {exc}", file=sys.stderr)
                 continue
             if not key.startswith("__no_dir__::"):
-                self._realpath_index[key] = winner.get("_fqcn", "")
+                self._realpath_index[key] = winner.fqcn or ""
             # Remaining group members register as auto-realpath aliases.
             for alias_project in group_projects[1:]:
-                alias_fqcn = alias_project.get("_fqcn", "")
-                canonical_fqcn = winner.get("_fqcn", "")
+                alias_fqcn = alias_project.fqcn or ""
+                canonical_fqcn = winner.fqcn or ""
                 if not alias_fqcn or not canonical_fqcn:
                     continue
                 try:
@@ -1330,8 +1330,8 @@ class AggregatorEngine:
                         file=sys.stderr,
                     )
                     continue
-                alias_project["_auto_realpath_alias"] = True
-                alias_project["_canonical_fqcn"] = canonical_fqcn
+                alias_project.auto_realpath_alias = True
+                alias_project.canonical_fqcn = canonical_fqcn
 
     def _maybe_emit_reroot_hint(self):
         """Hint at rerooting when discovery surfaces deeply-nested tools.

@@ -1,0 +1,6 @@
+  Name       Namespace  Description
+  ---------------------------------
+  locked     core  Why did my Windows PC lock?  [history, admin]
+  restarted  core  Why did my Windows PC restart?  [AI, history]
+
+  2 tool(s) found

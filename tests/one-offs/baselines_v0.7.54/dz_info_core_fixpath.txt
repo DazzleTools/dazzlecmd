@@ -1,0 +1,12 @@
+Name:        fixpath
+FQCN:        core:fixpath
+Kit:         core
+Namespace:   core
+Version:     0.1.0
+Description: Fix mangled paths and optionally open, copy, or browse files
+Platform:    cross-platform
+Language:    python
+Runtime:     python
+Script:      fixpath.py
+Category:    file-tools
+Tags:        path, fix, canonicalize, open, clipboard

@@ -12,18 +12,18 @@ import os
 import pytest
 
 from dazzlecmd_lib.engine import AggregatorEngine
+from dazzlecmd_lib.testing import make_tool
 
 
 def _proj(fqcn, short, kit, **extra):
-    p = {
+    return make_tool(**{
         "_fqcn": fqcn,
         "_short_name": short,
         "_kit_import_name": kit,
         "name": short,
         "namespace": kit,
-    }
-    p.update(extra)
-    return p
+        **extra,
+    })
 
 
 class TestEnvVarInjection:

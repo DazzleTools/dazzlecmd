@@ -22,18 +22,19 @@ from dazzlecmd.engine import (
     FQCNCollisionError,
     FQCNIndex,
 )
+from dazzlecmd_lib.testing import make_tool
 
 
 def _proj(fqcn, short, kit, description=""):
-    """Build a minimal project dict for tests."""
-    return {
+    """Build a minimal project entity for tests."""
+    return make_tool(**{
         "name": short,
         "_fqcn": fqcn,
         "_short_name": short,
         "_kit_import_name": kit,
         "_dir": f"/fake/{fqcn.replace(':', '/')}",
         "description": description,
-    }
+    })
 
 
 # ---------------------------------------------------------------------------

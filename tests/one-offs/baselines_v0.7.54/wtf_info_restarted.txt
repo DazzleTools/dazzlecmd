@@ -1,0 +1,17 @@
+Name:        restarted
+FQCN:        core:restarted
+Kit:         core
+Namespace:   core
+Version:     0.2.3
+Description: Why did my Windows PC restart? One command, instant answers.
+Platform:    windows
+Language:    python
+Runtime:     python
+Script:      wtf_restarted/cli.py
+Pass-through: yes
+Category:    windows-diagnostics
+Tags:        restart, reboot, crash, bsod, event-log, shutdown
+Event logs:  System
+Privileges:  user
+AI support:  yes
+History:     yes

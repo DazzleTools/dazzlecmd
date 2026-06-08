@@ -4,6 +4,30 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.15] - 2026-06-07
+
+Phase 1 (DazzleEntity call-site migration) — completes the `engine.py` sweep: the FQCN-index core (`FQCNIndex.insert_canonical`, `_build_fqcn_index`) is now entity-native, after its direct-call test fixtures moved to entities (fixtures-first). With this, **all six production files are fully swept** — no typed-field dict access remains in the dispatch path. Byte-identical; suite + byte-gate green. Local-only.
+
+### Changed
+
+- `dazzlecmd_lib.engine.FQCNIndex.insert_canonical` + `AggregatorEngine._build_fqcn_index` — migrated to attribute access (`project.fqcn`/`.short_name`/`.kit_import_name`, `existing.directory or '?'`, the `"_fqcn" not in project` membership check → the value check `project.fqcn is None`, the realpath-dedup reads `(p.fqcn or "")`, and the auto-realpath alias writes `alias_project.auto_realpath_alias = True` / `alias_project.canonical_fqcn = ...`).
+
+### Tests
+
+- `test_engine_fqcn`, `test_fqcn_index_alias`, `test_path_form_convergence`, `test_stale_favorites_warning`, `test_env_var_injection` — their `_proj()` fixture helpers now build real `Tool` entities via `dazzlecmd_lib.testing.make_tool(**fixture)` instead of raw dicts, so they exercise the entity-native index methods directly. (Assertion reads via the shim are left unchanged; they migrate in the eventual pre-shim-deletion test cleanup.)
+
+### Verification
+
+- Added the human test checklist `tests/checklists/v0.8.15__Refactor__engine-dazzleentity-attribute-sweep.md` — targets the WRITE/MUTATE and real-dispatch paths the byte-gate doesn't cover (real tool dispatch, `mode switch` write path, cross-aggregator `wtf` recursion, `kit_active` propagation, auto-realpath dedup, reroot hint). Executed via `tester-unbounded`: **SHIP** (suite 1254 passed / 14 skipped, byte-gate 10 OK / 0 FAIL); no attribute-access regressions found. Two flagged behaviors (`kit status` not filtering by `active_kits`; `mode switch` resolving by short name not FQCN) are pre-existing, outside `engine.py`, not regressions of this sweep.
+- Committed the byte-identical-gate harness it relies on: `tests/one-offs/run_byte_gate.py` + `tests/one-offs/baselines_v0.7.54/` (golden `dz list`/`info`/`tree`/`mode status` outputs — the ground truth for the whole 0.8.x byte-identical guarantee). Scratch tooling under `tests/one-offs/`, committed to preserve it.
+- Also committed the previously-uncommitted `tests/checklists/v0.8.2__Refactor__shim-mapping-and-mode-switch-crashfix.md` (the v0.8.2 shim-Mapping completion + `cache_manifest` crash-fix checklist).
+
+### Versions
+
+- dazzlecmd 0.8.14 -> 0.8.15 (PATCH).
+- dazzlecmd-lib 0.7.11 -> 0.7.12 (PATCH -- FQCN-index core sweep).
+- dazzle-dz alias -> 0.8.15; deps re-pinned to >=0.8.15 / >=0.7.12.
+
 ## [0.8.14] - 2026-06-07
 
 Phase 1 (DazzleEntity call-site migration) — `engine.py` attribute sweep (the last production file). The discovery-pipeline entity sites in the dispatch core are now typed attribute access; byte-identical; full suite + byte-gate green. Local-only.
@@ -2277,7 +2301,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.14...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.15...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
