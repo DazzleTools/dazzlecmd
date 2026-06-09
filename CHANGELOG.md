@@ -4,6 +4,28 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.21] - 2026-06-09
+
+Behavioral phase (#84) — `rebind` PoC, Phase 2 (mode-switch). The *same* `rebind` verb now also drives dev↔publish mode switching, via a second context — proving the context-delegate pattern generalizes (the verb didn't change; a new context did). Also fixes a latent entity-migration bug it surfaced.
+
+### Added
+
+- `dazzlecmd_lib.mode.ModeRebindContext` — a `RebindContext` for dev↔publish. The conserved invariant (C2) is the **remote URL**: `dev↔publish` reverses within the orbit (`SUBMODULE↔SYMLINK`). Criticality is **invariant-derivability**, not a state blocklist: no derivable remote URL → `CriticalityBoundaryError` (pre-flight). Entering the orbit from `EMBEDDED`/`LOCAL_ONLY` is permitted (when a URL exists) but one-way → `receipt.reversible = False`. Delegates the switch to the existing `_switch_to_dev`/`_switch_to_publish` (so `entity.py` stays decoupled from the filesystem); a non-zero exit surfaces as the new `dazzlecmd_lib.groupable.RebindError`.
+
+### Fixed
+
+- `dz mode switch <tool> --publish` (without `--url`) was **broken for entities**: `mode._resolve_remote_url` → `_dotted_lookup` rejected a `DazzleEntity` (its `isinstance(dict)` guard returned `None`), so `source.url` / `lifecycle.graduated_to` couldn't be read — a latent regression from the Phase-1 dict→entity migration, masked because the mode tests always passed an explicit `--url`. `_resolve_remote_url` now resolves against the manifest projection (`to_manifest()`), fixing it for entity *and* dict callers. Surfaced by the Phase-2 `ModeRebindContext`.
+
+### Tests
+
+- `tests/test_groupable_rebind.py` — `TestModeRebind` (5): invalid target, criticality refusal (no remote URL), publish dry-run receipt + one-way-entry `reversible=False`, in-orbit dev `reversible=True`, and a direct `_resolve_remote_url`-reads-from-entity regression. 17 rebind tests total; suite 1286 / byte-gate 10 OK.
+
+### Versions
+
+- dazzlecmd 0.8.20 -> 0.8.21 (PATCH).
+- dazzlecmd-lib 0.7.16 -> 0.7.17 (PATCH -- ModeRebindContext + RebindError + the _resolve_remote_url entity fix).
+- dazzle-dz alias -> 0.8.21; deps re-pinned to >=0.8.21 / >=0.7.17.
+
 ## [0.8.20] - 2026-06-09
 
 Behavioral phase (#84) — `rebind` PoC, Phase 1 (alias). The first live `Groupable` verb: a `DazzleEntity` can now re-route one of its name bindings to a different canonical without changing its own canonical identity (C1). Additive; existing behavior byte-identical.
@@ -2402,7 +2424,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.20...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.21...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -40,6 +40,18 @@ class CriticalityBoundaryError(Exception):
 
     Example: a mode-switch ``rebind`` whose published state cannot be re-derived
     (no remote URL resolvable) would be a lossy, unrecoverable change.
+
+    This is a PRE-FLIGHT refusal (the invariant check fails before any change).
+    """
+
+
+class RebindError(Exception):
+    """Raised when a rebind transition fails to APPLY.
+
+    Distinct from :class:`CriticalityBoundaryError` (a pre-flight refusal): the
+    invariant was fine, but the underlying mechanism failed mid-apply (e.g. the
+    mode-switch returned a non-zero exit code). The transition's success/failure
+    is the mechanism's; this surfaces it as the verb's typed failure.
     """
 
 

@@ -7,15 +7,43 @@ the receiver precondition + single-hop/existence guards, idempotence, and
 ``short_index`` coherence after a repoint (the corruption risk flagged in the
 DWP hole-review H2).
 """
+import os
+import tempfile
+
 import pytest
 
 from dazzlecmd_lib.engine import FQCNIndex
+from dazzlecmd_lib.entity import build_entity
 from dazzlecmd_lib.groupable import (
     AliasRebindContext,
+    CriticalityBoundaryError,
     RebindReceipt,
     RebindInvariant,
 )
 from dazzlecmd_lib.testing import make_tool
+
+
+def _sandbox_tool(tmpdir, *, with_url=True, gitmodules=False):
+    """A tool entity at ``tmpdir/projects/core/mytool`` (an embedded dir), with
+    an optional ``source.url`` and an optional ``.gitmodules`` entry (the latter
+    makes ``detect_tool_state`` report SUBMODULE -- i.e. in-orbit)."""
+    tool_dir = os.path.join(tmpdir, "projects", "core", "mytool")
+    os.makedirs(tool_dir)
+    with open(os.path.join(tool_dir, "mytool.py"), "w", encoding="utf-8") as f:
+        f.write("# placeholder")
+    data = {
+        "name": "mytool", "namespace": "core", "version": "1.0.0",
+        "description": "sandbox", "directory": tool_dir, "_fqcn": "core:mytool",
+        "runtime": {"type": "python", "script_path": "mytool.py"},
+    }
+    if with_url:
+        data["source"] = {"url": "https://example.com/mytool.git"}
+    if gitmodules:
+        with open(os.path.join(tmpdir, ".gitmodules"), "w", encoding="utf-8") as f:
+            f.write('[submodule "projects/core/mytool"]\n'
+                    '\tpath = projects/core/mytool\n'
+                    '\turl = https://example.com/mytool.git\n')
+    return build_entity(data, entity_type="tool")
 
 
 def _idx_two_canonicals_one_alias():
@@ -180,3 +208,79 @@ class TestShortIndexCoherence:
         c1.rebind("core:cleanup", context=AliasRebindContext(idx, "claude:cleanup"))
 
         assert idx._alias_sources["claude:cleanup"] == "rebind"
+
+
+class TestModeRebind:
+    """Phase 2 -- the SAME `rebind` verb over a different context
+    (ModeRebindContext): dev<->publish coupling change with the criticality
+    boundary. Filesystem ops run in --dry-run (no mutation, no git network)."""
+
+    def test_invalid_target(self):
+        from dazzlecmd_lib.mode import ModeRebindContext
+        with tempfile.TemporaryDirectory() as tmp:
+            tool = _sandbox_tool(tmp)
+            ctx = ModeRebindContext(project_root=tmp, tools_dir="projects", dry_run=True)
+            with pytest.raises(ValueError, match="dev"):
+                tool.rebind("sideways", context=ctx)
+
+    def test_refused_when_no_remote_url(self):
+        """Criticality (H3): no derivable remote URL -> the dev<->publish
+        invariant can't be preserved -> CriticalityBoundaryError (pre-flight,
+        before any filesystem touch)."""
+        from dazzlecmd_lib.mode import ModeRebindContext
+        with tempfile.TemporaryDirectory() as tmp:
+            tool = _sandbox_tool(tmp, with_url=False)
+            ctx = ModeRebindContext(project_root=tmp, tools_dir="projects", dry_run=True)
+            with pytest.raises(CriticalityBoundaryError, match="irreversible"):
+                tool.rebind("publish", context=ctx)
+
+    def test_publish_dry_run_receipt_one_way_entry(self):
+        """Embedded + URL: publish is PERMITTED (URL derivable) but ONE-WAY --
+        reversible=False (entering the orbit from outside is a mini-graduation, H3).
+        The receipt carries the conserved invariant (the remote URL)."""
+        from dazzlecmd_lib.mode import ModeRebindContext
+        with tempfile.TemporaryDirectory() as tmp:
+            tool = _sandbox_tool(tmp, with_url=True)  # EMBEDDED + url
+            ctx = ModeRebindContext(project_root=tmp, tools_dir="projects", dry_run=True)
+            r = tool.rebind("publish", context=ctx)
+            assert r.sub_kind == "mode-switch"
+            assert r.new_state == "publish"
+            assert r.invariant.conserved_quantity_name == "remote_url"
+            assert r.invariant.conserved_value == "https://example.com/mytool.git"
+            assert r.reversible is False
+            # C1 unchanged
+            assert tool.fqcn == "core:mytool"
+
+    def test_in_orbit_dev_reversible(self):
+        """SUBMODULE (publish) -> dev is WITHIN the orbit: reversible=True,
+        inverse target = 'publish'."""
+        from dazzlecmd_lib.mode import ModeRebindContext
+        with tempfile.TemporaryDirectory() as tmp:
+            tool = _sandbox_tool(tmp, with_url=True, gitmodules=True)  # SUBMODULE
+            dev_src = os.path.join(tmp, "devsrc")
+            os.makedirs(dev_src)
+            ctx = ModeRebindContext(project_root=tmp, tools_dir="projects",
+                                    dev_path=dev_src, dry_run=True)
+            r = tool.rebind("dev", context=ctx)
+            assert r.new_state == "dev"
+            assert r.reversible is True
+            assert r.previous_state == "publish"
+
+    def test_resolve_remote_url_reads_from_entity(self):
+        """Regression for the latent entity-migration bug this phase surfaced:
+        `_resolve_remote_url` must read `source.url` (and the
+        `lifecycle.graduated_to` fallback) from a DazzleEntity, not only a dict.
+        Pre-fix, `_dotted_lookup`'s `isinstance(dict)` guard returned None for
+        entities -- breaking `dz mode switch --publish` without --url."""
+        from dazzlecmd_lib.mode import _resolve_remote_url
+        tool = build_entity({
+            "name": "mytool", "namespace": "core",
+            "source": {"url": "https://example.com/mytool.git"},
+        }, entity_type="tool")
+        assert _resolve_remote_url(tool) == "https://example.com/mytool.git"
+
+        graduated = build_entity({
+            "name": "t2", "namespace": "core",
+            "lifecycle": {"graduated_to": "https://example.com/t2.git"},
+        }, entity_type="tool")
+        assert _resolve_remote_url(graduated) == "https://example.com/t2.git"

@@ -8,6 +8,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.7.17] - 2026-06-09
+
+Ships with dazzlecmd v0.8.21 -- behavioral phase (#84) `rebind` Phase 2 (mode-switch) + a latent-bug fix it surfaced.
+
+### Added
+
+- `mode.ModeRebindContext` -- the dev↔publish `RebindContext`. Invariant = the remote URL; reverses within the `SUBMODULE↔SYMLINK` orbit; criticality = invariant-derivability (no remote URL → `CriticalityBoundaryError`); entering the orbit is one-way (`reversible=False`). Delegates to `_switch_to_dev`/`_switch_to_publish`; non-zero exit → `groupable.RebindError` (new).
+
+### Fixed
+
+- `mode._resolve_remote_url` couldn't read `source.url` / `lifecycle.graduated_to` from a `DazzleEntity` (`_dotted_lookup`'s `isinstance(dict)` guard returned `None`) -- a latent Phase-1 migration regression that broke `dz mode switch --publish` without `--url`. Now resolves against `to_manifest()`. Works for entity and dict callers.
+
+### Refs
+
+Ships with dazzlecmd v0.8.21. Refs dazzlecmd #84, #77, #73, #37.
+
 ## [0.7.16] - 2026-06-09
 
 Ships with dazzlecmd v0.8.20 -- behavioral phase (#84) `rebind` PoC Phase 1 (alias). Additive; no breaking change.

@@ -28,8 +28,16 @@ import json
 import os
 import subprocess
 import sys
+from dataclasses import dataclass
+from typing import Any, Optional
 
 from dazzlecmd_lib.entity import build_entity
+from dazzlecmd_lib.groupable import (
+    CriticalityBoundaryError,
+    RebindError,
+    RebindInvariant,
+    RebindReceipt,
+)
 from dazzlecmd_lib.paths import (
     create_link,
     get_link_target,
@@ -964,6 +972,14 @@ def _resolve_remote_url(project, explicit_url=None, *, schema=None):
     if explicit_url:
         return explicit_url
 
+    # ``project`` may be a DazzleEntity; its nested manifest blocks (source,
+    # lifecycle) live in extra. ``_dotted_lookup`` walks plain dicts, so resolve
+    # against the manifest projection. (Pre-entity-migration this was a raw dict
+    # and worked; entities silently returned None here -- e.g. `dz mode switch
+    # <tool> --publish` without --url couldn't read source.url. This restores
+    # it for entity AND dict callers.)
+    manifest = project.to_manifest() if hasattr(project, "to_manifest") else project
+
     # Determine the list of dotted paths to probe.
     default_paths = ("source.url",)
     if schema is None:
@@ -977,13 +993,13 @@ def _resolve_remote_url(project, explicit_url=None, *, schema=None):
         )
 
     for dotted in remote_paths:
-        value = _dotted_lookup(project, dotted)
+        value = _dotted_lookup(manifest, dotted)
         if value:
             return value
 
     # Historical fallback that's outside the configurable paths because
     # it represents tool-graduation semantics, not manifest layout.
-    lifecycle = project.get("lifecycle", {})
+    lifecycle = manifest.get("lifecycle", {})
     if lifecycle.get("graduated_to"):
         return lifecycle["graduated_to"]
 
@@ -1017,3 +1033,92 @@ def _dry_run_save_path(qualified_name, dev_path, project_root):
     """Show what path would be saved in dry-run mode."""
     print(f"  Would save dev path to mode_local.json: "
           f"{qualified_name} -> {dev_path}")
+
+
+# Mode state -> the "mode" a rebind would invert to. Only the two in-orbit
+# states map to a mode; out-of-orbit states have no inverse mode (one-way entry).
+_STATE_TO_MODE = {STATE_SUBMODULE: "publish", STATE_SYMLINK: "dev"}
+
+
+@dataclass
+class ModeRebindContext:
+    """A ``RebindContext`` for dev<->publish mode switching (the filesystem
+    coupling change) -- the second ``rebind`` sub-kind after alias.
+
+    The first PERSISTENT rebind: the filesystem IS the store, so no separate
+    persistence layer is needed (unlike alias rebind, which is in-memory only).
+
+    The conserved invariant (C2) is the REMOTE URL: publish is a submodule
+    re-derivable from it, so ``publish<->dev`` reverses WITHIN the orbit
+    (SUBMODULE<->SYMLINK). The criticality predicate is invariant-DERIVABILITY,
+    NOT a state blocklist (DWP hole-review H3): if ``_resolve_remote_url`` yields
+    nothing, the published state can't be restored -> ``CriticalityBoundaryError``.
+    Entering the orbit from EMBEDDED/LOCAL_ONLY is permitted (when a URL is
+    derivable) but ONE-WAY -> the receipt's ``reversible`` is False.
+
+    Delegates the actual switch to the existing ``_switch_to_dev`` /
+    ``_switch_to_publish`` (so ``entity.py`` stays decoupled from the filesystem
+    layer); a non-zero exit code is surfaced as ``RebindError``.
+    """
+
+    project_root: str
+    tools_dir: str = "projects"
+    command: str = "dz"
+    schema: Any = None
+    dev_path: Optional[str] = None      # explicit dev path (dev direction)
+    explicit_url: Optional[str] = None  # explicit remote URL (publish direction)
+    dry_run: bool = False
+    force: bool = False
+
+    def apply(self, entity, target: str) -> RebindReceipt:
+        if target not in ("dev", "publish"):
+            raise ValueError(
+                f"mode rebind target must be 'dev' or 'publish', got {target!r}"
+            )
+        # Criticality (C2 invariant-derivability): the conserved quantity for
+        # dev<->publish is the remote URL. Checked BEFORE any filesystem touch --
+        # if it can't be derived, publish can't be restored, so refuse.
+        remote_url = _resolve_remote_url(entity, self.explicit_url, schema=self.schema)
+        if remote_url is None:
+            raise CriticalityBoundaryError(
+                f"rebind({target!r}) refused for {entity.fqcn}: no remote URL "
+                f"derivable -- the dev<->publish invariant (the remote) cannot "
+                f"be preserved, so the transition would be irreversible."
+            )
+
+        gitmodules = parse_gitmodules(self.project_root, tools_dir=self.tools_dir)
+        state = detect_tool_state(
+            entity.directory, gitmodules, self.project_root, tools_dir=self.tools_dir
+        )
+        in_orbit = state in (STATE_SUBMODULE, STATE_SYMLINK)
+        prior_mode = _STATE_TO_MODE.get(state)
+
+        if target == "dev":
+            rc = _switch_to_dev(
+                entity, self.project_root, gitmodules, self.dev_path,
+                self.dry_run, self.force,
+                tools_dir=self.tools_dir, command=self.command,
+            )
+        else:
+            rc = _switch_to_publish(
+                entity, self.project_root, gitmodules, self.dry_run, self.force,
+                url=self.explicit_url,
+                tools_dir=self.tools_dir, command=self.command, schema=self.schema,
+            )
+        if rc != 0:
+            raise RebindError(
+                f"mode rebind({target!r}) failed for {entity.fqcn} (exit {rc})"
+            )
+
+        return RebindReceipt(
+            entity_fqcn=entity.fqcn,        # C1 -- unchanged by the rebind
+            sub_kind="mode-switch",
+            previous_state=prior_mode,      # rebind(prior_mode) inverts, iff reversible
+            new_state=target,
+            invariant=RebindInvariant(
+                conserved_quantity_name="remote_url",
+                conserved_value=remote_url,
+                restore_path="re-derived from .gitmodules / source.url / lifecycle.graduated_to",
+            ),
+            reversible=in_orbit,
+        )
