@@ -72,11 +72,16 @@ class Groupable:
     - **C3 constitutional inclusion** -- constitutional items appear in every
       consumer (may be hidden, never ungrouped).
 
-    Phase 0 declares the verbs as the capability surface; their concrete
-    tree mechanics (move between parents, graduate to a new repo, hide/expose
-    in a frame) are implemented post-0.8.x alongside the grouping/ungrouping
-    work. They raise ``NotImplementedError`` until then so callers fail
-    explicitly rather than silently no-op.
+    Behavioral phase (#84): the verbs become state-transition operators.
+    ``rebind`` is the first live verb (coupling/resolution change -- alias
+    repoint now, mode-switch next; see ``dazzlecmd_lib.groupable``).
+    ``group``/``ungroup``/``hide``/``expose`` still raise
+    ``NotImplementedError`` so callers fail explicitly rather than silently
+    no-op until their tree mechanics land.
+
+    Frame (reserved): a presentation/consumer context (ties to
+    ``AggregatorConfig.presentation``). ``rebind`` is NOT frame-relative;
+    ``hide``/``expose`` will consume Frame -- see ``visibility_in(frame)``.
 
     The capability is a *mixin*, not a base class, on purpose: it is mixed
     into ``DazzleEntity`` (tree occupants) and -- in the #77 era -- may be
@@ -85,9 +90,9 @@ class Groupable:
     """
 
     _CAP_DEFERRED: ClassVar[str] = (
-        "grouping/ungrouping tree mechanics land post-0.8.x "
-        "(see the grouping/ungrouping DWPs); Phase 0 ships the capability "
-        "surface + the C1 canonical-identity contract only"
+        "this verb's tree mechanics are not yet implemented "
+        "(rebind is live as of the behavioral-phase PoC; "
+        "group/ungroup/hide/expose land next -- see the grouping/ungrouping DWPs)"
     )
 
     def group(self, *args: Any, **kwargs: Any) -> Any:
@@ -106,9 +111,26 @@ class Groupable:
         """Undo hide (frame-relative)."""
         raise NotImplementedError(f"expose(): {self._CAP_DEFERRED}")
 
-    def rebind(self, *args: Any, **kwargs: Any) -> Any:
-        """Change coupling / resolution / identity without containment change."""
-        raise NotImplementedError(f"rebind(): {self._CAP_DEFERRED}")
+    def rebind(self, target: Any, *, context: Any) -> Any:
+        """REBIND: change this entity's coupling/resolution to ``target`` within
+        ``context``, WITHOUT changing its canonical identity (C1 ``fqcn`` is
+        unchanged). The first live Groupable verb.
+
+        The verb is entity-local in spirit (the same-bones thesis: entities ARE
+        Groupable), but the mechanism is not -- alias routing lives on the
+        ``FQCNIndex``, mode state on the filesystem -- so ``context`` (a
+        ``dazzlecmd_lib.groupable.RebindContext``: ``AliasRebindContext`` /
+        ``ModeRebindContext``) carries the handle plus the identity the verb
+        itself can't (e.g. WHICH alias). Returns a ``RebindReceipt``; raises
+        ``CriticalityBoundaryError`` when the transition's invariant cannot be
+        preserved (would be irreversible).
+        """
+        if context is None:
+            raise TypeError(
+                "rebind(target, *, context=...) requires a RebindContext "
+                "(e.g. AliasRebindContext or ModeRebindContext)"
+            )
+        return context.apply(self, target)
 
 
 # ---------------------------------------------------------------------------

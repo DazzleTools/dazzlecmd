@@ -4,6 +4,33 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.20] - 2026-06-09
+
+Behavioral phase (#84) — `rebind` PoC, Phase 1 (alias). The first live `Groupable` verb: a `DazzleEntity` can now re-route one of its name bindings to a different canonical without changing its own canonical identity (C1). Additive; existing behavior byte-identical.
+
+### Added
+
+- `dazzlecmd_lib.groupable` (NEW module) — the behavioral-verb types: `RebindReceipt`, `RebindInvariant` (the C2 conserved-quantity descriptor), `CriticalityBoundaryError`, the `RebindContext` protocol, and `AliasRebindContext`. Each rebind sub-kind is a context impl (`context.apply(entity, target) -> receipt`); the verb delegates to it — this protocol is the generalizable seam for the remaining verbs.
+- `dazzlecmd_lib.engine.FQCNIndex.repoint_alias(alias_fqcn, new_canonical_fqcn)` — the alias-rebind primitive. `insert_alias` deliberately *refuses* a different-target remap, so repointing gets its own method that owns the index's coherence (single-hop/existence guards, idempotence, and `short_index` re-bookkeeping a raw `alias_index` poke would skip).
+
+### Changed
+
+- `dazzlecmd_lib.entity.Groupable.rebind` — implemented (was `NotImplementedError`): `rebind(target, *, context)` delegates to the context, preserving C1. `group`/`ungroup`/`hide`/`expose` remain deferred. `Frame` reserved (not built) — `hide`/`expose` will consume it.
+
+### Tests
+
+- `tests/test_groupable_rebind.py` (NEW) — alias round-trip (`rebind ∘ rebind⁻¹ = identity`) against a real `FQCNIndex`, the receiver precondition, single-hop/existence guards, idempotence, and `short_index` coherence after a repoint (10 tests). `test_entity.py` updated: `rebind` is no longer in the deferred-verbs assertion.
+
+### Notes
+
+- Alias-rebind persistence is **out of PoC scope**: `alias_index` is rebuilt from manifests/config each invocation, so a repoint is in-memory only. No user-facing `dz rebind` is wired. Phase 2 (mode-switch rebind + the criticality boundary) is next.
+
+### Versions
+
+- dazzlecmd 0.8.19 -> 0.8.20 (PATCH).
+- dazzlecmd-lib 0.7.15 -> 0.7.16 (PATCH -- additive: groupable module + repoint_alias + live rebind).
+- dazzle-dz alias -> 0.8.20; deps re-pinned to >=0.8.20 / >=0.7.16.
+
 ## [0.8.19] - 2026-06-08
 
 Phase 1 (DazzleEntity migration) — Stage 4: the `wtf` consumer is migrated. Bumps the `projects/wtf` submodule pointer to wtf-windows v0.1.6-alpha, whose CLI now reads engine-produced entities via typed attribute access instead of the dict shim (19 sites in `cli.py`; wtf's own 7 smoke tests stay green). One of the two external consumers is now shim-free; `amdead` (separate repo) is the remaining one before the shim can be deleted.
@@ -2375,7 +2402,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.19...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.20...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

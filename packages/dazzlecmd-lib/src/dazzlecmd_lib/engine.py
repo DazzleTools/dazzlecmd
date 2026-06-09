@@ -218,6 +218,82 @@ class FQCNIndex:
         if canonical_fqcn not in short_bucket:
             short_bucket.append(canonical_fqcn)
 
+    def repoint_alias(self, alias_fqcn, new_canonical_fqcn, source="rebind"):
+        """Repoint an existing alias to a different canonical -- the alias
+        ``rebind`` primitive (the behavioral-phase ``Groupable.rebind`` calls
+        this via ``AliasRebindContext``; nothing pokes the dicts raw).
+
+        ``insert_alias`` deliberately REFUSES a different-target remap (first
+        virtual kit wins). Rebinding is a distinct, intentional operation, so it
+        gets its own method that owns the index's coherence rules -- including
+        the ``short_index`` re-bookkeeping that a raw ``alias_index`` poke would
+        skip (an alias short stores the CANONICAL it points at, so a naive
+        repoint would leave short-name resolution dispatching to the old
+        canonical).
+
+        Returns the PREVIOUS canonical FQCN (the inverse target, for the
+        ``rebind`` round-trip).
+
+        ``source`` re-stamps the alias provenance shown by display surfaces
+        (``_alias_sources`` -- consumed by ``dz list --show alias``): after a
+        repoint the original declaration (e.g. a virtual-kit manifest) no longer
+        describes the mapping, so attributing it would mislead. Follows the
+        existing source-string pattern ("auto-realpath").
+
+        Raises:
+            KeyError: ``alias_fqcn`` is not a registered alias, OR
+                ``new_canonical_fqcn`` is not in ``canonical_index`` (aliases are
+                single-hop and must point at a real canonical).
+        """
+        if alias_fqcn not in self.alias_index:
+            raise KeyError(
+                f"repoint_alias: '{alias_fqcn}' is not a registered alias"
+            )
+        old_canonical = self.alias_index[alias_fqcn]
+        if new_canonical_fqcn == old_canonical:
+            return old_canonical  # idempotent no-op (provenance unchanged)
+        if new_canonical_fqcn not in self.canonical_index:
+            raise KeyError(
+                f"repoint_alias: target '{new_canonical_fqcn}' is not a "
+                f"canonical FQCN (aliases are single-hop and must point at a "
+                f"real canonical)"
+            )
+
+        self.alias_index[alias_fqcn] = new_canonical_fqcn
+        self._alias_sources[alias_fqcn] = source
+
+        # short_index re-bookkeeping. The alias short contributes the CANONICAL
+        # it points at. Drop the old canonical from the alias-short bucket unless
+        # it is still justified (its own short, or another alias with this short
+        # still points at it); add the new canonical.
+        alias_short = alias_fqcn.rsplit(":", 1)[-1]
+        bucket = self.short_index.setdefault(alias_short, [])
+        if not self._short_still_justified(
+            alias_short, old_canonical, exclude_alias=alias_fqcn
+        ):
+            if old_canonical in bucket:
+                bucket.remove(old_canonical)
+        if new_canonical_fqcn not in bucket:
+            bucket.append(new_canonical_fqcn)
+
+        return old_canonical
+
+    def _short_still_justified(self, short, canonical_fqcn, *, exclude_alias):
+        """True if ``canonical_fqcn`` should remain in ``short_index[short]`` for
+        a reason OTHER than the alias being repointed away (``exclude_alias``):
+        either it is the canonical's own short name, or another alias with this
+        short still points at it.
+        """
+        proj = self.canonical_index.get(canonical_fqcn)
+        if proj is not None and getattr(proj, "short_name", None) == short:
+            return True
+        for a_fqcn, a_canon in self.alias_index.items():
+            if a_fqcn == exclude_alias:
+                continue
+            if a_canon == canonical_fqcn and a_fqcn.rsplit(":", 1)[-1] == short:
+                return True
+        return False
+
     # -- resolution -------------------------------------------------------
 
     def resolve(self, name, precedence=None, favorites=None):

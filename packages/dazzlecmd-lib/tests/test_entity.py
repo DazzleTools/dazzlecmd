@@ -171,9 +171,19 @@ class TestGroupable:
 
     def test_verbs_declared_but_deferred(self):
         t = Tool.model_validate(_tool_manifest())
-        for verb in ("group", "ungroup", "hide", "expose", "rebind"):
+        # rebind is live as of the behavioral-phase PoC (#84); the other four
+        # remain deferred and still fail explicitly.
+        for verb in ("group", "ungroup", "hide", "expose"):
             with pytest.raises(NotImplementedError):
                 getattr(t, verb)()
+
+    def test_rebind_is_live_not_deferred(self):
+        t = Tool.model_validate(_tool_manifest())
+        # rebind no longer raises NotImplementedError -- it delegates to a
+        # RebindContext. Called without one it raises TypeError (a live
+        # signature), proving it is implemented, not deferred.
+        with pytest.raises(TypeError):
+            t.rebind("some:target", context=None)
 
 
 class TestReserveFieldAxis:

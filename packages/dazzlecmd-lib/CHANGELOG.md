@@ -8,6 +8,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.7.16] - 2026-06-09
+
+Ships with dazzlecmd v0.8.20 -- behavioral phase (#84) `rebind` PoC Phase 1 (alias). Additive; no breaking change.
+
+### Added
+
+- `groupable` (NEW module): `RebindReceipt`, `RebindInvariant` (C2 descriptor), `CriticalityBoundaryError`, `RebindContext` protocol, `AliasRebindContext`.
+- `engine.FQCNIndex.repoint_alias(alias_fqcn, new_canonical_fqcn)` -- the alias-rebind primitive (single-hop/existence guards + `short_index` re-bookkeeping; `insert_alias` refuses different-target remaps by design).
+
+### Changed
+
+- `entity.Groupable.rebind` implemented (was `NotImplementedError`): `rebind(target, *, context)` delegates to a `RebindContext`, preserving C1. Other four verbs remain deferred; `Frame` reserved.
+
+### Refs
+
+Ships with dazzlecmd v0.8.20. Refs dazzlecmd #84, #77, #73.
+
 ## [0.7.15] - 2026-06-08
 
 Ships with dazzlecmd v0.8.18 -- Phase 1 Stage 3 (ratchet enforcement). Byte-identical.
