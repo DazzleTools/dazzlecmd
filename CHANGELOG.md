@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.33] - 2026-06-10
+
+The manifest↔entity **boundary contract** as a standing regression (tested rather than asserted). Empirical finding: the dict↔entity boundary IS a group/ungroup pair (`build_entity` groups, `to_manifest` ungroups; conserved invariant = the manifest's own content), and the existing `states.assert_round_trip` harness expresses it with **zero new machinery** — verified over all 41 real manifests in the repo (0 lost / 0 changed post-v0.8.32; the projection only ADDS materialized defaults — the L2-semantic vs L2.5-byte gap, measured). Also measured the wild `source` population: 3 blocks, all str-form — too small/skewed to justify a typed `SourceRef` now; a prototype validated against the population with 0 failures, so typing it at #73 (when graduation starts *writing* source blocks) is low-risk and the right time.
+
+### Added
+
+- `tests/test_boundary_roundtrip.py` (3): the live-repo-population round-trip (every real manifest, via the states harness), a worst-case synthetic manifest (typed + `_`-prefixed + both polymorphic source forms + novel keys), and the additive-only L2.5-gap pin.
+- `tests/one-offs/thinking/boundary_contract_experiments.py` — the E1/E2/E3 experiments (population identity, SourceRef prototype, harness-fit) that produced the evidence.
+
+### Versions
+
+- dazzlecmd 0.8.32 -> 0.8.33 (PATCH; lib unchanged at 0.8.2 — tests only).
+- dazzle-dz alias -> 0.8.33 (dazzlecmd pin only).
+
 ## [0.8.32] - 2026-06-10
 
 Post-shim untyped-access review (the `extra_get` DWP the v0.8.30 quick-decision deserved). Verdict: the mechanism was right but **4 of the 5 extra keys were mis-filed**, and the review surfaced a real data-loss bug. All fixes additive; byte-identical (byte-gate 10 OK).
@@ -2675,7 +2689,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.32...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.33...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
