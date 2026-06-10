@@ -308,6 +308,19 @@ def _register_meta_commands(subparsers):
     kit_unshadow.add_argument("fqcn", help="FQCN to unshadow")
     kit_unshadow.set_defaults(_meta="kit_unshadow")
 
+    kit_hide = kit_sub.add_parser(
+        "hide",
+        help="Hide a tool from listings (display-off) -- it stays dispatchable",
+    )
+    kit_hide.add_argument("fqcn", help="FQCN to hide")
+    kit_hide.set_defaults(_meta="kit_hide")
+
+    kit_unhide = kit_sub.add_parser(
+        "unhide", help="Restore a hidden tool to listings"
+    )
+    kit_unhide.add_argument("fqcn", help="FQCN to unhide")
+    kit_unhide.set_defaults(_meta="kit_unhide")
+
     kit_silenced = kit_sub.add_parser(
         "silenced",
         help="Show all silenced hints and shadowed tools",
@@ -507,6 +520,10 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
         return _cmd_kit_shadow(args, engine)
     elif meta == "kit_unshadow":
         return _cmd_kit_unshadow(args, engine)
+    elif meta == "kit_hide":
+        return _cmd_kit_hide(args, engine)
+    elif meta == "kit_unhide":
+        return _cmd_kit_unhide(args, engine)
     elif meta == "kit_silenced":
         return _cmd_kit_silenced(engine)
     elif meta == "kit_add":
@@ -1637,6 +1654,44 @@ def _cmd_kit_unshadow(args, engine):
 
     engine._write_user_config({"shadowed_tools": shadowed})
     print(f"Unshadowed: {fqcn}")
+    return 0
+
+
+def _cmd_kit_hide(args, engine):
+    """Add an FQCN to hidden_tools (display-off, still dispatchable)."""
+    fqcn = args.fqcn
+    if engine is None:
+        print("Error: engine unavailable", file=sys.stderr)
+        return 1
+
+    config = engine._get_user_config()
+    hidden = list(config.get("hidden_tools") or [])
+    if fqcn not in hidden:
+        hidden.append(fqcn)
+
+    engine._write_user_config({"hidden_tools": hidden})
+    print(f"Hidden: {fqcn}")
+    print("  Omitted from 'dz list'/'dz tree' but still dispatchable by name")
+    print("  (reveal with 'dz list --show-hidden').")
+    return 0
+
+
+def _cmd_kit_unhide(args, engine):
+    """Remove an FQCN from hidden_tools."""
+    fqcn = args.fqcn
+    if engine is None:
+        print("Error: engine unavailable", file=sys.stderr)
+        return 1
+
+    config = engine._get_user_config()
+    hidden = list(config.get("hidden_tools") or [])
+    if fqcn not in hidden:
+        print(f"'{fqcn}' was not hidden.")
+        return 0
+    hidden.remove(fqcn)
+
+    engine._write_user_config({"hidden_tools": hidden})
+    print(f"Unhidden: {fqcn}")
     return 0
 
 

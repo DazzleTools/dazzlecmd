@@ -4,6 +4,25 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.28] - 2026-06-10
+
+State system, Step 4b — the `dz kit hide` / `dz kit unhide` CLI sugar + the Hidden/verbs human checklist. Makes the Hidden level (mechanism in 0.8.26, verbs in 0.8.27) user-operable: `dz kit hide <fqcn>` adds a tool to `hidden_tools` (display-off, still dispatchable); `dz kit unhide <fqcn>` removes it — mirroring the existing `dz kit silence`/`shadow` channel toggles (silence = hints, hide = display, shadow = resolution). Reveal with `dz list --show-hidden`.
+
+### Added
+
+- `dz kit hide <fqcn>` / `dz kit unhide <fqcn>` — single-key toggles of `hidden_tools`, mirroring `dz kit shadow`/`unshadow`. (The programmatic `entity.hide(to="hidden")` verb sets the full ladder level cumulatively; the CLI command toggles the one display channel — both coexist, `visibility_in` reports the level.)
+- `tests/checklists/v0.8.28__Feature__hidden-visibility-and-hide-expose-verbs.md` — public human checklist; the load-bearing manual check is that a hidden tool still runs by name.
+
+### Tests
+
+- `tests/test_hidden_tools.py` — 4 added: `dz kit hide` writes config + list omits, `unhide` restores, unhide-not-hidden is graceful, hide is idempotent.
+
+### Versions
+
+- dazzlecmd 0.8.27 -> 0.8.28 (PATCH).
+- dazzlecmd-lib unchanged at 0.7.23 (this slice is CLI-only — no lib source change).
+- dazzle-dz alias -> 0.8.28; dazzlecmd dep re-pinned to >=0.8.28 (lib pin unchanged).
+
 ## [0.8.27] - 2026-06-10
 
 State system, Step 4a — the hide/expose verbs (the visibility ladder). #84's third and fourth live Groupable verbs: `hide`/`expose` walk the monotone channel ladder (Visible → Silenced → Hidden → Shadowed) with an explicit target level and direction enforcement. The verbs WRITE the existing config keys — which ARE the per-channel suppression sets (`silenced_hints`=hints, `hidden_tools`=display, `shadowed_tools`=resolution) — so the monotone effect falls out of the existing filters with no new engine logic. Additive; byte-identical (byte-gate 10 OK).
@@ -2551,7 +2570,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.27...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.28...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
