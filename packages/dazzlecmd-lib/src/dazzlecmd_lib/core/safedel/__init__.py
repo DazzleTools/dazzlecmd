@@ -40,6 +40,7 @@ from dazzlecmd_lib.core.safedel._recover import (
     cmd_recover,
     cmd_clean,
     cmd_status,
+    recover_folder,
 )
 
 __all__ = [
@@ -59,7 +60,9 @@ __all__ = [
     "cmd_recover",
     "cmd_clean",
     "cmd_status",
+    "recover_folder",
 ]
 
 # Bump when the public surface changes in a way consumers must adapt to.
-__api_version__ = "1"
+# v2: added `recover_folder` (exact-name programmatic recovery, #37).
+__api_version__ = "2"

@@ -530,10 +530,21 @@ def build_default_registry() -> TransitionRegistry:
         reversibility=Reversibility.REVERSIBLE, conserved="remote_url",
         note="dev<->publish within the orbit (SYMLINK<->SUBMODULE); reversible",
     ))
+    # EMBEDDED -> orbit is now REVERSIBLE: `dz mode restore` (#37) re-materializes
+    # the embedded content from the origins record + safedel backup. The inverse
+    # mechanism is restore, not a bare rebind, but the edge can be inverted -- so
+    # it is no longer a one-way mini-graduation.
     reg.declare(Transition(
-        axis="mode", from_values=_MODE_OUT_OF_ORBIT, to_value=OPEN, verb="rebind",
+        axis="mode", from_values=("embedded",), to_value=OPEN, verb="rebind",
+        reversibility=Reversibility.REVERSIBLE, conserved="embedded_content",
+        note="EMBEDDED->SYMLINK: reversible via origins tracking + 'dz mode restore'",
+    ))
+    # LOCAL_ONLY -> orbit stays ONE_WAY: there is no backed-up content to recover
+    # and no registered submodule to re-clone, so the entry cannot be inverted.
+    reg.declare(Transition(
+        axis="mode", from_values=("local-only",), to_value=OPEN, verb="rebind",
         reversibility=Reversibility.ONE_WAY, conserved="remote_url",
-        note="entering the orbit from EMBEDDED/LOCAL_ONLY -- one-way (mini-graduation)",
+        note="LOCAL_ONLY->SYMLINK: one-way (no backed-up content, no registered submodule)",
     ))
     reg.declare(Transition(
         axis="mode", from_values=("missing",), to_value=OPEN, verb="rebind",

@@ -476,6 +476,13 @@ def _register_meta_commands(subparsers):
                              help="Show what would happen without doing it")
     mode_switch.set_defaults(_meta="mode_switch")
 
+    mode_restore = mode_sub.add_parser(
+        "restore", help="Restore a tool to its prior on-disk form (undo a dev switch)")
+    mode_restore.add_argument("tool", help="Tool name to restore")
+    mode_restore.add_argument("--dry-run", action="store_true",
+                              help="Show what would happen without doing it")
+    mode_restore.set_defaults(_meta="mode_restore")
+
     mode_parser.set_defaults(_meta="mode")
 
     # dz version (alternate to --version)
@@ -560,6 +567,8 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
         return _cmd_mode_status(args, projects, project_root)
     elif meta == "mode_switch":
         return _cmd_mode_switch(args, projects, project_root)
+    elif meta == "mode_restore":
+        return _cmd_mode_restore(args, projects, project_root)
     elif meta == "mode":
         # bare "dz mode" with no subcommand — show status
         return _cmd_mode_status(args, projects, project_root)
@@ -962,6 +971,18 @@ def _cmd_mode_switch(args, projects, project_root):
         url=getattr(args, "url", None),
         force=getattr(args, "force", False),
         immediate=getattr(args, "immediate", False),
+    )
+
+
+def _cmd_mode_restore(args, projects, project_root):
+    """Restore a tool to its prior on-disk form (undo a dev-mode switch)."""
+    from dazzlecmd.mode import cmd_restore
+
+    return cmd_restore(
+        tool_name=args.tool,
+        projects=projects,
+        project_root=project_root,
+        dry_run=getattr(args, "dry_run", False),
     )
 
 

@@ -15,10 +15,10 @@ import dazzlecmd_lib.core.safedel as sd
 
 
 def test_public_surface():
-    assert sd.__api_version__ == "1"
+    assert sd.__api_version__ == "2"  # v2 added recover_folder (#37)
     for name in ("TrashStore", "TrashEntry", "TrashResult", "StoreStats",
                  "stage_to_trash", "safe_delete", "get_trash_dir", "classify",
-                 "cmd_recover", "cmd_list"):
+                 "cmd_recover", "cmd_list", "recover_folder"):
         assert hasattr(sd, name), name
 
 

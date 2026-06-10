@@ -326,19 +326,37 @@ class TestLiveModeAgreement:
             assert t.reversible == r.reversible
             assert t.conserved == r.invariant.conserved_quantity_name == "remote_url"
 
-    def test_enter_orbit_one_way_matches_declaration(self):
+    def test_embedded_reversible_via_restore_localonly_oneway(self):
+        """EMBEDDED->orbit is REVERSIBLE in the registry now that the inverse
+        mechanism exists ('dz mode restore', #37) -- even though the in-orbit
+        ModeRebindContext receipt still reports reversible=False, because its
+        undo() drives the dev<->publish orbit, not restore. The two layers
+        diverge on purpose: registry = "an inverse mechanism exists"; receipt =
+        "this context's undo() can auto-invert". LOCAL_ONLY stays ONE_WAY."""
         from dazzlecmd_lib.mode import ModeRebindContext
         reg = build_default_registry()
         with tempfile.TemporaryDirectory() as tmp:
             tool = _sandbox_tool(tmp, with_url=True)  # EMBEDDED + url
             ctx = ModeRebindContext(project_root=tmp, tools_dir="projects", dry_run=True)
             r = tool.rebind("publish", context=ctx)
+            # The orbit context cannot auto-invert an entry from outside the
+            # orbit -- its undo() has no way to recover the content.
             assert r.reversible is False
 
-            t = reg.lookup(verb="rebind", axis="mode", from_value="embedded")
-            assert t.reversibility is Reversibility.ONE_WAY
-            assert t.reversible is False
-            assert t.conserved == r.invariant.conserved_quantity_name == "remote_url"
+        # The registry, however, now classifies EMBEDDED->orbit REVERSIBLE: the
+        # inverse exists (origins record + 'dz mode restore'), conserving the
+        # embedded content rather than the remote URL.
+        t_emb = reg.lookup(verb="rebind", axis="mode", from_value="embedded")
+        assert t_emb.reversibility is Reversibility.REVERSIBLE
+        assert t_emb.reversible is True
+        assert t_emb.conserved == "embedded_content"
+
+        # LOCAL_ONLY has no backed-up content and no registered submodule, so it
+        # is genuinely one-way -- nothing to invert.
+        t_lo = reg.lookup(verb="rebind", axis="mode", from_value="local-only")
+        assert t_lo.reversibility is Reversibility.ONE_WAY
+        assert t_lo.reversible is False
+        assert t_lo.conserved == "remote_url"
 
     def test_underivable_invariant_is_refused_and_declared(self):
         from dazzlecmd_lib.mode import ModeRebindContext

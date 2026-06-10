@@ -4,6 +4,24 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.13] - 2026-06-10
+
+**#37 mode-swap reversibility — `dz mode restore` (the symmetric inverse of a dev switch).** Building on the 0.9.12 origins foundation: `dz mode restore <tool>` reads the recorded origin and re-materializes the prior on-disk form — the *group* that inverts the dev-switch *ungroup*. An EMBEDDED origin recovers the exact backed-up content from the safedel trash; a SUBMODULE origin re-clones via `git submodule update --init`. Refuses cleanly when there's no origin, the tool isn't in dev mode, or the backup is gone; for the EMBEDDED path the symlink is removed only after a pre-check, and a recovery failure re-creates the symlink (best-effort rollback) so the tool is never left missing. `dz mode restore <tool> --dry-run` previews. The state system reclassifies EMBEDDED→SYMLINK as REVERSIBLE (the inverse mechanism now exists) while LOCAL_ONLY stays ONE_WAY.
+
+### Added
+
+- `dz mode restore <tool>` (+ `--dry-run`): CLI subcommand, `mode.cmd_restore`, and a `recover_folder` primitive in `dazzlecmd_lib.core.safedel` for exact-name programmatic recovery (safedel API v2).
+
+### Changed
+
+- `states`: EMBEDDED→SYMLINK is REVERSIBLE (conserved `embedded_content`); LOCAL_ONLY→SYMLINK stays ONE_WAY. `ModeRebindContext.undo()` on an out-of-orbit entry now points the user at `dz mode restore`.
+
+### Versions
+
+- dazzlecmd 0.9.12 -> 0.9.13 (PATCH).
+- dazzlecmd-lib 0.8.14 -> 0.8.15 (PATCH).
+- dazzle-dz alias -> 0.9.13; deps re-pinned to >=0.9.13 / >=0.8.15.
+
 ## [0.9.12] - 2026-06-10
 
 **#37 mode-swap reversibility — origins-tracking foundation.** Entering dev mode (`dz mode switch <tool>`) is an *ungroup* (the tool's content leaves the tree; a symlink replaces it); coming back is the *group*. This slice records what was there before so the symmetric restore (next slice) can re-materialize it. `mode_local.json` gains an `origins` key (schema **v2**, transparently migrated): for each tool that entered dev mode it stores the prior on-disk form (`embedded`/`submodule`), the safedel backup pointer (EMBEDDED only — SUBMODULE re-clones from `.gitmodules`), the original path (rename cross-check), and a timestamp. Origins are written after the symlink lands (never for an aborted swap) and cleared when the user intentionally moves to publish. No user-visible behavior yet — `dz mode restore` arrives next.
@@ -2935,7 +2953,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.12...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.13...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

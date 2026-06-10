@@ -8,6 +8,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.15] - 2026-06-10
+
+Ships with dazzlecmd v0.9.13 -- #37 mode-swap reversibility, the functional restore path. Builds on the 0.8.14 origins foundation.
+
+### Added
+
+- `mode.cmd_restore(tool_name, projects, project_root, dry_run, *, tools_dir, command, schema)` -- re-materializes a tool's prior on-disk form from its recorded origin (EMBEDDED -> recover from the safedel trash; SUBMODULE -> re-clone). Removes the dev symlink only after a pre-check; on a recovery failure re-creates the symlink (best-effort rollback) so the tool is never left STATE_MISSING.
+- `dazzlecmd_lib.core.safedel.recover_folder(store, folder_name, ...)` -- exact-name programmatic recovery of one trash folder (vs `cmd_recover`'s fuzzy time-pattern globbing). Safedel public API bumped to **v2**.
+
+### Changed
+
+- `states.build_default_registry`: the EMBEDDED->SYMLINK MODE edge is now `REVERSIBLE` (conserved `embedded_content`) -- the inverse mechanism (origins + `cmd_restore`) exists. LOCAL_ONLY->SYMLINK stays `ONE_WAY` (no backed-up content, no registered submodule). The registry's REVERSIBLE classification ("an inverse mechanism exists") deliberately diverges from `ModeRebindContext`'s receipt `reversible` flag ("this context's `undo()` can auto-invert") -- `undo()` on an out-of-orbit entry now points the user at `dz mode restore`.
+
 ## [0.8.14] - 2026-06-10
 
 Ships with dazzlecmd v0.9.12 -- #37 mode-swap reversibility, the origins-tracking foundation (no restore command yet). Additive + schema-migrating.

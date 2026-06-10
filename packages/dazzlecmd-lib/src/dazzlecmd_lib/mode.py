@@ -547,6 +547,148 @@ def cmd_switch(tool_name, projects, project_root, dev_path=None,
         )
 
 
+def cmd_restore(tool_name, projects, project_root, dry_run=False, *,
+                tools_dir, command, schema=None):
+    """Restore a tool to its prior on-disk form -- the inverse of ``mode switch``
+    into dev mode (#37). Entering dev mode ungroups the tool from the working
+    tree (a symlink replaces its content); ``restore`` groups it back.
+
+    Reads the origin recorded by ``_record_origin`` and re-materializes the
+    prior form by its mechanism:
+
+    - **EMBEDDED** origin -> recover the backed-up content from the safedel
+      trash (the only path that needs the backup; there is no remote to clone).
+    - **SUBMODULE** origin -> re-clone via the existing publish path
+      (``git submodule update --init``); the backup is not needed.
+
+    Refuses cleanly when there is no origin, the tool is not in dev mode, or the
+    trash backup is gone. For the EMBEDDED path the symlink is removed BEFORE
+    recovery (safedel refuses an occupied target); a recovery failure re-creates
+    the symlink as best-effort rollback so we never silently lose the tool.
+    """
+    matches = [
+        p for p in projects
+        if p.name == tool_name or (p.fqcn or "") == tool_name
+    ]
+    if matches:
+        project = matches[0]
+        tool_name = project.name
+    else:
+        project = _find_undiscovered_tool(
+            tool_name, project_root, tools_dir=tools_dir
+        )
+        if project is None:
+            print(f"Error: Tool '{tool_name}' not found. Use '{command} list' "
+                  "to see available tools.", file=sys.stderr)
+            return 1
+
+    tool_dir = project.directory
+    namespace = project.namespace
+    qualified = f"{namespace}:{tool_name}"
+
+    data = _load_full_config(project_root)
+    origin = data.get("origins", {}).get(qualified)
+    if not origin:
+        print(f"No restore origin recorded for '{qualified}'. Nothing to do.")
+        print(f"  (Origins are recorded when '{command} mode switch' enters "
+              "dev mode from an embedded dir or submodule.)")
+        return 0
+
+    gitmodules = parse_gitmodules(project_root, tools_dir=tools_dir)
+    state = detect_tool_state(
+        tool_dir, gitmodules, project_root, tools_dir=tools_dir
+    )
+    if state not in (STATE_SYMLINK, STATE_LOCAL_ONLY):
+        print(f"Tool '{qualified}' is not in dev mode (current: "
+              f"{STATE_LABELS.get(state, state)}); restore not applicable.")
+        return 0
+
+    prior_state = origin.get("prior_state")
+    original_path = origin.get("original_path")
+    if (original_path
+            and os.path.normpath(original_path) != os.path.normpath(tool_dir)):
+        print(f"  [warning] recorded origin path '{original_path}' differs from "
+              f"the current tool dir '{tool_dir}' (tool moved/renamed?); "
+              "restoring to the current location.", file=sys.stderr)
+
+    dev_path = data.get("dev_paths", {}).get(qualified)
+
+    print(f"Tool:    {qualified}")
+    print(f"Current: {STATE_LABELS.get(state, state)}")
+    print(f"Target:  {STATE_LABELS.get(prior_state, prior_state)} (restore)")
+    print()
+
+    if prior_state == STATE_SUBMODULE:
+        if dry_run:
+            print(f"  Would restore the submodule checkout at {tool_dir} "
+                  "(git submodule update --init).")
+            return 0
+        # Re-clone via the existing publish path. It clears the origin on
+        # success (intentional move to publish).
+        rc = _switch_to_publish(
+            project, project_root, gitmodules, dry_run=False, force=False,
+            tools_dir=tools_dir, command=command, schema=schema,
+        )
+        if rc == 0:
+            print(f"Restored '{qualified}' to SUBMODULE.")
+        return rc
+
+    if prior_state == STATE_EMBEDDED:
+        trash_folder = origin.get("trash_folder")
+        if not trash_folder:
+            print(f"Error: the origin for '{qualified}' is EMBEDDED but records "
+                  "no trash backup; cannot restore automatically.",
+                  file=sys.stderr)
+            return 1
+        from dazzlecmd_lib.core.safedel import TrashStore, recover_folder
+        store = TrashStore()
+        if store.get_folder(trash_folder) is None:
+            print(f"Error: backup '{trash_folder}' not found in the trash store "
+                  "(it may have been cleaned). Cannot restore automatically.",
+                  file=sys.stderr)
+            print(f"  Inspect the trash with: {command} safedel list",
+                  file=sys.stderr)
+            return 1
+
+        if dev_path:
+            print(f"  Note: your dev work in {dev_path} is untouched -- only the "
+                  "symlink here is removed.")
+        if dry_run:
+            print(f"  Would remove the symlink at {tool_dir}.")
+            print(f"  Would recover backup '{trash_folder}' to {tool_dir}.")
+            return 0
+
+        # Remove the symlink first (safedel refuses an occupied target), then
+        # recover. On recovery failure, re-create the symlink (best-effort
+        # rollback) so the tool is never left STATE_MISSING.
+        if is_linked_project(tool_dir):
+            if not remove_link(tool_dir):
+                print(f"Error: could not remove the symlink at {tool_dir}.",
+                      file=sys.stderr)
+                return 1
+        rc = recover_folder(store, trash_folder)
+        if rc != 0:
+            print(f"Error: recovery of backup '{trash_folder}' failed.",
+                  file=sys.stderr)
+            if dev_path and create_link(dev_path, tool_dir):
+                print(f"  Re-created the dev symlink {tool_dir} -> {dev_path} "
+                      "(restore rolled back; nothing lost).", file=sys.stderr)
+            return 1
+
+        _clear_origin(qualified, project_root)
+        # No longer in dev mode -- drop the remembered dev path too.
+        dp = load_local_config(project_root)
+        if qualified in dp:
+            dp.pop(qualified, None)
+            save_local_config(project_root, dp)
+        print(f"Restored '{qualified}' to EMBEDDED.")
+        return 0
+
+    print(f"Error: unknown prior_state {prior_state!r} recorded for "
+          f"'{qualified}'.", file=sys.stderr)
+    return 1
+
+
 def _find_undiscovered_tool(tool_name, project_root, *, tools_dir):
     """Find a tool by scanning ``<tools_dir>/`` directories even without a manifest.
 
@@ -1294,10 +1436,14 @@ class ModeRebindContext:
         entity's directory), so ``undo`` must follow an ``apply`` on this context.
         """
         if not receipt.reversible:
+            short = receipt.entity_fqcn.split(":")[-1]
             raise CriticalityBoundaryError(
                 f"cannot undo mode rebind for {receipt.entity_fqcn}: the transition "
                 f"was one-way (reversible=False) -- entering the orbit from outside "
-                f"is a mini-graduation, not auto-invertible."
+                f"is not auto-invertible by this context (which drives the in-orbit "
+                f"dev<->publish mechanism). If the prior form was an embedded "
+                f"directory, recover it with 'dz mode restore {short}' (#37); a "
+                f"LOCAL_ONLY entry has nothing to recover."
             )
         entity = getattr(self, "_applied_entity", None)
         if entity is None:

@@ -42,6 +42,7 @@ from dazzlecmd_lib.mode import detect_tool_state as _lib_detect_tool_state
 from dazzlecmd_lib.mode import resolve_dev_path as _lib_resolve_dev_path
 from dazzlecmd_lib.mode import cmd_status as _lib_cmd_status
 from dazzlecmd_lib.mode import cmd_switch as _lib_cmd_switch
+from dazzlecmd_lib.mode import cmd_restore as _lib_cmd_restore
 
 
 # dazzlecmd's aggregator-specific defaults. wtf-windows / amdead supply
@@ -97,4 +98,12 @@ def cmd_switch(tool_name, projects, project_root, dev_path=None,
         dry_run=dry_run, url=url, force=force,
         tools_dir=_TOOLS_DIR, command=_COMMAND, schema=None,
         immediate=immediate,
+    )
+
+
+def cmd_restore(tool_name, projects, project_root, dry_run=False):
+    """Restore a dazzlecmd tool to its prior on-disk form (inverse of dev switch)."""
+    return _lib_cmd_restore(
+        tool_name, projects, project_root, dry_run=dry_run,
+        tools_dir=_TOOLS_DIR, command=_COMMAND, schema=None,
     )

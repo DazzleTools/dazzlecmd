@@ -213,6 +213,52 @@ def cmd_recover(
     return 1 if total_errors > 0 else 0
 
 
+def recover_folder(
+    store: TrashStore,
+    folder_name: str,
+    to_path: Optional[str] = None,
+    dry_run: bool = False,
+) -> int:
+    """Recover one SPECIFIC trash folder by its exact name. Returns 0/1.
+
+    Programmatic counterpart to ``cmd_recover``: where ``cmd_recover`` resolves
+    user-typed positional args through fuzzy time-pattern globbing (``last``,
+    ``today``, ``2026-04-0*``), this takes the exact ``folder_name`` a caller
+    already holds (e.g. the ``TrashResult.folder_name`` a mode swap recorded as
+    a restore origin, #37) and recovers it directly -- no glob ambiguity.
+
+    Recovers every entry to its ``original_path`` (or under ``to_path``), then
+    removes the now-empty trash folder on full success. Returns 0 if all entries
+    recovered, 1 if the folder is missing or any entry failed.
+    """
+    folder = store.get_folder(folder_name)
+    if folder is None:
+        print(f"  Trash folder '{folder_name}' not found.", file=sys.stderr)
+        return 1
+
+    recovered = 0
+    errors = 0
+    for entry in folder.entries:
+        if _recover_entry(store, folder, entry, to_path=to_path,
+                          dry_run=dry_run):
+            recovered += 1
+        else:
+            errors += 1
+
+    if not dry_run and errors == 0:
+        store.remove_folder(folder.folder_name)
+
+    if dry_run:
+        print(f"\n  DRY RUN: Would recover {recovered} item(s) from "
+              f"'{folder_name}'.")
+    else:
+        print(f"\n  Recovered {recovered} item(s) from '{folder_name}'.")
+        if errors:
+            print(f"  {errors} error(s) occurred.", file=sys.stderr)
+
+    return 1 if errors > 0 else 0
+
+
 def _recover_entry(
     store: TrashStore,
     folder: TrashFolder,
