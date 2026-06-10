@@ -4,6 +4,25 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] - 2026-06-10 — opens the 0.9.x line
+
+**0.9.x begins.** 0.8.x is distinctly the grouping-mechanics work (Act I; closed at v0.8.34, the rollback anchor). 0.9.x is the design-settlement Act II: finalize the base + consumers, then ship the parked tools. This first commit is **Phase 0 consumer finalization** — reconciling the wtf-windows consumer for the dazzlecmd-lib 0.8.0 shim deletion.
+
+### Changed
+
+- Submodule `projects/wtf` bumped to wtf-windows **v0.1.7-alpha** (`a2f993b`): wtf's own aggregator CLI (`wtf list` / `wtf info`) migrated 3 `project.get("diagnostics")` reads to `extra_get`. The 0.8.0 shim removal exposed this break in wtf's **standalone** entry point only — dazzlecmd dispatches wtf's tools through its own already-migrated render code, so the byte-gate never surfaced it. The fix propagated to both the in-tree submodule and the standalone checkout (`c:\code\wtf-windows`); both wtf suites green on lib 0.8.x.
+
+### Note
+
+- **amdead** (the other consumer) was already green on 0.8.x — its entity-access fix shipped earlier (amdead `2941a26`); no change needed.
+- wtf's `diagnostics` block is correctly a wtf-domain manifest extension (read via `extra_get`), **not** a missing dazzlecmd-lib core type (`.wtf.json` extends `.dazzlecmd.json` with it). The adjacent "should the lib offer *typed* aggregator manifest extensions?" question is tracked for the #77 framework — see `2026-06-10__09-40-42__dev-workflow-process__post-shim-untyped-access-design-review.md` §5.
+
+### Versions
+
+- dazzlecmd 0.8.34 -> 0.9.0 (MINOR — opens the 0.9.x line).
+- dazzlecmd-lib unchanged at 0.8.3 (consumer/submodule reconciliation only — no lib change).
+- dazzle-dz alias -> 0.9.0; dazzlecmd dep re-pinned to >=0.9.0.
+
 ## [0.8.34] - 2026-06-10
 
 #84 certification cleanup. With all five Groupable verbs live, the orphaned `_CAP_DEFERRED` stub scaffolding (defined but no longer referenced -- no `NotImplementedError` remains on any verb) is removed from `Groupable`, making #84's "the stubs are gone" acceptance criterion literally true. #84 closed against this arc (v0.8.20-v0.8.34).
@@ -2701,7 +2720,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.34...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.0...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
