@@ -4,6 +4,18 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.34] - 2026-06-10
+
+#84 certification cleanup. With all five Groupable verbs live, the orphaned `_CAP_DEFERRED` stub scaffolding (defined but no longer referenced -- no `NotImplementedError` remains on any verb) is removed from `Groupable`, making #84's "the stubs are gone" acceptance criterion literally true. #84 closed against this arc (v0.8.20-v0.8.34).
+
+### Removed
+
+- `Groupable._CAP_DEFERRED` -- orphaned stub-era scaffolding.
+
+### Versions
+
+- dazzlecmd 0.8.33 -> 0.8.34 (PATCH); dazzlecmd-lib 0.8.2 -> 0.8.3 (PATCH); dazzle-dz -> 0.8.34.
+
 ## [0.8.33] - 2026-06-10
 
 The manifest↔entity **boundary contract** as a standing regression (tested rather than asserted). Empirical finding: the dict↔entity boundary IS a group/ungroup pair (`build_entity` groups, `to_manifest` ungroups; conserved invariant = the manifest's own content), and the existing `states.assert_round_trip` harness expresses it with **zero new machinery** — verified over all 41 real manifests in the repo (0 lost / 0 changed post-v0.8.32; the projection only ADDS materialized defaults — the L2-semantic vs L2.5-byte gap, measured). Also measured the wild `source` population: 3 blocks, all str-form — too small/skewed to justify a typed `SourceRef` now; a prototype validated against the population with 0 failures, so typing it at #73 (when graduation starts *writing* source blocks) is low-risk and the right time.
@@ -2689,7 +2701,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.33...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.34...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

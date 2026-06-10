@@ -90,12 +90,6 @@ class Groupable:
     making grouping/ungrouping universal without a forced common ancestor.
     """
 
-    _CAP_DEFERRED: ClassVar[str] = (
-        "this verb's tree mechanics are not yet implemented "
-        "(rebind and hide/expose are live; "
-        "group/ungroup land next -- see the grouping/ungrouping DWPs)"
-    )
-
     def group(self, target: Any, *, context: Any) -> Any:
         """P: incorporate this entity into the boundary ``target`` (a kit), within
         ``context`` (a ``dazzlecmd_lib.groupable.ContainmentContext``). A
