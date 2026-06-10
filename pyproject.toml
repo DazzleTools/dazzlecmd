@@ -5,17 +5,17 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dazzlecmd"
 dynamic = ["version"]
-description = "Unified CLI for the DazzleTools collection - many tools, one command"
+description = "A tool for tools: a framework for aggregating and composing the DazzleTools collection"
 readme = "README.md"
 license = {text = "GPL-3.0-or-later"}
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 authors = [
     {name = "Dustin", email = "6962246+djdarcy@users.noreply.github.com"},
 ]
 keywords = ["cli", "tools", "utility", "dazzletools", "dazzle", "command-line", "aggregator"]
 
 dependencies = [
-    "dazzlecmd-lib>=0.7.18",
+    "dazzlecmd-lib>=0.7.19",
 ]
 
 [project.optional-dependencies]

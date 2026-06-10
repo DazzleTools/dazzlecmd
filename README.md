@@ -2,14 +2,14 @@
 
 [![PyPI](https://img.shields.io/pypi/v/dazzlecmd?color=green)](https://pypi.org/project/dazzlecmd/)
 [![Release Date](https://img.shields.io/github/release-date/DazzleTools/dazzlecmd?color=green)](https://github.com/DazzleTools/dazzlecmd/releases)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/license-GPL%20v3-green.svg)](https://www.gnu.org/licenses/gpl-3.0.html)
 [![Installs](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/djdarcy/d10d1c2194e7a4842e323a9dacef2e08/raw/installs.json)](https://dazzletools.github.io/dazzlecmd/stats/#installs)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#cross-platform)
 
-> **Many tools, one command.**
+> **A tool for tools.**
 
-A unified CLI that aggregates many small standalone tools into a single discoverable, version-tracked interface. Instead of remembering where dozens of scripts live or hunting through folders, just use `dz <tool> [args]`.
+A framework for tools -- and for how tools compound on each other. DazzleCMD aggregates many small standalone tools into one discoverable, version-tracked interface, and lets them nest and grow into kits and whole aggregators. Instead of remembering where dozens of scripts live or hunting through folders, just use `dz <tool> [args]`.
 
 ## Why DazzleCMD?
 
