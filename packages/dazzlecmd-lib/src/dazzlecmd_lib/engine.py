@@ -1511,6 +1511,27 @@ class AggregatorEngine:
         """Return a dict-valued config key, validated."""
         return self.config.get_dict(key, default)
 
+    def filter_hidden(self, projects, *, reveal=False):
+        """Drop projects whose FQCN is in the user's ``hidden_tools`` config from
+        a DISPLAY list.
+
+        Hidden is the visibility level between Silenced and Shadowed: a hidden
+        tool stays fully dispatchable (its short name is still claimed, its FQCN
+        still resolves) -- it is merely omitted from ``dz list`` / ``dz tree`` /
+        the help epilog. This is a RENDER-only filter: discovery, the FQCN index,
+        dispatch, and collision/precedence never consult ``hidden_tools`` (unlike
+        ``shadowed_tools``, which is applied at discovery and frees the short
+        name). ``reveal=True`` (``--show-hidden``) returns the list unfiltered.
+        No-op when ``hidden_tools`` is empty -- the default -- so output is
+        byte-identical to before this filter existed.
+        """
+        if reveal:
+            return projects
+        hidden = set(self._get_config_list("hidden_tools", default=[]) or [])
+        if not hidden:
+            return projects
+        return [p for p in projects if (getattr(p, "fqcn", None) or "") not in hidden]
+
     def _write_user_config(self, updates):
         """Merge ``updates`` into the config and write atomically (delegates to ConfigManager)."""
         self.config.write(updates)
@@ -1611,7 +1632,7 @@ class AggregatorEngine:
         epilog = None
         if self.epilog_builder is not None:
             try:
-                epilog = self.epilog_builder(self.projects)
+                epilog = self.epilog_builder(self.filter_hidden(self.projects))
             except Exception as exc:
                 print(
                     f"Warning: epilog_builder raised {exc!r}; using default",

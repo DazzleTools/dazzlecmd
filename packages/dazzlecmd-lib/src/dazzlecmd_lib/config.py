@@ -12,8 +12,18 @@ Schema (Phase 3+):
         "favorites": {"short": "fqcn", ...},
         "silenced_hints": {"tools": [...], "kits": [...]},
         "shadowed_tools": [...],
+        "hidden_tools": [...],
         "kit_discovery": "auto"
     }
+
+The visibility keys form a ladder (increasing suppression):
+    - ``silenced_hints``: suppress the "did you mean" hints for a tool/kit;
+      the tool still lists and dispatches.
+    - ``hidden_tools``: omit the tool's FQCN from display (``dz list``/``dz
+      tree``/help) but keep it fully dispatchable (short name still claimed).
+      A RENDER-only filter -- revealed by ``--show-hidden``.
+    - ``shadowed_tools``: remove the tool at discovery -- not listed, not
+      dispatchable, and its short name is freed for another tool.
 
 All keys are optional. Missing keys fall back to sensible defaults.
 Malformed entries (wrong type, bad JSON) are tolerated with a stderr

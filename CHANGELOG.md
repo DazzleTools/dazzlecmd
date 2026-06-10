@@ -4,6 +4,31 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.26] - 2026-06-10
+
+State system, Step 3 — the Hidden visibility level (#84 behavioral phase, Act I). A new `hidden_tools` user-config key plus a render-only filter: a hidden tool is omitted from `dz list` / `dz tree` / the help epilog but stays fully dispatchable (its short name is still claimed, its FQCN still resolves). This is the ladder level between Silenced (hints suppressed) and Shadowed (removed at discovery, short name freed) — the one net-new mechanism the verbs need. `--show-hidden` reveals. No-op when `hidden_tools` is empty (the default), so output is byte-identical (byte-gate 10 OK).
+
+### Added
+
+- `dazzlecmd_lib.engine.AggregatorEngine.filter_hidden(projects, *, reveal=False)` — the render-only chokepoint shared by all display surfaces; returns a filtered copy (never mutates `engine.projects` / the FQCN index / dispatch), or the same object unchanged when no tools are hidden.
+- `hidden_tools` config key, documented in `config.py` alongside the `silenced_hints` / `shadowed_tools` visibility ladder.
+- `--show-hidden` on `dz list` and `dz tree` (mirrors the existing `--show-disabled` reveal-flag convention).
+
+### Tests
+
+- `tests/test_hidden_tools.py` (NEW, 9): `filter_hidden` (omit + dispatch-source preserved, reveal, empty-is-noop-same-object), and `dz list` / `dz tree` end-to-end (omit, reveal, no-config-shows-all).
+- `tests/test_default_meta_commands.py` — the MagicMock engine stub now mirrors `filter_hidden`'s no-op pass-through.
+
+### Note
+
+The `dz kit hide` / `dz kit unhide` management commands (which WRITE `hidden_tools`) ship with the `hide`/`expose` verbs in Step 4 — this commit lands the mechanism the verbs drive. Until then `hidden_tools` is populated via config.
+
+### Versions
+
+- dazzlecmd 0.8.25 -> 0.8.26 (PATCH).
+- dazzlecmd-lib 0.7.21 -> 0.7.22 (PATCH -- the Hidden render-filter mechanism).
+- dazzle-dz alias -> 0.8.26; deps re-pinned to >=0.8.26 / >=0.7.22.
+
 ## [0.8.25] - 2026-06-09
 
 State system, Step 2 — `undo(receipt)` (#84 behavioral phase, Act I). The context-level inverse, so callers and the round-trip harness need not track the new owner; `assert_round_trip`'s `invert` is now just `ctx.undo`. Additive — `undo` is not called on any dispatch path, so existing behavior is byte-identical (byte-gate 10 OK).
@@ -2497,7 +2522,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.25...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.26...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

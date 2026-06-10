@@ -133,6 +133,10 @@ def _engine(command="test", name="test-aggregator", version_info=None, projects=
     e.projects = projects or []
     e.kits = kits or []
     e.tools_dir = "tools"
+    # Mirror the real engine.filter_hidden no-op (no hidden_tools configured):
+    # pass projects through unchanged so the auto-generated Mock doesn't clobber
+    # the display list.
+    e.filter_hidden = lambda projects, **kw: projects
     return e
 
 

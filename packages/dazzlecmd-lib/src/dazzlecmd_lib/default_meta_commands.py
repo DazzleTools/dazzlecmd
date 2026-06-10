@@ -109,6 +109,10 @@ def list_parser_factory(subparsers):
             "config key 'list_view' then to 'default' if unset."
         ),
     )
+    p.add_argument(
+        "--show-hidden", action="store_true",
+        help="Include tools hidden via the 'hidden_tools' config (still dispatchable).",
+    )
     p.set_defaults(_meta="list")
 
 
@@ -192,6 +196,13 @@ def render_list(args, projects, engine=None) -> int:
             print(f"  {name:<{name_width}}  {kit_name:<{kit_col_width}}  {desc}")
         print(f"\n  {len(filtered)} tool(s) found")
         return 0
+
+    # Hidden tools: a render-only filter (the tool stays dispatchable; this just
+    # omits it from `dz list`). Revealed by --show-hidden. No-op -- byte-identical
+    # -- when the hidden_tools config is empty (the default).
+    projects = engine.filter_hidden(
+        projects, reveal=getattr(args, "show_hidden", False)
+    )
 
     # Determine effective --show mode
     show_mode = getattr(args, "show", None)
@@ -1374,6 +1385,10 @@ def tree_parser_factory(subparsers):
         "--show-disabled", action="store_true",
         help="Include disabled kits in the output",
     )
+    p.add_argument(
+        "--show-hidden", action="store_true",
+        help="Include tools hidden via the 'hidden_tools' config (still dispatchable).",
+    )
     p.set_defaults(_meta="tree")
 
 
@@ -1407,6 +1422,13 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
     # default uses the supplied projects (typically engine.projects, active only).
     if show_disabled:
         projects = getattr(engine, "all_projects", projects)
+
+    # Hidden tools: render-only filter (stays dispatchable; omitted from the
+    # tree). Revealed by --show-hidden. No-op when hidden_tools is empty.
+    if engine is not None:
+        projects = engine.filter_hidden(
+            projects, reveal=getattr(args, "show_hidden", False)
+        )
 
     by_kit: dict[str, list] = {}
     for project in projects:
