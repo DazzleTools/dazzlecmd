@@ -35,6 +35,10 @@ dependencies = [
     # uses dazzle_filekit.metadata for cross-platform metadata preservation
     # (ACLs/ADS/timestamps/xattrs). filekit is the canonical home of that code.
     "dazzle-filekit>=0.2.2",
+    # The trash engine's per-volume routing (_volumes) needs Windows drive-type
+    # detection (network/removable/fixed) for zero-copy same-volume rename;
+    # unctools provides it. Windows-only -- POSIX uses the in-module stubs.
+    "unctools>=0.1.0; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]

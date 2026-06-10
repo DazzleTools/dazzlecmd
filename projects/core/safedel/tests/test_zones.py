@@ -2,7 +2,7 @@
 
 import datetime
 
-from _zones import (
+from dazzlecmd_lib.core.safedel._zones import (
     Zone,
     DEFAULT_CONFIG,
     determine_zone,

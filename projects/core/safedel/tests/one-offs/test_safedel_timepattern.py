@@ -8,7 +8,7 @@ import tempfile
 # Add safedel to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from _timepattern import (
+from dazzlecmd_lib.core.safedel._timepattern import (
     parse_folder_datetime,
     generate_folder_name,
     generate_unique_folder_name,

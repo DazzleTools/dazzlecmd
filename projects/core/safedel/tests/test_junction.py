@@ -11,9 +11,9 @@ import sys
 
 import pytest
 
-from _store import TrashStore
-from _classifier import classify, FileType
-from _recover import cmd_recover
+from dazzlecmd_lib.core.safedel._store import TrashStore
+from dazzlecmd_lib.core.safedel._classifier import classify, FileType
+from dazzlecmd_lib.core.safedel._recover import cmd_recover
 
 
 pytestmark = pytest.mark.skipif(

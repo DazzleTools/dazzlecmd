@@ -11,7 +11,7 @@ import tempfile
 
 import pytest
 
-from _volumes import (
+from dazzlecmd_lib.core.safedel._volumes import (
     VolumeInfo,
     VolumeTrashInfo,
     get_volume_info,
@@ -24,7 +24,7 @@ from _volumes import (
     get_all_trash_paths,
     resolve_trash_store,
 )
-from _store import TrashStore
+from dazzlecmd_lib.core.safedel._store import TrashStore
 
 
 class TestVolumeDetection:

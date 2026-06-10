@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
-from _zones import (
+from dazzlecmd_lib.core.safedel._zones import (
     Zone,
     DEFAULT_CONFIG,
     determine_zone,

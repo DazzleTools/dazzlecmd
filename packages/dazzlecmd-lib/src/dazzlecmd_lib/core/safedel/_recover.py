@@ -43,7 +43,7 @@ def _resolve_folders(
     age_filter: Optional[str] = None,
 ) -> List[TrashFolder]:
     """Resolve user arguments to matching TrashFolder objects across all stores."""
-    from _timepattern import time_pattern_to_glob, get_most_recent_folder
+    from ._timepattern import time_pattern_to_glob, get_most_recent_folder
 
     # --contains and --path search: scan all manifests
     if contains or path_pattern:

@@ -22,10 +22,10 @@ from pathlib import Path
 
 import pytest
 
-from _store import TrashStore
-from _classifier import classify, FileType
-from _recover import cmd_recover, cmd_list, cmd_status
-from _platform import detect_platform
+from dazzlecmd_lib.core.safedel._store import TrashStore
+from dazzlecmd_lib.core.safedel._classifier import classify, FileType
+from dazzlecmd_lib.core.safedel._recover import cmd_recover, cmd_list, cmd_status
+from dazzlecmd_lib.core.safedel._platform import detect_platform
 
 
 @pytest.fixture

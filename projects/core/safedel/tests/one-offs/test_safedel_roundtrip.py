@@ -15,9 +15,9 @@ sys.path.insert(0, _safedel_dir)
 sys.path.insert(0, os.path.join(_safedel_dir, "_lib"))
 sys.path.insert(0, os.path.join(_safedel_dir, "..", "links"))
 
-from _store import TrashStore
-from _classifier import classify, FileType
-from _platform import detect_platform
+from dazzlecmd_lib.core.safedel._store import TrashStore
+from dazzlecmd_lib.core.safedel._classifier import classify, FileType
+from dazzlecmd_lib.core.safedel._platform import detect_platform
 
 
 def _make_test_store():
@@ -67,7 +67,7 @@ def test_regular_file_roundtrip():
         assert manifest["entries"][0]["stat"]["st_size"] == 11
 
         # Recover
-        from _recover import cmd_recover
+        from dazzlecmd_lib.core.safedel._recover import cmd_recover
         # Recover to a new location to avoid path conflicts
         recover_dir = os.path.join(workdir, "recovered")
         os.makedirs(recover_dir)
@@ -118,7 +118,7 @@ def test_directory_roundtrip():
         assert not os.path.exists(test_dir)
 
         # Recover
-        from _recover import cmd_recover
+        from dazzlecmd_lib.core.safedel._recover import cmd_recover
         recover_dir = os.path.join(workdir, "recovered")
         os.makedirs(recover_dir)
         rc = cmd_recover(store, positional_args=["last"], to_path=recover_dir)
@@ -203,7 +203,7 @@ def test_symlink_roundtrip():
             assert f.read() == "target content"
 
         # Recover
-        from _recover import cmd_recover
+        from dazzlecmd_lib.core.safedel._recover import cmd_recover
         rc = cmd_recover(store, positional_args=["last"])
         assert rc == 0
 

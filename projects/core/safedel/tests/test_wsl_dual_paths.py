@@ -12,7 +12,7 @@ import sys
 
 import pytest
 
-from _store import TrashStore, _compute_alt_path
+from dazzlecmd_lib.core.safedel._store import TrashStore, _compute_alt_path
 
 
 @pytest.fixture
@@ -102,16 +102,16 @@ class TestManifestDualPaths:
 
 class TestPathParentAccessible:
     def test_existing_parent(self, workdir):
-        from _recover import _path_parent_accessible
+        from dazzlecmd_lib.core.safedel._recover import _path_parent_accessible
         f = workdir / "nested" / "file.txt"
         (workdir / "nested").mkdir()
         assert _path_parent_accessible(str(f)) is True
 
     def test_missing_parent(self):
-        from _recover import _path_parent_accessible
+        from dazzlecmd_lib.core.safedel._recover import _path_parent_accessible
         assert _path_parent_accessible("/nonexistent/path/to/file.txt") is False
 
     def test_none_or_empty(self):
-        from _recover import _path_parent_accessible
+        from dazzlecmd_lib.core.safedel._recover import _path_parent_accessible
         assert _path_parent_accessible("") is False
         assert _path_parent_accessible(None) is False

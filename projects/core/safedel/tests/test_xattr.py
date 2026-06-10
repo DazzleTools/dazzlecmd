@@ -104,8 +104,8 @@ class TestApplyXattrs:
 class TestRoundtrip:
     def test_xattr_preserved_through_roundtrip(self, tmp_path, xattr_workdir):
         """End-to-end: create file with xattr, delete via safedel, recover."""
-        from _store import TrashStore
-        from _recover import cmd_recover
+        from dazzlecmd_lib.core.safedel._store import TrashStore
+        from dazzlecmd_lib.core.safedel._recover import cmd_recover
 
         store = TrashStore(
             store_path=str(tmp_path / "trash"),

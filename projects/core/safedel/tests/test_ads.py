@@ -9,7 +9,7 @@ import sys
 
 import pytest
 
-from _platform import detect_alternate_streams, has_significant_ads
+from dazzlecmd_lib.core.safedel._platform import detect_alternate_streams, has_significant_ads
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "win32", reason="ADS tests are Windows-only"

@@ -34,10 +34,19 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-from _classifier import classify, format_classification
-from _store import TrashStore
-from _platform import get_trash_dir
-from _recover import cmd_list, cmd_recover, cmd_clean, cmd_status
+# The recoverable-delete engine now lives in the lib (the constitutional
+# core.safedel primitive); this tool provides the CLI + trash-management UX on
+# top of it. Absolute lib imports work in this plain-script CLI.
+from dazzlecmd_lib.core.safedel import (
+    classify,
+    format_classification,
+    TrashStore,
+    get_trash_dir,
+    cmd_list,
+    cmd_recover,
+    cmd_clean,
+    cmd_status,
+)
 
 # Initialize log_lib from _lib/
 _lib_dir = str(Path(__file__).parent / "_lib")
@@ -45,7 +54,7 @@ if _lib_dir not in sys.path:
     sys.path.insert(0, _lib_dir)
 
 from log_lib import OutputManager, init_output, get_output
-from preservelib.metadata import is_win32_available
+from dazzle_filekit.metadata import is_win32_available
 
 
 SUBCOMMANDS = {"list", "ls", "recover", "restore", "clean", "purge", "status", "info"}
@@ -233,7 +242,7 @@ def _do_delete(store: TrashStore, args: argparse.Namespace) -> int:
         return 1
 
     # Classify all paths first and show report
-    from _classifier import classify, format_classification
+    from dazzlecmd_lib.core.safedel._classifier import classify, format_classification
 
     json_output = getattr(args, "json_output", False)
     classifications = [classify(p) for p in paths]

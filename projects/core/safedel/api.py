@@ -1,29 +1,25 @@
-"""Stable public API for safedel.
+"""Stable public API for safedel (a thin shim over the lib primitive).
 
-This is the supported importable surface other dazzlecmd code uses to delete
-recoverably -- notably dazzlecmd-lib's ``mode.py``, which stages a tool
-directory to the trash store before a mode swap removes it (issue #38 /
-Phase-3.5 item 3.5-14). Importing this module is the data-safe alternative to
-calling ``shutil.rmtree`` directly: the trash store IS the recovery backup.
+The recoverable-delete ENGINE now lives in the library as the constitutional
+``dazzlecmd_lib.core.safedel`` primitive (relocated v0.9.4). This module simply
+re-exports it as the tool's stable public surface, so any external importer of
+``safedel.api`` keeps working. dazzlecmd-lib's ``mode.py`` imports the lib
+primitive directly (it no longer loads this tool).
 
-Import convention -- safedel's modules use BARE imports (``from _store import
-...``) and run with the safedel directory on ``sys.path`` (the tool is
-dispatched as a script, and its conftest/CLI put its own dir on the path).
-This module follows that same convention, so an importer must place the
-safedel directory on ``sys.path`` BEFORE importing ``api``. The canonical
-loader that does this is ``dazzlecmd_lib.mode._load_safedel_api`` -- it locates
-``<project_root>/<tools_dir>/core/safedel`` deterministically, puts it on
-``sys.path``, and loads this file under a private cache name. Do not turn
-safedel into a dotted package (``from ._store import ...``): its CLI is run as
-a plain script and would break.
-
-Public surface: only the names in ``__all__`` are supported. Everything else
-(the leading-underscore modules ``_store``/``_platform``/``_classifier`` and
-their internals) is private and may change without notice.
+Public surface: only the names in ``__all__`` are supported.
 """
-from _store import TrashStore, TrashEntry, TrashResult, StoreStats
-from _platform import stage_to_trash, safe_delete
-from _classifier import classify
+# The engine now lives in the lib (the constitutional core.safedel primitive);
+# this module re-exports it as the tool's stable public surface. Kept as a thin
+# shim so any external importer of `safedel.api` keeps working.
+from dazzlecmd_lib.core.safedel import (
+    TrashStore,
+    TrashEntry,
+    TrashResult,
+    StoreStats,
+    stage_to_trash,
+    safe_delete,
+    classify,
+)
 
 __all__ = [
     "TrashStore",
@@ -36,4 +32,4 @@ __all__ = [
 ]
 
 # Bump when the public surface changes in a way consumers must adapt to.
-__api_version__ = "1"
+__api_version__ = "2"

@@ -4,7 +4,7 @@ import datetime
 import os
 import tempfile
 
-from _timepattern import (
+from dazzlecmd_lib.core.safedel._timepattern import (
     parse_folder_datetime,
     generate_folder_name,
     generate_unique_folder_name,

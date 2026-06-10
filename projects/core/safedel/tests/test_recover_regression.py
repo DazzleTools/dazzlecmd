@@ -9,8 +9,8 @@ import shutil
 
 import pytest
 
-from _store import TrashStore
-from _recover import cmd_recover
+from dazzlecmd_lib.core.safedel._store import TrashStore
+from dazzlecmd_lib.core.safedel._recover import cmd_recover
 
 
 @pytest.fixture

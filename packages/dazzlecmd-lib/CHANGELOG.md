@@ -8,6 +8,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.8] - 2026-06-10
+
+Ships with dazzlecmd v0.9.6 -- the safedel tool imports the engine from the lib; the duplicate tool-side engine is removed (slice 3 of 3; #38 reframe / #179). One engine, in the lib.
+
+### Changed
+
+- The `projects/core/safedel/` TOOL now imports the engine from `dazzlecmd_lib.core.safedel` (its CLI + 12 test files + `api.py` shim rewired to lib imports); the tool's duplicate engine modules are removed (preserved in `private/revisions/`). The tool keeps only the CLI, the `api` shim, and its `log_lib` usage.
+- New **Windows-only** runtime dependency: `unctools>=0.1.0; sys_platform=='win32'` -- the trash engine's per-volume routing (`_volumes`) needs Windows drive-type detection (network/removable/fixed); POSIX uses the in-module stubs. (Editable-installed in dev; flagged for review -- could be replaced with stdlib `GetDriveType` later.)
+
+### Fixed
+
+- `core.safedel._recover`: a function-level `from _timepattern import ...` (a bare import the slice-1 relocation's line-start sed missed) is now relative. It was latent -- masked by the tool's duplicate copy on `sys.path` until that copy was removed.
+
 ## [0.8.7] - 2026-06-10
 
 Ships with dazzlecmd v0.9.5 -- the mode swap removes via the lib `core.safedel` primitive; the safedel-absent FALLBACK is deleted (slice 2 of 3; #38 reframe / #179). CLI byte-identical.
