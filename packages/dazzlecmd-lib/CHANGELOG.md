@@ -8,6 +8,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.11] - 2026-06-10
+
+Ships with dazzlecmd v0.9.9 -- absolute FQCNs are now always RESOLVABLE (dispatch + info), not just derivable (FQCN-identity, the "always honored" follow-up). Additive.
+
+### Added
+
+- `AggregatorEngine._absolute_to_local(name)` -- normalizes an absolute FQCN to its dispatchable local form (inverse of `absolute_fqcn`): `dazzlecmd:core:f-cp` -> `core:f-cp`, `dazzlecmd_lib:core:safedel` -> `core:safedel`. Called at the top of `resolve_command`, so BOTH dispatch (`dz <absolute>`) and `dz info <absolute>` honor a real path -- it resolves like the prefixless name. Chained prefixes (`dazzlecmd:wtf:core:restarted`) reduce to the surfaced form.
+- `dz list` epilogue legend for `[lib]`: explains the constitutional engine home + that names show prefixless while the absolute prepends the aggregator (both resolve).
+
+### Fixed
+
+- `dz info dazzlecmd_lib:core:safedel` (and `dz dazzlecmd:core:f-cp`) previously failed ("not found" / "invalid choice"); a real absolute path now always resolves.
+
 ## [0.8.10] - 2026-06-10
 
 Ships with dazzlecmd v0.9.8 -- absolute FQCN as a real derivable core concept; walk back the v0.9.7 fake `Canonical:` field (FQCN-identity DWP Phase 0-1). Additive.

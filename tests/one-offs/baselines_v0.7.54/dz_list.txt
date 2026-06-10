@@ -78,4 +78,6 @@ wtf:core:
              logged in.
   restarted  Why did my Windows PC restart? One command, instant answers.
 
+  [lib] constitutional primitive (engine in dazzlecmd_lib); absolute FQCN 'dazzlecmd_lib:core:<name>'. Names show prefixless -- the absolute prepends this aggregator (e.g. 'dazzlecmd:core:<name>'); both resolve. 'dz info <name>' shows it.
+
   34 tool(s) (23 canonical + 11 virtual-kit alias(es)). Use --show all to see both; --show canonical for legacy view.

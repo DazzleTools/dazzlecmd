@@ -1545,15 +1545,47 @@ class AggregatorEngine:
         """
         return self._get_config_list("kit_precedence")
 
+    def _absolute_to_local(self, name):
+        """Reduce an absolute FQCN to its dispatchable local form (inverse of
+        ``absolute_fqcn``), so a real path is ALWAYS resolvable -- by dispatch
+        AND by ``dz info`` (both route through ``resolve_command``):
+
+        - ``<self.name>:...`` -> strip this aggregator's own (redundant in its
+          own runtime) prefix: ``dazzlecmd:core:f-cp`` -> ``core:f-cp``;
+          ``dazzlecmd:f-cp`` -> ``f-cp``.
+        - ``dazzlecmd_lib:core:<short>`` for a constitutional tool -> its local
+          projection ``core:<short>`` (``dazzlecmd_lib:core:safedel`` ->
+          ``core:safedel``).
+
+        The remainder is resolved by the normal FQCN/alias/short-name path, so a
+        chained-aggregator prefix (``dazzlecmd:wtf:core:restarted``) reduces to
+        the surfaced ``wtf:core:restarted`` and resolves there.
+        """
+        if not name or ":" not in name:
+            return name
+        prefix = f"{self.name}:"
+        if name.startswith(prefix):
+            return name[len(prefix):]
+        lib_prefix = "dazzlecmd_lib:core:"
+        if name.startswith(lib_prefix):
+            from dazzlecmd_lib.core import is_constitutional
+            short = name[len(lib_prefix):]
+            if is_constitutional(short):
+                return f"core:{short}"
+        return name
+
     def resolve_command(self, name):
         """Resolve a command name to a ``(project, ResolutionContext)`` tuple.
 
         Thin wrapper over ``FQCNIndex.resolve()`` that supplies user
         configuration (``favorites`` and ``kit_precedence``) from the
-        engine's ConfigManager.
+        engine's ConfigManager. Absolute FQCNs are normalized to their local
+        form first (``_absolute_to_local``) so they resolve like the prefixless
+        name.
 
         Returns ``(None, None)`` if no project matches.
         """
+        name = self._absolute_to_local(name)
         favorites = self._get_config_dict("favorites")
         precedence = self.get_kit_precedence()
         return self.fqcn_index.resolve(

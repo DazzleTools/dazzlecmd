@@ -78,3 +78,37 @@ def test_dz_info_shows_absolute_for_ordinary():
     assert "Absolute:" in out
     assert "dazzlecmd:core:find" in out
     assert "constitutional" not in out
+
+
+# --- absolute FQCN is ALWAYS resolvable (a real path always works) ---
+
+def test_absolute_to_local_normalization():
+    from dazzlecmd_lib import AggregatorEngine
+    eng = AggregatorEngine(name="dazzlecmd")
+    assert eng._absolute_to_local("dazzlecmd:core:f-cp") == "core:f-cp"
+    assert eng._absolute_to_local("dazzlecmd:f-cp") == "f-cp"
+    assert eng._absolute_to_local("dazzlecmd_lib:core:safedel") == "core:safedel"
+    assert eng._absolute_to_local("core:f-cp") == "core:f-cp"   # already local
+    assert eng._absolute_to_local("f-cp") == "f-cp"             # short untouched
+    # a non-constitutional lib-prefixed name is NOT rewritten
+    assert (eng._absolute_to_local("dazzlecmd_lib:core:nope")
+            == "dazzlecmd_lib:core:nope")
+
+
+def test_absolute_fqcn_resolves_in_info():
+    """`dz info <absolute>` resolves to the tool (was 'not found')."""
+    assert "Name:        safedel" in _dz("info", "dazzlecmd_lib:core:safedel").stdout
+    assert "Name:        f-cp" in _dz("info", "dazzlecmd:core:f-cp").stdout
+
+
+def test_absolute_fqcn_dispatches():
+    """`dz <absolute> ...` dispatches the tool (was 'invalid choice')."""
+    assert "dz f-cp" in _dz("dazzlecmd:core:f-cp", "--help").stdout
+    assert "dz safedel" in _dz("dazzlecmd_lib:core:safedel", "--help").stdout
+
+
+def test_dz_list_lib_legend():
+    """The dz list epilogue explains [lib] + the absolute FQCN."""
+    out = _dz("list").stdout
+    assert "[lib] constitutional primitive" in out
+    assert "dazzlecmd_lib:core:<name>" in out

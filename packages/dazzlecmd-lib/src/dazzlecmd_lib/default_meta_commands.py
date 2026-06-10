@@ -466,7 +466,8 @@ def render_list(args, projects, engine=None) -> int:
     has_alias_marker = show_mode == "all" and any(
         e.get("has_aliases") for e in entries
     )
-    if has_collision or has_alias_marker:
+    has_lib_marker = any(_constitutional_entry(e) for e in entries)
+    if has_collision or has_alias_marker or has_lib_marker:
         print()
         if has_collision:
             cmd = getattr(engine, "command", None) or "dz"
@@ -480,6 +481,15 @@ def render_list(args, projects, engine=None) -> int:
                 f"  [+] canonical has aliases (virtual-kit overlays and/or "
                 f"auto-realpath dedup of cross-aggregator embeddings) -- "
                 f"use '{cmd} info <name>' for alias details."
+            )
+        if has_lib_marker:
+            cmd = getattr(engine, "command", None) or "dz"
+            agg = getattr(engine, "name", None) or "dazzlecmd"
+            print(
+                f"  [lib] constitutional primitive (engine in dazzlecmd_lib); "
+                f"absolute FQCN 'dazzlecmd_lib:core:<name>'. Names show "
+                f"prefixless -- the absolute prepends this aggregator (e.g. "
+                f"'{agg}:core:<name>'); both resolve. '{cmd} info <name>' shows it."
             )
 
     # Footer — counts
