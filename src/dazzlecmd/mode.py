@@ -88,11 +88,13 @@ def cmd_status(projects, project_root, tool_filter=None, kit_filter=None):
 
 
 def cmd_switch(tool_name, projects, project_root, dev_path=None,
-               force_mode=None, dry_run=False, url=None, force=False):
+               force_mode=None, dry_run=False, url=None, force=False,
+               immediate=False):
     """Toggle a dazzlecmd tool between dev and publish mode."""
     return _lib_cmd_switch(
         tool_name, projects, project_root,
         dev_path=dev_path, force_mode=force_mode,
         dry_run=dry_run, url=url, force=force,
         tools_dir=_TOOLS_DIR, command=_COMMAND, schema=None,
+        immediate=immediate,
     )

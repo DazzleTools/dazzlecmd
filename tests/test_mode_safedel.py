@@ -1,33 +1,17 @@
-"""Tests for safedel adoption in the mode swap (#38 / Phase-3.5 item 3.5-10).
+"""Tests for the mode swap's recoverable removal (no fallback; #38 reframe / #179).
 
-Covers:
-- `_load_safedel_api`: real load from the repo's safedel, absent->None, caching.
-- `_remove_tool_dir_recoverable`: the recoverable-removal policy branches
-  (safedel present + success, safedel absent -> rmtree fallback, backup
-  failure aborts unless --force).
-
-The helper-logic tests stub `_load_safedel_api` so they assert the branching
-without touching the real trash store; the real trash-store behavior is covered
-by safedel's own suite. One integration test exercises the real load mechanism.
+The recoverable-delete engine is now a constitutional lib primitive
+(`dazzlecmd_lib.core.safedel`), so mode.py removes a tool directory via that
+primitive ALWAYS -- there is NO "safedel absent" fallback path. `--immediate`
+is a deliberate CHOICE (direct rmtree, no recovery backup), not a fallback.
+These pin `_remove_tool_dir`'s branches (the trash call is stubbed so they
+don't touch the real store; the real round-trip is in the lib's
+`test_core_safedel.py`).
 """
 import os
-import sys
 import types
-from pathlib import Path
-
-import pytest
 
 from dazzlecmd_lib import mode
-
-REPO_ROOT = str(Path(__file__).resolve().parents[1])
-
-
-@pytest.fixture(autouse=True)
-def _clear_safedel_cache():
-    """Each test starts and ends without the cached safedel api module."""
-    sys.modules.pop(mode._SAFEDEL_API_CACHE_KEY, None)
-    yield
-    sys.modules.pop(mode._SAFEDEL_API_CACHE_KEY, None)
 
 
 def _make_victim(tmp_path):
@@ -37,11 +21,11 @@ def _make_victim(tmp_path):
     return str(d)
 
 
-def _fake_api(*, success=True, removes=False, raises=False):
-    """A stand-in safedel api module whose TrashStore().trash() is scripted."""
-    mod = types.ModuleType("_fake_safedel_api")
-
+def _fake_store_cls(*, success=True, removes=False, raises=False):
     class _Store:
+        def __init__(self, *a, **k):
+            pass
+
         def trash(self, paths, dry_run=False):
             if raises:
                 raise RuntimeError("boom")
@@ -55,90 +39,60 @@ def _fake_api(*, success=True, removes=False, raises=False):
                 folder_path="/trash/2026-06-10__00-00-00",
             )
 
-    mod.TrashStore = _Store
-    return mod
+    return _Store
 
 
-# --- _load_safedel_api -------------------------------------------------------
-
-def test_load_safedel_api_absent_returns_none(tmp_path):
-    """No safedel under the given root -> None (graceful, not an error)."""
-    assert mode._load_safedel_api(str(tmp_path), "projects") is None
-
-
-def test_load_safedel_api_present_loads_real_and_caches():
-    """The real repo safedel loads with its full public surface, then caches."""
-    api = mode._load_safedel_api(REPO_ROOT, "projects")
-    assert api is not None
-    assert api.__api_version__ == "1"
-    for name in ("TrashStore", "TrashEntry", "TrashResult", "StoreStats",
-                 "stage_to_trash", "safe_delete", "classify"):
-        assert hasattr(api, name), name
-    # Second call returns the cached module object.
-    assert mode._load_safedel_api(REPO_ROOT, "projects") is api
-
-
-# --- _remove_tool_dir_recoverable -------------------------------------------
-
-def test_remove_safedel_present_success_removes(tmp_path, monkeypatch):
-    """safedel present + backup success -> dir removed, rc 0."""
+def test_immediate_rmtrees(tmp_path):
+    """--immediate deletes directly with no backup -> rc 0, dir gone."""
     victim = _make_victim(tmp_path)
-    monkeypatch.setattr(mode, "_load_safedel_api",
-                        lambda pr, td: _fake_api(success=True, removes=True))
-    rc = mode._remove_tool_dir_recoverable(
-        victim, project_root=str(tmp_path), tools_dir="projects",
-        tool_name="tool", command="dz", force=False,
-    )
+    rc = mode._remove_tool_dir(victim, tool_name="t", command="dz",
+                               force=False, immediate=True)
     assert rc == 0
     assert not os.path.exists(victim)
 
 
-def test_remove_safedel_absent_falls_back_to_rmtree(tmp_path, monkeypatch):
-    """safedel absent -> rmtree fallback (backward-compat), dir removed, rc 0."""
+def test_recoverable_default_trashes(tmp_path, monkeypatch):
+    """Default path stages to the lib trash primitive -> rc 0, dir removed."""
     victim = _make_victim(tmp_path)
-    monkeypatch.setattr(mode, "_load_safedel_api", lambda pr, td: None)
-    rc = mode._remove_tool_dir_recoverable(
-        victim, project_root=str(tmp_path), tools_dir="projects",
-        tool_name="tool", command="dz", force=False,
-    )
+    monkeypatch.setattr("dazzlecmd_lib.core.safedel.TrashStore",
+                        _fake_store_cls(success=True, removes=True))
+    rc = mode._remove_tool_dir(victim, tool_name="t", command="dz", force=False)
     assert rc == 0
     assert not os.path.exists(victim)
 
 
-def test_remove_backup_failure_aborts_without_force(tmp_path, monkeypatch):
-    """Backup FAILS + no --force -> abort, dir intact, rc 1."""
+def test_backup_failure_aborts_without_force(tmp_path, monkeypatch):
+    """A backup FAILURE aborts (nothing deleted) unless --force/--immediate."""
     victim = _make_victim(tmp_path)
-    monkeypatch.setattr(mode, "_load_safedel_api",
-                        lambda pr, td: _fake_api(success=False, removes=False))
-    rc = mode._remove_tool_dir_recoverable(
-        victim, project_root=str(tmp_path), tools_dir="projects",
-        tool_name="tool", command="dz", force=False,
-    )
-    assert rc == 1
-    assert os.path.exists(victim)  # nothing deleted -- backup failed
-
-
-def test_remove_backup_failure_force_rmtrees(tmp_path, monkeypatch):
-    """Backup FAILS + --force -> rmtree fallback, dir removed, rc 0."""
-    victim = _make_victim(tmp_path)
-    monkeypatch.setattr(mode, "_load_safedel_api",
-                        lambda pr, td: _fake_api(success=False, removes=False))
-    rc = mode._remove_tool_dir_recoverable(
-        victim, project_root=str(tmp_path), tools_dir="projects",
-        tool_name="tool", command="dz", force=True,
-    )
-    assert rc == 0
-    assert not os.path.exists(victim)
-
-
-def test_remove_backup_raises_aborts_without_force(tmp_path, monkeypatch):
-    """Backup raises + no --force -> abort, dir intact, rc 1."""
-    victim = _make_victim(tmp_path)
-    monkeypatch.setattr(mode, "_load_safedel_api",
-                        lambda pr, td: _fake_api(raises=True))
-    rc = mode._remove_tool_dir_recoverable(
-        victim, project_root=str(tmp_path), tools_dir="projects",
-        tool_name="tool", command="dz", force=False,
-    )
+    monkeypatch.setattr("dazzlecmd_lib.core.safedel.TrashStore",
+                        _fake_store_cls(success=False))
+    rc = mode._remove_tool_dir(victim, tool_name="t", command="dz", force=False)
     assert rc == 1
     assert os.path.exists(victim)
+
+
+def test_backup_failure_force_rmtrees(tmp_path, monkeypatch):
+    """--force proceeds past a backup failure (rmtree) -> rc 0, dir gone."""
+    victim = _make_victim(tmp_path)
+    monkeypatch.setattr("dazzlecmd_lib.core.safedel.TrashStore",
+                        _fake_store_cls(success=False))
+    rc = mode._remove_tool_dir(victim, tool_name="t", command="dz", force=True)
+    assert rc == 0
+    assert not os.path.exists(victim)
+
+
+def test_backup_exception_aborts(tmp_path, monkeypatch):
+    """An exception in the trash call aborts (nothing deleted) without force."""
+    victim = _make_victim(tmp_path)
+    monkeypatch.setattr("dazzlecmd_lib.core.safedel.TrashStore",
+                        _fake_store_cls(raises=True))
+    rc = mode._remove_tool_dir(victim, tool_name="t", command="dz", force=False)
+    assert rc == 1
+    assert os.path.exists(victim)
+
+
+def test_no_fallback_loader_removed():
+    """The tool-loading shim + its absent-fallback are gone (no dead path)."""
+    assert not hasattr(mode, "_load_safedel_api")
+    assert not hasattr(mode, "_remove_tool_dir_recoverable")
+    assert hasattr(mode, "_remove_tool_dir")

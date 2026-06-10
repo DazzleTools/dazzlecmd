@@ -8,6 +8,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.7] - 2026-06-10
+
+Ships with dazzlecmd v0.9.5 -- the mode swap removes via the lib `core.safedel` primitive; the safedel-absent FALLBACK is deleted (slice 2 of 3; #38 reframe / #179). CLI byte-identical.
+
+### Removed
+
+- `mode._load_safedel_api` + `_SAFEDEL_API_CACHE_KEY` (the v0.8.4 tool-loading shim) and the "safedel absent -> `shutil.rmtree`" FALLBACK branch. The recoverable-delete capability is now internal to the lib (`dazzlecmd_lib.core.safedel`), so it is always available to every aggregator -- there is no absent case to fall back from, and no dead-code fallback path.
+
+### Changed
+
+- `mode._remove_tool_dir_recoverable` -> `mode._remove_tool_dir`: removes a tool directory via `dazzlecmd_lib.core.safedel.TrashStore().trash()` by default (recoverable). A backup FAILURE aborts the swap unless `--force`.
+
+### Added
+
+- `immediate` parameter on the swap path (`cmd_switch` / `_switch_to_dev` / `_switch_to_publish`) -- a deliberate CHOICE to delete the old tool directory immediately with no recovery backup. NOT a fallback: the recoverable path is the default and always works.
+
 ## [0.8.6] - 2026-06-10
 
 Ships with dazzlecmd v0.9.4 -- the recoverable-delete engine becomes a constitutional lib primitive (slice 1 of 3; #38 reframe / #37 Bucket D). Additive; CLI byte-identical.

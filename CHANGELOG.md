@@ -4,6 +4,24 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.5] - 2026-06-10
+
+**Phase 1 base finalization — `dz mode switch` removes via the lib `core.safedel` primitive; the fallback is GONE (slice 2 of 3; #38 reframe / #179).** The mode swap previously loaded the safedel tool from the tools dir and fell back to `shutil.rmtree` when it was absent (wtf/amdead). That tool-loading shim + the fallback are DELETED — removal now always goes through the constitutional `dazzlecmd_lib.core.safedel` primitive (no fallback paths; the capability is internal to the lib). CLI byte-identical for the gated surfaces.
+
+### Added
+
+- `dz mode switch --immediate` — delete the old tool directory immediately with NO recovery backup (the default stages it to the recoverable trash store; recover with `dz safedel recover last`). A deliberate choice, not a fallback.
+
+### Removed
+
+- The `_load_safedel_api` tool-loading shim + the "safedel absent → rmtree" fallback branch in `mode.py`. No dead-code paths.
+
+### Versions
+
+- dazzlecmd 0.9.4 -> 0.9.5 (PATCH; CLI byte-identical).
+- dazzlecmd-lib 0.8.6 -> 0.8.7 (PATCH).
+- dazzle-dz alias -> 0.9.5; deps re-pinned to >=0.9.5 / >=0.8.7.
+
 ## [0.9.4] - 2026-06-10
 
 **Phase 1 base finalization — recoverable-delete becomes a constitutional lib primitive (slice 1 of 3; #38 reframe / #37).** The recoverable-delete engine is relocated from the `projects/core/safedel/` tool into `dazzlecmd_lib.core.safedel`, so every aggregator gets it automatically. This is the foundation for **removing the mode-swap "safedel absent → rmtree" fallback** — no fallback paths: the capability is internal to the lib, so there is no "absent" case. This slice is purely additive (the lib gains the engine; mode.py adoption + the tool rewire follow). CLI byte-identical.
@@ -2798,7 +2816,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.4...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.5...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -468,6 +468,10 @@ def _register_meta_commands(subparsers):
     mode_switch.add_argument("--force", action="store_true",
         help="Bypass the dirty-tree safety check (DATA LOSS: any "
              "uncommitted work in the tool directory is destroyed).")
+    mode_switch.add_argument("--immediate", action="store_true",
+        help="Delete the old tool directory immediately, with NO recovery "
+             "backup (by default it is staged to the recoverable trash store; "
+             "recover with 'dz safedel recover last').")
     mode_switch.add_argument("--dry-run", action="store_true",
                              help="Show what would happen without doing it")
     mode_switch.set_defaults(_meta="mode_switch")
@@ -957,6 +961,7 @@ def _cmd_mode_switch(args, projects, project_root):
         dry_run=getattr(args, "dry_run", False),
         url=getattr(args, "url", None),
         force=getattr(args, "force", False),
+        immediate=getattr(args, "immediate", False),
     )
 
 
