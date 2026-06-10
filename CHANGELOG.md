@@ -4,6 +4,29 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.24] - 2026-06-09
+
+State system, slice 0 (#84 behavioral phase, the design-settlement Act I). A new generic module giving every grouping/ungrouping mechanism one vocabulary for the states it moves between, which transitions are reversible/critical, and what each preserves/creates/destroys — the `group ∘ ungroup = identity` contract becomes generated tests rather than markdown. Additive: imported nowhere in the dispatch hot path, so existing behavior is byte-identical.
+
+### Added
+
+- `dazzlecmd_lib.states` (NEW module, generic — imports nothing from `engine`/`mode`/`groupable`, so it ships in the standalone lib and any aggregator registers its own axes):
+  - `StateAxis` / `EntityState` (frozen, OBSERVED not stored — the `ResolutionContext` precedent) / `Transition` / `TransitionRegistry` — the four-type vocabulary.
+  - `Reversibility` (`REVERSIBLE` / `ONE_WAY` / `REFUSED_AT_BOUNDARY` / `GENERATIVE`) — the criticality algebra as data; the `Transition` type enforces its contracts (GENERATIVE must declare `creates`/`loses`; REVERSIBLE must preserve C1).
+  - `assert_round_trip(read, apply, invert)` — substrate-agnostic identity-contract harness (L2-semantic equality); forward-compatible with `ctx.undo` (Step 2).
+  - `observe(registry, fqcn, **readings)` — the platform→model bridge: validates a real substrate reading against the registered axes (a state the model can't express raises, rather than being silently stored).
+  - `build_default_registry()` — registers KIND/MODE/VISIBILITY/ACTIVATION + the index-level ROUTING axis and retro-declares the live `rebind` transitions (alias repoint; dev↔publish orbit; enter-orbit one-way; underivable-invariant refusal). Reserves `CompositeTransition` (graduation) as a documented extension point.
+
+### Tests
+
+- `tests/test_states.py` (NEW, 32): the four types, registry-enumeration property tests (every REVERSIBLE preserves C1 + names its invariant; the GENERATIVE contract is enforced; MODE declares a REFUSED class), the round-trip harness, live cross-checks against BOTH rebind contexts (a full in-memory alias round-trip via the harness + receipt-level mode agreement), and platform integration — a real discovery pass over this repo observing all 33 discovered tools across the axes (`observe()` proves the model spans the real platform). Suite 1318 / byte-gate 10 OK.
+
+### Versions
+
+- dazzlecmd 0.8.23 -> 0.8.24 (PATCH).
+- dazzlecmd-lib 0.7.19 -> 0.7.20 (PATCH -- new states.py module, additive).
+- dazzle-dz alias -> 0.8.24; deps re-pinned to >=0.8.24 / >=0.7.20.
+
 ## [0.8.23] - 2026-06-09
 
 Drop Python 3.8 + tagline refresh. The DazzleEntity model imports `typing.Annotated` (a 3.9+ feature, used at *runtime* for the discriminated union), so the lib has effectively required Python 3.9+ since the 0.8.x rearchitecture — CI surfaced it on 3.8 (`ImportError: cannot import name 'Annotated' from 'typing'`) once the v0.8.22 pydantic-dep fix let the import chain run far enough to reach it. Python 3.8 is EOL (Oct 2024) and pydantic 2.10 already dropped it, so 3.8 is dropped rather than shimmed.
@@ -2454,7 +2477,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.23...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.24...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
