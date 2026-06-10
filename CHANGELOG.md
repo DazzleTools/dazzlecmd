@@ -4,6 +4,25 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.31] - 2026-06-10 — Gate I: contracts settled
+
+State system, Step 7 — **the contracts are settled (Gate I)**. The final Act-I step: the DazzleEntity object model and the Groupable verb/state contracts are declared **frozen until 1.0**. With all five verbs live (`rebind`/`hide`/`expose`/`group`/`ungroup`), the state system underpinning them (axes / transitions / registry / round-trip harness / `CompositeTransition`), and the dict shim removed (0.8.0), the public API of `dazzlecmd-lib` is the stable seam consumers build on — the design milestone the 0.8.x line was built toward.
+
+### Added
+
+- `dazzlecmd_lib.entity.__all__` and `dazzlecmd_lib.groupable.__all__` — explicit public-API surfaces (states.py already had one), making the frozen contract concrete and `from … import *`-checkable.
+- A **"Public API — frozen until 1.0 (Gate I)"** section in `packages/dazzlecmd-lib/README.md` documenting the settled surface (`entity` / `groupable` / `states` / `aggregator_config`) and the access model (typed attributes + `extra_get`/`extra_set`; the dict shim is gone).
+
+### Gate I
+
+All five Groupable verbs are live; the dict shim is gone; the state system (axes / transitions / registry / round-trip harness / `CompositeTransition`) underpins them; the public API surface is declared and frozen. **The design is settled.** (Act II — the parked 0.7.x tool batch, lib repo extraction, log_lib/help_lib graduation, and release — is tracked in the design-settlement ultraplan, and includes the amdead consumer follow-up.)
+
+### Versions
+
+- dazzlecmd 0.8.30 -> 0.8.31 (PATCH).
+- dazzlecmd-lib 0.8.0 -> 0.8.1 (PATCH — README + `__all__`, additive).
+- dazzle-dz alias -> 0.8.31; deps re-pinned to >=0.8.31 / >=0.8.1.
+
 ## [0.8.30] - 2026-06-10 — dazzlecmd-lib 0.8.0 (BREAKING)
 
 State system, Step 6 — the DazzleEntity **dict shim is DELETED** (the migration's close; lib **0.8.0**, breaking). Entities no longer support dict-style access (`entity["x"]`, `entity.get()`, `entity.keys()/items()`) — the backward-compat Mapping shim + `_LEGACY_KEY_MAP` + the `_warn_on_shim` ratchet are gone. Access is now typed attributes (`entity.runtime`, `entity.fqcn`) + `extra_get`/`extra_set`/`has_extra` for the untyped remainder (`source`, `_vars`, `manifest`). ~293 call sites across prod + tests were migrated. dazzlecmd's own CLI is **byte-identical** (byte-gate 10 OK); the break is for LIBRARY CONSUMERS that used dict-access.
@@ -2627,7 +2646,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.30...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.31...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

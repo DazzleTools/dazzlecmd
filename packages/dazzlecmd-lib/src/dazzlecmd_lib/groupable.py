@@ -534,3 +534,29 @@ class ContainmentContext:
         if receipt.verb == "group":
             return self.apply(entity, None, verb="ungroup")
         return self.apply(entity, self.boundary.fqcn, verb="group")
+
+
+# Public API surface -- frozen until 1.0 (Gate I). See the lib README.
+__all__ = [
+    # errors
+    "CriticalityBoundaryError",
+    "RebindError",
+    # rebind
+    "RebindInvariant",
+    "RebindReceipt",
+    "RebindContext",
+    "AliasRebindContext",
+    # visibility (hide/expose)
+    "VISIBILITY_CHANNELS",
+    "VISIBILITY_LADDER",
+    "VISIBILITY_ORDER",
+    "level_for_channels",
+    "Frame",
+    "VisibilityInvariant",
+    "VisibilityReceipt",
+    "VisibilityContext",
+    # containment (group/ungroup)
+    "ContainmentInvariant",
+    "ContainmentReceipt",
+    "ContainmentContext",
+]

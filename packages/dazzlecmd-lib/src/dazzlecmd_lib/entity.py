@@ -417,3 +417,19 @@ def reserve_field_axis(name: str = "", namespace: str = "") -> None:
                 f"axis; use '-' or '_' in entity names "
                 f"(two-axis FQCN: ':' is hierarchy, '.' is field access)"
             )
+
+
+# Public API surface -- frozen until 1.0 (Gate I). See the lib README.
+__all__ = [
+    "AmbiguousEntityTypeError",
+    "Groupable",
+    "DazzleEntity",
+    "Tool",
+    "Kit",
+    "Aggregator",
+    "AnyDazzleEntity",
+    "ENTITY_ADAPTER",
+    "build_entity",
+    "detect_type",
+    "reserve_field_axis",
+]

@@ -37,6 +37,37 @@ def main():
 - Dev/publish mode toggle -- dazzlecmd-specific workflow
 - Tool import via symlinks -- dazzlecmd-specific workflow
 
+## Public API -- frozen until 1.0 (Gate I)
+
+As of dazzlecmd-lib **0.8.0**, the DazzleEntity object model and the Groupable
+verb/state contracts are **settled**. These surfaces follow semantic versioning
+and will not change incompatibly before 1.0 (each module declares its public
+names in `__all__`):
+
+- **`dazzlecmd_lib.entity`** -- the typed object model: `DazzleEntity` (+ the
+  `Tool` / `Kit` / `Aggregator` discriminated union, `AnyDazzleEntity`,
+  `ENTITY_ADAPTER`), the `Groupable` capability mixin, and
+  `build_entity` / `detect_type` / `reserve_field_axis`. Access is by typed
+  attribute (`entity.runtime`, `entity.fqcn`) plus `extra_get` / `extra_set` /
+  `has_extra` for the untyped remainder (`source`, `_vars`, `manifest`). The
+  dict shim was removed in 0.8.0.
+- **`dazzlecmd_lib.groupable`** -- the five state-transition verbs as the
+  `{P, not-P}` boundary primitive (`rebind` / `hide` / `expose` / `group` /
+  `ungroup`). Each verb on `Groupable` delegates to a typed `*Context`
+  (`AliasRebindContext`, `ModeRebindContext` [in `mode`], `VisibilityContext`,
+  `ContainmentContext`) and returns a frozen `*Receipt` carrying a C2 `*Invariant`;
+  `CriticalityBoundaryError` marks a refused (criticality) transition. Plus the
+  visibility ladder (`VISIBILITY_LADDER` / `VISIBILITY_CHANNELS`) and `Frame`.
+- **`dazzlecmd_lib.states`** -- the state system: `StateAxis` / `EntityState`
+  (observed, not stored) / `Transition` / `CompositeTransition` /
+  `TransitionRegistry`; `Reversibility` (the criticality algebra);
+  `assert_round_trip` (the `group o ungroup = identity` harness); `observe` (the
+  platform-to-model bridge); `build_default_registry`.
+- **`dazzlecmd_lib.aggregator_config`** -- the declarative aggregator schema.
+
+The engine / loader / dispatch internals (`AggregatorEngine`, `FQCNIndex`, ...)
+remain free to evolve; the contract above is the stable seam consumers build on.
+
 ## License
 
 GPL-3.0-or-later
