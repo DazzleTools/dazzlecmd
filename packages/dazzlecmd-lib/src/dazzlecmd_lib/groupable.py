@@ -97,10 +97,14 @@ class RebindContext(Protocol):
 
     Each rebind sub-kind implements this protocol, encapsulating its mechanism
     and carrying the identity the verb itself lacks. ``Groupable.rebind``
-    delegates to ``context.apply(self, target)``.
+    delegates to ``context.apply(self, target)``; ``undo`` inverts a receipt so
+    callers (and the ``assert_round_trip`` harness) need not track the new owner.
     """
 
     def apply(self, entity: Any, target: Any) -> RebindReceipt:  # pragma: no cover - protocol
+        ...
+
+    def undo(self, receipt: RebindReceipt) -> RebindReceipt:  # pragma: no cover - protocol
         ...
 
 
@@ -150,4 +154,33 @@ class AliasRebindContext:
                 restore_path="repoint the alias back to previous_state",
             ),
             reversible=True,                # alias repoint is always reversible
+        )
+
+    def undo(self, receipt: RebindReceipt) -> RebindReceipt:
+        """Invert a prior ``apply``: repoint the alias back to
+        ``receipt.previous_state``.
+
+        Entity-free -- the context owns the alias and the index, so it looks up
+        the CURRENT owner itself. This is where the receiver asymmetry of
+        ``apply`` dissolves (DWP addendum H1): after the apply the alias points at
+        the apply's target, and ``undo`` simply points it back, without the caller
+        having to know who the new owner is. Always reversible.
+        """
+        current = self.index.alias_index.get(self.alias)
+        if current is None:
+            raise KeyError(
+                f"alias {self.alias!r} is not registered in this index"
+            )
+        self.index.repoint_alias(self.alias, receipt.previous_state)
+        return RebindReceipt(
+            entity_fqcn=receipt.entity_fqcn,    # C1 -- unchanged
+            sub_kind="alias",
+            previous_state=current,             # where it pointed before this undo
+            new_state=receipt.previous_state,   # the restored target
+            invariant=RebindInvariant(
+                conserved_quantity_name="single_hop_rule",
+                conserved_value=receipt.entity_fqcn,
+                restore_path="repoint the alias back to previous_state",
+            ),
+            reversible=True,
         )

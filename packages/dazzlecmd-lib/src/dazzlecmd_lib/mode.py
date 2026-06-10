@@ -1110,6 +1110,11 @@ class ModeRebindContext:
                 f"mode rebind({target!r}) failed for {entity.fqcn} (exit {rc})"
             )
 
+        # Capture the entity so undo() can re-drive the inverse switch: unlike
+        # the alias context (whose subject -- the alias -- is fixed at
+        # construction), the mode context receives its subject at apply time, and
+        # the filesystem substrate is keyed by the entity's directory.
+        self._applied_entity = entity
         return RebindReceipt(
             entity_fqcn=entity.fqcn,        # C1 -- unchanged by the rebind
             sub_kind="mode-switch",
@@ -1122,3 +1127,27 @@ class ModeRebindContext:
             ),
             reversible=in_orbit,
         )
+
+    def undo(self, receipt) -> RebindReceipt:
+        """Invert a prior ``apply``: switch back to ``receipt.previous_state``
+        (the prior mode), iff the transition was reversible.
+
+        A one-way entry into the orbit (EMBEDDED/LOCAL_ONLY -> publish/dev,
+        ``reversible=False``) is a mini-graduation and cannot be auto-inverted ->
+        ``CriticalityBoundaryError``. Re-drives the same mechanism on the entity
+        captured at ``apply`` time (the substrate is the filesystem, keyed by the
+        entity's directory), so ``undo`` must follow an ``apply`` on this context.
+        """
+        if not receipt.reversible:
+            raise CriticalityBoundaryError(
+                f"cannot undo mode rebind for {receipt.entity_fqcn}: the transition "
+                f"was one-way (reversible=False) -- entering the orbit from outside "
+                f"is a mini-graduation, not auto-invertible."
+            )
+        entity = getattr(self, "_applied_entity", None)
+        if entity is None:
+            raise RebindError(
+                "ModeRebindContext.undo() requires a prior apply() on this context "
+                "(the entity to invert was not captured)."
+            )
+        return self.apply(entity, receipt.previous_state)

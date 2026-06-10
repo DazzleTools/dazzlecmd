@@ -17,9 +17,11 @@ from dazzlecmd_lib.entity import build_entity
 from dazzlecmd_lib.groupable import (
     AliasRebindContext,
     CriticalityBoundaryError,
+    RebindError,
     RebindReceipt,
     RebindInvariant,
 )
+from dazzlecmd_lib.states import assert_round_trip
 from dazzlecmd_lib.testing import make_tool
 
 
@@ -284,3 +286,86 @@ class TestModeRebind:
             "lifecycle": {"graduated_to": "https://example.com/t2.git"},
         }, entity_type="tool")
         assert _resolve_remote_url(graduated) == "https://example.com/t2.git"
+
+
+class TestUndo:
+    """Step 2: ``context.undo(receipt)`` -- the context-level inverse, so callers
+    (and the ``assert_round_trip`` harness) don't track the new owner. Alias undo
+    is entity-free (the context owns the alias + index); mode undo re-drives the
+    inverse switch on the entity captured at apply time, iff the receipt is
+    reversible."""
+
+    # -- alias -------------------------------------------------------------
+    def test_alias_undo_round_trip_via_harness(self):
+        """The Step-1 harness now consumes ``ctx.undo`` directly as the inverse."""
+        idx, c1, c2 = _idx_two_canonicals_one_alias()
+        ctx = AliasRebindContext(idx, alias="claude:cleanup")
+        receipt = assert_round_trip(
+            read=lambda: idx.alias_index["claude:cleanup"],
+            apply=lambda: c1.rebind("core:cleanup", context=ctx),
+            invert=ctx.undo,
+            expected_new="core:cleanup",
+        )
+        assert idx.alias_index["claude:cleanup"] == "dazzletools:cleanup"  # restored
+        assert receipt.previous_state == "dazzletools:cleanup"
+
+    def test_alias_undo_returns_inverse_receipt(self):
+        idx, c1, c2 = _idx_two_canonicals_one_alias()
+        ctx = AliasRebindContext(idx, "claude:cleanup")
+        r = c1.rebind("core:cleanup", context=ctx)
+        u = ctx.undo(r)
+        assert u.sub_kind == "alias"
+        assert u.previous_state == "core:cleanup"        # where it pointed pre-undo
+        assert u.new_state == "dazzletools:cleanup"      # restored
+        assert u.reversible is True
+        assert idx.alias_index["claude:cleanup"] == "dazzletools:cleanup"
+
+    def test_alias_undo_unknown_alias_raises(self):
+        idx, c1, c2 = _idx_two_canonicals_one_alias()
+        ctx = AliasRebindContext(idx, "claude:cleanup")
+        r = c1.rebind("core:cleanup", context=ctx)
+        ghost = AliasRebindContext(idx, "ghost:alias")
+        with pytest.raises(KeyError):
+            ghost.undo(r)
+
+    # -- mode --------------------------------------------------------------
+    def test_mode_undo_refuses_one_way(self):
+        """Entering the orbit from EMBEDDED is one-way (reversible=False) -- undo
+        refuses (the inverse can't be auto-derived)."""
+        from dazzlecmd_lib.mode import ModeRebindContext
+        with tempfile.TemporaryDirectory() as tmp:
+            tool = _sandbox_tool(tmp, with_url=True)  # EMBEDDED + url
+            ctx = ModeRebindContext(project_root=tmp, tools_dir="projects", dry_run=True)
+            r = tool.rebind("publish", context=ctx)
+            assert r.reversible is False
+            with pytest.raises(CriticalityBoundaryError, match="one-way"):
+                ctx.undo(r)
+
+    def test_mode_undo_in_orbit_returns_inverse_receipt(self):
+        """In-orbit dev<->publish is reversible -- undo re-drives toward the prior
+        mode and returns the inverse receipt."""
+        from dazzlecmd_lib.mode import ModeRebindContext
+        with tempfile.TemporaryDirectory() as tmp:
+            tool = _sandbox_tool(tmp, with_url=True, gitmodules=True)  # SUBMODULE
+            dev_src = os.path.join(tmp, "devsrc")
+            os.makedirs(dev_src)
+            ctx = ModeRebindContext(project_root=tmp, tools_dir="projects",
+                                    dev_path=dev_src, dry_run=True)
+            r = tool.rebind("dev", context=ctx)
+            assert r.reversible is True and r.previous_state == "publish"
+            u = ctx.undo(r)
+            assert u.sub_kind == "mode-switch"
+            assert u.new_state == "publish"          # inverted back toward publish
+
+    def test_mode_undo_without_apply_raises(self):
+        """undo before any apply on the context -> RebindError (no captured entity)."""
+        from dazzlecmd_lib.mode import ModeRebindContext
+        ctx = ModeRebindContext(project_root="/nope", tools_dir="projects", dry_run=True)
+        fake = RebindReceipt(
+            entity_fqcn="core:x", sub_kind="mode-switch",
+            previous_state="publish", new_state="dev",
+            invariant=RebindInvariant("remote_url", "https://example.com/x.git"),
+            reversible=True,
+        )
+        with pytest.raises(RebindError, match="prior apply"):
+            ctx.undo(fake)

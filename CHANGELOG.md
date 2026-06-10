@@ -4,6 +4,26 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.25] - 2026-06-09
+
+State system, Step 2 — `undo(receipt)` (#84 behavioral phase, Act I). The context-level inverse, so callers and the round-trip harness need not track the new owner; `assert_round_trip`'s `invert` is now just `ctx.undo`. Additive — `undo` is not called on any dispatch path, so existing behavior is byte-identical (byte-gate 10 OK).
+
+### Added
+
+- `dazzlecmd_lib.groupable.RebindContext.undo(receipt)` (protocol) + two implementations:
+  - `AliasRebindContext.undo` — entity-free: the context owns the alias and the index, so it looks up the current owner itself and repoints back to `receipt.previous_state`. Always reversible (this is where the receiver asymmetry of `apply` dissolves).
+  - `dazzlecmd_lib.mode.ModeRebindContext.undo` — re-drives the inverse switch on the entity captured at `apply` time, iff `receipt.reversible`. A one-way orbit entry (`reversible=False`) refuses with `CriticalityBoundaryError`; calling `undo` before any `apply` refuses with `RebindError`.
+
+### Tests
+
+- `tests/test_groupable_rebind.py` — `TestUndo` (6): alias undo round-trip driven through the Step-1 harness (`invert=ctx.undo`), the inverse-receipt shape, the unknown-alias guard; mode undo refusing one-way, returning the inverse receipt in-orbit, and refusing without a prior apply. Suite 1324 / byte-gate 10 OK.
+
+### Versions
+
+- dazzlecmd 0.8.24 -> 0.8.25 (PATCH).
+- dazzlecmd-lib 0.7.20 -> 0.7.21 (PATCH -- undo on the rebind contexts).
+- dazzle-dz alias -> 0.8.25; deps re-pinned to >=0.8.25 / >=0.7.21.
+
 ## [0.8.24] - 2026-06-09
 
 State system, slice 0 (#84 behavioral phase, the design-settlement Act I). A new generic module giving every grouping/ungrouping mechanism one vocabulary for the states it moves between, which transitions are reversible/critical, and what each preserves/creates/destroys — the `group ∘ ungroup = identity` contract becomes generated tests rather than markdown. Additive: imported nowhere in the dispatch hot path, so existing behavior is byte-identical.
@@ -2477,7 +2497,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.24...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.25...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
