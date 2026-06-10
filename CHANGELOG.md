@@ -4,6 +4,24 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.11] - 2026-06-10
+
+**Phase 2 — the overlay body: the constitutional home is a real FQCN-index entry (FQCN-identity DWP Phase 2, slice 2).** The overlay grouping transition declared in 0.9.10 now materializes: each constitutional tool's home canonical (`dazzlecmd_lib:core:safedel`, Scheme O / "bones") is registered in the FQCN index as a real **overlay alias** pointing at the surfaced projection (`core:safedel`, Scheme P / "skin"). `dz dazzlecmd_lib:core:safedel` now dispatches through the real index — the v0.9.9 `_absolute_to_local` lib-prefix string-rewrite special-case is **deleted**; only this aggregator's own redundant self-prefix is still string-stripped. `[lib]` stops being a special-case: the overlay rides the same alias machinery as virtual kits, in the opposite (grouping) direction. The alias is dispatch-only (the auto-realpath precedent) — `dz list` stays byte-identical (overlay shown via `[lib]` + epilogue, never a `[+]` or an alias row).
+
+### Added
+
+- `engine._apply_constitutional_overlay` — registers each constitutional home FQCN as a `source="overlay"` alias in the FQCN index (the runtime artifact of the PROJECTION-axis `group` transition). `dz info <home-fqcn>` shows overlay provenance.
+
+### Changed
+
+- `engine._absolute_to_local` now strips only this aggregator's own self-prefix; cross-home (constitutional) absolutes resolve through the real overlay alias. Overlay aliases are excluded from the `dz list` `[+]`/alias-row surfaces (dispatch-only, shown via `[lib]`).
+
+### Versions
+
+- dazzlecmd 0.9.10 -> 0.9.11 (PATCH).
+- dazzlecmd-lib 0.8.12 -> 0.8.13 (PATCH).
+- dazzle-dz alias -> 0.9.11; deps re-pinned to >=0.9.11 / >=0.8.13.
+
 ## [0.9.10] - 2026-06-10
 
 **Phase 1→2 — overlay declared as a grouping transition in the state system (FQCN-identity DWP Phase 2, slice 1: the contract).** Virtual kits and overlays are the two directions of the `{group, ungroup}` primitive on a new PROJECTION (naming) axis — a virtual kit **ungroups** (splits a canonical into alias names), an overlay **groups** (collapses a home namespace onto a consumer surface, e.g. `dazzlecmd_lib:core` onto `dazzlecmd:core`). Both conserve the canonical FQCN. Declared as data (the graduation precedent); the FQCN-index re-root body — making the home canonical a real index entry with the projection as an alias, replacing the v0.9.9 `_absolute_to_local` shim — is the next slice.
@@ -2903,7 +2921,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.10...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.11...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -1409,6 +1409,66 @@ class AggregatorEngine:
                 alias_project.auto_realpath_alias = True
                 alias_project.canonical_fqcn = canonical_fqcn
 
+        # Overlay the constitutional home canonicals onto this surface (the
+        # PROJECTION-axis `group` transition; inverse of the virtual-kit
+        # ungroup). Runs after canonical insertion so the surfaced canonical
+        # exists as an alias target.
+        self._apply_constitutional_overlay()
+
+    def _apply_constitutional_overlay(self):
+        """Group each constitutional tool's HOME canonical onto this surface.
+
+        A constitutional tool (``core:<name>`` whose engine lives in
+        ``dazzlecmd_lib.core``) is surfaced here under its prefixless projection
+        ``core:<name>`` (Scheme P, the "skin"), but its true home identity is
+        the library canonical ``dazzlecmd_lib:core:<name>`` (Scheme O, the
+        "bones"). *Overlaying* GROUPS that home identity onto this aggregator's
+        surface: we register the home FQCN as a real alias-index entry pointing
+        at the surfaced canonical, so the absolute home name always dispatches
+        through the real index (``dz dazzlecmd_lib:core:safedel`` resolves) --
+        no string-rewrite special-case in ``_absolute_to_local``.
+
+        This is the runtime artifact of the PROJECTION-axis ``group`` transition
+        declared in ``states.build_default_registry`` -- overlay is the inverse
+        of the virtual-kit ``ungroup``, one ``{group, ungroup}`` primitive in
+        two directions (#180). The alias is DISPATCH-only: exactly like the
+        auto-realpath aliases (#65), it is excluded from the ``dz list``
+        alias/``[+]`` surfaces. The overlay is shown to users via the ``[lib]``
+        marker + epilogue legend, not as an alias row; ``source="overlay"`` tags
+        it so the display path can make that exclusion.
+        """
+        from .core import is_constitutional
+
+        for project in self.projects:
+            # An auto-realpath-demoted duplicate is not a surfaced canonical;
+            # its winner sibling carries the overlay.
+            if project.auto_realpath_alias:
+                continue
+            name = project.name or ""
+            if (project.namespace or "") != "core" or not is_constitutional(name):
+                continue
+            canonical = project.fqcn or ""
+            home = self.absolute_fqcn(project)  # dazzlecmd_lib:core:<name>
+            if not canonical or not home or home == canonical:
+                continue
+            # Never shadow a real canonical (§9b) -- defensive; no on-disk tool
+            # owns the `dazzlecmd_lib:core:*` FQCN.
+            if home in self.fqcn_index.canonical_index:
+                continue
+            try:
+                self.fqcn_index.insert_alias(
+                    alias_fqcn=home,
+                    canonical_fqcn=canonical,
+                    source="overlay",
+                )
+            except (FQCNCollisionError, KeyError) as exc:
+                print(
+                    f"Warning: constitutional overlay of '{home}' "
+                    f"-> '{canonical}': {exc}",
+                    file=sys.stderr,
+                )
+                continue
+
     def _maybe_emit_reroot_hint(self):
         """Hint at rerooting when discovery surfaces deeply-nested tools.
 
@@ -1546,16 +1606,19 @@ class AggregatorEngine:
         return self._get_config_list("kit_precedence")
 
     def _absolute_to_local(self, name):
-        """Reduce an absolute FQCN to its dispatchable local form (inverse of
-        ``absolute_fqcn``), so a real path is ALWAYS resolvable -- by dispatch
-        AND by ``dz info`` (both route through ``resolve_command``):
+        """Strip THIS aggregator's own (redundant) prefix from an absolute FQCN,
+        so a real path is ALWAYS resolvable -- by dispatch AND by ``dz info``
+        (both route through ``resolve_command``):
 
-        - ``<self.name>:...`` -> strip this aggregator's own (redundant in its
-          own runtime) prefix: ``dazzlecmd:core:f-cp`` -> ``core:f-cp``;
-          ``dazzlecmd:f-cp`` -> ``f-cp``.
-        - ``dazzlecmd_lib:core:<short>`` for a constitutional tool -> its local
-          projection ``core:<short>`` (``dazzlecmd_lib:core:safedel`` ->
-          ``core:safedel``).
+        - ``<self.name>:...`` -> ``dazzlecmd:core:f-cp`` -> ``core:f-cp``;
+          ``dazzlecmd:f-cp`` -> ``f-cp``. The self-prefix is a pure projection
+          of this aggregator onto its OWN tools -- they ARE the same canonical,
+          so eliding the prefix is a string normalization (no index entry).
+
+        Cross-home absolutes are NOT handled here: a constitutional tool's home
+        ``dazzlecmd_lib:core:<name>`` is a genuinely different home, registered
+        as a real OVERLAY alias in the FQCN index (``_apply_constitutional_overlay``)
+        so it resolves through the normal alias path -- no string special-case.
 
         The remainder is resolved by the normal FQCN/alias/short-name path, so a
         chained-aggregator prefix (``dazzlecmd:wtf:core:restarted``) reduces to
@@ -1566,12 +1629,6 @@ class AggregatorEngine:
         prefix = f"{self.name}:"
         if name.startswith(prefix):
             return name[len(prefix):]
-        lib_prefix = "dazzlecmd_lib:core:"
-        if name.startswith(lib_prefix):
-            from dazzlecmd_lib.core import is_constitutional
-            short = name[len(lib_prefix):]
-            if is_constitutional(short):
-                return f"core:{short}"
         return name
 
     def resolve_command(self, name):

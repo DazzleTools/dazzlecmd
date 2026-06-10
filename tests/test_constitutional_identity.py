@@ -87,10 +87,13 @@ def test_absolute_to_local_normalization():
     eng = AggregatorEngine(name="dazzlecmd")
     assert eng._absolute_to_local("dazzlecmd:core:f-cp") == "core:f-cp"
     assert eng._absolute_to_local("dazzlecmd:f-cp") == "f-cp"
-    assert eng._absolute_to_local("dazzlecmd_lib:core:safedel") == "core:safedel"
     assert eng._absolute_to_local("core:f-cp") == "core:f-cp"   # already local
     assert eng._absolute_to_local("f-cp") == "f-cp"             # short untouched
-    # a non-constitutional lib-prefixed name is NOT rewritten
+    # Cross-home absolutes are NOT string-rewritten here (#180): a
+    # constitutional tool's home resolves through the real OVERLAY alias in
+    # the FQCN index, so _absolute_to_local leaves it untouched.
+    assert (eng._absolute_to_local("dazzlecmd_lib:core:safedel")
+            == "dazzlecmd_lib:core:safedel")
     assert (eng._absolute_to_local("dazzlecmd_lib:core:nope")
             == "dazzlecmd_lib:core:nope")
 
@@ -112,3 +115,35 @@ def test_dz_list_lib_legend():
     out = _dz("list").stdout
     assert "[lib] constitutional primitive" in out
     assert "dazzlecmd_lib:core:<name>" in out
+
+
+# --- the overlay is a REAL index entry (#180), not a string shim ---
+
+def test_overlay_alias_is_a_real_index_entry():
+    """The constitutional home is registered in the FQCN index as an overlay
+    alias -- a real, dispatchable grouping artifact, not a `_absolute_to_local`
+    string rewrite."""
+    from dazzlecmd_lib import AggregatorEngine
+    eng = AggregatorEngine(name="dazzlecmd")
+    eng.discover()
+    idx = eng.fqcn_index
+    # The home FQCN points at the surfaced canonical...
+    assert idx.alias_index.get("dazzlecmd_lib:core:safedel") == "core:safedel"
+    # ...tagged `overlay` so display surfaces can exclude it (shown via [lib]).
+    assert idx._alias_sources.get("dazzlecmd_lib:core:safedel") == "overlay"
+    # It must never shadow a real canonical (§9b).
+    assert "dazzlecmd_lib:core:safedel" not in idx.canonical_index
+
+
+def test_overlay_dispatch_shows_overlay_provenance():
+    """`dz info <home-fqcn>` resolves through the real alias and says so."""
+    out = _dz("info", "dazzlecmd_lib:core:safedel").stdout
+    assert "Name:        safedel" in out
+    assert "overlay" in out  # the overlay-provenance banner, not virtual-kit
+
+
+def test_overlay_alias_excluded_from_alias_rows():
+    """The overlay alias is dispatch-only: it does NOT clutter `dz list
+    --show alias` (which enumerates virtual-kit aliases)."""
+    out = _dz("list", "--show", "alias").stdout
+    assert "dazzlecmd_lib:core:safedel" not in out

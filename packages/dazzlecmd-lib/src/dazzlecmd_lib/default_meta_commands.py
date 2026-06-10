@@ -576,10 +576,17 @@ def build_list_entries(projects, engine, show_mode, kit_filter):
 
     kit_filter_is_virtual = kit_filter is not None and kit_filter in virtual_kit_names
 
-    # Track which canonical FQCNs have aliases (used for [+] marker).
+    # Track which canonical FQCNs have aliases (used for [+] marker). Overlay
+    # aliases (#180) are dispatch-only artifacts of the constitutional overlay
+    # -- the home FQCN surfaced onto this aggregator. They are shown via the
+    # [lib] marker + epilogue, NOT as a [+] "has aliases" (which is reserved for
+    # virtual-kit overlays), so they are excluded here.
     canonicals_with_aliases = set()
     if engine is not None and hasattr(engine, "fqcn_index"):
-        for canonical_fqcn in engine.fqcn_index.alias_index.values():
+        _alias_sources = getattr(engine.fqcn_index, "_alias_sources", {})
+        for alias_fqcn, canonical_fqcn in engine.fqcn_index.alias_index.items():
+            if _alias_sources.get(alias_fqcn) == "overlay":
+                continue
             canonicals_with_aliases.add(canonical_fqcn)
 
     # --- Build canonical entries ---
@@ -633,9 +640,12 @@ def build_list_entries(projects, engine, show_mode, kit_filter):
                 # Auto-realpath aliases (#65) are physical-identity
                 # bookkeeping for dispatch; their canonical already
                 # appears in the canonical section with the [+] marker.
-                # Skip them from the alias rows to avoid duplicate rows
-                # under bogus "(virtual kit '<path>')" section headers.
-                if alias_sources.get(alias_fqcn) == "auto-realpath":
+                # Overlay aliases (#180) are the constitutional home FQCN
+                # surfaced onto this aggregator -- dispatch-only, shown via
+                # the [lib] marker instead. Skip both from the alias rows to
+                # avoid duplicate rows under bogus "(virtual kit '<path>')"
+                # section headers.
+                if alias_sources.get(alias_fqcn) in ("auto-realpath", "overlay"):
                     continue
                 vk_name, _, alias_short = alias_fqcn.rpartition(":")
                 if kit_filter is not None and kit_filter_is_virtual:
@@ -1033,6 +1043,15 @@ def render_info(args, projects, engine) -> int:
                 f"(auto-realpath alias '{ctx.alias_fqcn}' -> canonical "
                 f"'{ctx.canonical_fqcn}'; same physical script reached "
                 f"via two discovery paths)"
+            ))
+        elif alias_sources.get(ctx.alias_fqcn) == "overlay":
+            # Issue #180: constitutional overlay. The user typed the home
+            # canonical (`dazzlecmd_lib:core:<name>`, Scheme O) which is
+            # surfaced on this aggregator as the prefixless projection
+            # (`core:<name>`, Scheme P) via the overlay grouping transition.
+            print(_dim(
+                f"(overlay: '{ctx.alias_fqcn}' is the constitutional home in "
+                f"dazzlecmd_lib; surfaced here as '{ctx.canonical_fqcn}')"
             ))
         elif getattr(ctx, "resolution_kind", None) == "qualified_alias":
             # User typed the qualified form (e.g., "dazzletools:claude:cleanup").

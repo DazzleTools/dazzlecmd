@@ -8,9 +8,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
-## [0.8.12] - 2026-06-10
+## [0.8.13] - 2026-06-10
 
-Ships with dazzlecmd v0.9.10 -- overlay declared as a state-system grouping transition (FQCN-identity DWP Phase 2, slice 1: the contract). Additive.
+Ships with dazzlecmd v0.9.11 -- the overlay body: the constitutional home is a real FQCN-index entry (FQCN-identity DWP Phase 2, slice 2). The 0.8.12 grouping transition now materializes as a real index artifact; the `_absolute_to_local` lib special-case is deleted.
+
+### Added
+
+- `AggregatorEngine._apply_constitutional_overlay()` -- after canonical insertion, registers each constitutional tool's HOME canonical (`dazzlecmd_lib:core:<name>`, Scheme O / bones) as a `source="overlay"` alias in the FQCN index, pointing at the surfaced projection (`core:<name>`, Scheme P / skin). This is the runtime artifact of the PROJECTION-axis `group` transition (overlay = the inverse of the virtual-kit `ungroup`). The home FQCN now dispatches through the real index (`dz dazzlecmd_lib:core:safedel`), and `dz info <home>` reports overlay provenance.
+
+### Changed
+
+- `AggregatorEngine._absolute_to_local(name)` -- the constitutional lib-prefix branch is **removed**. It now strips only this aggregator's own redundant self-prefix (`dazzlecmd:core:f-cp` -> `core:f-cp`); cross-home constitutional absolutes resolve through the real overlay alias instead of a string rewrite (`[lib]` is no longer a dispatch special-case). Overlay aliases are dispatch-only -- like the auto-realpath aliases (#65), they are excluded from the `dz list` `[+]`/alias-row surfaces (the overlay is shown via `[lib]` + epilogue), so display output is byte-identical.
 
 ### Added
 
