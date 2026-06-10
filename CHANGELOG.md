@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.12] - 2026-06-10
+
+**#37 mode-swap reversibility — origins-tracking foundation.** Entering dev mode (`dz mode switch <tool>`) is an *ungroup* (the tool's content leaves the tree; a symlink replaces it); coming back is the *group*. This slice records what was there before so the symmetric restore (next slice) can re-materialize it. `mode_local.json` gains an `origins` key (schema **v2**, transparently migrated): for each tool that entered dev mode it stores the prior on-disk form (`embedded`/`submodule`), the safedel backup pointer (EMBEDDED only — SUBMODULE re-clones from `.gitmodules`), the original path (rename cross-check), and a timestamp. Origins are written after the symlink lands (never for an aborted swap) and cleared when the user intentionally moves to publish. No user-visible behavior yet — `dz mode restore` arrives next.
+
+### Added
+
+- `mode._record_origin` / `_clear_origin` helpers + `origins` in `mode_local.json` (schema v1→v2). `_remove_tool_dir` now returns `(rc, trash_folder)` so the switch path can capture the safedel backup pointer.
+
+### Versions
+
+- dazzlecmd 0.9.11 -> 0.9.12 (PATCH).
+- dazzlecmd-lib 0.8.13 -> 0.8.14 (PATCH).
+- dazzle-dz alias -> 0.9.12; deps re-pinned to >=0.9.12 / >=0.8.14.
+
 ## [0.9.11] - 2026-06-10
 
 **Phase 2 — the overlay body: the constitutional home is a real FQCN-index entry (FQCN-identity DWP Phase 2, slice 2).** The overlay grouping transition declared in 0.9.10 now materializes: each constitutional tool's home canonical (`dazzlecmd_lib:core:safedel`, Scheme O / "bones") is registered in the FQCN index as a real **overlay alias** pointing at the surfaced projection (`core:safedel`, Scheme P / "skin"). `dz dazzlecmd_lib:core:safedel` now dispatches through the real index — the v0.9.9 `_absolute_to_local` lib-prefix string-rewrite special-case is **deleted**; only this aggregator's own redundant self-prefix is still string-stripped. `[lib]` stops being a special-case: the overlay rides the same alias machinery as virtual kits, in the opposite (grouping) direction. The alias is dispatch-only (the auto-realpath precedent) — `dz list` stays byte-identical (overlay shown via `[lib]` + epilogue, never a `[+]` or an alias row).
@@ -2921,7 +2935,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.11...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.12...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

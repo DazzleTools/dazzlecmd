@@ -114,28 +114,34 @@ def parse_gitmodules(project_root, *, tools_dir):
 def _load_full_config(project_root):
     """Load full mode_local.json contents.
 
-    Returns dict with keys: dev_paths, cached_manifests.
+    Returns dict with keys: dev_paths, cached_manifests, origins.
+
+    ``origins`` (schema v2, #37 reversibility) records the pre-switch on-disk
+    form of each tool that entered dev mode, so ``dz mode restore <tool>`` can
+    re-materialize it. Older configs without the key get an empty dict here --
+    the ``setdefault`` makes the migration transparent.
     """
     config_path = os.path.join(project_root, "mode_local.json")
     if not os.path.isfile(config_path):
-        return {"dev_paths": {}, "cached_manifests": {}}
+        return {"dev_paths": {}, "cached_manifests": {}, "origins": {}}
 
     try:
         with open(config_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         data.setdefault("dev_paths", {})
         data.setdefault("cached_manifests", {})
+        data.setdefault("origins", {})
         return data
     except (json.JSONDecodeError, OSError) as exc:
         print(f"Warning: Could not load mode_local.json: {exc}",
               file=sys.stderr)
-        return {"dev_paths": {}, "cached_manifests": {}}
+        return {"dev_paths": {}, "cached_manifests": {}, "origins": {}}
 
 
 # mode_local.json schema version -- stamped on every save so a future format
 # change can detect and migrate old configs (3.5-12). Bump when the on-disk
-# shape changes.
-MODE_LOCAL_SCHEMA_VERSION = 1
+# shape changes. v2 (#37): added the ``origins`` key (mode-swap reversibility).
+MODE_LOCAL_SCHEMA_VERSION = 2
 
 
 def _save_full_config(project_root, data):
@@ -743,7 +749,13 @@ def _rmtree_or_error(tool_dir):
 
 
 def _remove_tool_dir(tool_dir, *, tool_name, command, force, immediate=False):
-    """Remove ``tool_dir`` for a mode swap. Returns 0 (ok) or 1 (failed/aborted).
+    """Remove ``tool_dir`` for a mode swap. Returns ``(rc, trash_folder)``:
+    ``rc`` is 0 (ok) or 1 (failed/aborted); ``trash_folder`` is the safedel
+    backup's folder name on a recoverable success, else ``None``.
+
+    The ``trash_folder`` is the pointer ``_record_origin`` stores so ``dz mode
+    restore`` can recover the exact backed-up content (#37). It is ``None`` for
+    the ``--immediate`` and ``--force`` rmtree paths (no backup made).
 
     The caller has already cleared the dirty-tree gate (T1-E). Removal is
     RECOVERABLE by default: ``tool_dir`` is staged to the trash store via the
@@ -762,12 +774,14 @@ def _remove_tool_dir(tool_dir, *, tool_name, command, force, immediate=False):
     if immediate:
         print(f"  Removing {tool_dir} immediately (--immediate; no recovery "
               "backup).")
-        return _rmtree_or_error(tool_dir)
+        return _rmtree_or_error(tool_dir), None
 
     from dazzlecmd_lib.core.safedel import TrashStore
+    folder_name = None
     try:
         result = TrashStore().trash([tool_dir])
         ok = result.success
+        folder_name = result.folder_name if ok else None
         errors = "" if ok else "; ".join(result.errors)
     except Exception as exc:  # noqa: BLE001
         ok, errors = False, str(exc)
@@ -775,17 +789,17 @@ def _remove_tool_dir(tool_dir, *, tool_name, command, force, immediate=False):
     if ok:
         print(f"  Backed up to trash (recover with: {command} safedel "
               "recover last)")
-        return 0
+        return 0, folder_name
 
     print(f"Error: recoverable delete of {tool_dir} failed: "
           f"{errors or 'unknown error'}", file=sys.stderr)
     if force:
         print("  --force given; removing without a recovery backup.",
               file=sys.stderr)
-        return _rmtree_or_error(tool_dir)
+        return _rmtree_or_error(tool_dir), None
     print(f"  Swap aborted (nothing deleted). Use: {command} mode switch "
           "<tool> --immediate to delete without a backup.", file=sys.stderr)
-    return 1
+    return 1, None
 
 
 def _switch_to_dev(project, project_root, gitmodules, explicit_path,
@@ -837,7 +851,10 @@ def _switch_to_dev(project, project_root, gitmodules, explicit_path,
         _dry_run_save_path(qualified, dev_path, project_root)
         return 0
 
-    # Remove existing directory (submodule checkout)
+    # Remove existing directory (submodule checkout). Track the safedel backup
+    # folder so we can record a restore origin (#37) after the symlink lands.
+    trash_folder = None
+    removed_form = None  # the prior on-disk form, for the origin record
     if os.path.exists(tool_dir):
         if is_linked_project(tool_dir):
             remove_link(tool_dir)
@@ -852,11 +869,14 @@ def _switch_to_dev(project, project_root, gitmodules, explicit_path,
             # Remove the submodule working tree recoverably via the
             # constitutional core.safedel primitive (#38 / item 3.5-10);
             # --immediate skips the backup as a deliberate choice.
-            if _remove_tool_dir(
+            rc, trash_folder = _remove_tool_dir(
                 tool_dir, tool_name=tool_name, command=command,
                 force=force, immediate=immediate,
-            ) != 0:
+            )
+            if rc != 0:
                 return 1
+            # `state` was EMBEDDED or SUBMODULE here (a real dir, not a link).
+            removed_form = state
 
     # Create symlink
     link_mode = create_link(dev_path, tool_dir)
@@ -867,6 +887,19 @@ def _switch_to_dev(project, project_root, gitmodules, explicit_path,
 
     # Remember dev path for future toggles
     _remember_dev_path(qualified, dev_path, project_root)
+
+    # Record the restore origin (#37) now that the symlink is in place. Only
+    # for a destroyed on-disk form (EMBEDDED/SUBMODULE) -- a tool that was
+    # already a symlink returned early above. For EMBEDDED the trash folder is
+    # the recovery pointer; for SUBMODULE restore re-clones from .gitmodules
+    # (per the #37 DWP), so trash_folder is intentionally not stored.
+    if removed_form in (STATE_EMBEDDED, STATE_SUBMODULE):
+        _record_origin(
+            qualified, removed_form, project_root,
+            trash_folder=(trash_folder if removed_form == STATE_EMBEDDED
+                          else None),
+            original_path=tool_dir,
+        )
 
     print(f"Switched to DEV mode ({link_mode})")
     print(f"  {tool_dir} -> {dev_path}")
@@ -950,10 +983,11 @@ def _switch_to_publish(project, project_root, gitmodules, dry_run, force,
             # Remove the existing dir recoverably before submodule add via
             # the constitutional core.safedel primitive (#38 / item 3.5-10);
             # --immediate skips the backup as a deliberate choice.
-            if _remove_tool_dir(
+            rc, _ = _remove_tool_dir(
                 tool_dir, tool_name=tool_name, command=command,
                 force=force, immediate=immediate,
-            ) != 0:
+            )
+            if rc != 0:
                 return 1
 
         # Register and clone the submodule
@@ -972,6 +1006,8 @@ def _switch_to_publish(project, project_root, gitmodules, dry_run, force,
                   file=sys.stderr)
             return 1
 
+        # Intentional move to publish -- drop any stale dev-restore origin (#37).
+        _clear_origin(qualified, project_root)
         print("Switched to REMOTE mode (submodule - first time)")
         print(f"  {remote_url}")
         print("  Note: .gitmodules updated (uncommitted)")
@@ -1009,6 +1045,8 @@ def _switch_to_publish(project, project_root, gitmodules, dry_run, force,
               file=sys.stderr)
         return 1
 
+    # Intentional move to publish -- drop any stale dev-restore origin (#37).
+    _clear_origin(qualified, project_root)
     print("Switched to REMOTE mode (submodule)")
     print(f"  {gitmodules[rel_key]['url']}")
     return 0
@@ -1099,6 +1137,51 @@ def _remember_dev_path(qualified_name, dev_path, project_root):
     local_config = load_local_config(project_root)
     local_config[qualified_name] = dev_path
     save_local_config(project_root, local_config)
+
+
+def _record_origin(qualified, prior_state, project_root,
+                   trash_folder=None, original_path=None):
+    """Record a tool's pre-switch on-disk form in ``mode_local.json['origins']``.
+
+    Called from ``_switch_to_dev`` AFTER the dev symlink is created, so a swap
+    that aborted partway never leaves a phantom origin. The record is what
+    ``dz mode restore <tool>`` reads to re-materialize the prior form (#37):
+
+    - ``prior_state``  -- ``STATE_EMBEDDED`` or ``STATE_SUBMODULE`` (the form
+      before the switch). Drives the restore MECHANISM: EMBEDDED -> recover the
+      backed-up content from the safedel trash; SUBMODULE -> re-clone via
+      ``git submodule update --init`` (no trash needed).
+    - ``trash_folder`` -- the ``TrashResult.folder_name`` from the safedel
+      backup (EMBEDDED case only; ``None`` for SUBMODULE, which is
+      reconstructible from ``.gitmodules``).
+    - ``original_path`` -- the ``tool_dir`` at switch time. Cross-check: if the
+      tool was later renamed, this won't match the current dir and restore warns.
+
+    Overwrites any prior origin for ``qualified`` (flat dict, one record per
+    tool -- multi-level undo is a future schema, see the #37 DWP).
+    """
+    import datetime
+    data = _load_full_config(project_root)
+    data.setdefault("origins", {})[qualified] = {
+        "prior_state": prior_state,
+        "trash_folder": trash_folder,
+        "original_path": original_path,
+        "switch_timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
+    }
+    _save_full_config(project_root, data)
+
+
+def _clear_origin(qualified, project_root):
+    """Drop a tool's origin record from ``mode_local.json['origins']`` (#37).
+
+    Called when an origin becomes stale: after ``dz mode restore`` succeeds (the
+    tool is back to its prior form), or when the user intentionally overrides the
+    origin by forcing a direction (``mode switch --dev``/``--publish``) or lands
+    in publish mode. A no-op when no record exists.
+    """
+    data = _load_full_config(project_root)
+    if data.setdefault("origins", {}).pop(qualified, None) is not None:
+        _save_full_config(project_root, data)
 
 
 def _dry_run_save_path(qualified_name, dev_path, project_root):

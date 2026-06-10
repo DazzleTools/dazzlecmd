@@ -36,6 +36,7 @@ def _fake_store_cls(*, success=True, removes=False, raises=False):
             return types.SimpleNamespace(
                 success=success,
                 errors=[] if success else ["disk full"],
+                folder_name="2026-06-10__00-00-00" if success else None,
                 folder_path="/trash/2026-06-10__00-00-00",
             )
 
@@ -43,21 +44,25 @@ def _fake_store_cls(*, success=True, removes=False, raises=False):
 
 
 def test_immediate_rmtrees(tmp_path):
-    """--immediate deletes directly with no backup -> rc 0, dir gone."""
+    """--immediate deletes directly with no backup -> rc 0, dir gone, no folder."""
     victim = _make_victim(tmp_path)
-    rc = mode._remove_tool_dir(victim, tool_name="t", command="dz",
-                               force=False, immediate=True)
+    rc, folder = mode._remove_tool_dir(victim, tool_name="t", command="dz",
+                                       force=False, immediate=True)
     assert rc == 0
+    assert folder is None  # no backup made -> no restore pointer (#37)
     assert not os.path.exists(victim)
 
 
 def test_recoverable_default_trashes(tmp_path, monkeypatch):
-    """Default path stages to the lib trash primitive -> rc 0, dir removed."""
+    """Default path stages to the lib trash primitive -> rc 0, dir removed,
+    and returns the trash folder name (the restore pointer, #37)."""
     victim = _make_victim(tmp_path)
     monkeypatch.setattr("dazzlecmd_lib.core.safedel.TrashStore",
                         _fake_store_cls(success=True, removes=True))
-    rc = mode._remove_tool_dir(victim, tool_name="t", command="dz", force=False)
+    rc, folder = mode._remove_tool_dir(victim, tool_name="t", command="dz",
+                                       force=False)
     assert rc == 0
+    assert folder == "2026-06-10__00-00-00"
     assert not os.path.exists(victim)
 
 
@@ -66,18 +71,22 @@ def test_backup_failure_aborts_without_force(tmp_path, monkeypatch):
     victim = _make_victim(tmp_path)
     monkeypatch.setattr("dazzlecmd_lib.core.safedel.TrashStore",
                         _fake_store_cls(success=False))
-    rc = mode._remove_tool_dir(victim, tool_name="t", command="dz", force=False)
+    rc, folder = mode._remove_tool_dir(victim, tool_name="t", command="dz",
+                                       force=False)
     assert rc == 1
+    assert folder is None
     assert os.path.exists(victim)
 
 
 def test_backup_failure_force_rmtrees(tmp_path, monkeypatch):
-    """--force proceeds past a backup failure (rmtree) -> rc 0, dir gone."""
+    """--force proceeds past a backup failure (rmtree) -> rc 0, dir gone, no folder."""
     victim = _make_victim(tmp_path)
     monkeypatch.setattr("dazzlecmd_lib.core.safedel.TrashStore",
                         _fake_store_cls(success=False))
-    rc = mode._remove_tool_dir(victim, tool_name="t", command="dz", force=True)
+    rc, folder = mode._remove_tool_dir(victim, tool_name="t", command="dz",
+                                       force=True)
     assert rc == 0
+    assert folder is None
     assert not os.path.exists(victim)
 
 
@@ -86,8 +95,10 @@ def test_backup_exception_aborts(tmp_path, monkeypatch):
     victim = _make_victim(tmp_path)
     monkeypatch.setattr("dazzlecmd_lib.core.safedel.TrashStore",
                         _fake_store_cls(raises=True))
-    rc = mode._remove_tool_dir(victim, tool_name="t", command="dz", force=False)
+    rc, folder = mode._remove_tool_dir(victim, tool_name="t", command="dz",
+                                       force=False)
     assert rc == 1
+    assert folder is None
     assert os.path.exists(victim)
 
 

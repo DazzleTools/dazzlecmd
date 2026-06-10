@@ -8,6 +8,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.14] - 2026-06-10
+
+Ships with dazzlecmd v0.9.12 -- #37 mode-swap reversibility, the origins-tracking foundation (no restore command yet). Additive + schema-migrating.
+
+### Added
+
+- `mode_local.json` schema **v2**: a new `origins` dict records each tool's pre-switch on-disk form so a future `dz mode restore` can re-materialize it. Old configs migrate transparently (`_load_full_config` setdefaults an empty dict).
+- `mode._record_origin(qualified, prior_state, project_root, trash_folder, original_path)` -- writes the origin (prior state, safedel backup pointer, original path, timestamp) after `_switch_to_dev` lands the symlink (never for an aborted swap). `mode._clear_origin(qualified, project_root)` -- drops a stale record (called on intentional publish; will also be called after a successful restore).
+
+### Changed
+
+- `mode._remove_tool_dir(...)` now returns `(rc, trash_folder)` instead of `rc` -- the trash folder name is the recovery pointer recorded for an EMBEDDED origin. Both internal call sites (`_switch_to_dev`, `_switch_to_publish`) unpack the tuple.
+
 ## [0.8.13] - 2026-06-10
 
 Ships with dazzlecmd v0.9.11 -- the overlay body: the constitutional home is a real FQCN-index entry (FQCN-identity DWP Phase 2, slice 2). The 0.8.12 grouping transition now materializes as a real index artifact; the `_absolute_to_local` lib special-case is deleted.
