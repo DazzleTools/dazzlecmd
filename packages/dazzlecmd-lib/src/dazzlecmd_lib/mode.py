@@ -133,9 +133,16 @@ def _load_full_config(project_root):
         return {"dev_paths": {}, "cached_manifests": {}}
 
 
+# mode_local.json schema version -- stamped on every save so a future format
+# change can detect and migrate old configs (3.5-12). Bump when the on-disk
+# shape changes.
+MODE_LOCAL_SCHEMA_VERSION = 1
+
+
 def _save_full_config(project_root, data):
-    """Save full mode_local.json contents."""
+    """Save full mode_local.json contents (stamped with the schema version)."""
     config_path = os.path.join(project_root, "mode_local.json")
+    data["_schema_version"] = MODE_LOCAL_SCHEMA_VERSION
     try:
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
@@ -612,7 +619,12 @@ def _determine_target(state):
     elif state == STATE_MISSING:
         return None  # Ambiguous — use --dev or --publish
     elif state == STATE_EMBEDDED:
-        return None  # No submodule to toggle with
+        # Switch the embedded checkout to a dev symlink (3.5-1). The embedded
+        # directory is removed RECOVERABLY (staged to safedel's trash store;
+        # #38) before the symlink is created, so enabling this is data-safe.
+        # A bare toggle defaults to dev (the common "work on it locally"
+        # intent); `--publish` registers a submodule instead.
+        return "dev"
     elif state == STATE_LOCAL_ONLY:
         return None  # No submodule registered
     return None

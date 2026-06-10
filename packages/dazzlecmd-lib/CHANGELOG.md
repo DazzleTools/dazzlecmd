@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.5] - 2026-06-10
+
+Ships with dazzlecmd v0.9.3 -- EMBEDDED-swap enablement + config schema stamp (#37 Phase-3.5 Bucket D, items 3.5-1 / 3.5-12). Additive; CLI byte-identical.
+
+### Added
+
+- `mode.MODE_LOCAL_SCHEMA_VERSION` (= 1) -- `mode_local.json` is now stamped with a `_schema_version` on every save (`_save_full_config`), so a future on-disk format change can detect and migrate old configs (item 3.5-12).
+
+### Changed
+
+- `mode._determine_target` returns `"dev"` for `STATE_EMBEDDED` (was `None`) -- a bare `dz mode switch <embedded-tool>` now toggles an embedded checkout to a dev symlink instead of refusing with "no mode toggle available" (item 3.5-1). This was gated on data safety: it is enabled now that the swap removes the embedded directory RECOVERABLY via safedel (the v0.8.4 adoption), so the only-local embedded content is staged to the trash store before removal.
+
 ## [0.8.4] - 2026-06-10
 
 Ships with dazzlecmd v0.9.2 -- safedel adoption in the mode swap (#38 / Phase-3.5 item 3.5-10). Additive; CLI byte-identical.

@@ -4,6 +4,28 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.3] - 2026-06-10
+
+**Phase 1 base finalization — `dz mode switch` now works for embedded tools (#37 Phase-3.5 Bucket D, items 3.5-1 / 3.5-12).** Previously a tool checked out directly into the aggregator tree (STATE_EMBEDDED, e.g. imported via `git clone`/subtree/copy) could not be mode-switched — `dz mode switch <tool>` printed "no mode toggle available". It now toggles an embedded checkout to a dev symlink. This was gated on data safety and is unblocked by v0.9.2: the embedded directory (whose content exists ONLY in this checkout) is staged to safedel's recoverable trash store before removal.
+
+### Added
+
+- `mode_local.json` now carries a `_schema_version` stamp (item 3.5-12) so a future on-disk format change can migrate old configs.
+
+### Changed
+
+- `dz mode switch <embedded-tool>` toggles to dev (symlink) instead of refusing (item 3.5-1). Use `--publish` to register a submodule instead; `--path` points at the local dev repo. The embedded content is recoverable via `dz safedel recover last` after the swap.
+
+### Deferred (next Bucket D slice)
+
+- `origins` tracking + restore-to-embedded, `dz mode status --complete`, `dz mode switch --all`, and backup list/clean remain open under #37 (they need the restore consumer; tracked in the Act-II audit).
+
+### Versions
+
+- dazzlecmd 0.9.2 -> 0.9.3 (PATCH; CLI byte-identical).
+- dazzlecmd-lib 0.8.4 -> 0.8.5 (PATCH; additive).
+- dazzle-dz alias -> 0.9.3; deps re-pinned to >=0.9.3 / >=0.8.5.
+
 ## [0.9.2] - 2026-06-10
 
 **Phase 1 base finalization — recoverable mode swaps via safedel (#38 / Phase-3.5 item 3.5-10).** `dz mode switch` previously removed a tool directory (a submodule checkout or embedded dir) with an unrecoverable `shutil.rmtree`. It now stages that directory to safedel's recoverable trash store first — a mistaken switch is recoverable via `dz safedel recover last`. This is the foundation for #37's embedded-swap backup machinery (Bucket D). CLI is byte-identical (the change is on the destructive write path only).
@@ -2758,7 +2780,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.2...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.3...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
