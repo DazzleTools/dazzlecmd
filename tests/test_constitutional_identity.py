@@ -52,13 +52,29 @@ def test_dz_list_marks_constitutional_tools():
             assert "[lib]" not in line, f"non-constitutional marked: {line!r}"
 
 
-def test_dz_info_shows_canonical_for_constitutional():
+def test_absolute_fqcn_derivation():
+    """engine.absolute_fqcn is a real, always-derivable core concept."""
+    import types
+    from dazzlecmd_lib import AggregatorEngine
+    eng = AggregatorEngine(name="dazzlecmd")
+    native = types.SimpleNamespace(name="f-cp", namespace="core", fqcn="core:f-cp")
+    assert eng.absolute_fqcn(native) == "dazzlecmd:core:f-cp"
+    consti = types.SimpleNamespace(name="safedel", namespace="core", fqcn="core:safedel")
+    assert eng.absolute_fqcn(consti) == "dazzlecmd_lib:core:safedel"
+
+
+def test_dz_info_shows_absolute_for_constitutional():
+    """No fake 'Canonical:' -- the real, lib-homed Absolute FQCN with overlay note."""
     out = _dz("info", "safedel").stdout
-    assert "Canonical:" in out
+    assert "Canonical:" not in out            # the v0.9.7 fake field is gone
+    assert "Absolute:" in out
     assert "dazzlecmd_lib:core:safedel" in out
-    assert "(constitutional)" in out
+    assert "constitutional" in out
 
 
-def test_dz_info_omits_canonical_for_ordinary():
+def test_dz_info_shows_absolute_for_ordinary():
+    """Ordinary tools get the derived absolute too (no asymmetry), sans note."""
     out = _dz("info", "find").stdout
-    assert "Canonical:" not in out
+    assert "Absolute:" in out
+    assert "dazzlecmd:core:find" in out
+    assert "constitutional" not in out

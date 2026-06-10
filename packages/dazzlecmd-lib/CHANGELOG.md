@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.10] - 2026-06-10
+
+Ships with dazzlecmd v0.9.8 -- absolute FQCN as a real derivable core concept; walk back the v0.9.7 fake `Canonical:` field (FQCN-identity DWP Phase 0-1). Additive.
+
+### Added
+
+- `AggregatorEngine.absolute_fqcn(project)` -- the true, globally-unique absolute FQCN, ALWAYS derivable (derived, not stored): `<aggregator>:<namespace>:<name>` for native tools (`dazzlecmd:core:f-cp`), or the lib home `dazzlecmd_lib:core:<name>` for constitutional tools (overlaid here). The prefixless `project.fqcn` is a projection of this.
+
+### Changed
+
+- `dz info` shows `Absolute:` (the derived absolute FQCN) for EVERY tool, replacing the v0.9.7 `Canonical:` line -- which was constitutional-only AND not dispatchable (`dz dazzlecmd_lib:core:safedel` -> invalid choice; a fake rival FQCN). Constitutional tools are annotated `(constitutional; overlaid from dazzlecmd_lib)`. Fixes the asymmetry.
+
 ## [0.8.9] - 2026-06-10
 
 Ships with dazzlecmd v0.9.7 -- constitutional core identity surfaced in `dz list` / `dz info` (#179 follow-up). Additive.

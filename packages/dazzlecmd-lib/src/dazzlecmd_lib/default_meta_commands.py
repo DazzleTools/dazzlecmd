@@ -43,7 +43,7 @@ import sys as _sys
 from typing import Iterable, Optional
 
 from . import colors as _colors
-from .core import is_constitutional as _is_constitutional, canonical_fqcn as _canonical_fqcn
+from .core import is_constitutional as _is_constitutional
 
 
 def _constitutional_entry(entry) -> bool:
@@ -1074,11 +1074,17 @@ def render_info(args, projects, engine) -> int:
     print(f"Name:        {project.name}")
     if project.fqcn:
         print(f"FQCN:        {project.fqcn}")
-    if project.namespace == "core" and _is_constitutional(project.name):
-        # Constitutional core primitive: its engine lives in the lib's
-        # `dazzlecmd_lib.core` namespace. The FQCN above is the consumer
-        # projection (skin); the canonical below is the real home (bones).
-        print(f"Canonical:   {_canonical_fqcn(project.name)}   (constitutional)")
+    # The ABSOLUTE FQCN: the prefixless FQCN above is a projection; this is the
+    # true globally-unique name (home aggregator prepended), always derivable
+    # via engine.absolute_fqcn. Constitutional tools carry the lib's home prefix
+    # (they are overlaid here), which is why their absolute differs from
+    # <this-aggregator>:<fqcn>.
+    _abs = engine.absolute_fqcn(project)
+    if _abs and _abs != project.fqcn:
+        if project.namespace == "core" and _is_constitutional(project.name):
+            print(f"Absolute:    {_abs}   (constitutional; overlaid from dazzlecmd_lib)")
+        else:
+            print(f"Absolute:    {_abs}")
     if project.kit_import_name:
         print(f"Kit:         {project.kit_import_name}")
     if project.namespace:

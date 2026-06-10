@@ -1560,6 +1560,30 @@ class AggregatorEngine:
             name, precedence=precedence, favorites=favorites
         )
 
+    def absolute_fqcn(self, project):
+        """The true, globally-unique absolute FQCN for a tool (always derivable).
+
+        A tool's ``project.fqcn`` (``core:safedel``) is the PREFIXLESS form -- a
+        projection with the home aggregator elided because it's implied by the
+        runtime. The ABSOLUTE FQCN prepends that home:
+
+        - Native tools (homed in THIS aggregator) ->
+          ``<self.name>:<namespace>:<name>`` (e.g. ``dazzlecmd:core:f-cp``).
+        - Constitutional tools (engine homed in ``dazzlecmd_lib.core``) carry the
+          LIBRARY's home prefix, since the lib is their real home and this
+          aggregator only OVERLAYS them -> ``dazzlecmd_lib:core:<name>``.
+
+        This is the absolute identity that the prefixless display and every
+        alias/overlay project onto. It is DERIVED, not stored: the prefix is
+        aggregator context, not an intrinsic property of the (frozen) entity.
+        """
+        from dazzlecmd_lib.core import is_constitutional, canonical_fqcn
+        name = project.name or ""
+        if (project.namespace or "") == "core" and is_constitutional(name):
+            return canonical_fqcn(name)
+        local = project.fqcn or f"{project.namespace}:{name}"
+        return f"{self.name}:{local}"
+
     def find_project(self, name):
         """Alias-aware canonical lookup for a user-typed name.
 

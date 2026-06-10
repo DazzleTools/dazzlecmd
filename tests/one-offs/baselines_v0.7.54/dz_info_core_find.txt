@@ -1,5 +1,6 @@
 Name:        find
 FQCN:        core:find
+Absolute:    dazzlecmd:core:find
 Kit:         core
 Namespace:   core
 Version:     0.1.0

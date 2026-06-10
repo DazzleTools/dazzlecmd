@@ -1,5 +1,6 @@
 Name:        listall
 FQCN:        core:listall
+Absolute:    dazzlecmd:core:listall
 Kit:         core
 Namespace:   core
 Version:     0.0.2

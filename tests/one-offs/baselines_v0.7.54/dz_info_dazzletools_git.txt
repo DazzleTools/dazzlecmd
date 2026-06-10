@@ -1,5 +1,6 @@
 Name:        git
 FQCN:        dazzletools:git
+Absolute:    dazzlecmd:dazzletools:git
 Kit:         dazzletools
 Namespace:   dazzletools
 Version:     0.1.0
