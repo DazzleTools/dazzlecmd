@@ -84,6 +84,15 @@ def discover_kits(kits_dir, projects_dir=None):
         kit.setdefault("tools", [])
         kit["kit_source"] = filepath        # promoted computed field (was "_source")
         kit["kit_name"] = kit_name          # promoted computed field (was "_kit_name")
+        # Normalize the registry's parent-level override keys to their promoted
+        # field names (was "_override_tools_dir"/"_override_manifest") so
+        # build_entity lands them in the typed computed fields. Chokepoint for
+        # BOTH merge branches (in-repo merge above writes the raw key; the
+        # registry-is-the-definition branch carries it via dict(registry)).
+        for raw, promoted in (("_override_tools_dir", "override_tools_dir"),
+                              ("_override_manifest", "override_manifest")):
+            if raw in kit:
+                kit[promoted] = kit.pop(raw)
         # Tag virtual kits and preserve their alias-rewrite map so the
         # engine's _apply_virtual_kits pass can process them after the
         # canonical FQCN index is built.
@@ -320,7 +329,7 @@ def discover_projects(projects_dir, active_kits=None, default_manifest=".dazzlec
     if active_kits is not None:
         kit_tools = set()
         for kit in active_kits:
-            manifest_name = kit.extra_get("manifest", default_manifest)
+            manifest_name = kit.manifest or default_manifest
             for tool_ref in kit.tools:
                 kit_tools.add(tool_ref)
                 # Track manifest name per namespace. FQCNs may have 2+
@@ -332,7 +341,7 @@ def discover_projects(projects_dir, active_kits=None, default_manifest=".dazzlec
                     kit_manifest_names[ns] = manifest_name
 
             # If kit declares a tools_dir, queue it for scanning
-            tools_dir = kit.extra_get("tools_dir")
+            tools_dir = kit.tools_dir
             if tools_dir:
                 abs_tools_dir = os.path.join(project_root, tools_dir)
                 if os.path.isdir(abs_tools_dir):

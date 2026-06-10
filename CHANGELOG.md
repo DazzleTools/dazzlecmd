@@ -4,6 +4,35 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.32] - 2026-06-10
+
+Post-shim untyped-access review (the `extra_get` DWP the v0.8.30 quick-decision deserved). Verdict: the mechanism was right but **4 of the 5 extra keys were mis-filed**, and the review surfaced a real data-loss bug. All fixes additive; byte-identical (byte-gate 10 OK).
+
+### Fixed
+
+- **`to_manifest()` no longer strips `_vars`** (or `_schema_version`). Pre-fix, every `_`-prefixed key was dropped from the manifest projection — including `_vars`, which is user manifest data (template variables, #41) — so `mode.cache_manifest` silently lost a tool's template variables on mode switch. A `_MANIFEST_UNDERSCORE_KEYS` whitelist now separates `_`-prefixed MANIFEST data (preserved) from computed `_`-annotations (`_fqcn`, still stripped).
+
+### Changed
+
+- `tools_dir` / `manifest` promoted to **typed fields** (kit-manifest schema keys for nested-aggregator child layout — Stage 5 missed them because they only occur off the main sweep path). Absent values stay out of the `to_manifest()` projection (no `null` noise).
+- `_override_tools_dir` / `_override_manifest` promoted to **computed fields** `override_tools_dir` / `override_manifest` (the `_dir`→`directory` pattern); the loader normalizes the registry's raw keys at the single pre-`build_entity` chokepoint.
+- `extra_get` now documents its **three-category contract** (also in the lib README freeze section): (1) genuinely polymorphic blocks (`source`), (2) `_`-prefixed manifest data (`_vars`/`_schema_version`, a Pydantic field-naming constraint), (3) novel/unmodeled keys. Every remaining extra key is there for a stated reason.
+- `cli_helpers.build_tool_subparsers` type hint tells the truth (entities or dicts).
+
+### Tests
+
+- `packages/dazzlecmd-lib/tests/test_entity.py` — `TestUntypedAccessContract` (6): the `_vars`/`_schema_version` round-trip survival (the bug), computed keys still stripped, the typed/computed promotions, and absent-optional projection hygiene. Suite 1362 / byte-gate 10 OK.
+
+### Design
+
+- `2026-06-10__09-40-42__dev-workflow-process__post-shim-untyped-access-design-review.md`
+
+### Versions
+
+- dazzlecmd 0.8.31 -> 0.8.32 (PATCH).
+- dazzlecmd-lib 0.8.1 -> 0.8.2 (PATCH -- additive promotions + the `_vars` round-trip fix).
+- dazzle-dz alias -> 0.8.32; deps re-pinned to >=0.8.32 / >=0.8.2.
+
 ## [0.8.31] - 2026-06-10 — Gate I: contracts settled
 
 State system, Step 7 — **the contracts are settled (Gate I)**. The final Act-I step: the DazzleEntity object model and the Groupable verb/state contracts are declared **frozen until 1.0**. With all five verbs live (`rebind`/`hide`/`expose`/`group`/`ungroup`), the state system underpinning them (axes / transitions / registry / round-trip harness / `CompositeTransition`), and the dict shim removed (0.8.0), the public API of `dazzlecmd-lib` is the stable seam consumers build on — the design milestone the 0.8.x line was built toward.
@@ -2646,7 +2675,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.31...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.32...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

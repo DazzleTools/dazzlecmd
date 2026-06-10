@@ -49,8 +49,15 @@ names in `__all__`):
   `ENTITY_ADAPTER`), the `Groupable` capability mixin, and
   `build_entity` / `detect_type` / `reserve_field_axis`. Access is by typed
   attribute (`entity.runtime`, `entity.fqcn`) plus `extra_get` / `extra_set` /
-  `has_extra` for the untyped remainder (`source`, `_vars`, `manifest`). The
-  dict shim was removed in 0.8.0.
+  `has_extra` for the untyped remainder. The dict shim was removed in 0.8.0.
+  **The `extra` contract** (exactly three categories live there, each for a
+  stated reason): (1) genuinely polymorphic blocks (`source` -- kit str vs tool
+  dict, consumed schema-driven via `aggregator_config.remote_url_paths`);
+  (2) `_`-prefixed manifest data (`_vars`, `_schema_version` -- a Pydantic
+  field-naming constraint); (3) novel/unmodeled keys (`extra="allow"`,
+  open-world manifests). Everything else -- including the nested-aggregator
+  keys `tools_dir` / `manifest` and the engine overrides
+  `override_tools_dir` / `override_manifest` -- is a typed field.
 - **`dazzlecmd_lib.groupable`** -- the five state-transition verbs as the
   `{P, not-P}` boundary primitive (`rebind` / `hide` / `expose` / `group` /
   `ungroup`). Each verb on `Groupable` delegates to a typed `*Context`

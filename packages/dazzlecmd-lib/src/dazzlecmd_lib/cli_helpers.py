@@ -17,14 +17,14 @@ registered factories.
 from __future__ import annotations
 
 import sys as _sys
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 from . import colors as _colors
 
 
 def build_tool_subparsers(
     subparsers,
-    projects: Iterable[dict],
+    projects: Iterable[Any],  # DazzleEntity instances or plain manifest dicts
     reserved_commands: Optional[set] = None,
     *,
     add_help: bool = False,

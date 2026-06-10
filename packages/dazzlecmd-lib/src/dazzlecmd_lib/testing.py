@@ -46,6 +46,8 @@ _LEGACY_INPUT_ALIASES = {
     "_auto_realpath_alias": "auto_realpath_alias",
     "_canonical_fqcn": "canonical_fqcn",
     "_original_name": "original_name",
+    "_override_tools_dir": "override_tools_dir",
+    "_override_manifest": "override_manifest",
 }
 
 

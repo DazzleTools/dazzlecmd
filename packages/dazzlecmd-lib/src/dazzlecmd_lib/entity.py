@@ -216,6 +216,11 @@ class DazzleEntity(Groupable, BaseModel):
     virtual: bool = False
     tools: list = Field(default_factory=list)
     name_rewrite: dict = Field(default_factory=dict)
+    # Nested-aggregator child layout (kit-manifest schema keys; None = defaults).
+    # Promoted post-shim (the v0.8.32 review): Stage 5 missed them because they
+    # only occur on nested-aggregator kits, off the main sweep's path.
+    tools_dir: Optional[str] = None
+    manifest: Optional[str] = None
 
     # --- computed runtime fields (Phase 1 Stage 3) ---
     # Promoted from the `_`-prefixed extra keys so they are typed and
@@ -234,12 +239,23 @@ class DazzleEntity(Groupable, BaseModel):
     auto_realpath_alias: bool = False            # was "_auto_realpath_alias"
     canonical_fqcn: Optional[str] = None         # was "_canonical_fqcn"
     original_name: Optional[str] = None          # was "_original_name"
+    override_tools_dir: Optional[str] = None     # was "_override_tools_dir" (registry parent-level override)
+    override_manifest: Optional[str] = None      # was "_override_manifest"
 
     # Computed (non-manifest) field names -- stripped by to_manifest().
     _COMPUTED_FIELDS: ClassVar[frozenset] = frozenset({
         "short_name", "kit_import_name", "directory", "manifest_path",
         "cached", "kit_source", "kit_name", "kit_active",
         "auto_realpath_alias", "canonical_fqcn", "original_name",
+        "override_tools_dir", "override_manifest",
+    })
+
+    # `_`-prefixed keys that ARE manifest data (not computed annotations):
+    # to_manifest() must preserve them or round-trips silently lose user data
+    # (the `_vars` strip bug: mode.cache_manifest dropped template variables).
+    # The `_`-prefix here is schema convention, not a computed marker.
+    _MANIFEST_UNDERSCORE_KEYS: ClassVar[frozenset] = frozenset({
+        "_vars", "_schema_version",
     })
 
     # ------------------------------------------------------------------
@@ -282,7 +298,21 @@ class DazzleEntity(Groupable, BaseModel):
     # no attribute form and is read/written here via model_extra.
     # ------------------------------------------------------------------
     def extra_get(self, key: str, default: Any = None) -> Any:
-        """Read an untyped/extra manifest key from ``model_extra``."""
+        """Read an untyped/extra manifest key from ``model_extra``.
+
+        THE CONTRACT (v0.8.32 review): exactly three categories of key live in
+        extra, each for a stated reason -- everything else is a typed field with
+        attribute access:
+
+        1. **Genuinely polymorphic blocks** -- ``source`` (a kit's is a str URL,
+           a tool's is a ``{"url": ...}`` dict; consumed schema-driven via
+           ``aggregator_config.remote_url_paths`` over the manifest projection).
+        2. **``_``-prefixed manifest data** -- ``_vars``, ``_schema_version``
+           (a Pydantic constraint: a field literally named ``_vars`` becomes a
+           private attr; see ``_MANIFEST_UNDERSCORE_KEYS``).
+        3. **Novel/unmodeled keys** -- the open-world remainder
+           (``extra="allow"``); third-party manifests may carry anything.
+        """
         return (self.__pydantic_extra__ or {}).get(key, default)
 
     def extra_set(self, key: str, value: Any) -> None:
@@ -300,12 +330,21 @@ class DazzleEntity(Groupable, BaseModel):
     def to_manifest(self) -> Dict[str, Any]:
         data = self.model_dump()
         computed = type(self)._COMPUTED_FIELDS
+        keep_underscore = type(self)._MANIFEST_UNDERSCORE_KEYS
         for key in list(data):
-            # Strip computed runtime fields (promoted, non-underscore) and any
-            # `_`-prefixed runtime key (e.g. `_fqcn`). Note: `_vars` is manifest
-            # data that merely starts with `_` and is stripped here too -- that
-            # pre-existing behavior is unchanged; rescuing it is a separate fix.
-            if key in computed or key.startswith("_"):
+            # Strip computed runtime fields (promoted, non-underscore) and
+            # `_`-prefixed runtime keys (e.g. `_fqcn`) -- EXCEPT the whitelisted
+            # `_`-prefixed MANIFEST keys (`_vars`, `_schema_version`), which are
+            # user data that must survive the round-trip (pre-v0.8.32, `_vars`
+            # was silently dropped here, losing template variables through
+            # mode.cache_manifest).
+            if key in computed or (key.startswith("_") and key not in keep_underscore):
+                data.pop(key, None)
+        # None-valued OPTIONAL schema fields that were never in the source
+        # manifest stay out of the projection (tools_dir/manifest are absent on
+        # ordinary kits; emitting `"tools_dir": null` would dirty every manifest).
+        for key in ("tools_dir", "manifest"):
+            if data.get(key, "") is None:
                 data.pop(key, None)
         return data
 

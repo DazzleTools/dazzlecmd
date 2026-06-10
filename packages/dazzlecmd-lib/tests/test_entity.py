@@ -135,6 +135,64 @@ class TestGroupable:
             t.ungroup(context=None)
 
 
+class TestUntypedAccessContract:
+    """The v0.8.32 post-shim review: the 4 mis-filed keys are typed, and the
+    `_vars` strip bug is fixed (to_manifest preserves `_`-prefixed MANIFEST
+    data while still stripping computed `_`-annotations)."""
+
+    def test_vars_survives_to_manifest(self):
+        # THE BUG: pre-v0.8.32, to_manifest stripped `_vars` (template
+        # variables, #41), so mode.cache_manifest silently lost them.
+        t = build_entity(
+            {**_tool_manifest(), "_vars": {"venv": ".venv312"}},
+            entity_type="tool",
+        )
+        m = t.to_manifest()
+        assert m["_vars"] == {"venv": ".venv312"}
+
+    def test_schema_version_survives_to_manifest(self):
+        t = build_entity(
+            {**_tool_manifest(), "_schema_version": 2}, entity_type="tool"
+        )
+        assert t.to_manifest()["_schema_version"] == 2
+
+    def test_computed_underscore_keys_still_stripped(self):
+        t = build_entity(_tool_manifest(), entity_type="tool")
+        t.fqcn = "core:tool1"
+        m = t.to_manifest()
+        assert "_fqcn" not in m
+
+    def test_tools_dir_and_manifest_are_typed_fields(self):
+        k = build_entity(
+            {"name": "wtf", "tools_dir": "src/tools", "manifest": ".wtf.json"},
+            entity_type="kit",
+        )
+        assert k.tools_dir == "src/tools"
+        assert k.manifest == ".wtf.json"
+        # and they round-trip as manifest data
+        m = k.to_manifest()
+        assert m["tools_dir"] == "src/tools" and m["manifest"] == ".wtf.json"
+
+    def test_absent_optional_schema_fields_stay_out_of_projection(self):
+        # An ordinary kit never declared tools_dir/manifest -- the projection
+        # must not grow `"tools_dir": null` noise.
+        k = build_entity({"name": "core"}, entity_type="kit")
+        assert k.tools_dir is None and k.manifest is None
+        m = k.to_manifest()
+        assert "tools_dir" not in m and "manifest" not in m
+
+    def test_override_fields_are_computed_and_stripped(self):
+        k = build_entity(
+            {"name": "wtf", "override_tools_dir": "projects",
+             "override_manifest": ".dazzlecmd.json"},
+            entity_type="kit",
+        )
+        assert k.override_tools_dir == "projects"
+        m = k.to_manifest()
+        # engine annotations, not manifest data
+        assert "override_tools_dir" not in m and "override_manifest" not in m
+
+
 class TestReserveFieldAxis:
     def test_clean_name_ok(self):
         reserve_field_axis(name="claude-cleanup", namespace="dazzletools")  # no raise

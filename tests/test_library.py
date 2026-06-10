@@ -478,12 +478,13 @@ class TestAggregatorAsKitDiscovery:
         ptr = next(k for k in kits if k.kit_name == "ptr")
 
         # Inner kits declared tools_dir="projects" and manifest=".myrepo.json"
-        assert ptr.extra_get("tools_dir") == "projects"
-        assert ptr.extra_get("manifest") == ".myrepo.json"
+        # (typed fields as of v0.8.32 -- attribute access)
+        assert ptr.tools_dir == "projects"
+        assert ptr.manifest == ".myrepo.json"
         # And it stays RELATIVE -- not absolute (pre-fix it was joined with
         # the embedded root, producing absolute paths that triggered the
         # basename mis-normalization downstream)
-        assert not os.path.isabs(ptr.extra_get("tools_dir"))
+        assert not os.path.isabs(ptr.tools_dir)
 
     def test_no_hints_when_inner_kits_minimal(self, tmp_path):
         """When inner kits don't declare structural fields, the

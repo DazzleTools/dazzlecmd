@@ -1077,13 +1077,13 @@ class AggregatorEngine:
         #   3. Child kit manifest's manifest field
         #   4. Defaults (projects/, .dazzlecmd.json)
         child_tools_dir = (
-            kit.extra_get("_override_tools_dir")
-            or kit.extra_get("tools_dir")
+            kit.override_tools_dir
+            or kit.tools_dir
             or "projects"
         )
         child_manifest = (
-            kit.extra_get("_override_manifest")
-            or kit.extra_get("manifest")
+            kit.override_manifest
+            or kit.manifest
             or ".dazzlecmd.json"
         )
 
