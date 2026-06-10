@@ -1,5 +1,6 @@
 Name:        safedel
 FQCN:        core:safedel
+Canonical:   dazzlecmd_lib:core:safedel   (constitutional)
 Kit:         core
 Namespace:   core
 Version:     0.1.0

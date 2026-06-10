@@ -36,16 +36,54 @@ one a user can never stumble onto).
 
 Current inhabitants:
 
-- ``dazzlecmd_lib.core.links`` -- link primitives (symlink/junction
-  detection and creation) that ``mode.py`` and ``render_info`` depend on
-  for correctness across every aggregator. Relocated here from
-  ``dazzlecmd_lib.paths`` in v0.7.0 (dazzlecmd v0.8.0); ``paths`` re-exports
-  them for backward compatibility.
+- ``dazzlecmd_lib.core.links`` -- link primitives. Link creation/removal
+  (``create_link``/``remove_link``/...) that ``mode.py`` depends on, PLUS the
+  link DETECTION surface (``detect_link``/``LinkInfo``/the ``LINK_*``
+  varieties), relocated from the ``links`` tool (dazzlecmd v0.9.4) so lib code
+  imports it as a normal package. ``paths`` re-exports the creation helpers for
+  backward compatibility.
+- ``dazzlecmd_lib.core.safedel`` -- the recoverable-delete engine (the trash
+  store, link-aware staging, metadata preservation, recovery). Relocated from
+  the ``projects/core/safedel/`` tool (dazzlecmd v0.9.4-v0.9.6, #38 / #179) so
+  every aggregator gets recoverable deletion automatically -- ``mode.py``'s
+  swap stages a tool dir here before removing it, with no fallback path. The
+  ``projects/core/safedel/`` tool now wraps this primitive with its CLI +
+  trash-management UX.
 
-Future inhabitants (tracked, not yet migrated): a safe-deletion primitive
-(``core.safedel``, dazzlecmd #38) and dazzlelink sidecar detection
-(``core.links`` extension, dazzlecmd #82). Both already exist as code inside
-``projects/core/safedel/_lib/preservelib/`` and will consolidate here.
+Future inhabitants (tracked, not yet migrated): dazzlelink sidecar detection
+(``core.links`` extension, dazzlecmd #82).
 """
 
 from __future__ import annotations
+
+
+# The names of the constitutional primitives that live in this namespace. A
+# tool whose engine is one of these (e.g. the `core:safedel` CLI wrapping
+# `dazzlecmd_lib.core.safedel`) is constitutional: its canonical "home" is
+# `dazzlecmd_lib:core:<name>` (Scheme O), of which `core:<name>` is the
+# consumer projection (Scheme P). Grows as primitives are added (e.g.
+# dazzlelink, #82).
+_CONSTITUTIONAL_NAMES = frozenset({"links", "safedel"})
+
+
+def constitutional_names() -> frozenset:
+    """Return the set of constitutional primitive names in this namespace."""
+    return _CONSTITUTIONAL_NAMES
+
+
+def is_constitutional(name: str) -> bool:
+    """True if ``name`` names a constitutional ``dazzlecmd_lib.core`` primitive.
+
+    ``name`` is the tool's short name (e.g. ``"safedel"``). The constitutional
+    canonical for such a tool is ``dazzlecmd_lib:core:<name>``.
+    """
+    return name in _CONSTITUTIONAL_NAMES
+
+
+def canonical_fqcn(name: str) -> str:
+    """The canonical (Scheme O) FQCN for a constitutional primitive (bones).
+
+    e.g. ``canonical_fqcn("safedel") -> "dazzlecmd_lib:core:safedel"``. This is
+    axis-invariant (C1); ``core:<name>`` is the consumer projection (skin).
+    """
+    return f"dazzlecmd_lib:core:{name}"

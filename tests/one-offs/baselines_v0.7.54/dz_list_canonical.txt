@@ -1,17 +1,17 @@
 core:
-  f-cp     Safe copy with full metadata preservation (mtime/atime/ctime, ACLs,
-           attributes) and clobber protection. Wraps preservelib.
-  f-mv     Safe move with full metadata preservation (mtime/atime/ctime, ACLs,
-           attributes) and clobber protection. Wraps preservelib.
-  find     Cross-platform file search powered by fd
-  fixpath  Fix mangled paths and optionally open, copy, or browse files
-  links    Detect and display filesystem links (symlinks, junctions, hardlinks,
-           dazzlelinks)
-  listall  Flexible directory structure listing with sorting, collection modes,
-           and output formatting
-  rn       Rename files using regular expressions
-  safedel  Safe file/directory deletion with link-aware classification,
-           metadata preservation, and recoverable trash store
+  f-cp           Safe copy with full metadata preservation (mtime/atime/ctime,
+                 ACLs, attributes) and clobber protection. Wraps preservelib.
+  f-mv           Safe move with full metadata preservation (mtime/atime/ctime,
+                 ACLs, attributes) and clobber protection. Wraps preservelib.
+  find           Cross-platform file search powered by fd
+  fixpath        Fix mangled paths and optionally open, copy, or browse files
+  links [lib]    Detect and display filesystem links (symlinks, junctions,
+                 hardlinks, dazzlelinks)
+  listall        Flexible directory structure listing with sorting, collection
+                 modes, and output formatting
+  rn             Rename files using regular expressions
+  safedel [lib]  Safe file/directory deletion with link-aware classification,
+                 metadata preservation, and recoverable trash store
 
 dazzletools:
   claude-cleanup           Stage and commit Claude Code state files -- noise

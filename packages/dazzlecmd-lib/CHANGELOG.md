@@ -8,6 +8,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.9] - 2026-06-10
+
+Ships with dazzlecmd v0.9.7 -- constitutional core identity surfaced in `dz list` / `dz info` (#179 follow-up). Additive.
+
+### Added
+
+- `dazzlecmd_lib.core.is_constitutional(name)` / `constitutional_names()` / `canonical_fqcn(name)` -- the constitutional-identity API. A tool whose engine lives in `dazzlecmd_lib.core` (safedel, links) has canonical FQCN `dazzlecmd_lib:core:<name>` (Scheme O / "bones"); `core:<name>` is the consumer projection (Scheme P / "skin").
+- `dz list` marks constitutional core tools `[lib]`; `dz info` shows their canonical FQCN (`Canonical: dazzlecmd_lib:core:safedel (constitutional)`). Surfaces the real home of the relocated primitives.
+
+### Changed
+
+- `core/__init__.py` docstring updated: safedel + links are now CURRENT inhabitants (were "future"), reflecting the v0.9.4-v0.9.6 relocation.
+
 ## [0.8.8] - 2026-06-10
 
 Ships with dazzlecmd v0.9.6 -- the safedel tool imports the engine from the lib; the duplicate tool-side engine is removed (slice 3 of 3; #38 reframe / #179). One engine, in the lib.

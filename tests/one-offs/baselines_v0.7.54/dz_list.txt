@@ -1,9 +1,9 @@
 core:
-  find     Cross-platform file search powered by fd
-  fixpath  Fix mangled paths and optionally open, copy, or browse files
-  links    Detect and display filesystem links (symlinks, junctions, hardlinks,
-           dazzlelinks)
-  rn       Rename files using regular expressions
+  find         Cross-platform file search powered by fd
+  fixpath      Fix mangled paths and optionally open, copy, or browse files
+  links [lib]  Detect and display filesystem links (symlinks, junctions,
+               hardlinks, dazzlelinks)
+  rn           Rename files using regular expressions
 
 core:f:  (virtual kit 'f')
   cp  Safe copy with full metadata preservation (mtime/atime/ctime, ACLs,

@@ -43,6 +43,19 @@ import sys as _sys
 from typing import Iterable, Optional
 
 from . import colors as _colors
+from .core import is_constitutional as _is_constitutional, canonical_fqcn as _canonical_fqcn
+
+
+def _constitutional_entry(entry) -> bool:
+    """True if a list entry is a constitutional ``dazzlecmd_lib.core`` tool.
+
+    Such a tool's canonical home is ``dazzlecmd_lib:core:<name>`` (the engine
+    lives in the lib's constitutional namespace); ``core:<name>`` is the
+    consumer projection shown in ``dz list``. The ``[lib]`` marker surfaces
+    that distinction.
+    """
+    return (entry.get("namespace") == "core"
+            and _is_constitutional(entry.get("name", "")))
 
 
 def _wrap_description(text, width):
@@ -333,6 +346,8 @@ def render_list(args, projects, engine=None) -> int:
             markers.append("*")
         if show_mode == "all" and entry.get("has_aliases"):
             markers.append("+")
+        if _constitutional_entry(entry):
+            markers.append("lib")
         if not markers:
             return entry["name"]
         suffix = "".join(f"[{m}]" for m in markers)
@@ -353,6 +368,8 @@ def render_list(args, projects, engine=None) -> int:
             )
         if show_mode == "all" and entry.get("has_aliases"):
             marker_strs.append(_colors.colorize("[+]", _colors.CYAN))
+        if _constitutional_entry(entry):
+            marker_strs.append(_colors.colorize("[lib]", _colors.GREEN))
         if not marker_strs:
             return entry["name"]
         return f"{entry['name']} {''.join(marker_strs)}"
@@ -1057,6 +1074,11 @@ def render_info(args, projects, engine) -> int:
     print(f"Name:        {project.name}")
     if project.fqcn:
         print(f"FQCN:        {project.fqcn}")
+    if project.namespace == "core" and _is_constitutional(project.name):
+        # Constitutional core primitive: its engine lives in the lib's
+        # `dazzlecmd_lib.core` namespace. The FQCN above is the consumer
+        # projection (skin); the canonical below is the real home (bones).
+        print(f"Canonical:   {_canonical_fqcn(project.name)}   (constitutional)")
     if project.kit_import_name:
         print(f"Kit:         {project.kit_import_name}")
     if project.namespace:

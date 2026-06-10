@@ -4,6 +4,24 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.7] - 2026-06-10
+
+**Phase 1 base finalization — constitutional core identity in `dz list` / `dz info` (#179 follow-up).** After relocating safedel + links into the lib's constitutional `dazzlecmd_lib.core` namespace, `dz list` now marks them `[lib]` and `dz info` shows their canonical FQCN (`dazzlecmd_lib:core:safedel`), distinguishing them from ordinary `core:` kit tools. The canonical (bones) is the real home; `core:safedel` is the projection (skin).
+
+### Added
+
+- `dz list` `[lib]` marker on constitutional core tools; `dz info` `Canonical:` line. The `dazzlecmd_lib.core.is_constitutional`/`canonical_fqcn`/`constitutional_names` API. `tests/test_constitutional_identity.py` (5).
+
+### Changed
+
+- Byte-gate: 5 surfaces (4 `dz list` variants + `dz info core:safedel`) re-baselined for this deliberate display change — the first intentional output change since the v0.7.54 byte-identical-migration anchor.
+
+### Versions
+
+- dazzlecmd 0.9.6 -> 0.9.7 (PATCH).
+- dazzlecmd-lib 0.8.8 -> 0.8.9 (PATCH; the constitutional-identity API + display).
+- dazzle-dz alias -> 0.9.7; deps re-pinned to >=0.9.7 / >=0.8.9.
+
 ## [0.9.6] - 2026-06-10
 
 **Phase 1 base finalization — the safedel engine dedup completes (slice 3 of 3; #38 reframe / #179).** The `projects/core/safedel/` tool now imports its engine from the lib (`dazzlecmd_lib.core.safedel`); the duplicate tool-side engine modules are removed (one engine, in the lib — no duplication). Verified end-to-end: `dz safedel` delete → list → recover round-trips off the lib engine.
@@ -2835,7 +2853,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.6...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.7...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
