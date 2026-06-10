@@ -154,11 +154,13 @@ class TestCompositeTransition:
 class TestRegistry:
     def test_containment_transitions_reversible(self):
         reg = build_default_registry()
+        # group/ungroup are one primitive across substrates -- containment
+        # (in-tree membership) AND projection (FQCN overlay/virtual-kit). Scope
+        # to the containment axis here; projection is covered in test_states.
         for verb in ("group", "ungroup"):
-            edges = reg.for_verb(verb)
-            assert edges, f"registry must declare {verb} edges"
+            edges = [t for t in reg.for_verb(verb) if t.axis == "containment"]
+            assert edges, f"registry must declare containment {verb} edges"
             for t in edges:
-                assert t.axis == "containment"
                 assert t.reversibility is Reversibility.REVERSIBLE
                 assert t.conserved == "local_incorporability"
 

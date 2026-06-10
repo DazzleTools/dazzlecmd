@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.10] - 2026-06-10
+
+**Phase 1→2 — overlay declared as a grouping transition in the state system (FQCN-identity DWP Phase 2, slice 1: the contract).** Virtual kits and overlays are the two directions of the `{group, ungroup}` primitive on a new PROJECTION (naming) axis — a virtual kit **ungroups** (splits a canonical into alias names), an overlay **groups** (collapses a home namespace onto a consumer surface, e.g. `dazzlecmd_lib:core` onto `dazzlecmd:core`). Both conserve the canonical FQCN. Declared as data (the graduation precedent); the FQCN-index re-root body — making the home canonical a real index entry with the projection as an alias, replacing the v0.9.9 `_absolute_to_local` shim — is the next slice.
+
+### Added
+
+- `states` PROJECTION axis + `group`(overlay)/`ungroup`(virtual-kit) transitions. Tests updated (group/ungroup now span containment + projection).
+
+### Versions
+
+- dazzlecmd 0.9.9 -> 0.9.10 (PATCH).
+- dazzlecmd-lib 0.8.11 -> 0.8.12 (PATCH).
+- dazzle-dz alias -> 0.9.10; deps re-pinned to >=0.9.10 / >=0.8.12.
+
 ## [0.9.9] - 2026-06-10
 
 **Phase 1 base finalization — absolute FQCNs are always honored (resolvable everywhere).** A real path now resolves like the prefixless name: `dz dazzlecmd:core:f-cp` ≡ `dz core:f-cp`, and `dz info dazzlecmd_lib:core:safedel` resolves to safedel (both previously failed with "invalid choice" / "not found"). `dz list` stays prefixless (the aggregator prefix is redundant in its own runtime) but gains a `[lib]` epilogue legend explaining the absolute FQCN + the constitutional `dazzlecmd_lib:core:` home.
@@ -2889,7 +2903,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.9...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.10...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

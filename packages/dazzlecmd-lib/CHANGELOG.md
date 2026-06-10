@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.12] - 2026-06-10
+
+Ships with dazzlecmd v0.9.10 -- overlay declared as a state-system grouping transition (FQCN-identity DWP Phase 2, slice 1: the contract). Additive.
+
+### Added
+
+- `states`: a PROJECTION axis carrying the {group, ungroup} naming primitive -- `ungroup` = virtual kit (one canonical -> many alias names), `group` = OVERLAY (many home canonicals grouped onto one consumer surface; the inverse of a virtual kit). Both REVERSIBLE, both conserve the canonical FQCN. Declared as DATA (the graduation precedent); the FQCN-index body (home canonical + projection alias, replacing the v0.9.9 `_absolute_to_local` shim) is the next slice.
+
 ## [0.8.11] - 2026-06-10
 
 Ships with dazzlecmd v0.9.9 -- absolute FQCNs are now always RESOLVABLE (dispatch + info), not just derivable (FQCN-identity, the "always honored" follow-up). Additive.

@@ -183,9 +183,15 @@ class TestDefaultRegistry:
     def test_axes_registered(self):
         reg = build_default_registry()
         names = {a.name for a in reg.axes()}
-        assert names == {"kind", "mode", "visibility", "activation", "routing", "containment"}
+        assert names == {"kind", "mode", "visibility", "activation", "routing",
+                         "containment", "projection"}
         assert reg.axis("kind").read_only is True
         assert reg.axis("routing").values is None  # open-valued
+        # PROJECTION carries the {group=overlay, ungroup=virtual-kit} naming
+        # primitive; both REVERSIBLE, both conserve the canonical FQCN.
+        proj = {t.verb: t for t in reg.for_axis("projection")}
+        assert set(proj) == {"group", "ungroup"}
+        assert all(t.conserved == "canonical_fqcn" for t in proj.values())
 
     def test_mode_values_match_mode_module(self):
         """Drift guard: the MODE axis values must equal mode.STATE_* literals."""

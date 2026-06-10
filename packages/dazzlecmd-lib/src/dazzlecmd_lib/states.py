@@ -599,6 +599,38 @@ def build_default_registry() -> TransitionRegistry:
         atomicity="all_or_nothing", fqcn_fate="reborn",
     ))
 
+    # -- PROJECTION: FQCN-name overlay/alias moves (the naming axis) -----------
+    # How a canonical's name is PROJECTED into a consumer's surface -- the two
+    # directions of the {group, ungroup} primitive on the naming substrate:
+    #   - ungroup (VIRTUAL KIT): one canonical projected under additional alias
+    #     names -- split a kit into pieces (e.g. ``core:safedel`` also surfaced
+    #     as ``f:rm``). One thing presented as many.
+    #   - group (OVERLAY): many home canonicals grouped onto ONE consumer
+    #     surface -- collapse ``dazzlecmd_lib:core`` onto ``<consumer>:core`` so
+    #     the lib's constitutional tools appear in the consumer's ``core:`` list
+    #     as projection-aliases. Many homes presented as one surface. This is the
+    #     INVERSE of a virtual kit.
+    # Both are REVERSIBLE name projections that CONSERVE the canonical FQCN (C1):
+    # the absolute identity never changes; only its projected/aliased names do.
+    # Declared as DATA here (the precedent: graduation above); the index body
+    # (home canonical + projection alias in the FQCN index) is the next slice,
+    # replacing the v0.9.9 ``_absolute_to_local`` normalization shim.
+    reg.register_axis(StateAxis(
+        name="projection", values=None,   # open-valued: the set of projected names
+        substrate="fqcn_index alias/canonical entries (display + dispatch)",
+    ))
+    reg.declare(Transition(
+        axis="projection", from_values=(OPEN,), to_value=OPEN, verb="ungroup",
+        reversibility=Reversibility.REVERSIBLE, conserved="canonical_fqcn",
+        note="virtual kit: project a canonical under additional alias names (split)",
+    ))
+    reg.declare(Transition(
+        axis="projection", from_values=(OPEN,), to_value=OPEN, verb="group",
+        reversibility=Reversibility.REVERSIBLE, conserved="canonical_fqcn",
+        note="overlay: group a home namespace's canonicals onto a consumer "
+             "surface as projection-aliases (the inverse of the virtual-kit ungroup)",
+    ))
+
     return reg
 
 
