@@ -8,6 +8,117 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.3] - 2026-06-10
+
+Ships with dazzlecmd v0.8.34 -- #84 certification cleanup. Additive.
+
+### Removed
+
+- Orphaned `_CAP_DEFERRED` ClassVar in `entity.py` (defined, zero references -- no `NotImplementedError` stub remained), so "the stubs are gone" is literally true at the Gate-I freeze.
+
+## [0.8.2] - 2026-06-10
+
+Ships with dazzlecmd v0.8.32 -- the post-shim untyped-access review (the DWP the 0.8.0 quick-decision deserved). Additive; byte-identical.
+
+### Fixed
+
+- `to_manifest()` no longer strips `_vars` (or `_schema_version`) from the manifest projection. Pre-fix every `_`-prefixed key was dropped -- including `_vars` (user template variables, #41) -- so `mode.cache_manifest` silently lost a tool's template variables on mode switch. A `_MANIFEST_UNDERSCORE_KEYS` whitelist now separates `_`-prefixed MANIFEST data (preserved) from computed annotations (`_fqcn`, still stripped). This was a real data-loss bug.
+
+### Changed
+
+- `tools_dir` / `manifest` promoted to typed fields (kit-manifest schema keys for nested-aggregator child layout; the Stage-5 sweep had missed them). Absent values stay out of the `to_manifest` projection.
+- `_override_tools_dir` / `_override_manifest` -> computed fields `override_tools_dir` / `override_manifest`; `loader` normalizes the registry's raw keys at the single pre-`build_entity` chokepoint.
+- `extra_get` now documents its three-category contract (also in the README): (1) polymorphic blocks (`source`), (2) `_`-prefixed manifest data (`_vars` / `_schema_version`, a Pydantic field-naming constraint), (3) novel/unmodeled keys.
+
+## [0.8.1] - 2026-06-10
+
+Ships with dazzlecmd v0.8.31 -- Gate I. Additive (README + `__all__`).
+
+### Added
+
+- `entity.__all__` + `groupable.__all__` (`states` already had one) -- explicit, star-import-checkable public surfaces.
+- A "Public API -- frozen until 1.0 (Gate I)" section in the README documenting the settled surface + the access model (typed attributes + `extra_get`/`extra_set`).
+
+**Gate I:** with the dict shim gone (0.8.0), all five Groupable verbs live, and the state system in place, the DazzleEntity object model + the Groupable verb/state contracts are declared FROZEN until 1.0.
+
+## [0.8.0] - 2026-06-10
+
+Ships with dazzlecmd v0.8.30. **BREAKING** (pre-1.0 MINOR) -- the close of the DazzleEntity migration.
+
+### Removed -- BREAKING
+
+- The DazzleEntity dict shim: `__getitem__` / `__setitem__` / `get` / `__contains__` / `keys` / `values` / `items`, plus `_LEGACY_KEY_MAP` and the `_warn_on_shim` ratchet. Consumers that treated entities as dicts must migrate: `entity["x"]` -> `entity.x` (typed) or `entity.extra_get("x")` (untyped); `entity["x"] = v` -> `entity.x = v` or `entity.extra_set("x", v)`; `entity["_fqcn"]` -> `entity.fqcn`. (Known consumers reconciled to this break: amdead, wtf-windows.)
+
+### Added
+
+- `DazzleEntity.extra_get` / `extra_set` / `has_extra` -- the typed-entity accessor for the untyped remainder (the polymorphic `source` block, `_vars`, `_schema_version`, nested `manifest`).
+
+### Changed
+
+- ~293 call sites migrated from dict-access to attribute / `extra_get` across prod (loader / engine / default_meta_commands / registry / cli_helpers / setup_resolve) and tests; behavior preserved (dazzlecmd's CLI byte-identical). The break is for LIBRARY CONSUMERS using dict-access -- dazzlecmd itself is unaffected at the CLI.
+
+## [0.7.24] - 2026-06-10
+
+Ships with dazzlecmd v0.8.29 -- state system Step 5; all five Groupable verbs now live. Additive; byte-identical.
+
+### Added
+
+- `states.CompositeTransition` -- a multi-axis move as ordered composition of single-axis legs; composite-criticality is computed from leg INTERACTION (a leg's `creates` feeding a later leg's conserved invariant => generative), NOT the union of leg classes. Plus `TransitionRegistry.register_composite` / `composites` / `composite`.
+- `build_default_registry`: the CONTAINMENT axis + reversible `group`/`ungroup` edges (conserved = `local_incorporability`) + the GENERATIVE graduation composite (creates `own_repo`/`remote_url`, loses `in_tree_coupling`, `fqcn_fate=reborn`).
+- `groupable.ContainmentInvariant` / `ContainmentReceipt` / `ContainmentContext` (in-tree membership move; apply/undo; C3 refusal on ungrouping a constitutional item; graduation refused until #73).
+- `Groupable.group(target, *, context)` / `ungroup(target=None, *, context)` live delegates.
+
+## [0.7.23] - 2026-06-10
+
+Ships with dazzlecmd v0.8.27 -- state system Step 4a, the hide/expose verbs. Additive; byte-identical.
+
+### Added
+
+- `groupable`: `VISIBILITY_CHANNELS` + `VISIBILITY_LADDER` (monotone presets: Visible -> Silenced -> Hidden -> Shadowed) + `level_for_channels`; `Frame` (consumer/projection context; reserved unwired `channel_overrides`); `VisibilityInvariant` (C2 = `canonical_dispatch`), `VisibilityReceipt`, `VisibilityContext` (global path; writes the existing per-channel config keys; undo; frame-relative writes refused until #79).
+- `entity.Groupable.hide(to=, *, context)` / `expose(to=, *, context)` -- live ladder-walk delegates; first real C3 enforcement (shadowing a constitutional `always_active` item raises `CriticalityBoundaryError`). `visibility_in(frame=None, *, context=None)` real for the global path.
+- The VISIBILITY hide/expose transitions in `build_default_registry` (REVERSIBLE, conserved = `canonical_dispatch`).
+
+## [0.7.22] - 2026-06-10
+
+Ships with dazzlecmd v0.8.26 -- state system Step 3, the Hidden visibility level. Render-only; no-op when `hidden_tools` is empty (byte-identical).
+
+### Added
+
+- `engine.AggregatorEngine.filter_hidden(projects, *, reveal=False)` -- the render-only chokepoint shared by list/tree/epilog. A hidden tool is omitted from display but stays fully dispatchable (short name still claimed, FQCN still resolves); discovery, the FQCN index, dispatch, and collision/precedence never consult `hidden_tools`.
+- `hidden_tools` config key (documented alongside `silenced_hints` / `shadowed_tools`).
+
+## [0.7.21] - 2026-06-10
+
+Ships with dazzlecmd v0.8.25 -- state system Step 2, context-level undo. Additive (undo is on no dispatch path); byte-identical.
+
+### Added
+
+- `groupable.RebindContext.undo(receipt)` (protocol) + impls: `AliasRebindContext.undo` (entity-free; the context looks up the current owner and repoints back to `receipt.previous_state`; always reversible) and `mode.ModeRebindContext.undo` (re-drives the inverse switch iff `receipt.reversible`; a one-way orbit entry refuses with `CriticalityBoundaryError`). The `assert_round_trip` harness's `invert` is now just `ctx.undo`.
+
+## [0.7.20] - 2026-06-09
+
+Ships with dazzlecmd v0.8.24 -- state system slice 0, the foundation the Groupable verbs build on. Additive (`states` is imported nowhere on the dispatch hot path); byte-identical.
+
+### Added
+
+- `dazzlecmd_lib.states` (NEW, generic -- imports nothing from engine/mode/groupable): `StateAxis` / `EntityState` (frozen, OBSERVED not stored) / `Transition` / `TransitionRegistry`; the `Reversibility` taxonomy (REVERSIBLE / ONE_WAY / REFUSED_AT_BOUNDARY / GENERATIVE) with contract enforcement; `assert_round_trip(read, apply, invert)` (substrate-agnostic L2-semantic identity harness); `observe(...)` (the platform->model bridge -- an unmodelable real reading raises rather than being stored); `build_default_registry()` (KIND/MODE/VISIBILITY/ACTIVATION + ROUTING axes; retro-declares the live rebind transitions; reserves `CompositeTransition`).
+
+## [0.7.19] - 2026-06-09
+
+Ships with dazzlecmd v0.8.23.
+
+### Changed
+
+- `requires-python` raised to `>=3.9`. The DazzleEntity model imports `typing.Annotated` (a 3.9+ runtime feature for the discriminated union), so the lib has effectively required 3.9+ since the 0.8.x rearchitecture; Python 3.8 is EOL and was dropped rather than shimmed.
+
+## [0.7.18] - 2026-06-09
+
+Ships with dazzlecmd v0.8.22 -- CI hotfix.
+
+### Fixed
+
+- Declare `pydantic>=2.0` as a runtime dependency. The DazzleEntity model imports Pydantic v2 unconditionally (a hard runtime dep since the 0.8.x rearchitecture), but the lib declared no core dependencies -- so a clean `pip install` (CI) died with `ModuleNotFoundError: No module named 'pydantic'` on `dz --version`. (`colorama` / `distro` stay optional -- both imported best-effort.)
+
 ## [0.7.17] - 2026-06-09
 
 Ships with dazzlecmd v0.8.21 -- behavioral phase (#84) `rebind` Phase 2 (mode-switch) + a latent-bug fix it surfaced.

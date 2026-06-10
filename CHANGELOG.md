@@ -4,6 +4,25 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.1] - 2026-06-10
+
+**Phase 1 base finalization — dazzlecmd-lib version-record reconciliation.** The library's `_version.py` and CHANGELOG had frozen at `0.7.17` (dazzlecmd v0.8.21) while `pyproject.toml` walked to `0.8.3` (dazzlecmd v0.8.22–v0.8.34). The public attribute `dazzlecmd_lib.__version__` (re-exported from `_version.py`) therefore reported `0.7.17` for a `0.8.3` package, and the lib CHANGELOG omitted all 11 of those versions — including the headline **BREAKING 0.8.0** dict-shim deletion. dazzlecmd's CLI is byte-identical (a `chore(lib)` record fix); the library's actual version is unchanged at 0.8.3.
+
+### Fixed
+
+- `dazzlecmd-lib` `_version.py` corrected `0.7.17` -> `0.8.3` to match the shipped package (a correction, not a version bump — the lib stays 0.8.3).
+- `dazzlecmd-lib` CHANGELOG backfilled with the missing entries 0.7.18 through 0.8.3 (reconstructed from the per-commit history), so the record finally documents the state-system steps and the breaking 0.8.0 shim deletion.
+
+### Changed
+
+- `dazzlecmd-lib` `pyproject.toml` now derives its version dynamically from `_version.py` (`[tool.setuptools.dynamic]`, mirroring dazzlecmd's own root pyproject) — single-sourcing the version so the static-pyproject vs `_version.py` drift that caused this can't recur.
+
+### Versions
+
+- dazzlecmd 0.9.0 -> 0.9.1 (PATCH; CLI byte-identical).
+- dazzlecmd-lib unchanged at 0.8.3 (its self-report corrected to match).
+- dazzle-dz alias -> 0.9.1; dazzlecmd dep re-pinned to >=0.9.1 (lib pin unchanged at >=0.8.3).
+
 ## [0.9.0] - 2026-06-10 — opens the 0.9.x line
 
 **0.9.x begins.** 0.8.x is distinctly the grouping-mechanics work (Act I; closed at v0.8.34, the rollback anchor). 0.9.x is the design-settlement Act II: finalize the base + consumers, then ship the parked tools. This first commit is **Phase 0 consumer finalization** — reconciling the wtf-windows consumer for the dazzlecmd-lib 0.8.0 shim deletion.
@@ -2720,7 +2739,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
