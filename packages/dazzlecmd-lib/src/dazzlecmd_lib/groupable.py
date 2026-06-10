@@ -184,3 +184,232 @@ class AliasRebindContext:
             ),
             reversible=True,
         )
+
+
+# ===========================================================================
+# Visibility -- the hide/expose verbs and the monotone channel ladder
+# ===========================================================================
+#
+# The visibility ladder is a set of MONOTONE channel-suppression presets over
+# three channels. Each ladder level suppresses strictly one more channel than
+# the previous -- so the levels form a {P, -P} boundary-tightening chain, and a
+# level is fully described by the SET of channels it suppresses (the channels
+# addendum to the hide/expose DWP). The existing config keys ARE those
+# suppression sets, one per channel:
+#
+#     channel       config key (persisted form)        what it suppresses
+#     ----------    -------------------------------    -----------------------
+#     hints         silenced_hints["tools"]            "did you mean" hints
+#     display       hidden_tools                       list/tree/help rendering
+#     resolution    shadowed_tools                     short-name claim + dispatch
+#
+# So a tool at level Hidden ({hints, display}) is in BOTH silenced_hints and
+# hidden_tools -- which means the EXISTING hint/display filters already produce
+# the monotone effect with no new engine logic. Shadowed adds resolution, which
+# is the discovery-time removal (and the C3 hard wall for constitutional items).
+
+VISIBILITY_CHANNELS = ("hints", "display", "resolution")
+
+# Monotone presets: each level's suppressed-channel set is a superset of the
+# previous. Visible suppresses nothing; Shadowed suppresses everything.
+VISIBILITY_LADDER = {
+    "visible": frozenset(),
+    "silenced": frozenset({"hints"}),
+    "hidden": frozenset({"hints", "display"}),
+    "shadowed": frozenset({"hints", "display", "resolution"}),
+}
+
+# Ordered weakest -> strongest (for direction enforcement: hide moves up the
+# index, expose moves down).
+VISIBILITY_ORDER = ("visible", "silenced", "hidden", "shadowed")
+
+
+def level_for_channels(suppressed):
+    """The ladder level a suppressed-channel set denotes.
+
+    The presets are monotone, so the highest channel present determines the
+    level (a non-preset set, e.g. only {display} from a manual config edit, maps
+    to the highest level it satisfies -- here Hidden)."""
+    if "resolution" in suppressed:
+        return "shadowed"
+    if "display" in suppressed:
+        return "hidden"
+    if "hints" in suppressed:
+        return "silenced"
+    return "visible"
+
+
+@dataclass(frozen=True)
+class Frame:
+    """A consumer/projection context (a Scheme-P veil over the canonical Scheme-O
+    tree).
+
+    #79's activated environment constructs one; #72's fold-depth and cd-cursor
+    are session-frame parameters (distinct mechanisms, same frame concept). The
+    ``channel_overrides`` field (a per-consumer channel configuration -- the
+    OutputManager shape lifted from log output to visibility) is RESERVED, not
+    wired: frame-relative visibility lands with #79. ``frame=None`` everywhere in
+    this slice means the global frame (the running aggregator's user config).
+    """
+
+    name: str
+    kind: str = "environment"        # "environment" | "aggregator" | "session"
+    channel_overrides: Any = None    # reserved (frame-relative writes = #79)
+
+
+@dataclass(frozen=True)
+class VisibilityInvariant:
+    """C2 for visibility: dispatch survives any veil.
+
+    The conserved quantity is the canonical FQCN's dispatchability -- a
+    visibility change never removes the canonical from the index, so every veil
+    is reversible and Hidden keeps dispatch alive (only Shadowed frees the short
+    name, and Shadowed is refused for constitutional items -- C3).
+    """
+
+    conserved_quantity_name: str = "canonical_dispatch"
+    conserved_value: Any = None
+    restore_path: str = "re-apply the previous visibility level"
+
+
+@dataclass(frozen=True)
+class VisibilityReceipt:
+    """The record returned by ``entity.hide()`` / ``entity.expose()``.
+
+    Carries the ladder-level transition plus the per-channel deltas
+    (``channels_suppressed`` / ``channels_restored``) -- forward-compatible with
+    fine-grained per-channel ops, while the verbs themselves only walk presets.
+    """
+
+    entity_fqcn: str
+    sub_kind: str                    # "visibility"
+    previous_state: str              # prior ladder level
+    new_state: str                   # new ladder level
+    invariant: VisibilityInvariant
+    reversible: bool = True          # all visibility transitions are reversible
+    channels_suppressed: tuple = ()  # channels newly suppressed by this step
+    channels_restored: tuple = ()    # channels newly restored by this step
+    verb: str = "hide"               # "hide" | "expose"
+
+
+class VisibilityContext:
+    """The context ``hide``/``expose`` operate within.
+
+    GLOBAL path only in this slice: ``frame=None`` -> the running aggregator's
+    user config (already per-aggregator-instance). ``frame=<Frame>`` raises a
+    clear error -- frame-relative visibility lands with #79 environments. Writes
+    go through ``engine._write_user_config`` (the tested path used by
+    ``dz kit silence/shadow``) -- never raw file I/O here.
+    """
+
+    def __init__(self, engine, frame=None):
+        self.engine = engine
+        self.frame = frame
+        self._applied_entity = None  # captured at apply() so undo() can re-target
+
+    # -- config <-> channel mapping ------------------------------------------
+    def _read_suppressed(self, fqcn):
+        silenced = self.engine._get_config_dict("silenced_hints", default={}) or {}
+        silenced_tools = set(silenced.get("tools", []) or [])
+        hidden = set(self.engine._get_config_list("hidden_tools", default=[]) or [])
+        shadowed = set(self.engine._get_config_list("shadowed_tools", default=[]) or [])
+        s = set()
+        if fqcn in silenced_tools:
+            s.add("hints")
+        if fqcn in hidden:
+            s.add("display")
+        if fqcn in shadowed:
+            s.add("resolution")
+        return s
+
+    def current_level(self, entity):
+        """The entity's current ladder level in this (global) frame."""
+        return level_for_channels(self._read_suppressed(entity.fqcn))
+
+    def _write_level(self, fqcn, target):
+        """Persist the channel-suppression sets so ``fqcn`` sits at ``target``."""
+        want = VISIBILITY_LADDER[target]
+        silenced = dict(self.engine._get_config_dict("silenced_hints", default={}) or {})
+        tools = list(silenced.get("tools", []) or [])
+        kits = list(silenced.get("kits", []) or [])
+        hidden = list(self.engine._get_config_list("hidden_tools", default=[]) or [])
+        shadowed = list(self.engine._get_config_list("shadowed_tools", default=[]) or [])
+
+        def _set(lst, present):
+            if present and fqcn not in lst:
+                lst.append(fqcn)
+            elif not present and fqcn in lst:
+                lst.remove(fqcn)
+
+        _set(tools, "hints" in want)
+        _set(hidden, "display" in want)
+        _set(shadowed, "resolution" in want)
+        self.engine._write_user_config({
+            "silenced_hints": {"tools": tools, "kits": kits},
+            "hidden_tools": hidden,
+            "shadowed_tools": shadowed,
+        })
+
+    # -- the operation -------------------------------------------------------
+    def apply(self, entity, target, *, verb):
+        if self.frame is not None:
+            raise CriticalityBoundaryError(
+                "frame-relative visibility is not wired in this slice -- only the "
+                "global frame (frame=None) is supported until #79 environments land."
+            )
+        if target not in VISIBILITY_LADDER:
+            raise ValueError(
+                f"unknown visibility level {target!r}; expected one of {VISIBILITY_ORDER}"
+            )
+        fqcn = entity.fqcn
+        prev = self.current_level(entity)
+        pi = VISIBILITY_ORDER.index(prev)
+        ti = VISIBILITY_ORDER.index(target)
+        if verb == "hide" and ti < pi:
+            raise ValueError(
+                f"hide only moves toward MORE suppression; {prev!r} -> {target!r} "
+                f"is backwards (use expose)"
+            )
+        if verb == "expose" and ti > pi:
+            raise ValueError(
+                f"expose only moves toward LESS suppression; {prev!r} -> {target!r} "
+                f"is backwards (use hide)"
+            )
+        # C3: constitutional items may be Hidden, never Shadowed (Hidden is the
+        # maximum veil a consumer may apply to a constitutional item).
+        if target == "shadowed" and getattr(entity, "always_active", False):
+            raise CriticalityBoundaryError(
+                f"{fqcn} is constitutional (always_active) -- it may be hidden but "
+                f"never shadowed (C3: constitutional items are never removed)."
+            )
+
+        before = self._read_suppressed(fqcn)
+        self._write_level(fqcn, target)
+        after = set(VISIBILITY_LADDER[target])
+        self._applied_entity = entity
+        return VisibilityReceipt(
+            entity_fqcn=fqcn,
+            sub_kind="visibility",
+            previous_state=prev,
+            new_state=target,
+            invariant=VisibilityInvariant(conserved_value=fqcn),
+            reversible=True,
+            channels_suppressed=tuple(sorted(after - before)),
+            channels_restored=tuple(sorted(before - after)),
+            verb=verb,
+        )
+
+    def undo(self, receipt):
+        """Re-apply ``receipt.previous_state`` -- the inverse walk. The direction
+        is whichever restores the prior level (undo of a hide is an expose, and
+        vice versa)."""
+        entity = self._applied_entity
+        if entity is None:
+            raise RebindError(
+                "VisibilityContext.undo() requires a prior apply() on this context."
+            )
+        target = receipt.previous_state
+        pi = VISIBILITY_ORDER.index(receipt.new_state)
+        ti = VISIBILITY_ORDER.index(target)
+        verb = "expose" if ti < pi else "hide"
+        return self.apply(entity, target, verb=verb)

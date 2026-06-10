@@ -73,11 +73,11 @@ class Groupable:
       consumer (may be hidden, never ungrouped).
 
     Behavioral phase (#84): the verbs become state-transition operators.
-    ``rebind`` is the first live verb (coupling/resolution change -- alias
-    repoint now, mode-switch next; see ``dazzlecmd_lib.groupable``).
-    ``group``/``ungroup``/``hide``/``expose`` still raise
+    ``rebind`` (coupling/resolution change -- alias repoint + mode-switch) and
+    ``hide``/``expose`` (the visibility ladder) are LIVE; see
+    ``dazzlecmd_lib.groupable``. ``group``/``ungroup`` still raise
     ``NotImplementedError`` so callers fail explicitly rather than silently
-    no-op until their tree mechanics land.
+    no-op until their containment/graduation mechanics land.
 
     Frame (reserved): a presentation/consumer context (ties to
     ``AggregatorConfig.presentation``). ``rebind`` is NOT frame-relative;
@@ -91,8 +91,8 @@ class Groupable:
 
     _CAP_DEFERRED: ClassVar[str] = (
         "this verb's tree mechanics are not yet implemented "
-        "(rebind is live as of the behavioral-phase PoC; "
-        "group/ungroup/hide/expose land next -- see the grouping/ungrouping DWPs)"
+        "(rebind and hide/expose are live; "
+        "group/ungroup land next -- see the grouping/ungrouping DWPs)"
     )
 
     def group(self, *args: Any, **kwargs: Any) -> Any:
@@ -103,13 +103,30 @@ class Groupable:
         """¬P: disincorporate item(s) from this boundary (generative/irreversible)."""
         raise NotImplementedError(f"ungroup(): {self._CAP_DEFERRED}")
 
-    def hide(self, *args: Any, **kwargs: Any) -> Any:
-        """Display-off, dispatch-on (frame-relative)."""
-        raise NotImplementedError(f"hide(): {self._CAP_DEFERRED}")
+    def hide(self, to: str = "hidden", *, context: Any) -> Any:
+        """Walk DOWN the visibility ladder (toward MORE suppression) to ``to``
+        (``"silenced"`` / ``"hidden"`` / ``"shadowed"``), within ``context`` (a
+        ``dazzlecmd_lib.groupable.VisibilityContext``).
 
-    def expose(self, *args: Any, **kwargs: Any) -> Any:
-        """Undo hide (frame-relative)."""
-        raise NotImplementedError(f"expose(): {self._CAP_DEFERRED}")
+        Dispatch always survives (C2 = ``canonical_dispatch``); shadowing a
+        constitutional (``always_active``) item raises ``CriticalityBoundaryError``
+        (C3: constitutional items may be hidden, never removed). Returns a
+        ``VisibilityReceipt``. The third live Groupable verb."""
+        if context is None:
+            raise TypeError(
+                "hide(to=..., *, context=...) requires a VisibilityContext"
+            )
+        return context.apply(self, to, verb="hide")
+
+    def expose(self, to: str = "visible", *, context: Any) -> Any:
+        """Walk UP the visibility ladder (toward LESS suppression) to ``to``
+        (``"visible"`` / ``"silenced"`` / ``"hidden"``), within ``context`` -- the
+        inverse of ``hide``. Returns a ``VisibilityReceipt``."""
+        if context is None:
+            raise TypeError(
+                "expose(to=..., *, context=...) requires a VisibilityContext"
+            )
+        return context.apply(self, to, verb="expose")
 
     def rebind(self, target: Any, *, context: Any) -> Any:
         """REBIND: change this entity's coupling/resolution to ``target`` within
@@ -395,11 +412,20 @@ class DazzleEntity(Groupable, BaseModel):
         return data
 
     # ------------------------------------------------------------------
-    # Visibility (frame-relative). Phase 0 stub: everything is visible.
-    # The four-level ladder (Visible/Silenced/Hidden/Shadowed) resolves
-    # against a consumer frame's presentation policy post-0.8.x.
+    # Visibility: the entity's current ladder level
+    # (visible/silenced/hidden/shadowed).
     # ------------------------------------------------------------------
-    def visibility_in(self, frame: Any = None) -> str:
+    def visibility_in(self, frame: Any = None, *, context: Any = None) -> str:
+        """Return the entity's current ladder level.
+
+        Real for the GLOBAL path: pass a ``VisibilityContext`` to read the level
+        from the running aggregator's config. Without a context the entity alone
+        cannot know (visibility lives in config, not on the entity), so it reports
+        ``"visible"``. ``frame`` is accepted and -- until #79 environments make
+        frame-relative reads real -- falls back to the global level.
+        """
+        if context is not None:
+            return context.current_level(self)
         return "visible"
 
 

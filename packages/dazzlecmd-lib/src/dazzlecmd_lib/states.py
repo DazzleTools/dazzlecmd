@@ -457,6 +457,24 @@ def build_default_registry() -> TransitionRegistry:
         note="path missing / conserved invariant underivable -> refuse (pre-flight)",
     ))
 
+    # -- VISIBILITY: hide/expose ladder walks (config; always reversible) ------
+    # The conserved invariant is canonical_dispatch: a veil never removes the
+    # canonical from the index, so every visibility move round-trips. The C3
+    # boundary (refusing to shadow a constitutional item) is a pre-flight refusal
+    # the context raises, not an irreversible edge.
+    reg.declare(Transition(
+        axis="visibility", from_values=("visible", "silenced", "hidden"),
+        to_value=OPEN, verb="hide", reversibility=Reversibility.REVERSIBLE,
+        conserved="canonical_dispatch",
+        note="walk down the ladder (more suppressed); dispatch survives",
+    ))
+    reg.declare(Transition(
+        axis="visibility", from_values=("silenced", "hidden", "shadowed"),
+        to_value=OPEN, verb="expose", reversibility=Reversibility.REVERSIBLE,
+        conserved="canonical_dispatch",
+        note="walk up the ladder (less suppressed); the inverse of hide",
+    ))
+
     return reg
 
 
