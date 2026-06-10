@@ -4,6 +4,24 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.4] - 2026-06-10
+
+**Phase 1 base finalization — recoverable-delete becomes a constitutional lib primitive (slice 1 of 3; #38 reframe / #37).** The recoverable-delete engine is relocated from the `projects/core/safedel/` tool into `dazzlecmd_lib.core.safedel`, so every aggregator gets it automatically. This is the foundation for **removing the mode-swap "safedel absent → rmtree" fallback** — no fallback paths: the capability is internal to the lib, so there is no "absent" case. This slice is purely additive (the lib gains the engine; mode.py adoption + the tool rewire follow). CLI byte-identical.
+
+### Added
+
+- `dazzlecmd_lib.core.safedel` (the relocated engine) + `dazzlecmd_lib.core.links` link-detection re-exports. `packages/dazzlecmd-lib/tests/test_core_safedel.py` (4).
+
+### Changed
+
+- `dazzlecmd-lib` gains a `dazzle-filekit>=0.2.2` runtime dependency (cross-platform metadata preservation — the canonical home of that code).
+
+### Versions
+
+- dazzlecmd 0.9.3 -> 0.9.4 (PATCH; CLI byte-identical).
+- dazzlecmd-lib 0.8.5 -> 0.8.6 (PATCH; additive — the `core.safedel` primitive).
+- dazzle-dz alias -> 0.9.4; deps re-pinned to >=0.9.4 / >=0.8.6.
+
 ## [0.9.3] - 2026-06-10
 
 **Phase 1 base finalization — `dz mode switch` now works for embedded tools (#37 Phase-3.5 Bucket D, items 3.5-1 / 3.5-12).** Previously a tool checked out directly into the aggregator tree (STATE_EMBEDDED, e.g. imported via `git clone`/subtree/copy) could not be mode-switched — `dz mode switch <tool>` printed "no mode toggle available". It now toggles an embedded checkout to a dev symlink. This was gated on data safety and is unblocked by v0.9.2: the embedded directory (whose content exists ONLY in this checkout) is staged to safedel's recoverable trash store before removal.
@@ -2780,7 +2798,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.3...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.4...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

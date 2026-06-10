@@ -1,0 +1,508 @@
+"""
+Platform-specific operations for safedel.
+
+Handles the low-level filesystem operations that differ across platforms:
+- Delete dispatch (unlink, rmdir, rmtree with safety checks)
+- Staging files to trash (rename vs copy+delete)
+- WSL detection
+- Same-device detection
+- Readonly file handling
+"""
+
+import errno
+import os
+import platform
+import shutil
+import stat
+import sys
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import List, Optional
+
+from ._classifier import Classification, DeleteMethod, FileType
+
+
+@dataclass
+class PlatformInfo:
+    """Information about the current platform."""
+    system: str        # "Windows", "Linux", "Darwin"
+    platform: str      # sys.platform: "win32", "linux", "darwin"
+    is_wsl: bool = False
+    wsl_distro: Optional[str] = None
+    python_version: str = ""
+    hostname: str = ""
+
+    @property
+    def is_windows(self) -> bool:
+        return self.platform == "win32"
+
+    @property
+    def is_linux(self) -> bool:
+        return self.platform == "linux"
+
+    @property
+    def is_macos(self) -> bool:
+        return self.platform == "darwin"
+
+
+@dataclass
+class DeleteResult:
+    """Result of a delete operation."""
+    success: bool
+    path: str
+    method_used: str = ""
+    error: Optional[str] = None
+    warnings: List[str] = field(default_factory=list)
+
+
+@dataclass
+class StagingResult:
+    """Result of staging a file/dir to the trash store."""
+    success: bool
+    source_path: str
+    dest_path: str
+    method: str = ""   # "rename" or "copy"
+    error: Optional[str] = None
+    warnings: List[str] = field(default_factory=list)
+
+
+def detect_platform() -> PlatformInfo:
+    """Detect the current platform, including WSL."""
+    info = PlatformInfo(
+        system=platform.system(),
+        platform=sys.platform,
+        python_version=platform.python_version(),
+        hostname=platform.node(),
+    )
+
+    # WSL detection
+    if sys.platform == "linux":
+        wsl_distro = os.environ.get("WSL_DISTRO_NAME")
+        if wsl_distro:
+            info.is_wsl = True
+            info.wsl_distro = wsl_distro
+        else:
+            # Fallback: check /proc/version
+            try:
+                with open("/proc/version", "r") as f:
+                    version_str = f.read().lower()
+                if "microsoft" in version_str or "wsl" in version_str:
+                    info.is_wsl = True
+            except OSError:
+                pass
+
+    return info
+
+
+def is_same_device(path1: str, path2: str) -> bool:
+    """Check if two paths are on the same filesystem device.
+
+    This determines whether os.rename() can be used (atomic, zero-copy)
+    or if a copy+delete is required.
+    """
+    try:
+        dev1 = os.stat(path1).st_dev
+        dev2 = os.stat(path2).st_dev
+        return dev1 == dev2
+    except OSError:
+        return False
+
+
+def stage_to_trash(
+    source_path: str,
+    dest_dir: str,
+    classification: Classification,
+) -> StagingResult:
+    """Stage a file or directory to the trash store.
+
+    Strategy:
+    1. Try os.rename() first (same-volume, atomic, preserves ALL metadata)
+    2. Fall back to copy+delete on cross-device error (EXDEV)
+    3. For links: we stage the link info, not the target content
+
+    Args:
+        source_path: the path being deleted
+        dest_dir: the content/ directory inside the timestamped trash folder
+        classification: the classification result from _classifier
+
+    Returns:
+        StagingResult
+    """
+    source_name = os.path.basename(source_path)
+    dest_path = os.path.join(dest_dir, source_name)
+
+    # Ensure dest directory exists
+    os.makedirs(dest_dir, exist_ok=True)
+
+    # For link types (symlink, junction): we don't copy target content.
+    # We just need to record the link metadata in the manifest.
+    # Stage the link entry itself if possible.
+    if classification.file_type in (
+        FileType.SYMLINK_FILE, FileType.SYMLINK_DIR,
+        FileType.JUNCTION, FileType.BROKEN_LINK,
+    ):
+        return _stage_link(source_path, dest_path, classification)
+
+    # For regular files, hardlinks, and descriptor files (.lnk, .url):
+    # Try rename first, fall back to copy
+    return _stage_regular(source_path, dest_path, classification)
+
+
+def _stage_link(
+    source_path: str, dest_path: str, classification: Classification
+) -> StagingResult:
+    """Stage a symlink or junction.
+
+    We recreate the link in the trash rather than copying the target.
+    If we can't recreate it, we just record it in the manifest (content_preserved=False).
+    """
+    warnings = []
+    link_target = classification.link_target
+
+    if classification.file_type == FileType.JUNCTION:
+        # Junctions: we can't easily recreate them portably.
+        # Just record the metadata. The manifest has the target path.
+        warnings.append(
+            "Junction staged as metadata only (target path recorded in manifest)."
+        )
+        return StagingResult(
+            success=True,
+            source_path=source_path,
+            dest_path=dest_path,
+            method="metadata_only",
+            warnings=warnings,
+        )
+
+    # Symlinks: try to recreate in trash
+    if link_target:
+        try:
+            os.symlink(link_target, dest_path,
+                        target_is_directory=classification.is_dir)
+            return StagingResult(
+                success=True,
+                source_path=source_path,
+                dest_path=dest_path,
+                method="symlink_recreate",
+            )
+        except OSError as e:
+            warnings.append(
+                f"Could not recreate symlink in trash: {e}. "
+                f"Link target recorded in manifest."
+            )
+
+    return StagingResult(
+        success=True,
+        source_path=source_path,
+        dest_path=dest_path,
+        method="metadata_only",
+        warnings=warnings,
+    )
+
+
+def _stage_regular(
+    source_path: str, dest_path: str, classification: Classification
+) -> StagingResult:
+    """Stage a regular file or directory via rename or copy."""
+    # Try atomic rename first
+    try:
+        os.rename(source_path, dest_path)
+        return StagingResult(
+            success=True,
+            source_path=source_path,
+            dest_path=dest_path,
+            method="rename",
+        )
+    except OSError as e:
+        if e.errno != errno.EXDEV:
+            # Not a cross-device error -- something else went wrong
+            # Still try copy as fallback
+            pass
+
+    # Cross-device: must copy then delete
+    warnings = []
+    try:
+        if classification.is_dir:
+            from dazzle_filekit.operations import copy_tree_preserving_links
+            # filekit's copy_tree_preserving_links enforces symlinks=True and
+            # rejects reparse-point roots for defense-in-depth. safedel's
+            # classifier has already verified this is a REGULAR directory
+            # (symlinks and junctions go through _stage_link), so passing
+            # here should succeed.
+            copy_tree_preserving_links(source_path, dest_path)
+        else:
+            shutil.copy2(source_path, dest_path)
+
+        warnings.append(
+            "Cross-device staging: file was copied (some metadata like "
+            "creation time may not be preserved). Original metadata "
+            "is recorded in manifest."
+        )
+        return StagingResult(
+            success=True,
+            source_path=source_path,
+            dest_path=dest_path,
+            method="copy",
+            warnings=warnings,
+        )
+    except OSError as e:
+        return StagingResult(
+            success=False,
+            source_path=source_path,
+            dest_path=dest_path,
+            method="copy",
+            error=f"Failed to stage: {e}",
+            warnings=warnings,
+        )
+
+
+def safe_delete(path: str, classification: Classification) -> DeleteResult:
+    """Execute the delete operation using the correct method for the platform.
+
+    This is called AFTER the file has been staged to trash. It removes
+    the original file/link from its location.
+
+    Args:
+        path: the path to delete
+        classification: the classification with the determined delete method
+
+    Returns:
+        DeleteResult
+    """
+    method = classification.delete_method
+    warnings = []
+
+    try:
+        if method == DeleteMethod.UNLINK:
+            _safe_unlink(path)
+            return DeleteResult(
+                success=True, path=path, method_used="os.unlink"
+            )
+
+        elif method == DeleteMethod.RMDIR:
+            os.rmdir(path)
+            return DeleteResult(
+                success=True, path=path, method_used="os.rmdir"
+            )
+
+        elif method == DeleteMethod.RMTREE:
+            # Extra safety: verify this is NOT a junction or symlink
+            # (defense in depth -- classifier should never assign RMTREE to these)
+            if os.path.islink(path):
+                warnings.append(
+                    "SAFETY OVERRIDE: rmtree was requested on a symlink. "
+                    "Using unlink instead to prevent target traversal."
+                )
+                _safe_unlink(path)
+                return DeleteResult(
+                    success=True, path=path,
+                    method_used="os.unlink (safety override)",
+                    warnings=warnings,
+                )
+
+            if sys.platform == "win32":
+                # Check for junction (defense in depth)
+                try:
+                    st = os.lstat(path)
+                    if st.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+                        warnings.append(
+                            "SAFETY OVERRIDE: rmtree on reparse point. "
+                            "Using rmdir instead."
+                        )
+                        os.rmdir(path)
+                        return DeleteResult(
+                            success=True, path=path,
+                            method_used="os.rmdir (safety override)",
+                            warnings=warnings,
+                        )
+                except (AttributeError, OSError):
+                    pass
+
+            shutil.rmtree(path, onerror=_rmtree_error_handler)
+            return DeleteResult(
+                success=True, path=path, method_used="shutil.rmtree"
+            )
+
+        else:
+            return DeleteResult(
+                success=False, path=path,
+                error=f"Unknown delete method: {method}",
+            )
+
+    except OSError as e:
+        return DeleteResult(
+            success=False, path=path,
+            method_used=method.value,
+            error=str(e),
+            warnings=warnings,
+        )
+
+
+def _safe_unlink(path: str) -> None:
+    """Unlink a file, handling readonly files by clearing the flag first."""
+    try:
+        os.unlink(path)
+    except PermissionError:
+        # Try clearing readonly flag and retry
+        try:
+            os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+            os.unlink(path)
+        except OSError:
+            raise  # Re-raise the original if chmod didn't help
+
+
+def _rmtree_error_handler(func, path, exc_info):
+    """Error handler for shutil.rmtree that handles readonly files."""
+    # If the error is due to readonly, clear the flag and retry
+    if isinstance(exc_info[1], PermissionError):
+        try:
+            os.chmod(path, stat.S_IWRITE | stat.S_IREAD)
+            func(path)
+        except OSError:
+            pass  # Give up on this file
+
+
+def get_trash_dir() -> str:
+    """Get the default trash store directory for the current platform.
+
+    Location:
+        Windows:  %LOCALAPPDATA%\\safedel\\trash\\
+        Linux:    ~/.safedel/trash/
+        macOS:    ~/.safedel/trash/
+        WSL:      ~/.safedel/trash/
+
+    Override: SAFEDEL_STORE environment variable
+    """
+    override = os.environ.get("SAFEDEL_STORE")
+    if override:
+        return override
+
+    if sys.platform == "win32":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if local_app_data:
+            return os.path.join(local_app_data, "safedel", "trash")
+
+    # Linux, macOS, WSL
+    return os.path.join(os.path.expanduser("~"), ".safedel", "trash")
+
+
+def check_disk_space(trash_dir: str, required_bytes: int) -> Optional[str]:
+    """Check if there's enough disk space for staging.
+
+    Returns:
+        None if OK, or a warning string if space is low.
+    """
+    from dazzle_filekit.utils.disk import check_disk_space as fk_check
+    has_space, _, _, message = fk_check(
+        trash_dir, required_bytes, safety_margin=0.1
+    )
+    if not has_space:
+        return message
+    return None
+
+
+def calculate_size(paths: List[str]) -> int:
+    """Calculate total size of files/directories for staging estimation.
+
+    Args:
+        paths: list of filesystem paths
+
+    Returns:
+        Total size in bytes.
+    """
+    from dazzle_filekit.utils.disk import calculate_total_size
+    return calculate_total_size(paths, follow_symlinks=False)
+
+
+# -- NTFS Alternate Data Stream Detection --
+#
+# ADS are Windows-specific metadata streams attached to files. The default
+# data stream is ::$DATA (the file's main content). Extra streams contain
+# metadata like :Zone.Identifier (download marker) or custom application
+# data. ADS are lost on cross-device copy or when moving to non-NTFS
+# filesystems. safedel warns about non-default streams during classification
+# so the user knows what's at risk.
+
+# Streams to ignore when warning about ADS (pre-filter to reduce alert fatigue)
+_ADS_IGNORE_STREAMS = {
+    "::$DATA",              # Default data stream (not really ADS)
+    ":Zone.Identifier:$DATA",  # Browser download marker (nearly universal)
+}
+
+
+def detect_alternate_streams(path: str) -> List[str]:
+    """Enumerate NTFS alternate data streams on a file.
+
+    Returns a list of non-default stream names found on the file.
+    Filters out ::$DATA (the main data stream) and :Zone.Identifier
+    (the browser download marker, which is nearly universal and would
+    cause alert fatigue).
+
+    Returns an empty list on non-Windows platforms, on errors, or when
+    only the default stream exists.
+
+    Uses ctypes to call FindFirstStreamW/FindNextStreamW since pywin32
+    doesn't expose these.
+    """
+    if sys.platform != "win32":
+        return []
+
+    try:
+        import ctypes
+        from ctypes import wintypes
+    except ImportError:
+        return []
+
+    kernel32 = ctypes.windll.kernel32
+
+    class WIN32_FIND_STREAM_DATA(ctypes.Structure):
+        _fields_ = [
+            ("StreamSize", ctypes.c_longlong),
+            ("cStreamName", ctypes.c_wchar * 296),
+        ]
+
+    try:
+        kernel32.FindFirstStreamW.argtypes = [
+            wintypes.LPCWSTR, ctypes.c_int,
+            ctypes.POINTER(WIN32_FIND_STREAM_DATA), wintypes.DWORD,
+        ]
+        kernel32.FindFirstStreamW.restype = wintypes.HANDLE
+        kernel32.FindNextStreamW.argtypes = [
+            wintypes.HANDLE, ctypes.POINTER(WIN32_FIND_STREAM_DATA),
+        ]
+        kernel32.FindNextStreamW.restype = wintypes.BOOL
+        kernel32.FindClose.argtypes = [wintypes.HANDLE]
+    except (AttributeError, OSError):
+        return []
+
+    INVALID_HANDLE_VALUE = wintypes.HANDLE(-1).value
+
+    streams: List[str] = []
+    data = WIN32_FIND_STREAM_DATA()
+
+    try:
+        handle = kernel32.FindFirstStreamW(str(path), 0, ctypes.byref(data), 0)
+        if handle == INVALID_HANDLE_VALUE:
+            return []
+
+        try:
+            while True:
+                name = data.cStreamName
+                if name and name not in _ADS_IGNORE_STREAMS:
+                    streams.append(name)
+                if not kernel32.FindNextStreamW(handle, ctypes.byref(data)):
+                    break
+        finally:
+            kernel32.FindClose(handle)
+    except Exception:
+        return []
+
+    return streams
+
+
+def has_significant_ads(path: str) -> bool:
+    """Return True if a file has non-default, non-Zone.Identifier streams.
+
+    Useful for staging warnings: if the file has significant ADS and we're
+    about to do a cross-device copy, the ADS will be lost.
+    """
+    return len(detect_alternate_streams(path)) > 0

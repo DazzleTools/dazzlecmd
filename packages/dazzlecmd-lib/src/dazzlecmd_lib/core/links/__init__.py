@@ -23,6 +23,23 @@ import os
 import subprocess
 import sys
 
+# Link DETECTION / classification (detect_link, LinkInfo, the LINK_* varieties,
+# canonicalize_path) -- relocated from the `links` tool into this constitutional
+# primitive so lib code (e.g. core.safedel's classifier) imports it normally
+# rather than via a sibling-tool sys.path hack. The link CREATION/removal helpers
+# (create_link, remove_link, ...) are defined below.
+from dazzlecmd_lib.core.links._detect import (  # noqa: E402,F401
+    detect_link,
+    canonicalize_path,
+    LinkInfo,
+    LINK_SYMLINK,
+    LINK_JUNCTION,
+    LINK_HARDLINK,
+    LINK_SHORTCUT,
+    LINK_URLSHORTCUT,
+    LINK_DAZZLELINK,
+)
+
 
 def is_linked_project(tool_dir):
     """Check if a project directory is a symlink or junction.

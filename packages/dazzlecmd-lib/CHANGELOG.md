@@ -8,6 +8,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.6] - 2026-06-10
+
+Ships with dazzlecmd v0.9.4 -- the recoverable-delete engine becomes a constitutional lib primitive (slice 1 of 3; #38 reframe / #37 Bucket D). Additive; CLI byte-identical.
+
+### Added
+
+- `dazzlecmd_lib.core.safedel` -- the recoverable-delete engine (`TrashStore`, `stage_to_trash`, `safe_delete`, `classify`, the `cmd_recover`/`cmd_list`/`cmd_clean`/`cmd_status` recovery surface) relocated from the `projects/core/safedel/` tool into the constitutional `dazzlecmd_lib.core` namespace. Every aggregator built on the lib now gets recoverable deletion **automatically** -- it is no longer an opt-in tool that may be absent. This is the foundation for removing the mode-swap "safedel absent -> rmtree" fallback (the capability is internal to the lib, so there is no absent case to fall back from). Metadata preservation comes from `dazzle_filekit.metadata`; link detection from `dazzlecmd_lib.core.links`.
+- `dazzlecmd_lib.core.links` now also re-exports the link DETECTION surface (`detect_link`, `LinkInfo`, `canonicalize_path`, the `LINK_*` varieties), relocated from the `links` tool so lib code imports it as a normal package instead of via a sibling-tool `sys.path` hack.
+
+### Changed
+
+- New runtime dependency: `dazzle-filekit>=0.2.2` -- the canonical home of the cross-platform metadata-preservation code (ACLs/ADS/timestamps/xattrs) the trash engine uses.
+
+This slice is purely additive (the lib gains the engine). mode.py's adoption (removing the fallback + the `--immediate` choice) and the tool's rewire to import from the lib follow in the next two slices.
+
 ## [0.8.5] - 2026-06-10
 
 Ships with dazzlecmd v0.9.3 -- EMBEDDED-swap enablement + config schema stamp (#37 Phase-3.5 Bucket D, items 3.5-1 / 3.5-12). Additive; CLI byte-identical.
