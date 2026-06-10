@@ -4,6 +4,21 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.22] - 2026-06-09
+
+CI hotfix — `dazzlecmd-lib` now declares its Pydantic runtime dependency. A clean `pip install` (e.g. CI) never pulled Pydantic, so `dz --version` (which imports `cli` → `loader` → the `DazzleEntity` model) died with `ModuleNotFoundError: No module named 'pydantic'` on every platform/Python combination. Local dev was unaffected because the dev environment already had Pydantic installed. Latent since the 0.8.x object-model rearchitecture; surfaced on the first push to CI.
+
+### Fixed
+
+- `packages/dazzlecmd-lib/pyproject.toml` now declares `dependencies = ["pydantic>=2.0"]`. The DazzleEntity model (`entity.py` / `aggregator_config.py`) is built on Pydantic v2 — a hard runtime dependency since 0.8.0 — but the lib declared no core dependencies, so clean installs lacked it. (`colorama` and `distro` stay undeclared/optional: both are imported best-effort under `try/except`, so neither breaks a clean install.)
+- Root `pyproject.toml` now requires `dazzlecmd-lib>=0.7.18` (was `>=0.6.4`): the root imports the DazzleEntity model, which only exists in the 0.7.x+ lib, so the stale floor could otherwise resolve an entity-less lib.
+
+### Versions
+
+- dazzlecmd 0.8.21 -> 0.8.22 (PATCH).
+- dazzlecmd-lib 0.7.17 -> 0.7.18 (PATCH -- declare the Pydantic runtime dep).
+- dazzle-dz alias -> 0.8.22; deps re-pinned to >=0.8.22 / >=0.7.18.
+
 ## [0.8.21] - 2026-06-09
 
 Behavioral phase (#84) — `rebind` PoC, Phase 2 (mode-switch). The *same* `rebind` verb now also drives dev↔publish mode switching, via a second context — proving the context-delegate pattern generalizes (the verb didn't change; a new context did). Also fixes a latent entity-migration bug it surfaced.
@@ -2424,7 +2439,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.21...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.22...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
