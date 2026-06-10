@@ -183,7 +183,7 @@ class TestDefaultRegistry:
     def test_axes_registered(self):
         reg = build_default_registry()
         names = {a.name for a in reg.axes()}
-        assert names == {"kind", "mode", "visibility", "activation", "routing"}
+        assert names == {"kind", "mode", "visibility", "activation", "routing", "containment"}
         assert reg.axis("kind").read_only is True
         assert reg.axis("routing").values is None  # open-valued
 

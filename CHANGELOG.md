@@ -4,6 +4,32 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.29] - 2026-06-10
+
+State system, Step 5 — the group/ungroup verbs + `CompositeTransition` (#84 behavioral phase, Act I). The fifth and final Groupable verb family, and the first transition that actually crosses the criticality boundary. group/ungroup are the {P, ¬P} boundary primitive at full strength: this slice wires the REVERSIBLE in-tree regime (move an entity in/out of a boundary's membership; `group ∘ ungroup = identity`, C2 = `local_incorporability`) and declares the GENERATIVE graduation regime as DATA — a `CompositeTransition` (KIND+MODE+identity) whose fs+git body is #73, so requesting it is refused at the boundary. **All five Groupable verbs are now live.** Additive; byte-identical (byte-gate 10 OK).
+
+### Added
+
+- `dazzlecmd_lib.states.CompositeTransition` — a multi-axis move as an ORDERED composition of single-axis legs, with composite-criticality computed from leg INTERACTION (a leg's `creates` feeding a later leg's conserved invariant ⇒ GENERATIVE), **not** the union of the legs' classes. Plus `TransitionRegistry.register_composite` / `composites` / `composite`.
+- `states.build_default_registry`: the CONTAINMENT axis + reversible `group`/`ungroup` transitions (conserved = `local_incorporability`) + the GENERATIVE `graduation` composite (creates `own_repo`/`remote_url`, loses `in_tree_coupling`, `fqcn_fate="reborn"`).
+- `dazzlecmd_lib.groupable`: `ContainmentInvariant` / `ContainmentReceipt` / `ContainmentContext` (in-tree membership move; `apply`/`undo`; C3 refusal on ungrouping a constitutional item; graduation requested via `ContainmentContext.GRADUATE` → refused until #73).
+- `dazzlecmd_lib.entity.Groupable.group(target, *, context)` / `ungroup(target=None, *, context)` — live delegates. All five verbs (`rebind`/`hide`/`expose`/`group`/`ungroup`) are now live for their regimes.
+
+### Tests
+
+- `tests/test_containment.py` (NEW, 16): in-tree group/ungroup round-trip via the harness, idempotence, C3 refusal (+ group-constitutional-allowed), the graduation-boundary refusal, the `CompositeTransition` criticality-from-interaction rule (incl. the ≠union demonstration), and the registry declarations.
+- `packages/dazzlecmd-lib/tests/test_entity.py` — all five verbs now assert live signatures (no verb is `NotImplementedError`).
+
+### Design
+
+- `2026-06-10__00-38-07__dev-workflow-process__group-ungroup-containment-graduation-composite.md`
+
+### Versions
+
+- dazzlecmd 0.8.28 -> 0.8.29 (PATCH).
+- dazzlecmd-lib 0.7.23 -> 0.7.24 (PATCH -- group/ungroup verbs + CompositeTransition).
+- dazzle-dz alias -> 0.8.29; deps re-pinned to >=0.8.29 / >=0.7.24.
+
 ## [0.8.28] - 2026-06-10
 
 State system, Step 4b — the `dz kit hide` / `dz kit unhide` CLI sugar + the Hidden/verbs human checklist. Makes the Hidden level (mechanism in 0.8.26, verbs in 0.8.27) user-operable: `dz kit hide <fqcn>` adds a tool to `hidden_tools` (display-off, still dispatchable); `dz kit unhide <fqcn>` removes it — mirroring the existing `dz kit silence`/`shadow` channel toggles (silence = hints, hide = display, shadow = resolution). Reveal with `dz list --show-hidden`.
@@ -2570,7 +2596,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.28...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.29...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

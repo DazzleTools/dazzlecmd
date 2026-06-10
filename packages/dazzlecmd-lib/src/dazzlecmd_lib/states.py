@@ -223,6 +223,68 @@ class Transition:
 
 
 # ---------------------------------------------------------------------------
+# CompositeTransition -- a multi-axis move as ordered composition (graduation)
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class CompositeTransition:
+    """A multi-axis transition: an ORDERED composition of single-axis legs.
+
+    Graduation (tool -> own repo -> kit/aggregator) is the canonical case: it
+    changes KIND + MODE + identity at once. This is COMPOSITION, not a new
+    primitive -- the legs are ordinary :class:`Transition` objects; this
+    aggregates them with an order (the legs are not freely commutable -- you
+    cannot publish a submodule against a remote the extraction leg hasn't created
+    yet) and an atomicity policy.
+
+    The load-bearing rule -- **composite-criticality is NOT the union of the
+    legs' classes.** If any leg's ``creates`` feeds a LATER leg's conserved
+    invariant, the whole is GENERATIVE even when every leg, taken alone, is
+    reversible (the 5/2 structural bridge at composite scale). Otherwise the
+    composite is as strong as its strongest leg.
+    """
+
+    name: str
+    legs: Tuple[Transition, ...]
+    verb: str
+    atomicity: str = "all_or_nothing"   # "all_or_nothing" | "checkpoint"
+    fqcn_fate: str = "reborn"
+
+    def __post_init__(self) -> None:
+        if not self.legs:
+            raise ValueError("CompositeTransition must declare at least one leg")
+
+    @property
+    def reversibility(self) -> Reversibility:
+        # Interaction first: a leg that CREATES a quantity a later leg CONSERVES
+        # crosses the criticality boundary -> generative (this is the case where
+        # the composite is strictly stronger than the union of its legs).
+        for i, leg in enumerate(self.legs):
+            created = set(leg.creates)
+            for later in self.legs[i + 1:]:
+                if later.conserved and later.conserved in created:
+                    return Reversibility.GENERATIVE
+        # Otherwise: as strong as the strongest leg.
+        classes = {leg.reversibility for leg in self.legs}
+        for strongest in (Reversibility.GENERATIVE, Reversibility.REFUSED_AT_BOUNDARY,
+                          Reversibility.ONE_WAY):
+            if strongest in classes:
+                return strongest
+        return Reversibility.REVERSIBLE
+
+    @property
+    def creates(self) -> Tuple[str, ...]:
+        return tuple(c for leg in self.legs for c in leg.creates)
+
+    @property
+    def loses(self) -> Tuple[str, ...]:
+        return tuple(x for leg in self.legs for x in leg.loses)
+
+    @property
+    def axes(self) -> Tuple[str, ...]:
+        return tuple(leg.axis for leg in self.legs)
+
+
+# ---------------------------------------------------------------------------
 # TransitionRegistry -- the markdown tables, queryable
 # ---------------------------------------------------------------------------
 class TransitionRegistry:
@@ -236,6 +298,7 @@ class TransitionRegistry:
     def __init__(self) -> None:
         self._axes: dict[str, StateAxis] = {}
         self._transitions: list[Transition] = []
+        self._composites: list[CompositeTransition] = []
 
     # -- axes -----------------------------------------------------------------
     def register_axis(self, axis: StateAxis) -> StateAxis:
@@ -275,6 +338,27 @@ class TransitionRegistry:
 
     def transitions(self) -> Tuple[Transition, ...]:
         return tuple(self._transitions)
+
+    # -- composites (multi-axis) ---------------------------------------------
+    def register_composite(self, composite: CompositeTransition) -> CompositeTransition:
+        """Register a multi-axis composite; validate each leg's axis is known."""
+        for leg in composite.legs:
+            if leg.axis not in self._axes:
+                raise KeyError(
+                    f"composite {composite.name!r} leg references unregistered "
+                    f"axis {leg.axis!r}"
+                )
+        self._composites.append(composite)
+        return composite
+
+    def composites(self) -> Tuple[CompositeTransition, ...]:
+        return tuple(self._composites)
+
+    def composite(self, name: str) -> CompositeTransition:
+        for c in self._composites:
+            if c.name == name:
+                return c
+        raise LookupError(f"no composite transition named {name!r}")
 
     def for_verb(self, verb: str) -> Tuple[Transition, ...]:
         return tuple(t for t in self._transitions if t.verb == verb)
@@ -475,6 +559,46 @@ def build_default_registry() -> TransitionRegistry:
         note="walk up the ladder (less suppressed); the inverse of hide",
     ))
 
+    # -- CONTAINMENT: group/ungroup membership moves (in-tree; reversible) -----
+    reg.register_axis(StateAxis(
+        name="containment", values=None,   # open-valued: which boundary holds it
+        substrate="kit.tools membership / nested-aggregator structure",
+    ))
+    reg.declare(Transition(
+        axis="containment", from_values=(OPEN,), to_value=OPEN, verb="group",
+        reversibility=Reversibility.REVERSIBLE, conserved="local_incorporability",
+        note="incorporate an entity into a boundary's membership (in-tree; reversible)",
+    ))
+    reg.declare(Transition(
+        axis="containment", from_values=(OPEN,), to_value=OPEN, verb="ungroup",
+        reversibility=Reversibility.REVERSIBLE, conserved="local_incorporability",
+        note="disincorporate an entity from a boundary (in-tree; the inverse of group)",
+    ))
+
+    # -- GRADUATION: the generative multi-axis ungroup (declared as DATA) ------
+    # Local tool -> its own git repo (-> kit/aggregator). The KIND leg CREATES
+    # the remote the MODE leg conserves, so the composite is GENERATIVE even
+    # though its MODE leg is reversible in isolation -- composite-criticality from
+    # leg interaction, not union. The fs+git EXECUTION is #73 build-environment
+    # work; here the edge is declared + criticality-classified as data so the
+    # contract is settled before its body exists.
+    _grad_kind = Transition(
+        axis="kind", from_values=("tool",), to_value=OPEN, verb="graduate",
+        reversibility=Reversibility.GENERATIVE, conserved="local_files",
+        creates=("own_repo", "remote_url"), loses=("in_tree_coupling",),
+        fqcn_fate="reborn",
+        note="extract a local tool into its own git repo (creates the remote)",
+    )
+    _grad_mode = Transition(
+        axis="mode", from_values=("embedded", "local-only"), to_value="submodule",
+        verb="graduate", reversibility=Reversibility.ONE_WAY, conserved="remote_url",
+        note="re-enter the graduated repo as a submodule (depends on the remote above)",
+    )
+    reg.register_composite(CompositeTransition(
+        name="graduation", legs=(_grad_kind, _grad_mode), verb="graduate",
+        atomicity="all_or_nothing", fqcn_fate="reborn",
+    ))
+
     return reg
 
 
@@ -484,6 +608,7 @@ __all__ = [
     "StateAxis",
     "EntityState",
     "Transition",
+    "CompositeTransition",
     "TransitionRegistry",
     "assert_round_trip",
     "observe",

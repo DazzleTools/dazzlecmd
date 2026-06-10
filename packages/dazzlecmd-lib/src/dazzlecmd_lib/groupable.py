@@ -413,3 +413,124 @@ class VisibilityContext:
         ti = VISIBILITY_ORDER.index(target)
         verb = "expose" if ti < pi else "hide"
         return self.apply(entity, target, verb=verb)
+
+
+# ===========================================================================
+# Containment -- the group/ungroup verbs (the {P, -P} boundary primitive)
+# ===========================================================================
+#
+# group forms a boundary (incorporate an entity into a kit/aggregator's
+# membership -- LOSSY); ungroup dissolves it (disincorporate -- GENERATIVE).
+# They are inverses ONLY while the conserved invariant holds. Two regimes,
+# split by the criticality point:
+#
+#   - REVERSIBLE (in-tree move): the entity stays local; C2 = local
+#     incorporability (its files + canonical FQCN are re-groupable). group o
+#     ungroup = identity. This is the slice wired here.
+#   - GENERATIVE (graduation): ungroup PAST criticality -- the entity leaves the
+#     tree to become its own git repo (lifecycle.graduated_to; fs+git). fqcn is
+#     reborn; not auto-reversible. Declared in the registry as a Composite
+#     transition (KIND+MODE+identity); its fs+git body lands with #73, so
+#     requesting it here is refused at the boundary.
+
+
+@dataclass(frozen=True)
+class ContainmentInvariant:
+    """C2 for the reversible regime: the entity stays locally re-incorporable --
+    its files and canonical FQCN are untouched by an in-tree move, so re-grouping
+    restores the prior state."""
+
+    conserved_quantity_name: str = "local_incorporability"
+    conserved_value: Any = None
+    restore_path: str = "re-group the entity into its prior boundary"
+
+
+@dataclass(frozen=True)
+class ContainmentReceipt:
+    """The record returned by ``entity.group()`` / ``entity.ungroup()``."""
+
+    entity_fqcn: str
+    sub_kind: str                 # "containment"
+    previous_state: Any           # prior boundary fqcn, or None if ungrouped
+    new_state: Any                # new boundary fqcn, or None if ungrouped
+    invariant: ContainmentInvariant
+    reversible: bool = True
+    verb: str = "group"           # "group" | "ungroup"
+
+
+class ContainmentContext:
+    """The context ``group``/``ungroup`` operate within: a single boundary (a Kit
+    entity with a ``tools`` membership list).
+
+    Reversible in-tree regime only. The move is in-memory (the manifests are the
+    source of truth, rebuilt each invocation -- persistence is deferred, exactly
+    as for alias rebind). The GENERATIVE graduation regime is refused here (its
+    fs+git body is #73); request it with ``target=ContainmentContext.GRADUATE``.
+    """
+
+    GRADUATE = "graduate"   # the graduation sentinel target (refused until #73)
+
+    def __init__(self, boundary):
+        self.boundary = boundary      # a Kit entity exposing a `.tools` list
+        self._applied_entity = None
+
+    def _tools(self):
+        return list(getattr(self.boundary, "tools", []) or [])
+
+    def contains(self, entity):
+        return entity.fqcn in self._tools()
+
+    def apply(self, entity, target, *, verb):
+        fqcn = entity.fqcn
+        # Graduation regime: generative (tool -> own repo); fs+git is #73.
+        if target == self.GRADUATE:
+            raise CriticalityBoundaryError(
+                f"graduation of {fqcn} is generative (tool -> own git repo): the "
+                f"transition is declared in the registry as a CompositeTransition, "
+                f"but its fs+git execution lands with #73. Only the reversible "
+                f"in-tree move is wired here."
+            )
+        # C3: constitutional items may be grouped (and hidden) but never ungrouped
+        # out of the tree.
+        if verb == "ungroup" and getattr(entity, "always_active", False):
+            raise CriticalityBoundaryError(
+                f"{fqcn} is constitutional (always_active) -- it may be grouped or "
+                f"hidden but never ungrouped out of the tree (C3)."
+            )
+
+        was_in = fqcn in self._tools()
+        prev = self.boundary.fqcn if was_in else None
+        tools = self._tools()
+        if verb == "group":
+            if fqcn not in tools:
+                tools.append(fqcn)
+            new = self.boundary.fqcn
+        elif verb == "ungroup":
+            if fqcn in tools:
+                tools.remove(fqcn)
+            new = None
+        else:
+            raise ValueError(f"unknown containment verb {verb!r}")
+        setattr(self.boundary, "tools", tools)
+        self._applied_entity = entity
+        return ContainmentReceipt(
+            entity_fqcn=fqcn,
+            sub_kind="containment",
+            previous_state=prev,
+            new_state=new,
+            invariant=ContainmentInvariant(conserved_value=fqcn),
+            reversible=True,
+            verb=verb,
+        )
+
+    def undo(self, receipt):
+        """Invert a prior in-tree move: re-group what was ungrouped, ungroup what
+        was grouped."""
+        entity = self._applied_entity
+        if entity is None:
+            raise RebindError(
+                "ContainmentContext.undo() requires a prior apply() on this context."
+            )
+        if receipt.verb == "group":
+            return self.apply(entity, None, verb="ungroup")
+        return self.apply(entity, self.boundary.fqcn, verb="group")

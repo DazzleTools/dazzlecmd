@@ -169,25 +169,23 @@ class TestGroupable:
         assert Groupable in DazzleEntity.__mro__
         assert DazzleEntity.__mro__.index(Groupable) < DazzleEntity.__mro__.index(__import__("pydantic").BaseModel)
 
-    def test_verbs_declared_but_deferred(self):
+    def test_all_five_verbs_live_with_real_signatures(self):
         t = Tool.model_validate(_tool_manifest())
-        # rebind + hide/expose are live (#84); only group/ungroup remain
-        # deferred and still fail explicitly until their containment mechanics.
-        for verb in ("group", "ungroup"):
-            with pytest.raises(NotImplementedError):
-                getattr(t, verb)()
-
-    def test_live_verbs_have_real_signatures(self):
-        t = Tool.model_validate(_tool_manifest())
-        # The live verbs no longer raise NotImplementedError -- they delegate to
-        # a context. Called without one they raise TypeError (a live signature),
-        # proving they are implemented, not deferred.
+        # All five Groupable verbs are live (#84) -- each delegates to a context,
+        # so called without one they raise TypeError (a live signature), not
+        # NotImplementedError. group/ungroup are live for the reversible in-tree
+        # regime; graduation is refused at the criticality boundary (not
+        # unimplemented).
         with pytest.raises(TypeError):
             t.rebind("some:target", context=None)
         with pytest.raises(TypeError):
             t.hide(to="hidden", context=None)
         with pytest.raises(TypeError):
             t.expose(to="visible", context=None)
+        with pytest.raises(TypeError):
+            t.group("core", context=None)
+        with pytest.raises(TypeError):
+            t.ungroup(context=None)
 
 
 class TestReserveFieldAxis:

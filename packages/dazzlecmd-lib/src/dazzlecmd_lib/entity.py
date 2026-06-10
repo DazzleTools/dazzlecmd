@@ -72,12 +72,13 @@ class Groupable:
     - **C3 constitutional inclusion** -- constitutional items appear in every
       consumer (may be hidden, never ungrouped).
 
-    Behavioral phase (#84): the verbs become state-transition operators.
-    ``rebind`` (coupling/resolution change -- alias repoint + mode-switch) and
-    ``hide``/``expose`` (the visibility ladder) are LIVE; see
-    ``dazzlecmd_lib.groupable``. ``group``/``ungroup`` still raise
-    ``NotImplementedError`` so callers fail explicitly rather than silently
-    no-op until their containment/graduation mechanics land.
+    Behavioral phase (#84): the verbs are state-transition operators, and all
+    five are now LIVE (see ``dazzlecmd_lib.groupable``) -- ``rebind``
+    (alias + mode-switch), ``hide``/``expose`` (the visibility ladder), and
+    ``group``/``ungroup`` (in-tree containment). Each delegates to a context.
+    The one deferred MECHANIC is graduation -- ``ungroup``'s GENERATIVE regime
+    (tool -> own git repo): declared in the registry as a ``CompositeTransition``,
+    refused at the criticality boundary until its fs+git body lands (#73).
 
     Frame (reserved): a presentation/consumer context (ties to
     ``AggregatorConfig.presentation``). ``rebind`` is NOT frame-relative;
@@ -95,13 +96,28 @@ class Groupable:
         "group/ungroup land next -- see the grouping/ungrouping DWPs)"
     )
 
-    def group(self, *args: Any, **kwargs: Any) -> Any:
-        """P: incorporate item(s) into this boundary."""
-        raise NotImplementedError(f"group(): {self._CAP_DEFERRED}")
+    def group(self, target: Any, *, context: Any) -> Any:
+        """P: incorporate this entity into the boundary ``target`` (a kit), within
+        ``context`` (a ``dazzlecmd_lib.groupable.ContainmentContext``). A
+        reversible in-tree move -- C2 = ``local_incorporability`` (files + canonical
+        FQCN untouched). Returns a ``ContainmentReceipt``."""
+        if context is None:
+            raise TypeError(
+                "group(target, *, context=...) requires a ContainmentContext"
+            )
+        return context.apply(self, target, verb="group")
 
-    def ungroup(self, *args: Any, **kwargs: Any) -> Any:
-        """¬P: disincorporate item(s) from this boundary (generative/irreversible)."""
-        raise NotImplementedError(f"ungroup(): {self._CAP_DEFERRED}")
+    def ungroup(self, target: Any = None, *, context: Any) -> Any:
+        """¬P: disincorporate this entity from its boundary (reversible in-tree).
+        With ``target=ContainmentContext.GRADUATE`` the GENERATIVE graduation
+        regime is requested -- declared in the registry as a ``CompositeTransition``
+        but refused until its fs+git body lands (#73). Constitutional
+        (``always_active``) items refuse (C3). Returns a ``ContainmentReceipt``."""
+        if context is None:
+            raise TypeError(
+                "ungroup(target=None, *, context=...) requires a ContainmentContext"
+            )
+        return context.apply(self, target, verb="ungroup")
 
     def hide(self, to: str = "hidden", *, context: Any) -> Any:
         """Walk DOWN the visibility ladder (toward MORE suppression) to ``to``
