@@ -8,6 +8,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.4] - 2026-06-10
+
+Ships with dazzlecmd v0.9.2 -- safedel adoption in the mode swap (#38 / Phase-3.5 item 3.5-10). Additive; CLI byte-identical.
+
+### Added
+
+- `mode._load_safedel_api(project_root, tools_dir)` -- loads safedel's public API (`<tools_dir>/core/safedel/api.py`) if present, anchored on the aggregator's `project_root` so it resolves identically in a dev checkout and a pip install. Returns `None` (graceful) when safedel isn't on disk.
+- `mode._remove_tool_dir_recoverable(...)` -- the mode swap now stages a tool directory to safedel's recoverable trash store before removing it (recover via `<command> safedel recover last`), instead of an unrecoverable `shutil.rmtree`. Applied at both delete sites (`_switch_to_dev`, `_switch_to_publish`).
+
+### Changed
+
+- When safedel is present (dazzlecmd always ships it), a backup FAILURE aborts the swap before any deletion unless `--force`. When safedel is absent (e.g. wtf-windows / amdead, which don't ship it), the swap falls back to `shutil.rmtree` with a note -- the dirty-tree gate (T1-E) remains the safety boundary, preserving the "a clean tree switches freely" contract.
+
+**Implementation note (two empirical revisions to the #38 DWP):** (1) safedel's modules use BARE imports (`from _store import ...`) and run as a plain-script CLI, so `api.py` matches that convention and the loader puts the safedel dir on `sys.path` -- it is NOT turned into a dotted `projects.core.*` package (which would break safedel's CLI), and no `__init__.py` is added. (2) The DWP recommended REFUSE-by-default when safedel is unavailable; implementation used the backward-compatible fallback above instead, because the only aggregator shipping safedel is dazzlecmd (which always gets the recoverable path) and an existing test encodes the clean-tree-switches-freely contract a hard refusal would break. The policy is a single clearly-marked branch, trivially flippable to strict-refuse.
+
 ## [0.8.3] - 2026-06-10
 
 Ships with dazzlecmd v0.8.34 -- #84 certification cleanup. Additive.

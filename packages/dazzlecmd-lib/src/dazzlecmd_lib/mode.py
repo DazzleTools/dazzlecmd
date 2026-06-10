@@ -24,6 +24,7 @@ copy from ``src/dazzlecmd/mode.py``; Tier 1 parameterizes it):
 """
 
 import configparser
+import importlib.util
 import json
 import os
 import subprocess
@@ -718,6 +719,115 @@ def _print_dirty_refusal(tool_name, tool_dir, dirty_output, command):
           "(DATA LOSS WARNING).", file=sys.stderr)
 
 
+# Private cache key for the lazily-loaded safedel api module (see below).
+_SAFEDEL_API_CACHE_KEY = "_dazzlecmd_safedel_api"
+
+
+def _load_safedel_api(project_root, tools_dir):
+    """Load safedel's public API (``<tools_dir>/core/safedel/api.py``).
+
+    Returns the api module, or ``None`` if safedel isn't on disk or can't
+    import. This is the data-safe deletion path for the mode swap (#38 /
+    Phase-3.5 item 3.5-14): when present, the swap stages the tool directory
+    to safedel's recoverable trash store before removing it.
+
+    safedel's modules use BARE imports (``from _store import ...``) and run
+    with their own directory on ``sys.path`` (the tool is dispatched as a
+    script). So we put that directory on ``sys.path`` and load ``api.py``
+    under a private cache name via ``spec_from_file_location`` -- NOT as a
+    dotted ``projects.core.*`` package (which would require turning safedel
+    into a package and break its plain-script CLI). The path is anchored on
+    ``project_root``/``tools_dir`` (both already in scope at every call site),
+    so it resolves identically in a dev checkout and a pip install. Cached
+    after the first successful load.
+    """
+    cached = sys.modules.get(_SAFEDEL_API_CACHE_KEY)
+    if cached is not None:
+        return cached
+    safedel_dir = os.path.join(project_root, tools_dir, "core", "safedel")
+    api_path = os.path.join(safedel_dir, "api.py")
+    if not os.path.isfile(api_path):
+        return None
+    if safedel_dir not in sys.path:
+        sys.path.insert(0, safedel_dir)
+    try:
+        spec = importlib.util.spec_from_file_location(
+            _SAFEDEL_API_CACHE_KEY, api_path
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[_SAFEDEL_API_CACHE_KEY] = module
+        spec.loader.exec_module(module)
+        return module
+    except Exception:  # noqa: BLE001 -- any import failure -> safe fallback
+        sys.modules.pop(_SAFEDEL_API_CACHE_KEY, None)
+        return None
+
+
+def _rmtree_or_error(tool_dir):
+    """``shutil.rmtree`` with the standard error message. Returns 0 or 1."""
+    import shutil
+    try:
+        shutil.rmtree(tool_dir)
+        return 0
+    except OSError as exc:
+        print(f"Error: Could not remove {tool_dir}: {exc}", file=sys.stderr)
+        return 1
+
+
+def _remove_tool_dir_recoverable(tool_dir, *, project_root, tools_dir,
+                                 tool_name, command, force):
+    """Remove ``tool_dir`` recoverably for a mode swap (#38). Returns 0/1.
+
+    The caller has already cleared the dirty-tree gate (T1-E). This adds a
+    recovery backup on top of it:
+
+    - **safedel present** (dazzlecmd ships it): stage ``tool_dir`` to the
+      trash store, then it is removed -- recoverable via
+      ``<command> safedel recover last``. If the backup itself FAILS, the
+      swap aborts (nothing deleted) unless ``force`` is given.
+    - **safedel absent** (e.g. wtf-windows / amdead, which don't ship it):
+      fall back to ``shutil.rmtree`` with a note. The dirty-tree gate remains
+      their safety boundary; this preserves the established "a clean tree
+      switches freely" contract rather than forcing ``--force`` everywhere.
+
+    NOTE (policy): the DWP for #38 recommended REFUSE-by-default when safedel
+    is unavailable. Implementation revised it to the backward-compatible
+    fallback above, because (a) the only aggregator that ships safedel is
+    dazzlecmd, which therefore always gets the recoverable path, and (b) an
+    existing test encodes the "clean tree switches without --force" contract
+    that a hard refusal would break for non-safedel aggregators. To tighten to
+    strict-refuse later, change the ``api is None`` branch to refuse unless
+    ``force``. See the #38 import-mechanism DWP doc for the full rationale.
+    """
+    api = _load_safedel_api(project_root, tools_dir)
+    if api is None:
+        print(f"  Note: safedel not available here; removing {tool_dir} "
+              "without a recovery backup.")
+        return _rmtree_or_error(tool_dir)
+
+    try:
+        result = api.TrashStore().trash([tool_dir])
+        errors = "" if result.success else "; ".join(result.errors)
+        ok = result.success
+    except Exception as exc:  # noqa: BLE001
+        ok, errors = False, str(exc)
+
+    if ok:
+        print(f"  Backed up to trash (recover with: {command} safedel "
+              "recover last)")
+        return 0
+
+    print(f"Error: safedel backup of {tool_dir} failed: "
+          f"{errors or 'unknown error'}", file=sys.stderr)
+    if force:
+        print("  --force given; removing without a recovery backup.",
+              file=sys.stderr)
+        return _rmtree_or_error(tool_dir)
+    print(f"  Swap aborted (nothing deleted). Rerun with: {command} mode "
+          "switch <tool> --force to remove without a backup.", file=sys.stderr)
+    return 1
+
+
 def _switch_to_dev(project, project_root, gitmodules, explicit_path,
                    dry_run, force, *, tools_dir, command):
     """Switch a tool from publish mode (submodule) to dev mode (symlink).
@@ -779,13 +889,12 @@ def _switch_to_dev(project, project_root, gitmodules, explicit_path,
                 if dirty:
                     _print_dirty_refusal(tool_name, tool_dir, dirty, command)
                     return 1
-            # Remove submodule working tree without deregistering
-            import shutil
-            try:
-                shutil.rmtree(tool_dir)
-            except OSError as exc:
-                print(f"Error: Could not remove {tool_dir}: {exc}",
-                      file=sys.stderr)
+            # Remove the submodule working tree recoverably (safedel
+            # trash store where available; #38 / item 3.5-10).
+            if _remove_tool_dir_recoverable(
+                tool_dir, project_root=project_root, tools_dir=tools_dir,
+                tool_name=tool_name, command=command, force=force,
+            ) != 0:
                 return 1
 
     # Create symlink
@@ -876,12 +985,12 @@ def _switch_to_publish(project, project_root, gitmodules, dry_run, force,
                 if dirty:
                     _print_dirty_refusal(tool_name, tool_dir, dirty, command)
                     return 1
-            import shutil
-            try:
-                shutil.rmtree(tool_dir)
-            except OSError as exc:
-                print(f"Error: Could not remove {tool_dir}: {exc}",
-                      file=sys.stderr)
+            # Remove the existing dir recoverably before submodule add
+            # (safedel trash store where available; #38 / item 3.5-10).
+            if _remove_tool_dir_recoverable(
+                tool_dir, project_root=project_root, tools_dir=tools_dir,
+                tool_name=tool_name, command=command, force=force,
+            ) != 0:
                 return 1
 
         # Register and clone the submodule

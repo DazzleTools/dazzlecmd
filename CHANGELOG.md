@@ -4,6 +4,25 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.2] - 2026-06-10
+
+**Phase 1 base finalization — recoverable mode swaps via safedel (#38 / Phase-3.5 item 3.5-10).** `dz mode switch` previously removed a tool directory (a submodule checkout or embedded dir) with an unrecoverable `shutil.rmtree`. It now stages that directory to safedel's recoverable trash store first — a mistaken switch is recoverable via `dz safedel recover last`. This is the foundation for #37's embedded-swap backup machinery (Bucket D). CLI is byte-identical (the change is on the destructive write path only).
+
+### Added
+
+- `projects/core/safedel/api.py` — safedel's stable public API surface (`stage_to_trash`, `safe_delete`, `classify`, `TrashStore`, `TrashEntry`, `TrashResult`, `StoreStats`; `__api_version__ = "1"`). The importable entry point other dazzlecmd code uses to delete recoverably. Closes the near-term scope of #38.
+- `dazzlecmd-lib` `mode._load_safedel_api` + `_remove_tool_dir_recoverable` — locate + load safedel anchored on the aggregator's `project_root`, and remove a tool dir recoverably at both swap sites. `tests/test_mode_safedel.py` (7) + the import-mechanism DWP.
+
+### Changed
+
+- The existing dirty-tree gate (T1-E) still refuses on uncommitted changes; safedel adds a recovery backup on top. A backup failure aborts the swap (nothing deleted) unless `--force`. Aggregators without safedel (wtf-windows, amdead) keep the prior `rmtree` behavior with a note — the "clean tree switches freely" contract is preserved.
+
+### Versions
+
+- dazzlecmd 0.9.1 -> 0.9.2 (PATCH; CLI byte-identical).
+- dazzlecmd-lib 0.8.3 -> 0.8.4 (PATCH; additive — `_load_safedel_api` + recoverable removal).
+- dazzle-dz alias -> 0.9.2; deps re-pinned to >=0.9.2 / >=0.8.4.
+
 ## [0.9.1] - 2026-06-10
 
 **Phase 1 base finalization — dazzlecmd-lib version-record reconciliation.** The library's `_version.py` and CHANGELOG had frozen at `0.7.17` (dazzlecmd v0.8.21) while `pyproject.toml` walked to `0.8.3` (dazzlecmd v0.8.22–v0.8.34). The public attribute `dazzlecmd_lib.__version__` (re-exported from `_version.py`) therefore reported `0.7.17` for a `0.8.3` package, and the lib CHANGELOG omitted all 11 of those versions — including the headline **BREAKING 0.8.0** dict-shim deletion. dazzlecmd's CLI is byte-identical (a `chore(lib)` record fix); the library's actual version is unchanged at 0.8.3.
@@ -2739,7 +2758,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.2...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
