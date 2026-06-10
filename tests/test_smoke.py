@@ -70,7 +70,7 @@ def test_loader_discover_kits():
     if root is None:
         return  # Skip if not in dev environment
     kits = discover_kits(os.path.join(root, "kits"))
-    kit_names = [k["name"] for k in kits]
+    kit_names = [k.name for k in kits]
     assert "core" in kit_names
     assert "dazzletools" in kit_names
 
@@ -87,6 +87,6 @@ def test_loader_discover_projects():
     kits = discover_kits(os.path.join(root, "kits"))
     active = get_active_kits(kits)
     projects = discover_projects(os.path.join(root, "projects"), active)
-    names = [p["name"] for p in projects]
+    names = [p.name for p in projects]
     assert "rn" in names
     assert "dos2unix" in names

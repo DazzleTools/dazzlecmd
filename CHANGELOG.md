@@ -4,6 +4,37 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.8.30] - 2026-06-10 — dazzlecmd-lib 0.8.0 (BREAKING)
+
+State system, Step 6 — the DazzleEntity **dict shim is DELETED** (the migration's close; lib **0.8.0**, breaking). Entities no longer support dict-style access (`entity["x"]`, `entity.get()`, `entity.keys()/items()`) — the backward-compat Mapping shim + `_LEGACY_KEY_MAP` + the `_warn_on_shim` ratchet are gone. Access is now typed attributes (`entity.runtime`, `entity.fqcn`) + `extra_get`/`extra_set`/`has_extra` for the untyped remainder (`source`, `_vars`, `manifest`). ~293 call sites across prod + tests were migrated. dazzlecmd's own CLI is **byte-identical** (byte-gate 10 OK); the break is for LIBRARY CONSUMERS that used dict-access.
+
+### Removed (BREAKING — dazzlecmd-lib 0.8.0)
+
+- `DazzleEntity.__getitem__` / `__setitem__` / `get` / `__contains__` / `keys` / `values` / `items` (the dict shim), plus `_LEGACY_KEY_MAP`, `_warn_on_shim`, and the migration ratchet. Consumers migrate: `entity["x"]` → `entity.x` (typed) or `entity.extra_get("x")` (untyped); `entity.get("x", d)` likewise; `entity["x"] = v` → `entity.x = v` / `entity.extra_set("x", v)`; `entity.fqcn` for `entity["_fqcn"]`.
+
+### Added
+
+- `DazzleEntity.extra_get(key, default=None)` / `extra_set(key, value)` / `has_extra(key)` — the sanctioned path for untyped/extra manifest data (the polymorphic `source` block, `_vars`, `_schema_version`, the nested-aggregator `manifest` key).
+
+### Changed
+
+- ~293 call sites (prod: `loader.py`, `engine.py`, `default_meta_commands.py`, `registry.py`, `cli_helpers.py`, `setup_resolve.py`; plus tests) migrated from dict-access to attribute / `extra_get`. Behavior preserved (byte-gate 10 OK).
+- `tests/test_ratchet_enforcement.py` repurposed as a post-shim regression (key ops run end-to-end + shim gone + `extra_get`/`extra_set`); the obsolete shim test classes (`TestShimTransparency` / `TestShimMapping`) deleted.
+
+### Tests
+
+- Full suite **1356 passed / 14 skipped**; byte-gate **10 OK / 0 FAIL**; `tests/checklists/v0.8.30__Epic__dict-shim-deletion-lib-0.8.0.md` (human verification).
+
+### Note
+
+The **amdead** consumer's staged entity fix + its suite verification remain the maintainer's follow-up (separate repo, GPG). **wtf-windows** was already shim-clean (0 shim reads) and is unaffected.
+
+### Versions
+
+- dazzlecmd 0.8.29 -> 0.8.30 (PATCH — CLI byte-identical).
+- dazzlecmd-lib 0.7.24 -> **0.8.0** (BREAKING MINOR, pre-1.0 — the dict shim removed).
+- dazzle-dz alias -> 0.8.30; deps re-pinned to >=0.8.30 / >=0.8.0.
+
 ## [0.8.29] - 2026-06-10
 
 State system, Step 5 — the group/ungroup verbs + `CompositeTransition` (#84 behavioral phase, Act I). The fifth and final Groupable verb family, and the first transition that actually crosses the criticality boundary. group/ungroup are the {P, ¬P} boundary primitive at full strength: this slice wires the REVERSIBLE in-tree regime (move an entity in/out of a boundary's membership; `group ∘ ungroup = identity`, C2 = `local_incorporability`) and declares the GENERATIVE graduation regime as DATA — a `CompositeTransition` (KIND+MODE+identity) whose fs+git body is #73, so requesting it is refused at the boundary. **All five Groupable verbs are now live.** Additive; byte-identical (byte-gate 10 OK).
@@ -2596,7 +2627,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.29...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.8.30...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

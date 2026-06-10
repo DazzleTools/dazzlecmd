@@ -190,7 +190,7 @@ class TestDiscoverProjectsCacheFallback:
 
             # Without cache, tool should NOT be discovered
             found = discover_projects(projects_dir)
-            names = [p["name"] for p in found]
+            names = [p.name for p in found]
             assert "mytool" not in names
 
             # Cache a manifest
@@ -203,12 +203,12 @@ class TestDiscoverProjectsCacheFallback:
 
             # Now discover_projects should find it via cache
             found = discover_projects(projects_dir)
-            names = [p["name"] for p in found]
+            names = [p.name for p in found]
             assert "mytool" in names
 
-            cached_project = [p for p in found if p["name"] == "mytool"][0]
-            assert cached_project["_cached"] is True
-            assert cached_project["description"] == "A cached tool"
+            cached_project = [p for p in found if p.name == "mytool"][0]
+            assert cached_project.cached is True
+            assert cached_project.description == "A cached tool"
 
     def test_cache_manifest_accepts_entity(self):
         """Regression: cache_manifest must work when passed a DazzleEntity.
@@ -274,13 +274,13 @@ class TestDiscoverProjectsCacheFallback:
             ))
 
             found = discover_projects(projects_dir)
-            project = [p for p in found if p["name"] == "mytool"][0]
-            assert project["description"] == "On-disk version"
+            project = [p for p in found if p.name == "mytool"][0]
+            assert project.description == "On-disk version"
             # `cached` is now a promoted typed field (default False) -- an
             # on-disk tool is not loaded from cache. (Pre-promotion this was
             # `"_cached" not in project`; the field always exists now, so check
             # the value.)
-            assert project["_cached"] is False
+            assert project.cached is False
 
     def test_empty_dir_no_cache_skipped(self):
         """A tool dir with no manifest and no cache is skipped."""
@@ -292,7 +292,7 @@ class TestDiscoverProjectsCacheFallback:
             os.makedirs(tool_dir)
 
             found = discover_projects(projects_dir)
-            names = [p["name"] for p in found]
+            names = [p.name for p in found]
             assert "orphan" not in names
 
 
@@ -430,7 +430,7 @@ class TestModeSwitchEntityBehavior:
         """cmd_switch resolves an exact FQCN (e.g. 'core:mytool'), not just the
         short name.
 
-        Regression: it matched ``p["name"] == tool_name`` only, so an FQCN
+        Regression: it matched ``p.name == tool_name`` only, so an FQCN
         argument fell through to the undiscovered-tool directory scan and
         errored with 'not found'. Now it also matches an exact ``p.fqcn``.
         """
@@ -476,7 +476,7 @@ class TestModeSwitchEntityBehavior:
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tool = self._make_tool_entity(tmpdir)
-            tool_dir = tool["_dir"]
+            tool_dir = tool.directory
             dev_src = os.path.join(tmpdir, "devsrc")
             os.makedirs(dev_src)
             with open(os.path.join(dev_src, "mytool.py"), "w") as f:

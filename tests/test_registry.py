@@ -99,7 +99,7 @@ class TestBinaryRunnerPrecedence:
         """No script_path at all -> error exit."""
         project = _make_project(tmp_path, {"script_path": None})
         # script_path is None, but the factory reads it from runtime
-        project["runtime"].pop("script_path", None)
+        project.runtime.pop("script_path", None)
         runner = make_binary_runner(project)
         result = runner([])
         assert result == 1

@@ -246,7 +246,7 @@ class TestGetActiveKits:
 
     def test_no_config_returns_all(self):
         result = get_active_kits(self.kits, user_config=None)
-        assert [k["name"] for k in result] == ["core", "dazzletools", "wtf", "extra"]
+        assert [k.name for k in result] == ["core", "dazzletools", "wtf", "extra"]
 
     def test_empty_config_returns_all(self):
         result = get_active_kits(self.kits, user_config={})
@@ -256,21 +256,21 @@ class TestGetActiveKits:
         result = get_active_kits(self.kits, user_config={
             "disabled_kits": ["wtf", "extra"],
         })
-        assert [k["name"] for k in result] == ["core", "dazzletools"]
+        assert [k.name for k in result] == ["core", "dazzletools"]
 
     def test_disabled_overrides_always_active(self):
         """Explicit disable overrides always_active=True."""
         result = get_active_kits(self.kits, user_config={
             "disabled_kits": ["core"],
         })
-        names = [k["name"] for k in result]
+        names = [k.name for k in result]
         assert "core" not in names
 
     def test_active_kits_filter_preserves_always_active(self):
         result = get_active_kits(self.kits, user_config={
             "active_kits": ["wtf"],
         })
-        names = {k["name"] for k in result}
+        names = {k.name for k in result}
         # core and dazzletools stay because they're always_active
         assert "core" in names
         assert "dazzletools" in names
@@ -283,7 +283,7 @@ class TestGetActiveKits:
             "active_kits": ["wtf", "core"],
             "disabled_kits": ["wtf"],
         })
-        names = {k["name"] for k in result}
+        names = {k.name for k in result}
         assert "wtf" not in names
         captured = capsys.readouterr()
         assert "disabled wins" in captured.err.lower() or "warning" in captured.err.lower()
@@ -293,7 +293,7 @@ class TestGetActiveKits:
         result = get_active_kits(self.kits, user_config={
             "disabled_kits": ["core"],  # ignored by env override
         })
-        assert {k["name"] for k in result} == {"core", "wtf"}
+        assert {k.name for k in result} == {"core", "wtf"}
 
     def test_dz_kits_empty_means_no_kits(self, monkeypatch):
         monkeypatch.setenv("DZ_KITS", "")
@@ -305,5 +305,5 @@ class TestGetActiveKits:
         result = get_active_kits(self.kits, user_config={
             "disabled_kits": ["wtf"],
         })
-        names = {k["name"] for k in result}
+        names = {k.name for k in result}
         assert "wtf" not in names

@@ -92,7 +92,7 @@ def venv_fixture(tmp_path_factory):
 @pytest.mark.venv_integration
 class TestVenvIntegration:
     def test_venv_was_created(self, venv_fixture):
-        venv_dir = Path(venv_fixture["_dir"]) / ".venv"
+        venv_dir = Path(venv_fixture.directory) / ".venv"
         assert venv_dir.is_dir(), ".venv directory should exist after setup"
 
         # Venv interpreter exists in the platform-appropriate location
@@ -105,7 +105,7 @@ class TestVenvIntegration:
     def test_resolve_runtime_picks_venv_interpreter(self, venv_fixture):
         """Conditional dispatch should select the venv interpreter for the current platform."""
         resolved = resolve_runtime(venv_fixture)
-        runtime = resolved["runtime"]
+        runtime = resolved.runtime
         interpreter = runtime.get("interpreter")
         assert interpreter is not None, "resolved runtime should declare interpreter"
         # Should contain .venv (may be relative or resolved absolute)
@@ -123,15 +123,15 @@ class TestVenvIntegration:
 
         # subprocess.run in the runner writes to real stdout, not captured buffer.
         # Instead, we run the same dispatch via a direct subprocess to capture output.
-        tool_dir = resolved["_dir"]
-        interpreter = resolved["runtime"]["interpreter"]
+        tool_dir = resolved.directory
+        interpreter = resolved.runtime["interpreter"]
         # Resolve interpreter path the same way _make_python_interpreter_runner does
         if not os.path.isabs(interpreter):
             if os.sep in interpreter or "/" in interpreter:
                 candidate = os.path.join(tool_dir, interpreter)
                 if os.path.isfile(candidate):
                     interpreter = candidate
-        script = os.path.join(tool_dir, resolved["runtime"]["script_path"])
+        script = os.path.join(tool_dir, resolved.runtime["script_path"])
         result = subprocess.run(
             [interpreter, script],
             capture_output=True,
@@ -165,14 +165,14 @@ class TestVenvIntegration:
 
     def test_all_heavy_deps_import_successfully(self, venv_fixture):
         """Every package in requirements.txt must import from the venv."""
-        tool_dir = venv_fixture["_dir"]
+        tool_dir = venv_fixture.directory
         resolved = resolve_runtime(venv_fixture)
-        interpreter = resolved["runtime"]["interpreter"]
+        interpreter = resolved.runtime["interpreter"]
         if not os.path.isabs(interpreter):
             candidate = os.path.join(tool_dir, interpreter)
             if os.path.isfile(candidate):
                 interpreter = candidate
-        script = os.path.join(tool_dir, resolved["runtime"]["script_path"])
+        script = os.path.join(tool_dir, resolved.runtime["script_path"])
         result = subprocess.run(
             [interpreter, script],
             capture_output=True,

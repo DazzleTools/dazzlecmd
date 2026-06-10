@@ -128,15 +128,34 @@ def _normalize_platforms(platforms: dict) -> dict:
     return normalized
 
 
+def _proj_get(project, key, default=None):
+    """Read a field from either a DazzleEntity or a plain dict.
+
+    DazzleEntity typed fields are accessed via attribute; extra/unknown
+    fields via ``extra_get``; plain dicts fall through to ``dict.get``.
+    """
+    if isinstance(project, dict):
+        return project.get(key, default)
+    # DazzleEntity: try typed attribute first, then extra_get
+    typed_val = getattr(project, key, _SENTINEL)
+    if typed_val is not _SENTINEL:
+        return typed_val if typed_val is not None else default
+    return project.extra_get(key, default)
+
+
+_SENTINEL = object()
+
+
 def resolve_setup_block(
-    project: dict,
+    project,
     *,
     platform_info: Optional[PlatformInfo] = None,
 ) -> Optional[dict]:
     """Resolve the effective setup block for the current host.
 
     Args:
-        project: Tool manifest dict. May or may not contain a `setup` key.
+        project: Tool entity (DazzleEntity) or plain manifest dict.
+            May or may not contain a ``setup`` key.
         platform_info: Override for testing; defaults to `get_platform_info()`.
 
     Returns:
@@ -148,7 +167,7 @@ def resolve_setup_block(
         UnsupportedSchemaVersionError: setup declares an unsupported
             `_schema_version`.
     """
-    setup = project.get("setup")
+    setup = _proj_get(project, "setup")
     if not setup or not isinstance(setup, dict):
         return None
 
@@ -159,20 +178,21 @@ def resolve_setup_block(
     # (override can introduce new subtype branches the manifest didn't declare).
     # Override's `_vars` merge into the setup block's _vars scope via deep-merge.
     # Missing override file = no change (load_override returns None).
-    fqcn = project.get("_fqcn")
+    fqcn = _proj_get(project, "fqcn") or _proj_get(project, "_fqcn")
     if fqcn:
         override = load_override("setup", fqcn)
         if override:
             setup = deep_merge(setup, override)
 
+    name = _proj_get(project, "name") or "?"
     check_schema_version(
-        setup, context=f"setup for {project.get('name', '?')}"
+        setup, context=f"setup for {name}"
     )
 
     # XOR validation: command and script are mutually exclusive at every
     # level. Check the top-level block first; per-platform branches are
     # checked after normalization.
-    tool_label = project.get("_fqcn") or project.get("name") or "?"
+    tool_label = fqcn or name
     _check_command_xor_script(setup, context=f"for {tool_label}")
 
     platforms = setup.get("platforms")
@@ -204,7 +224,7 @@ def resolve_setup_block(
     # Gather _vars from manifest-top (shared across setup + runtime) and from
     # the effective block (block-specific, merged through platform resolution).
     # Block-level entries win over manifest-top for matching keys.
-    manifest_vars = project.get("_vars", {}) or {}
+    manifest_vars = _proj_get(project, "_vars", {}) or {}
     block_vars = effective.pop("_vars", {}) if isinstance(effective.get("_vars"), dict) else {}
     combined_vars = {**manifest_vars, **block_vars}
 

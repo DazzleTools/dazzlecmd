@@ -69,7 +69,10 @@ def build_tool_subparsers(
     seen_names: set = set()
 
     for project in projects:
-        name = project.get("name")
+        if isinstance(project, dict):
+            name = project.get("name")
+        else:
+            name = project.name
         if not name:
             continue
 
@@ -100,7 +103,10 @@ def build_tool_subparsers(
             continue
         seen_names.add(name)
 
-        description = project.get("description", "")
+        if isinstance(project, dict):
+            description = project.get("description") or ""
+        else:
+            description = project.description or ""
         sub = subparsers.add_parser(
             name,
             help=description,

@@ -176,8 +176,8 @@ class TestRuntimeOverrideBasic:
             runtime={"type": "python", "script_path": "tool.py"},
         )
         resolved = resolve_runtime(project, platform_info=linux_debian)
-        assert resolved["runtime"]["type"] == "python"
-        assert resolved["runtime"].get("interpreter") is None
+        assert resolved.runtime["type"] == "python"
+        assert resolved.runtime.get("interpreter") is None
 
     def test_override_adds_interpreter(self, override_root, linux_debian, tmp_path):
         _write_override(override_root, "runtime", "kit:t", {
@@ -188,7 +188,7 @@ class TestRuntimeOverrideBasic:
             runtime={"type": "python", "script_path": "tool.py"},
         )
         resolved = resolve_runtime(project, platform_info=linux_debian)
-        assert resolved["runtime"]["interpreter"] == "/opt/my-venv/bin/python"
+        assert resolved.runtime["interpreter"] == "/opt/my-venv/bin/python"
 
 
 class TestRuntimeOverrideVarsMerge:
@@ -206,7 +206,7 @@ class TestRuntimeOverrideVarsMerge:
             },
         )
         resolved = resolve_runtime(project, platform_info=linux_debian)
-        assert resolved["runtime"]["interpreter"] == "/opt/user-venv/bin/python"
+        assert resolved.runtime["interpreter"] == "/opt/user-venv/bin/python"
 
 
 class TestRuntimeOverrideIsolationFromSetup:
@@ -222,7 +222,7 @@ class TestRuntimeOverrideIsolationFromSetup:
         )
         resolved = resolve_runtime(project, platform_info=linux_debian)
         # Runtime unchanged
-        assert resolved["runtime"] == {"type": "python", "script_path": "tool.py"}
+        assert resolved.runtime == {"type": "python", "script_path": "tool.py"}
 
     def test_runtime_override_does_not_affect_setup(self, override_root, linux_debian, tmp_path):
         _write_override(override_root, "runtime", "kit:t", {
@@ -254,7 +254,7 @@ class TestRuntimeOverridePlatforms:
         )
         resolved = resolve_runtime(project, platform_info=linux_debian)
         # Override's debian branch wins over manifest's general
-        assert resolved["runtime"]["interpreter"] == "/usr/bin/python3.11"
+        assert resolved.runtime["interpreter"] == "/usr/bin/python3.11"
 
 
 class TestRuntimeOverridePrefer:
@@ -274,7 +274,7 @@ class TestRuntimeOverridePrefer:
         )
         # Deep-merge: arrays REPLACED. Override's prefer wins entirely.
         resolved = resolve_runtime(project, platform_info=linux_debian)
-        assert resolved["runtime"]["interpreter"] == "python"
+        assert resolved.runtime["interpreter"] == "python"
 
 
 class TestCrossLayerIndependence:
@@ -291,4 +291,4 @@ class TestCrossLayerIndependence:
         setup_result = resolve_setup_block(project, platform_info=linux_debian)
         runtime_result = resolve_runtime(project, platform_info=linux_debian)
         assert setup_result["command"] == "user setup"
-        assert runtime_result["runtime"]["interpreter"] == "/user/python"
+        assert runtime_result.runtime["interpreter"] == "/user/python"

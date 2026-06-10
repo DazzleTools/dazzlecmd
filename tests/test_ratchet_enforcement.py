@@ -1,35 +1,25 @@
-"""Phase 1 ratchet enforcement (Stage 3).
+"""Post-shim regression: the DazzleEntity dict shim is DELETED (the 0.8.0 lib bump).
 
-Proof that the DazzleEntity call-site migration is complete for in-scope
-production code: each key ``dz`` operation is driven through the real CLI with
-``DazzleEntity._warn_on_shim`` flipped ON, and we assert NO production
-typed-field shim ``DeprecationWarning`` fires -- i.e. every operation reaches
-its entities' typed fields via attribute access, not the dict shim.
+The Phase-1 ratchet this file once enforced has done its job -- the dict shim is
+gone. Entities now expose typed attributes + ``extra_get``/``extra_set`` for the
+untyped remainder (``source``, ``_vars``). These tests pin the breaking change:
 
-Scope (per the Phase 1 DWP, D2): the ratchet is typed-field-only (extra /
-nested-block dict access like ``entity["runtime"]`` is legitimate and does NOT
-warn), and only dazzlecmd's OWN suite flips it. wtf-windows / amdead run their
-own suites with the ratchet OFF, so this enforcement never touches those
-consumers. Test-file assertion-side shim reads are out of scope here -- they are
-not on these production paths and migrate at shim deletion.
-
-The end-to-end one-off ``tests/one-offs/ratchet_recon.py`` is the manual
-diagnostic sibling of this gate.
+1. the key ``dz`` operations still run end-to-end with the shim removed, and
+2. legacy dict-style access on an entity now raises rather than silently working,
+   while ``extra_get``/``extra_set`` provide the sanctioned untyped path.
 """
 import contextlib
 import io
 import json
 import sys
-import warnings
 
 import pytest
 
-from dazzlecmd_lib.entity import DazzleEntity
+from dazzlecmd_lib.entity import build_entity
 from dazzlecmd.cli import main
 
-# The key operations the migration committed to making shim-free: the read
-# surfaces (list/info/tree/mode-status/kit), plus tool dispatch by short name
-# AND by FQCN (the dispatch path held the last straggler, registry.resolve).
+# The key operations the migration committed to keeping shim-free -- they must
+# still run end-to-end now that the shim backing them is gone.
 KEY_OPS = [
     ["dz", "list"],
     ["dz", "list", "--show", "all"],
@@ -43,14 +33,8 @@ KEY_OPS = [
 ]
 
 
-def _is_production(filename):
-    """True if a warning originated in shipped source (not tests / one-offs)."""
-    p = filename.replace("\\", "/")
-    return (("/src/" in p) or ("dazzlecmd_lib" in p)) and "/tests/" not in p and "/one-offs/" not in p
-
-
 @pytest.mark.parametrize("argv", KEY_OPS, ids=lambda a: " ".join(a[1:]))
-def test_no_typed_field_shim_on_key_operations(argv, tmp_path, monkeypatch):
+def test_key_operations_run_without_the_shim(argv, tmp_path, monkeypatch):
     cfg = tmp_path / "config.json"
     cfg.write_text(
         json.dumps({
@@ -62,29 +46,46 @@ def test_no_typed_field_shim_on_key_operations(argv, tmp_path, monkeypatch):
     monkeypatch.setenv("DAZZLECMD_CONFIG", str(cfg))
     monkeypatch.setattr(sys, "argv", list(argv))
 
-    prev = DazzleEntity._warn_on_shim
-    DazzleEntity._warn_on_shim = True
-    try:
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            buf = io.StringIO()
-            with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
-                try:
-                    main()
-                except SystemExit:
-                    pass  # argparse --help exits 0; that's fine
-        shim = [
-            w for w in caught
-            if issubclass(w.category, DeprecationWarning)
-            and "DazzleEntity" in str(w.message)
-            and _is_production(w.filename)
-        ]
-        assert not shim, (
-            "production typed-field shim access on `%s` -- migrate to attribute access:\n%s"
-            % (
-                " ".join(argv),
-                "\n".join(f"  {w.filename}:{w.lineno}: {w.message}" for w in shim),
-            )
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(buf):
+        try:
+            rc = main()
+        except SystemExit as e:           # argparse --help exits 0
+            rc = e.code if isinstance(e.code, int) else 0
+    assert rc in (0, None), (
+        f"`{' '.join(argv)}` failed (rc={rc}) with the shim removed:\n"
+        f"{buf.getvalue()[-800:]}"
+    )
+
+
+class TestShimDeleted:
+    def _entity(self):
+        return build_entity(
+            {"name": "t", "namespace": "core", "_fqcn": "core:t",
+             "source": {"url": "https://example.com/y.git"}},
+            entity_type="tool",
         )
-    finally:
-        DazzleEntity._warn_on_shim = prev
+
+    def test_dict_getitem_is_gone(self):
+        with pytest.raises(TypeError):
+            _ = self._entity()["name"]
+
+    def test_dict_get_is_gone(self):
+        # the shim's .get() / Mapping protocol is removed
+        assert not hasattr(self._entity(), "get")
+
+    def test_extra_get_reads_untyped_source(self):
+        e = self._entity()
+        assert e.extra_get("source") == {"url": "https://example.com/y.git"}
+        assert e.extra_get("missing", "default") == "default"
+
+    def test_extra_set_writes_untyped(self):
+        e = self._entity()
+        e.extra_set("source", {"url": "https://example.com/z.git"})
+        assert e.extra_get("source")["url"] == "https://example.com/z.git"
+
+    def test_typed_access_is_attribute(self):
+        e = self._entity()
+        assert e.name == "t"
+        assert e.fqcn == "core:t"
+        assert e.runtime == {}   # typed dict field, attribute access

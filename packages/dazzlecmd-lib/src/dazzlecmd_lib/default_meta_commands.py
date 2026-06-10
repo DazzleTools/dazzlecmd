@@ -819,7 +819,7 @@ def _print_runtime_resolved(project):
         "platforms" in raw_runtime
         or "prefer" in raw_runtime
         or has_template_refs(raw_runtime)
-        or bool(project.get("_vars"))
+        or bool(project.extra_get("_vars"))
     )
 
     if not has_conditional:
@@ -845,7 +845,7 @@ def _print_runtime_resolved(project):
             print(f"  {line}")
         return
 
-    runtime = resolved.get("runtime", {})
+    runtime = resolved.runtime or {}
     runtime_type = runtime.get("type", "python")
     platform_tag = pi.os + (f".{pi.subtype}" if pi.subtype else "")
     print(f"Runtime:     {runtime_type}  (resolved for {platform_tag})")
@@ -862,7 +862,7 @@ def _print_runtime_raw(project):
 
     # BUG-2 fix: surface manifest-top _vars AND runtime-block _vars so authors
     # debugging {{...}} references can see what's declared at each scope level.
-    manifest_vars = project.get("_vars")
+    manifest_vars = project.extra_get("_vars")
     if manifest_vars and isinstance(manifest_vars, dict):
         print(f"_vars (manifest-top):")
         for k, v in manifest_vars.items():

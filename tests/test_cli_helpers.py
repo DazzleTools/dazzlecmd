@@ -28,10 +28,10 @@ class TestBuildToolSubparsers:
 
         # Each subparser should have _project set
         args = parser.parse_args(["alpha"])
-        assert args._project["name"] == "alpha"
+        assert args._project.name == "alpha"
 
         args = parser.parse_args(["beta"])
-        assert args._project["name"] == "beta"
+        assert args._project.name == "beta"
 
     def test_skips_reserved_commands(self, capsys):
         parser = argparse.ArgumentParser()

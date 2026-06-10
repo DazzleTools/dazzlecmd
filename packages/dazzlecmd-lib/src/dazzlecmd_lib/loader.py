@@ -320,7 +320,7 @@ def discover_projects(projects_dir, active_kits=None, default_manifest=".dazzlec
     if active_kits is not None:
         kit_tools = set()
         for kit in active_kits:
-            manifest_name = kit.get("manifest", default_manifest)
+            manifest_name = kit.extra_get("manifest", default_manifest)
             for tool_ref in kit.tools:
                 kit_tools.add(tool_ref)
                 # Track manifest name per namespace. FQCNs may have 2+
@@ -332,7 +332,7 @@ def discover_projects(projects_dir, active_kits=None, default_manifest=".dazzlec
                     kit_manifest_names[ns] = manifest_name
 
             # If kit declares a tools_dir, queue it for scanning
-            tools_dir = kit.get("tools_dir")
+            tools_dir = kit.extra_get("tools_dir")
             if tools_dir:
                 abs_tools_dir = os.path.join(project_root, tools_dir)
                 if os.path.isdir(abs_tools_dir):

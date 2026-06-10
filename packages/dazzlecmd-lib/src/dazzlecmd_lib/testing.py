@@ -29,15 +29,33 @@ from typing import Any
 from dazzlecmd_lib.entity import DazzleEntity, build_entity
 
 
+# Legacy `_`-prefixed computed keys -> their promoted field names, so old dict
+# fixtures (which used `_dir`, `_kit_active`, ...) port to the factory unchanged.
+# This is INPUT normalization at construction -- distinct from the runtime dict
+# shim, which was removed in the 0.8.0 lib bump. (`_fqcn` is handled separately
+# via the set-once property.)
+_LEGACY_INPUT_ALIASES = {
+    "_short_name": "short_name",
+    "_kit_import_name": "kit_import_name",
+    "_dir": "directory",
+    "_manifest_path": "manifest_path",
+    "_cached": "cached",
+    "_source": "kit_source",
+    "_kit_name": "kit_name",
+    "_kit_active": "kit_active",
+    "_auto_realpath_alias": "auto_realpath_alias",
+    "_canonical_fqcn": "canonical_fqcn",
+    "_original_name": "original_name",
+}
+
+
 def _make(entity_type: str, fields: dict) -> DazzleEntity:
     data = dict(fields)
     # fqcn is a set-once PROPERTY, not a constructor field -- apply it after.
     fqcn = data.pop("_fqcn", None)
     if "fqcn" in data:
         fqcn = data.pop("fqcn")
-    # Normalize legacy `_`-keys to their promoted field names so old dict
-    # fixtures (which used `_dir`, `_kit_active`, ...) port unchanged.
-    norm = {DazzleEntity._LEGACY_KEY_MAP.get(k, k): v for k, v in data.items()}
+    norm = {_LEGACY_INPUT_ALIASES.get(k, k): v for k, v in data.items()}
     entity = build_entity(norm, entity_type=entity_type)
     if fqcn is not None:
         entity.fqcn = fqcn

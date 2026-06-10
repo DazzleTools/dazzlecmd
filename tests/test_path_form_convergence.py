@@ -58,12 +58,12 @@ class TestAllPathsConvergeToCanonical:
 
     def test_canonical_fqcn(self, index):
         project, ctx = index.resolve("dazzletools:claude-cleanup")
-        assert project["_fqcn"] == "dazzletools:claude-cleanup"
+        assert project.fqcn == "dazzletools:claude-cleanup"
         assert ctx.resolution_kind == "canonical"
 
     def test_canonical_short(self, index):
         project, ctx = index.resolve("claude-cleanup")
-        assert project["_fqcn"] == "dazzletools:claude-cleanup"
+        assert project.fqcn == "dazzletools:claude-cleanup"
         # Canonical short with no aliases would be "precedence";
         # with rule 7c relaxation, alias short collisions don't
         # affect canonical short uniqueness here.
@@ -71,14 +71,14 @@ class TestAllPathsConvergeToCanonical:
 
     def test_alias_fqcn(self, index):
         project, ctx = index.resolve("claude:cleanup")
-        assert project["_fqcn"] == "dazzletools:claude-cleanup"
+        assert project.fqcn == "dazzletools:claude-cleanup"
         assert ctx.resolution_kind == "alias"
         assert ctx.alias_fqcn == "claude:cleanup"
 
     def test_alias_short_via_rule_7c(self, index):
         """Rule 7c: alias shorts populate short_index."""
         project, ctx = index.resolve("cleanup")
-        assert project["_fqcn"] == "dazzletools:claude-cleanup"
+        assert project.fqcn == "dazzletools:claude-cleanup"
         # Resolution mode for short-name with one candidate is
         # "precedence" (single-candidate path)
         assert ctx.resolution_kind == "precedence"
@@ -88,7 +88,7 @@ class TestAllPathsConvergeToCanonical:
         invocable. ``dazzletools:claude:cleanup`` resolves via the
         alias ``claude:cleanup``."""
         project, ctx = index.resolve("dazzletools:claude:cleanup")
-        assert project["_fqcn"] == "dazzletools:claude-cleanup"
+        assert project.fqcn == "dazzletools:claude-cleanup"
         assert ctx.resolution_kind == "qualified_alias"
         assert ctx.alias_fqcn == "claude:cleanup"
         assert ctx.original_input == "dazzletools:claude:cleanup"
@@ -123,19 +123,19 @@ class TestNestedCanonicalConvergence:
 
     def test_canonical_fqcn(self, index):
         project, ctx = index.resolve("wtf:core:locked")
-        assert project["_fqcn"] == "wtf:core:locked"
+        assert project.fqcn == "wtf:core:locked"
         assert ctx.resolution_kind == "canonical"
 
     def test_kit_qualified_shortcut(self, index):
         """``wtf:locked`` drops the inner ``core`` segment. Must
         resolve to the same canonical."""
         project, ctx = index.resolve("wtf:locked")
-        assert project["_fqcn"] == "wtf:core:locked"
+        assert project.fqcn == "wtf:core:locked"
         assert ctx.resolution_kind == "kit_shortcut"
 
     def test_canonical_short(self, index):
         project, ctx = index.resolve("locked")
-        assert project["_fqcn"] == "wtf:core:locked"
+        assert project.fqcn == "wtf:core:locked"
 
     def test_all_three_forms_same_object(self, index):
         canonical, _ = index.resolve("wtf:core:locked")
@@ -185,7 +185,7 @@ class TestQualifiedAliasEdgeCases:
         ))
         idx.insert_alias("claude:cleanup", "dazzletools:claude-cleanup")
         project, ctx = idx.resolve("wtf:core:locked")
-        assert project["_fqcn"] == "wtf:core:locked"
+        assert project.fqcn == "wtf:core:locked"
         assert ctx.resolution_kind == "canonical"
 
     def test_nested_virtual_alias_fqcn_uses_alias_path_not_qualified(self):
@@ -199,5 +199,5 @@ class TestQualifiedAliasEdgeCases:
         # Nested virtual kit with already-prefixed name
         idx.insert_alias("wtf:claude:why-locked", "wtf:core:locked")
         project, ctx = idx.resolve("wtf:claude:why-locked")
-        assert project["_fqcn"] == "wtf:core:locked"
+        assert project.fqcn == "wtf:core:locked"
         assert ctx.resolution_kind == "alias"  # direct alias hit, NOT qualified

@@ -287,8 +287,8 @@ class TestManifestCacheHook:
                 "/fake/projects", "ns", "tool", "/fake/projects/ns/tool"
             )
             assert result is not None
-            assert result["name"] == "cached-tool"
-            assert result["_cached"] is True
+            assert result.name == "cached-tool"
+            assert result.cached is True
             assert called_with["qualified"] == "ns:tool"
         finally:
             lib_loader._manifest_cache_fn = original
@@ -447,15 +447,15 @@ class TestAggregatorAsKitDiscovery:
         }))
 
         kits = discover_kits(str(parent_kits), str(tmp_path))
-        myptr = next(k for k in kits if k.get("_kit_name") == "myptr")
+        myptr = next(k for k in kits if k.kit_name == "myptr")
 
         # The aggregator-as-kit's identity comes from the registry pointer
-        assert myptr["name"] == "myptr"
-        assert myptr.get("source") == "https://example.com/repo.git"
-        assert myptr.get("always_active") is True
+        assert myptr.name == "myptr"
+        assert myptr.extra_get("source") == "https://example.com/repo.git"
+        assert myptr.always_active is True
         # Identity fields from inner kits must NOT leak in
         # (pre-fix, name='core' and tools=[...] would have leaked)
-        assert myptr.get("tools", []) == []
+        assert myptr.tools or [] == []
 
     def test_structural_hints_extracted_from_inner_kits(self, tmp_path):
         """When inner kits declare ``tools_dir`` and ``manifest``, those
@@ -475,15 +475,15 @@ class TestAggregatorAsKitDiscovery:
         }))
 
         kits = discover_kits(str(parent_kits), str(tmp_path))
-        ptr = next(k for k in kits if k.get("_kit_name") == "ptr")
+        ptr = next(k for k in kits if k.kit_name == "ptr")
 
         # Inner kits declared tools_dir="projects" and manifest=".myrepo.json"
-        assert ptr.get("tools_dir") == "projects"
-        assert ptr.get("manifest") == ".myrepo.json"
+        assert ptr.extra_get("tools_dir") == "projects"
+        assert ptr.extra_get("manifest") == ".myrepo.json"
         # And it stays RELATIVE -- not absolute (pre-fix it was joined with
         # the embedded root, producing absolute paths that triggered the
         # basename mis-normalization downstream)
-        assert not os.path.isabs(ptr["tools_dir"])
+        assert not os.path.isabs(ptr.extra_get("tools_dir"))
 
     def test_no_hints_when_inner_kits_minimal(self, tmp_path):
         """When inner kits don't declare structural fields, the
@@ -500,14 +500,14 @@ class TestAggregatorAsKitDiscovery:
         }))
 
         kits = discover_kits(str(parent_kits), str(tmp_path))
-        ptr = next(k for k in kits if k.get("_kit_name") == "ptr")
+        ptr = next(k for k in kits if k.kit_name == "ptr")
 
         # No hints -- engine will use defaults (tools_dir="projects",
         # manifest=".dazzlecmd.json") via _recurse_into_nested fallbacks.
-        assert "tools_dir" not in ptr or ptr["tools_dir"] in (None, "")
-        assert "manifest" not in ptr or ptr["manifest"] in (None, "")
+        assert ptr.extra_get("tools_dir") in (None, "")
+        assert ptr.extra_get("manifest") in (None, "")
         # Identity still comes from the pointer
-        assert ptr["name"] == "ptr"
+        assert ptr.name == "ptr"
 
     def test_single_kit_pattern_1_unchanged(self, tmp_path):
         """Pattern 1 (kit_dir/.kit.json self-describing) must still work.
@@ -534,13 +534,13 @@ class TestAggregatorAsKitDiscovery:
         }))
 
         kits = discover_kits(str(parent_kits), str(tmp_path))
-        kit = next(k for k in kits if k.get("_kit_name") == "singlekit")
+        kit = next(k for k in kits if k.kit_name == "singlekit")
 
         # Pattern 1: full manifest merged, including version, description,
         # tools list -- this is the legitimate self-describing case.
-        assert kit["name"] == "singlekit"
-        assert kit.get("version") == "1.0.0"
-        assert kit.get("tools") == ["singlekit:something"]
+        assert kit.name == "singlekit"
+        assert kit.version == "1.0.0"
+        assert kit.tools == ["singlekit:something"]
 
     def test_engine_recurses_correctly_for_aggregator_as_kit(self, tmp_path):
         """End-to-end: the engine constructs a child for an aggregator-as-kit
@@ -580,7 +580,7 @@ class TestAggregatorAsKitDiscovery:
         engine.discover()
 
         # Both inner kits' tools should be discovered with embedded: prefix
-        fqcns = [p.get("_fqcn") for p in engine.projects]
+        fqcns = [p.fqcn for p in engine.projects]
         assert "embedded:core:sample" in fqcns, (
             f"Expected embedded:core:sample in projects; got {fqcns!r}"
         )
@@ -591,8 +591,8 @@ class TestAggregatorAsKitDiscovery:
         # The kit dict should have its tools field populated with FQCNs
         # of the discovered projects (post-recursion derived view).
         embedded_kit = next(
-            k for k in engine.kits if k.get("_kit_name") == "embedded"
+            k for k in engine.kits if k.kit_name == "embedded"
         )
-        assert set(embedded_kit["tools"]) == {
+        assert set(embedded_kit.tools) == {
             "embedded:core:sample", "embedded:extra:other",
         }

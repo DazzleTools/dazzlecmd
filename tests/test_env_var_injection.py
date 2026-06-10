@@ -40,7 +40,7 @@ class TestEnvVarInjection:
         def _capturing_dispatcher(project, argv):
             captured["DZ_CANONICAL_FQCN"] = os.environ.get("DZ_CANONICAL_FQCN")
             captured["DZ_INVOKED_FQCN"] = os.environ.get("DZ_INVOKED_FQCN")
-            captured["project_fqcn"] = project.get("_fqcn")
+            captured["project_fqcn"] = project.fqcn
             return 0
 
         engine._dispatch_tool = _capturing_dispatcher

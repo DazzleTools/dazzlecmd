@@ -220,9 +220,9 @@ class DazzleEntity(Groupable, BaseModel):
     # --- computed runtime fields (Phase 1 Stage 3) ---
     # Promoted from the `_`-prefixed extra keys so they are typed and
     # attribute-accessible. These are NOT manifest data -- to_manifest()
-    # strips them (see _COMPUTED_FIELDS). Legacy dict access
-    # (``project["_dir"]`` / ``project["_fqcn"]``) keeps working via
-    # _LEGACY_KEY_MAP until every reader migrates to attribute access.
+    # strips them (see _COMPUTED_FIELDS). Accessed via attribute
+    # (``entity.directory`` / ``entity.fqcn``); the legacy dict shim that once
+    # routed ``entity["_dir"]`` here was removed in the 0.8.0 lib bump.
     short_name: Optional[str] = None            # was "_short_name"
     kit_import_name: Optional[str] = None        # was "_kit_import_name"
     directory: Optional[str] = None              # was "_dir"
@@ -235,24 +235,6 @@ class DazzleEntity(Groupable, BaseModel):
     canonical_fqcn: Optional[str] = None         # was "_canonical_fqcn"
     original_name: Optional[str] = None          # was "_original_name"
 
-    # Legacy dict-era key -> promoted field/property name. Keeps existing
-    # ``entity["_dir"]`` / ``entity["_fqcn"]`` call sites (read AND write)
-    # working while they migrate to attribute access. (`_fqcn` -> the set-once
-    # `fqcn` property.) Removed once all in-scope readers are migrated.
-    _LEGACY_KEY_MAP: ClassVar[Dict[str, str]] = {
-        "_fqcn": "fqcn",
-        "_short_name": "short_name",
-        "_kit_import_name": "kit_import_name",
-        "_dir": "directory",
-        "_manifest_path": "manifest_path",
-        "_cached": "cached",
-        "_source": "kit_source",
-        "_kit_name": "kit_name",
-        "_kit_active": "kit_active",
-        "_auto_realpath_alias": "auto_realpath_alias",
-        "_canonical_fqcn": "canonical_fqcn",
-        "_original_name": "original_name",
-    }
     # Computed (non-manifest) field names -- stripped by to_manifest().
     _COMPUTED_FIELDS: ClassVar[frozenset] = frozenset({
         "short_name", "kit_import_name", "directory", "manifest_path",
@@ -293,123 +275,23 @@ class DazzleEntity(Groupable, BaseModel):
         self.__pydantic_extra__[key] = value
 
     # ------------------------------------------------------------------
-    # Backward-compat shim: existing dict call sites keep working unchanged.
-    # Phase 0 keeps this transparent (no warning noise) because the engine
-    # still relies on it everywhere. The DeprecationWarning ratchet
-    # (``_warn_on_shim``) is OFF by default and gets flipped on in the
-    # Phase-1 call-site migration, where pytest filterwarnings=error then
-    # fails CI on any still-unmigrated dict access.
+    # Untyped / extra access (the dict shim's replacement).
+    # Typed manifest fields have attribute access (entity.runtime,
+    # entity.always_active). The genuinely-untyped remainder -- the polymorphic
+    # `source` block and `_`-prefixed extras (`_vars`, `_schema_version`) -- has
+    # no attribute form and is read/written here via model_extra.
     # ------------------------------------------------------------------
-    _warn_on_shim: ClassVar[bool] = False
+    def extra_get(self, key: str, default: Any = None) -> Any:
+        """Read an untyped/extra manifest key from ``model_extra``."""
+        return (self.__pydantic_extra__ or {}).get(key, default)
 
-    def _is_typed_key(self, key: str) -> bool:
-        """True if ``key`` (or its legacy alias) names a typed field or property.
+    def extra_set(self, key: str, value: Any) -> None:
+        """Write an untyped/extra manifest key into ``model_extra``."""
+        self._set_extra_field(key, value)
 
-        Only typed fields/properties have a safe attribute form. Extra keys
-        (manifest data + nested blocks like ``runtime``/``always_active``/
-        ``tools``) have no attribute form -- ``entity.always_active`` raises
-        when the key is absent -- so dict access to them is legitimate and
-        permanent. The ratchet warns only for typed-key access.
-        """
-        mapped = type(self)._LEGACY_KEY_MAP.get(key, key)
-        if mapped in type(self).model_fields:
-            return True
-        return isinstance(getattr(type(self), mapped, None), property)
-
-    def _maybe_warn_shim(self, how: str, key: Optional[str] = None) -> None:
-        if not type(self)._warn_on_shim:
-            return
-        # Keyed access (getitem/setitem/get) warns only for TYPED keys; bulk
-        # Mapping methods (items/keys/values, key=None) always warn.
-        if key is not None and not self._is_typed_key(key):
-            return
-        warnings.warn(
-            f"legacy dict-style access ({how}) on a DazzleEntity; "
-            f"use attribute access instead",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-
-    def _raw_get(self, key: str) -> Any:
-        """Dict-style lookup WITHOUT the deprecation warning.
-
-        Used by the shim Mapping methods (``items``/``values``) so they warn
-        once per call, not once per item. Legacy ``_``-prefixed keys route to
-        their promoted field/property via _LEGACY_KEY_MAP.
-        """
-        mapped = type(self)._LEGACY_KEY_MAP.get(key, key)
-        try:
-            return getattr(self, mapped)
-        except AttributeError:
-            extra = self.__pydantic_extra__ or {}
-            if key in extra:
-                return extra[key]
-            raise KeyError(key)
-
-    def __getitem__(self, key: str) -> Any:
-        self._maybe_warn_shim("[]", key)
-        return self._raw_get(key)
-
-    def __setitem__(self, key: str, value: Any) -> None:
-        self._maybe_warn_shim("[]=", key)
-        # Legacy `_`-keys route to their promoted field/property; so an
-        # existing ``project["_dir"] = x`` lands in the typed `directory`
-        # field, and ``project["_fqcn"] = x`` goes through the set-once C1
-        # property (item-assignment can't bypass C1).
-        mapped = type(self)._LEGACY_KEY_MAP.get(key, key)
-        prop = getattr(type(self), mapped, None)
-        if isinstance(prop, property) and prop.fset is not None:
-            prop.fset(self, value)
-            return
-        if mapped in type(self).model_fields:
-            object.__setattr__(self, mapped, value)
-        else:
-            self._set_extra_field(key, value)
-
-    def get(self, key: str, default: Any = None) -> Any:
-        self._maybe_warn_shim(".get()", key)
-        try:
-            return self._raw_get(key)
-        except KeyError:
-            return default
-
-    def __contains__(self, key: str) -> bool:
-        mapped = type(self)._LEGACY_KEY_MAP.get(key, key)
-        if mapped in type(self).model_fields:
-            return True
+    def has_extra(self, key: str) -> bool:
+        """Whether an untyped/extra key is present in ``model_extra``."""
         return key in (self.__pydantic_extra__ or {})
-
-    # --- read-Mapping methods (faithful dict view; warned under the ratchet) ---
-    # The shim must be a CORRECT Mapping while it exists: code that does
-    # ``manifest.items()`` on an entity (e.g. ``mode.cache_manifest``) used to
-    # crash with AttributeError because only __getitem__/get/__contains__ were
-    # provided. These complete the read view (keys + extra, incl computed
-    # ``_``-prefixed keys -- consistent with ``__contains__``).
-    #
-    # Deliberately NOT overriding ``__iter__``/``__len__``: pydantic v2's
-    # BaseModel.__iter__ yields (field, value) tuples and ``dict(entity)``
-    # relies on that contract; redefining it to yield keys would break
-    # ``dict(entity)``. No top-level call site iterates a single entity, so
-    # the dict-view via keys()/values()/items() is sufficient.
-    def _shim_keys(self) -> List[str]:
-        keys = list(type(self).model_fields.keys())
-        extra = self.__pydantic_extra__ or {}
-        for k in extra:
-            if k not in type(self).model_fields:
-                keys.append(k)
-        return keys
-
-    def keys(self) -> List[str]:
-        self._maybe_warn_shim(".keys()")
-        return self._shim_keys()
-
-    def values(self) -> List[Any]:
-        self._maybe_warn_shim(".values()")
-        return [self._raw_get(k) for k in self._shim_keys()]
-
-    def items(self) -> List[Any]:
-        self._maybe_warn_shim(".items()")
-        return [(k, self._raw_get(k)) for k in self._shim_keys()]
 
     # ------------------------------------------------------------------
     # Serialization: manifest fields only (strip computed `_`-keys).

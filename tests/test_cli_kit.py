@@ -239,7 +239,7 @@ def _engine_with_canonical(tmp_path, monkeypatch, canonicals=(), aliases=()):
             _fqcn=fqcn,
         )
         engine.fqcn_index.canonical_index[fqcn] = project
-        engine.fqcn_index.short_index.setdefault(project["name"], []).append(fqcn)
+        engine.fqcn_index.short_index.setdefault(project.name, []).append(fqcn)
     for alias_fqcn, canonical_fqcn in aliases:
         engine.fqcn_index.alias_index[alias_fqcn] = canonical_fqcn
     return engine

@@ -752,7 +752,7 @@ class TestRenderInfo:
         plain_dir = tmp_path / "plain"
         plain_dir.mkdir()
         projects = [_project("alpha", fqcn="core:alpha")]
-        projects[0]["_dir"] = str(plain_dir)
+        projects[0].directory = str(plain_dir)
         engine = _engine_with(projects)
         dmc.render_info(_args(tool="alpha"), projects, engine=engine)
         out = capsys.readouterr().out
@@ -771,7 +771,7 @@ class TestRenderInfo:
         except (OSError, NotImplementedError):
             pytest.skip("symlink creation not available on this platform/runtime")
         projects = [_project("alpha", fqcn="core:alpha")]
-        projects[0]["_dir"] = str(link)
+        projects[0].directory = str(link)
         engine = _engine_with(projects)
         dmc.render_info(_args(tool="alpha"), projects, engine=engine)
         out = capsys.readouterr().out

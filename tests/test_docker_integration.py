@@ -127,7 +127,7 @@ def project_dict():
     manifest["_fqcn"] = "test:docker-test-tool"
     project = make_tool(**manifest)
     if top_vars:
-        project["_vars"] = top_vars
+        project.extra_set("_vars", top_vars)
     return project
 
 
@@ -144,7 +144,7 @@ class TestDockerIntegration:
     def test_resolve_runtime_substitutes_image(self, project_dict):
         """_vars substitution should resolve the manifest's image field."""
         resolved = resolve_runtime(project_dict)
-        assert resolved["runtime"]["image"] == FULL_IMAGE
+        assert resolved.runtime["image"] == FULL_IMAGE
 
     def test_runner_dispatches_container_and_captures_output(
         self, docker_image, project_dict, capfd

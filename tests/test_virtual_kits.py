@@ -107,10 +107,10 @@ class TestLoaderVirtualKitDetection:
         )
         assert len(kits) == 1
         kit = kits[0]
-        assert kit.get("virtual") is True
-        assert kit["name"] == "my-virt"
-        assert kit["tools"] == ["dz:tool"]
-        assert kit["name_rewrite"] == {"dz:tool": "t"}
+        assert kit.virtual is True
+        assert kit.name == "my-virt"
+        assert kit.tools == ["dz:tool"]
+        assert kit.name_rewrite == {"dz:tool": "t"}
 
     def test_virtual_kit_skips_in_repo_manifest_lookup(self, tmp_path, monkeypatch):
         """A virtual kit named after an existing projects/<name>/.kit.json
@@ -135,8 +135,8 @@ class TestLoaderVirtualKitDetection:
             os.path.join(root, "projects"),
         )
         # Should NOT have inherited the 4 in-repo tools -- just our 1
-        assert kits[0].get("virtual") is True
-        assert kits[0]["tools"] == ["x:y"]
+        assert kits[0].virtual is True
+        assert kits[0].tools == ["x:y"]
 
 
 class TestApplyVirtualKitsSingleLevel:
@@ -160,7 +160,7 @@ class TestApplyVirtualKitsSingleLevel:
 
         project, ctx = engine.fqcn_index.resolve("grouped:alpha")
         assert project is not None
-        assert project["_fqcn"] == "demo:tool-alpha"
+        assert project.fqcn == "demo:tool-alpha"
         assert ctx.resolution_kind == "alias"
         assert ctx.alias_fqcn == "grouped:alpha"
 
@@ -337,7 +337,7 @@ class TestCrossAggregatorOptionA:
 
         project, ctx = engine.fqcn_index.resolve("sub:bundled:first")
         assert project is not None
-        assert project["_fqcn"] == "sub:core:inner-a"
+        assert project.fqcn == "sub:core:inner-a"
         assert ctx.resolution_kind == "alias"
 
     def test_nested_virtual_kit_visible_in_kits_list(self, tmp_path, monkeypatch):
@@ -358,14 +358,14 @@ class TestCrossAggregatorOptionA:
         )
         engine.discover(project_root=root)
 
-        kit_names = {k.get("_kit_name") or k.get("name") for k in engine.kits}
+        kit_names = {k.kit_name or k.name for k in engine.kits}
         assert "sub:bundled" in kit_names, (
             "Nested virtual kit 'bundled' inside 'sub' aggregator should "
             "appear in engine.kits as 'sub:bundled' (prefixed) so "
             "display commands can render it."
         )
         active_names = {
-            k.get("_kit_name") or k.get("name") for k in engine.active_kits
+            k.kit_name or k.name for k in engine.active_kits
         }
         assert "sub:bundled" in active_names
 
@@ -477,7 +477,7 @@ class TestRule9aWarning:
         assert "rule 9b" in captured.err or "shadow a real tool" in captured.err
         # Canonical still dispatches cleanly
         project, ctx = engine.fqcn_index.resolve("demo:keep")
-        assert project["_fqcn"] == "demo:keep"
+        assert project.fqcn == "demo:keep"
         assert ctx.resolution_kind == "canonical"
 
 
@@ -643,7 +643,7 @@ class TestFullDispatchEnd2End:
 
         project, ctx = engine.resolve_command("grouped:alpha")
         assert project is not None
-        assert project["_fqcn"] == "demo:tool-alpha"
+        assert project.fqcn == "demo:tool-alpha"
         assert ctx.resolution_kind == "alias"
         assert ctx.alias_fqcn == "grouped:alpha"
 
@@ -660,4 +660,4 @@ class TestFullDispatchEnd2End:
         engine.discover(project_root=root)
 
         project, ctx = engine.find_project("grouped:alpha")
-        assert project["_fqcn"] == "demo:tool-alpha"
+        assert project.fqcn == "demo:tool-alpha"

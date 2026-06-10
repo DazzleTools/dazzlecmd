@@ -235,8 +235,8 @@ class TestFindUndiscoveredToolParameterization:
             "fix", str(project_root), tools_dir="tools"
         )
         assert result is not None
-        assert result["name"] == "fix"
-        assert result["namespace"] == "core"
+        assert result.name == "fix"
+        assert result.namespace == "core"
 
     def test_returns_none_when_tools_dir_missing(self, tmp_path):
         project_root = tmp_path / "agg"

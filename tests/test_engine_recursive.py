@@ -165,7 +165,7 @@ class TestFlatDiscovery:
         )
         engine.discover(project_root=str(tmp_path))
         assert len(engine.projects) == 2
-        short_names = {p["_short_name"] for p in engine.projects}
+        short_names = {p.short_name for p in engine.projects}
         assert short_names == {"toolA", "toolB"}
 
     def test_flat_fqcn_format(self, tmp_path):
@@ -175,7 +175,7 @@ class TestFlatDiscovery:
             manifest=".dazzlecmd.json",
         )
         engine.discover(project_root=str(tmp_path))
-        fqcns = {p["_fqcn"] for p in engine.projects}
+        fqcns = {p.fqcn for p in engine.projects}
         assert fqcns == {"core:toolA", "core:toolB"}
 
     def test_flat_resolve_short_name(self, tmp_path):
@@ -187,7 +187,7 @@ class TestFlatDiscovery:
         engine.discover(project_root=str(tmp_path))
         project, note = engine.resolve_command("toolA")
         assert project is not None
-        assert project["_fqcn"] == "core:toolA"
+        assert project.fqcn == "core:toolA"
         assert note is None or note.notification is None
 
 
@@ -211,7 +211,7 @@ class TestRecursiveDiscovery:
             manifest=".dazzlecmd.json",
         )
         engine.discover(project_root=str(tmp_path))
-        fqcns = {p["_fqcn"] for p in engine.projects}
+        fqcns = {p.fqcn for p in engine.projects}
         assert "core:parent_tool" in fqcns
         assert "child:core:child_toolA" in fqcns
         assert "child:core:child_toolB" in fqcns
@@ -224,11 +224,11 @@ class TestRecursiveDiscovery:
         )
         engine.discover(project_root=str(tmp_path))
         # Parent tool has kit_import_name "core"
-        parent_tool = [p for p in engine.projects if p["_short_name"] == "parent_tool"][0]
-        assert parent_tool["_kit_import_name"] == "core"
+        parent_tool = [p for p in engine.projects if p.short_name == "parent_tool"][0]
+        assert parent_tool.kit_import_name == "core"
         # Child tools have kit_import_name "child" (the parent's view)
-        child_a = [p for p in engine.projects if p["_short_name"] == "child_toolA"][0]
-        assert child_a["_kit_import_name"] == "child"
+        child_a = [p for p in engine.projects if p.short_name == "child_toolA"][0]
+        assert child_a.kit_import_name == "child"
 
     def test_recursive_resolve_short_name_no_collision(self, tmp_path):
         build_nested_aggregator(str(tmp_path))
@@ -239,7 +239,7 @@ class TestRecursiveDiscovery:
         engine.discover(project_root=str(tmp_path))
         project, note = engine.resolve_command("child_toolA")
         assert project is not None
-        assert project["_fqcn"] == "child:core:child_toolA"
+        assert project.fqcn == "child:core:child_toolA"
         assert note is None or note.notification is None  # no collision, no notification
 
     def test_recursive_resolve_explicit_fqcn(self, tmp_path):
@@ -251,7 +251,7 @@ class TestRecursiveDiscovery:
         engine.discover(project_root=str(tmp_path))
         project, note = engine.resolve_command("child:core:child_toolA")
         assert project is not None
-        assert project["_fqcn"] == "child:core:child_toolA"
+        assert project.fqcn == "child:core:child_toolA"
 
     def test_registry_override_custom_manifest(self, tmp_path):
         """The child uses .child.json manifest, not .dazzlecmd.json."""
@@ -262,7 +262,7 @@ class TestRecursiveDiscovery:
         )
         engine.discover(project_root=str(tmp_path))
         # If the override isn't honored, child tools wouldn't be discovered
-        child_fqcns = [p["_fqcn"] for p in engine.projects if p["_kit_import_name"] == "child"]
+        child_fqcns = [p.fqcn for p in engine.projects if p.kit_import_name == "child"]
         assert len(child_fqcns) == 2
 
 
@@ -524,7 +524,7 @@ class TestCollisionWithNotification:
         # Short name "toolA" resolves to core (default precedence)
         project, note = engine.resolve_command("toolA")
         assert project is not None
-        assert project["_fqcn"] == "core:toolA"
+        assert project.fqcn == "core:toolA"
         # Notification should mention extra as an alternative
         assert note is not None and note.notification is not None
         assert "extra" in note.notification
@@ -570,7 +570,7 @@ class TestCollisionWithNotification:
         # Directly test with precedence override (not via config file)
         project, note = engine.fqcn_index.resolve("toolA", precedence=["extra", "core"])
         assert project is not None
-        assert project["_fqcn"] == "extra:core:toolA"
+        assert project.fqcn == "extra:core:toolA"
 
 
 class TestPhase3SilencingAndShadowing:
@@ -598,7 +598,7 @@ class TestPhase3SilencingAndShadowing:
         )
         engine.discover(project_root=str(tmp_path))
 
-        fqcns = {p["_fqcn"] for p in engine.projects}
+        fqcns = {p.fqcn for p in engine.projects}
         assert "core:toolA" not in fqcns
         assert "core:toolB" in fqcns
 
@@ -673,7 +673,7 @@ class TestPhase3SilencingAndShadowing:
         # "shared" now resolves unambiguously to other:core:shared
         project, note = engine.resolve_command("shared")
         assert project is not None
-        assert project["_fqcn"] == "other:core:shared"
+        assert project.fqcn == "other:core:shared"
         assert note is None or note.notification is None  # no collision anymore
 
     def test_silenced_tool_suppresses_reroot_hint(self, tmp_path, monkeypatch, capsys):
@@ -1001,7 +1001,7 @@ class TestRealpathDedup:
         # Resolving the alias FQCN returns the canonical project.
         proj, ctx = engine.fqcn_index.resolve("dz:wtf:core:locked")
         assert proj is not None
-        assert proj["_fqcn"] == "wtf:core:locked"
+        assert proj.fqcn == "wtf:core:locked"
         assert ctx.resolution_kind == "alias"
         assert ctx.alias_fqcn == "dz:wtf:core:locked"
 
@@ -1013,9 +1013,9 @@ class TestRealpathDedup:
         engine = self._engine()
         engine.projects = [winner, loser]
         engine._build_fqcn_index()
-        assert not winner.get("_auto_realpath_alias")
-        assert loser.get("_auto_realpath_alias") is True
-        assert loser.get("_canonical_fqcn") == "a:b"
+        assert not winner.auto_realpath_alias
+        assert loser.auto_realpath_alias is True
+        assert loser.canonical_fqcn == "a:b"
 
     def test_list_entries_omit_auto_realpath_alias(self, tmp_path):
         from dazzlecmd_lib.default_meta_commands import build_list_entries
@@ -1095,7 +1095,7 @@ class TestRealpathDedup:
         engine.discover(project_root=str(root_b))
         # The symlink should resolve to the same realpath as A's tools.
         # In a single-aggregator discovery, only one canonical per realpath.
-        fqcns = {p["_fqcn"] for p in engine.projects if not p.get("_auto_realpath_alias")}
+        fqcns = {p.fqcn for p in engine.projects if not p.get("_auto_realpath_alias")}
         # Both tools should still be canonical (no other FQCN reaches them
         # in this single-engine setup).
         assert "core:toolA" in fqcns

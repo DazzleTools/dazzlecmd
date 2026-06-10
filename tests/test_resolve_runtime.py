@@ -77,7 +77,7 @@ class TestPlatformsOverride:
             },
         )
         result = resolve_runtime(project, platform_info=windows_win11)
-        rt = result["runtime"]
+        rt = result.runtime
         assert rt["type"] == "script"
         assert rt["interpreter"] == "cscript"
         assert rt["script_path"] == "tool_wsh.js"
@@ -98,7 +98,7 @@ class TestPlatformsOverride:
             },
         )
         result = resolve_runtime(project, platform_info=linux_debian)
-        rt = result["runtime"]
+        rt = result.runtime
         assert rt["type"] == "python"
         assert rt["script_path"] == "tool.py"
         assert "interpreter" not in rt
@@ -118,7 +118,7 @@ class TestPlatformsOverride:
             },
         )
         result = resolve_runtime(project, platform_info=linux_debian)
-        assert result["runtime"]["script_path"] == "debian.sh"
+        assert result.runtime["script_path"] == "debian.sh"
 
     def test_subtype_fallback_to_general(self, linux_arch, tmp_path):
         project = make_tool(
@@ -135,7 +135,7 @@ class TestPlatformsOverride:
             },
         )
         result = resolve_runtime(project, platform_info=linux_arch)
-        assert result["runtime"]["script_path"] == "generic.sh"
+        assert result.runtime["script_path"] == "generic.sh"
 
 
 class TestPreferIteration:
@@ -153,7 +153,7 @@ class TestPreferIteration:
             },
         )
         result = resolve_runtime(project, platform_info=linux_debian)
-        assert result["runtime"]["interpreter"] == "python"
+        assert result.runtime["interpreter"] == "python"
 
     def test_fallthrough_to_second_entry(self, linux_debian, tmp_path):
         project = make_tool(
@@ -168,7 +168,7 @@ class TestPreferIteration:
             },
         )
         result = resolve_runtime(project, platform_info=linux_debian)
-        assert result["runtime"]["interpreter"] == "python"
+        assert result.runtime["interpreter"] == "python"
 
     def test_no_entry_matches_raises(self, linux_debian, tmp_path):
         project = make_tool(
@@ -205,8 +205,8 @@ class TestPreferIteration:
         )
         result = resolve_runtime(project, platform_info=linux_debian)
         # Second entry picked (no script_path precondition to fail)
-        assert result["runtime"]["interpreter"] == "python"
-        assert "script_path" not in result["runtime"] or result["runtime"].get("script_path") != "does-not-exist.py"
+        assert result.runtime["interpreter"] == "python"
+        assert "script_path" not in result.runtime or result.runtime.get("script_path") != "does-not-exist.py"
 
     def test_script_path_absolute_resolves(self, linux_debian, tmp_path):
         real_script = tmp_path / "real.py"
@@ -222,7 +222,7 @@ class TestPreferIteration:
             },
         )
         result = resolve_runtime(project, platform_info=linux_debian)
-        assert result["runtime"]["script_path"] == str(real_script)
+        assert result.runtime["script_path"] == str(real_script)
 
     def test_selected_entry_merged_into_effective(self, linux_debian, tmp_path):
         project = make_tool(
@@ -237,7 +237,7 @@ class TestPreferIteration:
             },
         )
         result = resolve_runtime(project, platform_info=linux_debian)
-        rt = result["runtime"]
+        rt = result.runtime
         assert rt["interpreter"] == "python"
         assert rt["interpreter_args"] == ["-u"]
         assert "prefer" not in rt  # prefer key stripped after resolution
@@ -261,8 +261,8 @@ class TestDetectWhenInPrefer:
         )
         result = resolve_runtime(project, platform_info=linux_debian)
         # First entry's detect_when didn't match on linux, fell through
-        assert result["runtime"]["interpreter"] == "python"
-        assert "detect_when" not in result["runtime"]
+        assert result.runtime["interpreter"] == "python"
+        assert "detect_when" not in result.runtime
 
     def test_detect_when_passes_and_preconditions_pass(self, linux_debian, tmp_path):
         project = make_tool(
@@ -279,7 +279,7 @@ class TestDetectWhenInPrefer:
             },
         )
         result = resolve_runtime(project, platform_info=linux_debian)
-        assert result["runtime"]["interpreter"] == "python"
+        assert result.runtime["interpreter"] == "python"
 
     def test_detect_when_passes_but_preconditions_fail(self, linux_debian, tmp_path):
         project = make_tool(
@@ -321,7 +321,7 @@ class TestPlatformsPlusPreferComposed:
             },
         )
         result = resolve_runtime(project, platform_info=linux_debian)
-        assert result["runtime"]["interpreter"] == "python"
+        assert result.runtime["interpreter"] == "python"
 
     def test_base_prefer_replaced_by_platform_prefer(self, linux_debian, tmp_path):
         project = make_tool(
@@ -340,7 +340,7 @@ class TestPlatformsPlusPreferComposed:
             },
         )
         result = resolve_runtime(project, platform_info=linux_debian)
-        assert result["runtime"]["interpreter"] == "python"
+        assert result.runtime["interpreter"] == "python"
 
 
 class TestSchemaVersionCheck:
@@ -368,7 +368,7 @@ class TestSchemaVersionCheck:
             },
         )
         result = resolve_runtime(project, platform_info=linux_debian)
-        assert result["runtime"]["type"] == "python"
+        assert result.runtime["type"] == "python"
 
     def test_no_version_defaults_and_passes(self, linux_debian, tmp_path):
         project = make_tool(
@@ -377,7 +377,7 @@ class TestSchemaVersionCheck:
             runtime={"type": "python", "script_path": "tool.py"},
         )
         result = resolve_runtime(project, platform_info=linux_debian)
-        assert result["runtime"]["type"] == "python"
+        assert result.runtime["type"] == "python"
 
 
 class TestProjectNotMutated:
@@ -559,7 +559,7 @@ class TestDispatchToolCatchesResolutionError:
             },
         )
         # Set _vars via the shim so it lands in model_extra where resolve_runtime reads it.
-        project["_vars"] = {"a": "{{b}}", "b": "{{a}}"}
+        project.extra_set("_vars", {"a": "{{b}}", "b": "{{a}}"})
         result = dispatch_tool(project, [])
         captured = capsys.readouterr()
         assert result == 1

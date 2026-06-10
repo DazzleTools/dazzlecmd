@@ -1116,7 +1116,8 @@ def resolve_runtime(project, *, platform_info=None):
     has_platforms = "platforms" in runtime
     has_prefer = "prefer" in runtime
     has_runtime_vars = isinstance(runtime.get("_vars"), dict) and runtime["_vars"]
-    has_manifest_vars = isinstance(project.get("_vars"), dict) and project.get("_vars")
+    _manifest_vars = project.extra_get("_vars")
+    has_manifest_vars = isinstance(_manifest_vars, dict) and _manifest_vars
     # Even without _vars declarations anywhere, a stray `{{name}}` reference
     # in the runtime block must surface as UnresolvedTemplateVariableError at
     # resolve time -- not as a cryptic "interpreter '{{x}}' not found" at
@@ -1143,7 +1144,7 @@ def resolve_runtime(project, *, platform_info=None):
     # (shutil.which, os.path.isfile) see substituted interpreter/script_path
     # values, not literal `{{...}}`. Block-level `_vars` wins over manifest-
     # top for matching keys; both merged into the lookup map.
-    manifest_vars = project.get("_vars") or {}
+    manifest_vars = project.extra_get("_vars") or {}
     block_vars = (
         effective.pop("_vars", {}) if isinstance(effective.get("_vars"), dict) else {}
     )

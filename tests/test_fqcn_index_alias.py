@@ -151,7 +151,7 @@ class TestResolveWithAliases:
         idx = self._build()
         project, ctx = idx.resolve("claude:cleanup")
         assert project is not None
-        assert project["_fqcn"] == "dazzletools:claude-cleanup"
+        assert project.fqcn == "dazzletools:claude-cleanup"
 
     def test_alias_context_records_alias_and_kind(self):
         idx = self._build()
@@ -165,7 +165,7 @@ class TestResolveWithAliases:
     def test_canonical_direct_hit_still_works(self):
         idx = self._build()
         project, ctx = idx.resolve("dazzletools:claude-cleanup")
-        assert project["_fqcn"] == "dazzletools:claude-cleanup"
+        assert project.fqcn == "dazzletools:claude-cleanup"
         assert ctx.resolution_kind == "canonical"
         assert ctx.alias_fqcn is None
 
@@ -178,11 +178,11 @@ class TestResolveWithAliases:
         idx = self._build()
         # Canonical short still works
         project, ctx = idx.resolve("claude-cleanup")
-        assert project["_fqcn"] == "dazzletools:claude-cleanup"
+        assert project.fqcn == "dazzletools:claude-cleanup"
         # Alias short ALSO works now
         project, ctx = idx.resolve("cleanup")
         assert project is not None
-        assert project["_fqcn"] == "dazzletools:claude-cleanup"
+        assert project.fqcn == "dazzletools:claude-cleanup"
 
     def test_unknown_alias_fqcn_returns_none(self):
         idx = self._build()
@@ -237,7 +237,7 @@ class TestRule7cRelaxation:
         }
         # Resolution: core is higher precedence by default (core > dz)
         project, ctx = idx.resolve("cleanup")
-        assert project["_fqcn"] == "core:cleanup"
+        assert project.fqcn == "core:cleanup"
         assert ctx.notification is not None
         assert "also in" in ctx.notification
 
@@ -268,7 +268,7 @@ class TestRule7cRelaxation:
         project, ctx = idx.resolve(
             "cleanup", favorites={"cleanup": "dz:claude-cleanup"}
         )
-        assert project["_fqcn"] == "dz:claude-cleanup"
+        assert project.fqcn == "dz:claude-cleanup"
         assert ctx.resolution_kind == "favorite"
 
     def test_idempotent_alias_reinsert_does_not_duplicate_short_index(self):
@@ -302,7 +302,7 @@ class TestFavoritesOnAliases:
             "cc", favorites={"cc": "claude:cleanup"},
         )
         assert project is not None
-        assert project["_fqcn"] == "dazzletools:claude-cleanup"
+        assert project.fqcn == "dazzletools:claude-cleanup"
 
     def test_favorite_to_alias_context_records_both(self):
         idx = self._build()
@@ -392,7 +392,7 @@ class TestShortcutCandidates:
         idx = FQCNIndex()
         idx.insert_canonical(_proj("wtf:core:locked", "locked", "wtf"))
         project, ctx = idx.resolve("wtf:locked")
-        assert project["_fqcn"] == "wtf:core:locked"
+        assert project.fqcn == "wtf:core:locked"
         assert ctx.resolution_kind == "kit_shortcut"
 
     def test_shortcut_ambiguous_picks_alphabetically_first(self):
@@ -401,7 +401,7 @@ class TestShortcutCandidates:
         idx.insert_canonical(_proj("wtf:alpha:find", "find", "wtf"))
         project, ctx = idx.resolve("wtf:find")
         # Sorted alphabetically -- alpha wins
-        assert project["_fqcn"] == "wtf:alpha:find"
+        assert project.fqcn == "wtf:alpha:find"
         assert ctx.notification is not None
         assert "ambiguous" in ctx.notification.lower()
         assert "wtf:alpha:find" in ctx.notification
@@ -426,7 +426,7 @@ class TestShortcutCandidates:
         idx2.insert_canonical(_proj("wtf:alpha:find", "find", "wtf"))
         p2, _ = idx2.resolve("wtf:find")
 
-        assert p1["_fqcn"] == p2["_fqcn"] == "wtf:alpha:find"
+        assert p1.fqcn == p2.fqcn == "wtf:alpha:find"
 
     def test_shortcut_does_not_match_aliases(self):
         """Shortcut path searches canonical only. Aliases had their
@@ -470,17 +470,17 @@ class TestEngineFindProject:
     def test_find_project_by_short_name(self):
         engine = self._engine_with_aliases()
         project, ctx = engine.find_project("rn")
-        assert project["_fqcn"] == "core:rn"
+        assert project.fqcn == "core:rn"
 
     def test_find_project_by_canonical_fqcn(self):
         engine = self._engine_with_aliases()
         project, ctx = engine.find_project("dazzletools:claude-cleanup")
-        assert project["_fqcn"] == "dazzletools:claude-cleanup"
+        assert project.fqcn == "dazzletools:claude-cleanup"
 
     def test_find_project_by_alias_fqcn(self):
         engine = self._engine_with_aliases()
         project, ctx = engine.find_project("claude:cleanup")
-        assert project["_fqcn"] == "dazzletools:claude-cleanup"
+        assert project.fqcn == "dazzletools:claude-cleanup"
         assert ctx.resolution_kind == "alias"
 
     def test_find_project_unknown_returns_none(self):

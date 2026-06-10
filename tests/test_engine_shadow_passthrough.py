@@ -128,13 +128,13 @@ def test_shadowed_tool_wins_with_unknown_flag(tmp_path):
 
     # Fixture sanity: 'setup' is BOTH a reserved meta-command AND a tool.
     assert "setup" in engine.reserved_commands
-    assert any(p["name"] == "setup" for p in engine.projects)
+    assert any(p.name == "setup" for p in engine.projects)
 
     rc = engine.run(["setup", "-Install"])
     assert rc == 0
     dispatcher.assert_called_once()
     project, forwarded_argv = dispatcher.call_args.args
-    assert project["name"] == "setup"
+    assert project.name == "setup"
     assert forwarded_argv == ["-Install"]
 
 
@@ -148,7 +148,7 @@ def test_shadowed_tool_wins_with_no_args(tmp_path):
     assert rc == 0
     dispatcher.assert_called_once()
     project, forwarded_argv = dispatcher.call_args.args
-    assert project["name"] == "setup"
+    assert project.name == "setup"
     assert forwarded_argv == []
 
 
@@ -222,7 +222,7 @@ def test_non_shadowed_tool_dispatch_unchanged(tmp_path):
     assert rc == 0
     dispatcher.assert_called_once()
     project, forwarded_argv = dispatcher.call_args.args
-    assert project["name"] == "my-cool-tool"
+    assert project.name == "my-cool-tool"
     assert forwarded_argv == ["-Foo", "bar"]
 
 

@@ -445,6 +445,6 @@ class TestVarsSubstitution:
                 "image": "{{org}}/mytool:{{tag}}",
             },
         )
-        project["_vars"] = {"org": "myorg", "tag": "1.0"}
+        project.extra_set("_vars", {"org": "myorg", "tag": "1.0"})
         resolved = resolve_runtime(project)
-        assert resolved["runtime"]["image"] == "myorg/mytool:1.0"
+        assert resolved.runtime["image"] == "myorg/mytool:1.0"

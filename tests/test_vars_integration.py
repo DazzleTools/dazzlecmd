@@ -219,9 +219,9 @@ class TestRuntimeVars:
                 }
             },
         )
-        project["_vars"] = {"venv_bin": ".venv/bin"}
+        project.extra_set("_vars", {"venv_bin": ".venv/bin"})
         resolved = resolve_runtime(project, platform_info=linux_debian)
-        assert resolved["runtime"]["interpreter"] == ".venv/bin/python"
+        assert resolved.runtime["interpreter"] == ".venv/bin/python"
 
     def test_runtime_vars_local_to_runtime_block(self, linux_debian, tmp_path):
         script = tmp_path / "tool.py"
@@ -239,7 +239,7 @@ class TestRuntimeVars:
             },
         )
         resolved = resolve_runtime(project, platform_info=linux_debian)
-        assert resolved["runtime"]["interpreter"] == "python3"
+        assert resolved.runtime["interpreter"] == "python3"
 
     def test_setup_vars_NOT_visible_in_runtime(self, linux_debian, tmp_path):
         """setup._vars is scoped to setup -- runtime can't see them."""
@@ -272,10 +272,10 @@ class TestRuntimePreferSubstitution:
                 ]
             },
         )
-        project["_vars"] = {"py": "python"}   # python is on PATH
+        project.extra_set("_vars", {"py": "python"})   # python is on PATH
         resolved = resolve_runtime(project, platform_info=linux_debian)
         # Second entry should win after substitution: interpreter=python
-        assert resolved["runtime"]["interpreter"] == "python"
+        assert resolved.runtime["interpreter"] == "python"
 
     def test_detect_when_values_substituted(self, linux_debian, tmp_path):
         marker = tmp_path / ".marker"
@@ -293,9 +293,9 @@ class TestRuntimePreferSubstitution:
                 ]
             },
         )
-        project["_vars"] = {"marker_path": str(marker)}
+        project.extra_set("_vars", {"marker_path": str(marker)})
         resolved = resolve_runtime(project, platform_info=linux_debian)
-        assert resolved["runtime"]["interpreter"] == "python"
+        assert resolved.runtime["interpreter"] == "python"
 
 
 class TestCrossBlockSharing:
@@ -319,13 +319,13 @@ class TestCrossBlockSharing:
                 }
             },
         )
-        project["_vars"] = {"venv_dir": ".venv", "venv_bin": "{{venv_dir}}/bin"}
+        project.extra_set("_vars", {"venv_dir": ".venv", "venv_bin": "{{venv_dir}}/bin"})
         setup_result = resolve_setup_block(project, platform_info=linux_debian)
         runtime_result = resolve_runtime(project, platform_info=linux_debian)
         assert setup_result["command"] == (
             "python3 -m venv .venv && .venv/bin/pip install -r requirements.txt"
         )
-        assert runtime_result["runtime"]["interpreter"] == ".venv/bin/python"
+        assert runtime_result.runtime["interpreter"] == ".venv/bin/python"
 
 
 class TestFastPath:

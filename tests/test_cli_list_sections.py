@@ -60,7 +60,7 @@ def _build_engine(projects, virtual_kits=None, monkeypatch=None, tmp_path=None):
     engine.kits = [
         # Synthesize one canonical kit per project's _kit_import_name (deduped)
     ]
-    canonical_kit_names = sorted({p["_kit_import_name"] for p in projects})
+    canonical_kit_names = sorted({p.kit_import_name for p in projects})
     for name in canonical_kit_names:
         engine.kits.append(make_kit(
             name=name,
@@ -72,12 +72,12 @@ def _build_engine(projects, virtual_kits=None, monkeypatch=None, tmp_path=None):
         for vk in virtual_kits:
             engine.kits.append(vk)
             # Install aliases per the manifest
-            for canonical_fqcn in vk.get("tools", []):
-                short = (vk.get("name_rewrite", {}) or {}).get(
+            for canonical_fqcn in (vk.tools or []):
+                short = (vk.name_rewrite or {}).get(
                     canonical_fqcn,
                     canonical_fqcn.rsplit(":", 1)[-1],
                 )
-                alias_fqcn = f"{vk['name']}:{short}"
+                alias_fqcn = f"{vk.name}:{short}"
                 try:
                     engine.fqcn_index.insert_alias(alias_fqcn, canonical_fqcn)
                 except Exception:
@@ -402,9 +402,9 @@ class TestShowEmptyVirtualKitsConfig:
                      tools=["dz:claude-cleanup"],
                      name_rewrite={"dz:claude-cleanup": "cleanup"}),
         ]
-        engine.active_kits = [k for k in engine.kits if k.get("_kit_active", True)]
+        engine.active_kits = [k for k in engine.kits if k.kit_active]
         # Filter projects: kit dz is inactive, so claude-cleanup shouldn't surface
-        projects_visible = [p for p in projects if p["_kit_import_name"] != "dz"]
+        projects_visible = [p for p in projects if p.kit_import_name != "dz"]
         return engine, projects_visible
 
     def test_default_renders_empty_virtual_kit_section(self, monkeypatch, tmp_path, capsys):
