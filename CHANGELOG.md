@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.14] - 2026-06-10
+
+**Refactor (DRY): consolidate the two trash-recovery loops.** `cmd_recover` (fuzzy time-pattern, multi-folder) and the new `recover_folder` (exact-name, single-folder) shared their per-entry recovery loop; it's now extracted into one private `_recover_folder_entries` helper that both call. No behavior change — each keeps its own folder-resolution front-end, remove-on-success policy, and summary wording. `recover_folder` gains `metadata_only` parity.
+
+### Changed
+
+- `dazzlecmd_lib.core.safedel._recover`: extracted `_recover_folder_entries(store, folder, …)`; `cmd_recover` + `recover_folder` delegate the shared loop to it. Pure internal refactor (suite + byte-gate unchanged).
+
+### Versions
+
+- dazzlecmd 0.9.13 -> 0.9.14 (PATCH).
+- dazzlecmd-lib 0.8.15 -> 0.8.16 (PATCH).
+- dazzle-dz alias -> 0.9.14; deps re-pinned to >=0.9.14 / >=0.8.16.
+
 ## [0.9.13] - 2026-06-10
 
 **#37 mode-swap reversibility — `dz mode restore` (the symmetric inverse of a dev switch).** Building on the 0.9.12 origins foundation: `dz mode restore <tool>` reads the recorded origin and re-materializes the prior on-disk form — the *group* that inverts the dev-switch *ungroup*. An EMBEDDED origin recovers the exact backed-up content from the safedel trash; a SUBMODULE origin re-clones via `git submodule update --init`. Refuses cleanly when there's no origin, the tool isn't in dev mode, or the backup is gone; for the EMBEDDED path the symlink is removed only after a pre-check, and a recovery failure re-creates the symlink (best-effort rollback) so the tool is never left missing. `dz mode restore <tool> --dry-run` previews. The state system reclassifies EMBEDDED→SYMLINK as REVERSIBLE (the inverse mechanism now exists) while LOCAL_ONLY stays ONE_WAY.
@@ -2953,7 +2967,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.13...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.14...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

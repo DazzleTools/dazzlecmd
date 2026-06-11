@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.16] - 2026-06-10
+
+Ships with dazzlecmd v0.9.14 -- DRY refactor of the trash-recovery loops. No behavior change.
+
+### Changed
+
+- `core.safedel._recover`: extracted `_recover_folder_entries(store, folder, *, to_path, metadata_only, dry_run) -> (recovered, errors)` -- the per-entry recovery loop shared by `cmd_recover` (fuzzy multi-folder) and `recover_folder` (exact single-folder). Both now delegate to it; each retains its own folder resolution, remove-on-success policy, and summary. `recover_folder` gains `metadata_only` for parity. Verified behavior-identical by the safedel tool's roundtrip/junction/ctime suites + the mode-restore round-trip.
+
 ## [0.8.15] - 2026-06-10
 
 Ships with dazzlecmd v0.9.13 -- #37 mode-swap reversibility, the functional restore path. Builds on the 0.8.14 origins foundation.

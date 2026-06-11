@@ -14,7 +14,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ._store import TrashFolder, TrashStore, TrashEntry
 from ._timepattern import resolve_time_args, parse_folder_datetime
@@ -161,6 +161,35 @@ def cmd_list(
 # -- Recover --
 
 
+def _recover_folder_entries(
+    store: TrashStore,
+    folder: TrashFolder,
+    *,
+    to_path: Optional[str] = None,
+    metadata_only: bool = False,
+    dry_run: bool = False,
+) -> Tuple[int, int]:
+    """Recover every entry in ``folder`` via ``_recover_entry``. Returns
+    ``(recovered, errors)``.
+
+    The shared inner work of ``cmd_recover`` (which resolves MANY folders by
+    fuzzy time-pattern and accounts errors cumulatively) and ``recover_folder``
+    (one exact folder). Deliberately does NOT print a summary or remove the
+    folder -- those policies differ between the two callers, so each owns them.
+    """
+    recovered = 0
+    errors = 0
+    for entry in folder.entries:
+        if _recover_entry(
+            store, folder, entry,
+            to_path=to_path, metadata_only=metadata_only, dry_run=dry_run,
+        ):
+            recovered += 1
+        else:
+            errors += 1
+    return recovered, errors
+
+
 def cmd_recover(
     store: TrashStore,
     positional_args: List[str],
@@ -187,19 +216,16 @@ def cmd_recover(
         if not folder:
             continue
 
-        for entry in folder.entries:
-            result = _recover_entry(
-                store, folder, entry,
-                to_path=to_path,
-                metadata_only=metadata_only,
-                dry_run=dry_run,
-            )
-            if result:
-                total_recovered += 1
-            else:
-                total_errors += 1
+        rec, err = _recover_folder_entries(
+            store, folder,
+            to_path=to_path, metadata_only=metadata_only, dry_run=dry_run,
+        )
+        total_recovered += rec
+        total_errors += err
 
-        # If all entries recovered and not dry-run, remove the trash folder
+        # If everything so far recovered cleanly and not dry-run, remove the
+        # trash folder. (Cumulative `total_errors` is intentional/pre-existing:
+        # a failure in an earlier folder suppresses later removals.)
         if not dry_run and total_errors == 0:
             store.remove_folder(folder.folder_name)
 
@@ -217,6 +243,7 @@ def recover_folder(
     store: TrashStore,
     folder_name: str,
     to_path: Optional[str] = None,
+    metadata_only: bool = False,
     dry_run: bool = False,
 ) -> int:
     """Recover one SPECIFIC trash folder by its exact name. Returns 0/1.
@@ -227,23 +254,20 @@ def recover_folder(
     already holds (e.g. the ``TrashResult.folder_name`` a mode swap recorded as
     a restore origin, #37) and recovers it directly -- no glob ambiguity.
 
-    Recovers every entry to its ``original_path`` (or under ``to_path``), then
-    removes the now-empty trash folder on full success. Returns 0 if all entries
-    recovered, 1 if the folder is missing or any entry failed.
+    Recovers every entry to its ``original_path`` (or under ``to_path``) via the
+    shared ``_recover_folder_entries``, then removes the now-empty trash folder
+    on full success. Returns 0 if all entries recovered, 1 if the folder is
+    missing or any entry failed.
     """
     folder = store.get_folder(folder_name)
     if folder is None:
         print(f"  Trash folder '{folder_name}' not found.", file=sys.stderr)
         return 1
 
-    recovered = 0
-    errors = 0
-    for entry in folder.entries:
-        if _recover_entry(store, folder, entry, to_path=to_path,
-                          dry_run=dry_run):
-            recovered += 1
-        else:
-            errors += 1
+    recovered, errors = _recover_folder_entries(
+        store, folder,
+        to_path=to_path, metadata_only=metadata_only, dry_run=dry_run,
+    )
 
     if not dry_run and errors == 0:
         store.remove_folder(folder.folder_name)
