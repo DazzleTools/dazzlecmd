@@ -21,6 +21,8 @@ Enter `dz`...
 
 DazzleCMD provides a single entry point for all your tools. Each tool keeps its own structure and versioning. Dazzlecmd simply provides the discovery and dispatch layer. Tools that grow complex enough can "graduate" to their own repos (which can in turn be nested internal to "dz" as git submodules). Tools that stay small stay organized, easy to find, and simple to track.
 
+And it isn't just for *your* tools: `dz kit add <github-url>` pulls your own collection -- or anyone else's kit or aggregator -- onto any machine in one command, and every tool in it is instantly runnable, whatever language it's written in. It's package-manager convenience (think pip or brew) for scripts that never had to *become* packages first -- which makes a plain folder of utilities genuinely cross-platform and shareable.
+
 ## Features
 
 - **Unified Dispatch**: Run any tool with `dz <tool> [args]` -- argparse-based with per-tool subparsers
