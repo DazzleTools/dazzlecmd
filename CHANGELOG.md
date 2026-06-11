@@ -4,6 +4,14 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.25] - 2026-06-11
+
+**`dz new aggregator` inside-an-aggregator guard.** The target is CWD-relative, so running it from within an existing aggregator's tree nested the new project there silently. Clobbering was already impossible (existing paths refused; verified empirically against a sandbox host -- `projects`/`kits` collisions refuse, the host's `aggregator.json` is untouched), but there was no warning. Now a loud stderr note explains the nesting and suggests `cd` elsewhere; the scaffold still proceeds (non-destructive, occasionally intentional). New regression test pins refusal + host-untouched + the warning.
+
+### Versions
+
+- dazzlecmd 0.9.24 -> 0.9.25 (PATCH); dazzlecmd-lib unchanged (0.8.25); dazzle-dz -> 0.9.25.
+
 ## [0.9.24] - 2026-06-11
 
 **Embedded-aggregator kit descriptions + the rest of the magic-number sweep.** `dz kit list` showed no description for `wtf`: an embedded AGGREGATOR has no `.kit.json`, and the loader never fell back to its `aggregator.json` -- it now surfaces that description (identity fields still excluded; the registry pointer keeps naming authority). Also: the lib's legacy kit-list drill-in rows are width-aware (was a hardcoded 55-char cut); the `find_project_root` walk limit and the git/PowerShell subprocess timeouts are named constants (`GIT_CLONE_TIMEOUT` 120 / `GIT_UPDATE_TIMEOUT` 60 / `GIT_QUERY_TIMEOUT` 10 -- the clone-vs-update asymmetry is now documented).
@@ -3105,7 +3113,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.24...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.25...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

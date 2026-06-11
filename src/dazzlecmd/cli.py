@@ -1354,6 +1354,22 @@ def _cmd_new_aggregator(args, engine=None):
         print(f"Error: {target} already exists.", file=sys.stderr)
         return 1
 
+    # Inside-an-aggregator guard: the target is CWD-relative, so running this
+    # from within an existing aggregator's tree nests the new standalone
+    # project inside that repo (untracked litter + a stray aggregator.json).
+    # Never destructive (the exists-check above refuses collisions), and
+    # occasionally intentional -- so warn loudly and proceed.
+    from dazzlecmd_lib.aggregator_config import find_aggregator_root
+    enclosing = find_aggregator_root(os.getcwd())
+    if enclosing:
+        print(
+            f"Note: you are inside the aggregator at {enclosing} -- the new "
+            f"standalone project will be created NESTED in that repo's "
+            f"working tree at {target} (it will show up untracked there). "
+            f"cd elsewhere first if you wanted an independent sibling project.",
+            file=sys.stderr,
+        )
+
     templates_root = _find_templates_root()
     src = os.path.join(templates_root, "aggregator")
     if not os.path.isdir(src):

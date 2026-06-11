@@ -118,3 +118,37 @@ class TestNewAggregator:
         monkeypatch.chdir(tmp_path)
         os.makedirs(tmp_path / "Taken")
         assert _cmd_new_aggregator(_agg_args("Taken")) == 1
+
+    def test_inside_existing_aggregator_warns_and_never_clobbers(
+            self, tmp_path, monkeypatch, capsys):
+        """Running from INSIDE an existing aggregator must never touch the
+        host: existing dirs are refused, the host's aggregator.json is
+        untouched, and a loud nesting note goes to stderr (the scaffold is
+        allowed -- non-destructive, occasionally intentional)."""
+        host = tmp_path / "hostagg"
+        os.makedirs(host / "projects")
+        os.makedirs(host / "kits")
+        host_manifest = host / "aggregator.json"
+        host_manifest.write_text(
+            '{"_schema_version": 1, "name": "hostagg", "command": "ha", '
+            '"tools_dir": "projects", "kits_dir": "kits", '
+            '"manifest_name": ".dazzlecmd.json"}',
+            encoding="utf-8",
+        )
+        before = host_manifest.read_text(encoding="utf-8")
+        monkeypatch.chdir(host)
+
+        # Colliding with the host's structural dirs is refused outright.
+        assert _cmd_new_aggregator(_agg_args("projects")) == 1
+        assert _cmd_new_aggregator(_agg_args("kits")) == 1
+        capsys.readouterr()
+
+        # A fresh name succeeds, nested, with the warning on stderr.
+        assert _cmd_new_aggregator(_agg_args("Nested")) == 0
+        err = capsys.readouterr().err
+        assert "inside the aggregator at" in err
+        assert "NESTED" in err
+        assert (host / "Nested" / "aggregator.json").is_file()
+        # Host untouched.
+        assert host_manifest.read_text(encoding="utf-8") == before
+        assert sorted(os.listdir(host / "projects")) == []
