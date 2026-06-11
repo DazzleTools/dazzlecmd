@@ -1,0 +1,30 @@
+# {name}
+
+{description}
+
+A [dazzlecmd-lib](https://github.com/DazzleTools/dazzlecmd) aggregator: many tools, one command.
+
+## Install (development)
+
+```
+pip install -e .
+{command} list
+```
+
+## Add a tool
+
+Create `{tools_dir}/<namespace>/<tool>/` with a `{manifest}` manifest (or, if you also have dazzlecmd installed, `dz new tool <name>` scaffolds one). Then:
+
+```
+{command} list          # discover it
+{command} <tool> --help # dispatch it
+```
+
+## Layout
+
+```
+aggregator.json   # the aggregator's identity (name, command, discovery rules)
+{tools_dir}/      # tools, grouped by namespace
+kits/             # kit registry pointers (activation control)
+src/{name_underscore}/   # the CLI entry point
+```

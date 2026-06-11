@@ -63,4 +63,8 @@ dazzlecmd_lib = [
     "templates/*",
     "templates/**/*",
     "templates/**/**/*",
+    # Dot-named templates (.dazzlecmd.json.tmpl, .gitignore.tmpl): `*` globs
+    # skip dotfiles, so they need explicit patterns to ship in the wheel.
+    "templates/**/.*.tmpl",
+    "templates/**/**/.*.tmpl",
 ]

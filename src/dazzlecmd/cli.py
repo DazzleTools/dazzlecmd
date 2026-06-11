@@ -9,6 +9,7 @@ importing from this module.
 import argparse
 import json
 import os
+import re
 import sys
 
 from dazzlecmd._version import DISPLAY_VERSION, __version__
@@ -415,20 +416,48 @@ def _register_meta_commands(subparsers):
     )
     new_tool_parser.set_defaults(_meta="new_tool")
 
-    # dz new kit <name>  -- stub in v0.7.40
+    # dz new kit <name>  -- local kit inside THIS aggregator (4d-2, OQ-A2)
     new_kit_parser = new_sub.add_parser(
-        "kit", help="Create a new flat kit (full impl in v0.7.42)"
+        "kit", help="Create a new local kit (projects/<name>/ + registry pointer)"
     )
     new_kit_parser.add_argument("name", help="Kit name")
-    new_kit_parser.set_defaults(_meta="new_kit_stub")
+    new_kit_parser.add_argument(
+        "--description", "-d", default="", help="Kit description"
+    )
+    new_kit_parser.add_argument(
+        "--with-starter", action="store_true",
+        help="Include a starter 'hello' tool inside the kit",
+    )
+    new_kit_parser.set_defaults(_meta="new_kit")
 
-    # dz new aggregator <name>  -- stub in v0.7.40
+    # dz new aggregator <name>  -- standalone aggregator project (4d-2, OQ-A2:
+    # an aggregator is ALWAYS standalone; the local form is `dz new kit`).
     new_agg_parser = new_sub.add_parser(
         "aggregator",
-        help="Create a new aggregator project (full impl in v0.7.42)",
+        help="Create a standalone aggregator project (own CLI + pyproject)",
     )
-    new_agg_parser.add_argument("name", help="Aggregator name")
-    new_agg_parser.set_defaults(_meta="new_aggregator_stub")
+    new_agg_parser.add_argument("name", help="Aggregator/project name")
+    new_agg_parser.add_argument(
+        "--command", "-c", default=None,
+        help="CLI command name (default: derived from the project name)",
+    )
+    new_agg_parser.add_argument(
+        "--description", "-d", default="", help="Project description"
+    )
+    new_agg_parser.add_argument(
+        "--tools-dir", default=None,
+        help="Tools directory name (default: config 'new.tools_dir' or 'projects')",
+    )
+    new_agg_parser.add_argument(
+        "--manifest", default=None,
+        help="Per-tool manifest filename (default: config 'new.manifest' or "
+             "'.dazzlecmd.json')",
+    )
+    new_agg_parser.add_argument(
+        "--with-starter", action="store_true",
+        help="Include a starter 'hello' tool in <tools-dir>/core/",
+    )
+    new_agg_parser.set_defaults(_meta="new_aggregator")
 
     # Bare ``dz new`` with no type -> show help
     new_parser.set_defaults(_meta="new")
@@ -557,10 +586,10 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
         return 2
     elif meta == "new_tool":
         return _cmd_new_tool(args, project_root, engine)
-    elif meta == "new_kit_stub":
-        return _cmd_new_kit_stub(args)
-    elif meta == "new_aggregator_stub":
-        return _cmd_new_aggregator_stub(args)
+    elif meta == "new_kit":
+        return _cmd_new_kit(args, project_root)
+    elif meta == "new_aggregator":
+        return _cmd_new_aggregator(args, engine)
     elif meta == "add":
         return _cmd_add(args, project_root)
     elif meta == "mode_status":
@@ -1174,45 +1203,189 @@ def _cmd_new_tool(args, project_root, engine=None):
     return 0
 
 
-def _cmd_new_kit_stub(args):
-    """Stub for ``dz new kit <name>`` -- full impl in v0.7.42 (4d-2).
+def _cmd_new_kit(args, project_root):
+    """``dz new kit <name>`` -- create a LOCAL kit inside this aggregator.
 
-    Prints a clear "coming soon" message so users see the planned shape
-    without confusing argparse errors. Returns 2 (not 0) so scripts can
-    detect that the command did not actually create anything.
+    A kit is a directory of tools registered into the parent's discovery
+    (Tier 2 synthesis OQ-A2: semantically distinct from an aggregator, which
+    has its own dispatch). Creates ``projects/<name>/.kit.json`` (the in-tree
+    manifest that travels with the kit if it ever migrates) and
+    ``kits/<name>.kit.json`` (the registry pointer controlling activation).
     """
-    print(
-        f"'dz new kit {args.name}' is not yet implemented (v0.7.40).\n\n"
-        "Planned shape (v0.7.42, item 4d-2):\n"
-        "  dz new kit <name>                  Create a flat kit at projects/<name>/\n"
-        "  dz new kit <name> --with-starter   Include a starter 'hello' tool\n\n"
-        "For now, use 'dz new tool <name>' to create individual tools,\n"
-        "and 'dz kit add <url>' to import existing kits from a repo.",
-        file=sys.stderr,
-    )
-    return 2
+    name = args.name.strip().lower()
+    if not re.match(r"^[a-z][a-z0-9_-]*$", name):
+        print(f"Error: invalid kit name '{args.name}' (use lowercase letters, "
+              "digits, '-', '_').", file=sys.stderr)
+        return 1
+
+    kit_dir = os.path.join(project_root, "projects", name)
+    kit_manifest = os.path.join(kit_dir, ".kit.json")
+    registry_path = os.path.join(project_root, "kits", f"{name}.kit.json")
+    for existing in (kit_manifest, registry_path):
+        if os.path.exists(existing):
+            print(f"Error: {existing} already exists.", file=sys.stderr)
+            return 1
+
+    os.makedirs(kit_dir, exist_ok=True)
+    manifest = {
+        "name": name,
+        "version": "0.1.0",
+        "description": args.description or f"{name} kit",
+        "tools_dir": ".",
+        "manifest": ".dazzlecmd.json",
+        "tools": [],
+    }
+    with open(kit_manifest, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=4)
+        f.write("\n")
+
+    os.makedirs(os.path.dirname(registry_path), exist_ok=True)
+    # OQ-J: warn against cross-embedding loops until #65's display dedup ships
+    # everywhere. (Comment field, not a schema key the loader acts on.)
+    registry = {
+        "name": name,
+        "always_active": False,
+        "_note": "Registry pointer: controls activation only. Do not point a "
+                 "parent aggregator back at a child that embeds this one.",
+    }
+    with open(registry_path, "w", encoding="utf-8") as f:
+        json.dump(registry, f, indent=4)
+        f.write("\n")
+
+    created = [os.path.relpath(kit_manifest, project_root),
+               os.path.relpath(registry_path, project_root)]
+
+    if getattr(args, "with_starter", False):
+        rc = _scaffold_starter_tool(project_root, kit=name)
+        if rc == 0:
+            manifest["tools"].append(f"{name}:hello")
+            with open(kit_manifest, "w", encoding="utf-8") as f:
+                json.dump(manifest, f, indent=4)
+                f.write("\n")
+            created.append(os.path.join("projects", name, "hello", ""))
+
+    print(f"Created kit '{name}':")
+    for path in created:
+        print(f"  {path}")
+    print(f"\nEnable it with: dz kit enable {name}")
+    return 0
 
 
-def _cmd_new_aggregator_stub(args):
-    """Stub for ``dz new aggregator <name>`` -- full impl in v0.7.42 (4d-2).
+def _scaffold_starter_tool(project_root, kit, tool_name="hello"):
+    """Generate a starter 'hello' tool from the python template into
+    ``projects/<kit>/<tool_name>/``. Returns 0/1."""
+    templates_root = _find_templates_root()
+    src = os.path.join(templates_root, "python")
+    if not os.path.isdir(src):
+        print("Warning: python template not found; skipping starter tool.",
+              file=sys.stderr)
+        return 1
+    dest = os.path.join(project_root, "projects", kit, tool_name)
+    os.makedirs(dest, exist_ok=True)
+    placeholders = {
+        "name": tool_name,
+        "name_underscore": tool_name.replace("-", "_"),
+        "namespace": kit,
+        "description": "Starter tool -- replace me",
+        "long_description": "",
+    }
+    _copy_template_tree(src, dest, placeholders)
+    return 0
 
-    Aggregator scaffolding always produces a standalone project (own
-    pyproject.toml + entry point + tests). Local-kit creation is the
-    separate ``dz new kit`` command (per Tier 2 design synthesis 2026-05-13
-    Open Question A resolution A2).
+
+def _cmd_new_aggregator(args, engine=None):
+    """``dz new aggregator <name>`` -- scaffold a STANDALONE aggregator project.
+
+    Always standalone (Tier 2 synthesis OQ-A2): own pyproject.toml, console
+    entry point, aggregator.json, tools dir, kit registry, smoke test. The
+    generated cli.py is the canonical thin dazzlecmd-lib consumer (the wtf
+    pattern): ``AggregatorEngine.from_project(...)`` + ``engine.run()``, with
+    a commented ``nest_all_under`` stub for when #47 ships (OQ-E: manual
+    uncomment, no auto-rewrites of user code).
+
+    Defaults resolve CLI flag > user config ``new`` section > built-in (4d-7).
+    The target directory is ``./<name>`` relative to the CURRENT directory --
+    a new project beside wherever you are, never inside dazzlecmd's tree.
     """
+    name = args.name.strip()
+    if not re.match(r"^[A-Za-z][A-Za-z0-9_-]*$", name):
+        print(f"Error: invalid project name '{args.name}'.", file=sys.stderr)
+        return 1
+
+    new_defaults = _resolve_new_defaults(engine)
+    command = args.command or name.lower().replace("_", "-")
+    tools_dir = args.tools_dir or new_defaults.get("tools_dir") or "projects"
+    manifest = args.manifest or new_defaults.get("manifest") or ".dazzlecmd.json"
+    description = args.description or f"{name} -- a dazzlecmd-lib aggregator"
+
+    target = os.path.abspath(name)
+    if os.path.exists(target):
+        print(f"Error: {target} already exists.", file=sys.stderr)
+        return 1
+
+    templates_root = _find_templates_root()
+    src = os.path.join(templates_root, "aggregator")
+    if not os.path.isdir(src):
+        print(f"Error: aggregator template not found at {src}.", file=sys.stderr)
+        return 1
+
+    from dazzlecmd_lib._version import __version__ as _lib_version
+    placeholders = {
+        "name": name,
+        "name_underscore": name.lower().replace("-", "_"),
+        "command": command,
+        "description": description,
+        "tools_dir": tools_dir,
+        "manifest": manifest,
+        "lib_min_version": _lib_version,
+    }
+
+    os.makedirs(target)
+    created = _copy_template_tree(src, target, placeholders)
+
+    # The discovery directories (template trees can't carry empty dirs).
+    os.makedirs(os.path.join(target, tools_dir), exist_ok=True)
+    os.makedirs(os.path.join(target, "kits"), exist_ok=True)
+
+    if getattr(args, "with_starter", False):
+        core_dir = os.path.join(target, tools_dir, "core")
+        os.makedirs(core_dir, exist_ok=True)
+        with open(os.path.join(core_dir, ".kit.json"), "w", encoding="utf-8") as f:
+            json.dump({
+                "name": "core", "version": "0.1.0",
+                "description": f"Core tools for {name}",
+                "tools_dir": ".", "manifest": manifest,
+                "tools": ["core:hello"],
+            }, f, indent=4)
+            f.write("\n")
+        with open(os.path.join(target, "kits", "core.kit.json"), "w",
+                  encoding="utf-8") as f:
+            json.dump({"name": "core", "always_active": True}, f, indent=4)
+            f.write("\n")
+        # Reuse the python tool template for the hello tool (tools_dir-aware).
+        hello_root = os.path.join(target, tools_dir, "core", "hello")
+        os.makedirs(hello_root, exist_ok=True)
+        py_src = os.path.join(templates_root, "python")
+        if os.path.isdir(py_src):
+            _copy_template_tree(py_src, hello_root, {
+                "name": "hello", "name_underscore": "hello",
+                "namespace": "core",
+                "description": "Starter tool -- replace me",
+                "long_description": "",
+            })
+            created.append(os.path.join(tools_dir, "core", "hello", ""))
+
+    print(f"Created aggregator '{name}' at {target}")
+    for path in sorted(created):
+        print(f"  {path}")
     print(
-        f"'dz new aggregator {args.name}' is not yet implemented (v0.7.40).\n\n"
-        "Planned shape (v0.7.42, item 4d-2):\n"
-        "  dz new aggregator <name>                Standalone aggregator project\n"
-        "  dz new aggregator <name> --command <c>  Override CLI command name\n"
-        "  dz new aggregator <name> --with common,template,ci\n"
-        "                                          Composable scaffolding components\n\n"
-        "For now, use 'dz new tool <name>' to create tools inside the current\n"
-        "dazzlecmd project.",
-        file=sys.stderr,
+        f"\nNext steps:\n"
+        f"  cd {name}\n"
+        f"  pip install -e .\n"
+        f"  {command} list\n"
+        f"  git init && git add -A   # version it (RepoKit integration: --with common, later)"
     )
-    return 2
+    return 0
 
 
 def _layer_extras(tool_dir, name, args):

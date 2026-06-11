@@ -238,47 +238,16 @@ class TestNewToolConfigDefaults:
         assert rc == 0
 
 
-class TestNewKitStub:
-    """``dz new kit <name>`` returns 2 with the planned-shape message."""
+class TestNewKitAndAggregatorAreReal:
+    """v0.9.20 (4d-2): the v0.7.40 stubs are GONE -- `dz new kit` and
+    `dz new aggregator` are real implementations. Full coverage lives in
+    tests/test_cli_new_scaffold.py; these pin the stub removal."""
 
-    def test_returns_exit_code_2(self, capsys):
-        rc = cli._cmd_new_kit_stub(_make_args(name="my-kit"))
-        assert rc == 2
-
-    def test_prints_planned_shape_to_stderr(self, capsys):
-        cli._cmd_new_kit_stub(_make_args(name="my-kit"))
-        captured = capsys.readouterr()
-        assert "not yet implemented" in captured.err
-        assert "v0.7.42" in captured.err
-        assert "dz new kit <name>" in captured.err
-
-    def test_message_references_workaround(self, capsys):
-        """Stub tells the user what to do TODAY instead."""
-        cli._cmd_new_kit_stub(_make_args(name="x"))
-        captured = capsys.readouterr()
-        assert "dz new tool" in captured.err
-        assert "dz kit add" in captured.err
-
-
-class TestNewAggregatorStub:
-    """``dz new aggregator <name>`` returns 2 with the planned-shape message."""
-
-    def test_returns_exit_code_2(self):
-        rc = cli._cmd_new_aggregator_stub(_make_args(name="my-agg"))
-        assert rc == 2
-
-    def test_prints_planned_shape_to_stderr(self, capsys):
-        cli._cmd_new_aggregator_stub(_make_args(name="my-agg"))
-        captured = capsys.readouterr()
-        assert "not yet implemented" in captured.err
-        assert "v0.7.42" in captured.err
-        assert "dz new aggregator" in captured.err
-        assert "--with common,template,ci" in captured.err
-
-    def test_message_references_workaround(self, capsys):
-        cli._cmd_new_aggregator_stub(_make_args(name="x"))
-        captured = capsys.readouterr()
-        assert "dz new tool" in captured.err
+    def test_stubs_are_removed(self):
+        assert not hasattr(cli, "_cmd_new_kit_stub")
+        assert not hasattr(cli, "_cmd_new_aggregator_stub")
+        assert callable(cli._cmd_new_kit)
+        assert callable(cli._cmd_new_aggregator)
 
 
 class TestRegisterInKit:

@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.22] - 2026-06-11
+
+Ships with dazzlecmd v0.9.20 -- the `aggregator/` template tree (4d-2).
+
+### Added
+
+- `templates/aggregator/`: a complete standalone-aggregator scaffold (aggregator.json, pyproject.toml with console entry point, `src/{name_underscore}/cli.py` as the canonical thin consumer -- `AggregatorEngine.from_project` + `engine.run()`, commented `nest_all_under` stub for #47 -- plus _version.py, README, .gitignore, smoke test). Consumed by `dz new aggregator`; ships in the lib wheel via package_data like the per-language tool templates.
+
 ## [0.8.21] - 2026-06-11
 
 Ships with dazzlecmd v0.9.19 -- the links fork fixed + the constitutional tool boundary contract, enforced.

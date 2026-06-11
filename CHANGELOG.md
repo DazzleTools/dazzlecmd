@@ -4,6 +4,24 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.20] - 2026-06-11
+
+**`dz new kit` and `dz new aggregator` are real (4d-2 / Tier 2B.1 — the v0.7.42 plan row, finally shipped).** The two v0.7.40 stubs are replaced with implementations per the Tier-2 scaffolding synthesis (OQ-A2): a **kit** is the local form — `dz new kit <name>` creates `projects/<name>/.kit.json` + the `kits/<name>.kit.json` registry pointer (opt-in activation) inside the current aggregator; an **aggregator** is *always standalone* — `dz new aggregator <name>` scaffolds a complete project (`aggregator.json`, `pyproject.toml` with console entry point, `src/<pkg>/cli.py` as the canonical thin dazzlecmd-lib consumer with the commented `nest_all_under` stub per OQ-E, smoke test, README, .gitignore). Both support `--with-starter` (a hello tool); aggregator flags: `--command`, `--description`, `--tools-dir`, `--manifest`, with defaults resolving CLI flag > config `new` section > built-in (4d-7). **Verified end-to-end:** a generated aggregator's own CLI (`mytools list`) discovers and dispatches its starter tool out of the box, and its generated smoke test passes.
+
+### Added
+
+- `dz new kit <name> [-d] [--with-starter]` and `dz new aggregator <name> [-c command] [-d] [--tools-dir] [--manifest] [--with-starter]`; the `aggregator/` template tree in `dazzlecmd_lib/templates/`; `tests/test_cli_new_scaffold.py` (9 tests incl. the generated-aggregator E2E run).
+
+### Removed
+
+- The v0.7.40 `new kit`/`new aggregator` stubs (exit-2 "not yet implemented" messages).
+
+### Versions
+
+- dazzlecmd 0.9.19 -> 0.9.20 (PATCH).
+- dazzlecmd-lib 0.8.21 -> 0.8.22 (PATCH; ships the aggregator template).
+- dazzle-dz alias -> 0.9.20; deps re-pinned to >=0.9.20 / >=0.8.22.
+
 ## [0.9.19] - 2026-06-11
 
 **Fix the links fork — engine/CLI split completed + the constitutional boundary contract, enforced.** The user caught `links [lib]` rendering in `dz list`; recon found worse: the v0.9.4 relocation had copied the links tool's *entire file* (CLI included) into the lib **byte-identically**, and the tool was never rewired — two 28.6KB engines destined to drift, argparse/display dead weight inside the lib, and a `[lib]`/`Absolute:` claim describing a copy that wasn't the one running. Fixed to safedel-parity: the lib keeps the ENGINE only (detection, `LinkInfo`, `scan_directory`); the tool is now a thin CLI importing it. Golden-output capture proves the tool's help/table/JSON output is **byte-identical** before/after. The boundary contract (engine in lib; CLI in tool; no second engine; lib admission only when lib code itself needs the primitive) is now written in `core/__init__.py` and **enforced by `test_constitutional_contract.py`** — a constitutional name whose tool doesn't wrap its lib engine fails CI (verified to catch a revert of this very fix).
@@ -3055,7 +3073,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.19...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.20...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
