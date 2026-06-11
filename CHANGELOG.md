@@ -4,6 +4,14 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.22] - 2026-06-11
+
+**`dz kit list` kit names render BOLD** -- the row anchor stands out (matches the lib's `render_kit_status`, which already bolded names). Color-gated (`should_use_color`): piped output stays plain, so scripts and the byte-gate see identical bytes. dazzlecmd-side only (`cli.py`'s custom kit-list handler); the lib is unchanged.
+
+### Versions
+
+- dazzlecmd 0.9.21 -> 0.9.22 (PATCH); dazzlecmd-lib unchanged (0.8.23); dazzle-dz -> 0.9.22.
+
 ## [0.9.21] - 2026-06-11
 
 **Terminal-width-aware display: `dz kit list` descriptions wrap, `dz tree` fills the terminal.** Kit summary descriptions word-wrap with a hanging indent (the `dz list` discipline); `dz tree` and the flat-list fallback truncate to the REAL terminal width instead of hardcoded 57 chars. The #48 data-computed drill-in is untouched. `dz_tree` baseline refreshed (deliberate).
@@ -3081,7 +3089,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.21...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.22...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

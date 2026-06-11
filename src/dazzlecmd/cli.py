@@ -754,13 +754,21 @@ def _cmd_kit_list(args, kits, projects, engine=None):
         return 0
 
     # No name given — list all kits with status
+    _use_color = _colors.should_use_color()
     for i, kit in enumerate(kits):
         if i > 0:
             print()  # blank line separator for readability
         name = kit.kit_name or kit.name
         status = _kit_status(kit)
         tool_count = len(kit.tools or [])
-        print(f"  {name:<16} {tool_count} tool(s)  [{status}]")
+        # BOLD the kit name so it stands out as the row anchor (matches the
+        # lib's render_kit_status). Pad INSIDE the colorize so the 16-char
+        # field math runs on plain text and ANSI never skews alignment.
+        name_styled = (
+            _colors.colorize(f"{name:<16}", _colors.BOLD)
+            if _use_color else f"{name:<16}"
+        )
+        print(f"  {name_styled} {tool_count} tool(s)  [{status}]")
         if kit.description:
             # Word-wrap to terminal width with a hanging indent -- the
             # render_list formatting discipline (was an unwrapped line the
