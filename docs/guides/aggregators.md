@@ -127,6 +127,39 @@ This is exactly how wtf-windows specializes: it overrides `list`/`info` to add i
 - `mode switch` / `mode restore` -- the dev↔publish toggle with recoverable backups, for working on a tool in its own checkout.
 - Kit activation (`kit enable/disable/focus`), user config (`DAZZLECMD_CONFIG`-style isolation works per-aggregator), favorites, and shadowing controls.
 
+## Nesting: embedding one aggregator inside another
+
+This is how wtf-windows lives inside dz (`dz wtf <tool>` works), and how your aggregator can host -- or be hosted. **Do not use `dz new aggregator` for this** (that *creates* a new standalone project; running it inside an existing aggregator just nests an unrelated project in that repo's tree, and it will warn you). Embedding an aggregator that already exists is a *kit* operation:
+
+### The one-command path
+
+From the HOST aggregator's root:
+
+```
+dz kit add https://github.com/you/your-aggregator.git
+dz kit enable your-aggregator
+dz list                          # its tools appear, namespaced
+```
+
+`dz kit add <url> [--name N] [--branch B]` runs `git submodule add` into `projects/<name>/` and writes the `kits/<name>.kit.json` registry pointer. That's the entire embedding: discovery sees a kit directory that itself contains a `kits/` dir, recognizes it as a nested aggregator, and recurses -- its tools surface under qualified FQCNs (`wtf:core:locked`), dispatchable from the parent.
+
+### What's actually on disk (the manual path, same result)
+
+```
+projects/your-aggregator/        # the embedded repo (submodule, subtree, or plain copy)
+kits/your-aggregator.kit.json    # {"name": "your-aggregator", "always_active": false,
+                                 #  "source": "https://github.com/you/your-aggregator.git"}
+```
+
+Two pieces, nothing else. The registry pointer controls *activation only*; the embedded aggregator keeps its own identity (`aggregator.json`), description, and inner kit structure -- the parent reads structural hints from it but never overwrites identity.
+
+### Things to know
+
+- **Both directions keep working.** The embedded aggregator is still its own standalone command (`wtf ...` and `dz wtf ...` coexist); embedding adds a surface, it doesn't move the project.
+- **Development on an embedded kit** uses the mode system: `dz mode switch <tool>` symlinks a tool to your local checkout; `dz mode restore` puts it back.
+- **Don't create loops**: never point an embedded aggregator's kit registry back at its own host (parent embeds child embeds parent). Display dedup for accidental loops is tracked, but the rule is simply: embed downward.
+- Planned polish (designed, not yet shipped): `--method submodule|subtree|copy`, `--pin <tag>`, and `dz kit update <name>` for refreshing pinned imports.
+
 ## Growing up: the promotion ladder
 
 Aggregators participate in dazzlecmd's lifecycle story. A tool can start as a local script in your `projects/`, graduate into its own repo, and eventually become its own aggregator -- wtf-windows took exactly that path (standalone tool → aggregator of diagnostics) -- while staying reachable from a parent (`dz wtf ...`) through embedding. The same machinery runs in both directions: what an aggregator surfaces is a projection over canonical names, so reorganizing the surface never breaks the tools underneath.
