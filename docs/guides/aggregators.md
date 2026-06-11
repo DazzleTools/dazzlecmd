@@ -1,5 +1,9 @@
 # Aggregators -- how dz works inside, and how to build your own
 
+> **"This is my tool! There are many like it, but this one is mine!"**
+
+dazzlecmd is *a tool for tools* -- and the whole point of the aggregator design is that you can stand up your own: same engine, same discipline, your name on it.
+
 This guide is for **developers** who want to understand how dazzlecmd's aggregator machinery works, and for anyone who wants to build their **own** dz-style command -- a standalone CLI with its own name that discovers and dispatches its own tool collection, powered by the same library (`dazzlecmd-lib`).
 
 Audience: two groups. (1) Contributors working *inside* dazzlecmd who need the mental model of discovery/dispatch. (2) Authors creating an *external* aggregator -- the way [wtf-windows](https://github.com/djdarcy/wtf-windows) is its own `wtf` command built on the same engine. Users who just run `dz` don't need this; see `docs/guides/kits.md` and `docs/guides/dz-kit.md`.
