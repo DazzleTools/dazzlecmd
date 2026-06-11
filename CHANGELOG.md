@@ -4,6 +4,14 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.21] - 2026-06-11
+
+**Terminal-width-aware display: `dz kit list` descriptions wrap, `dz tree` fills the terminal.** Kit summary descriptions word-wrap with a hanging indent (the `dz list` discipline); `dz tree` and the flat-list fallback truncate to the REAL terminal width instead of hardcoded 57 chars. The #48 data-computed drill-in is untouched. `dz_tree` baseline refreshed (deliberate).
+
+### Versions
+
+- dazzlecmd 0.9.20 -> 0.9.21 (PATCH); dazzlecmd-lib 0.8.22 -> 0.8.23 (PATCH); dazzle-dz -> 0.9.21.
+
 ## [0.9.20] - 2026-06-11
 
 **`dz new kit` and `dz new aggregator` are real (4d-2 / Tier 2B.1 — the v0.7.42 plan row, finally shipped).** The two v0.7.40 stubs are replaced with implementations per the Tier-2 scaffolding synthesis (OQ-A2): a **kit** is the local form — `dz new kit <name>` creates `projects/<name>/.kit.json` + the `kits/<name>.kit.json` registry pointer (opt-in activation) inside the current aggregator; an **aggregator** is *always standalone* — `dz new aggregator <name>` scaffolds a complete project (`aggregator.json`, `pyproject.toml` with console entry point, `src/<pkg>/cli.py` as the canonical thin dazzlecmd-lib consumer with the commented `nest_all_under` stub per OQ-E, smoke test, README, .gitignore). Both support `--with-starter` (a hello tool); aggregator flags: `--command`, `--description`, `--tools-dir`, `--manifest`, with defaults resolving CLI flag > config `new` section > built-in (4d-7). **Verified end-to-end:** a generated aggregator's own CLI (`mytools list`) discovers and dispatches its starter tool out of the box, and its generated smoke test passes.

@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.23] - 2026-06-11
+
+Ships with dazzlecmd v0.9.21 -- terminal-width-aware kit-status description wrapping (`render_kit_status`) + width-aware truncation in `render_tree` and the flat-list fallback (was hardcoded 57/60 chars).
+
 ## [0.8.22] - 2026-06-11
 
 Ships with dazzlecmd v0.9.20 -- the `aggregator/` template tree (4d-2).
