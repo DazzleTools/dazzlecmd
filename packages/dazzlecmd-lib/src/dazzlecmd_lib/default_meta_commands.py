@@ -58,6 +58,32 @@ def _constitutional_entry(entry) -> bool:
             and _is_constitutional(entry.get("name", "")))
 
 
+# ---------------------------------------------------------------------------
+# Display-layout constants (shared by the lib renderers and consumer CLIs).
+# The preferred pattern for COLUMN widths is data-computed (the #48 drill-in
+# discipline: width = max over the actual rows); these constants exist for the
+# genuinely fixed parts of the layout that data can't derive.
+# ---------------------------------------------------------------------------
+
+# get_terminal_size fallback when no TTY is attached (pipes, CI, byte-gate).
+TERM_SIZE_FALLBACK = (80, 24)
+
+# Never wrap or truncate a description below this many columns -- on absurdly
+# narrow terminals, overflow beats unreadable two-character shards.
+MIN_DESC_WIDTH = 20
+
+# Kit-name column in the kit list/status summary views.
+KIT_NAME_COL = 16
+
+# Hanging indent for summary-view description lines (kit list/status).
+SUMMARY_INDENT = 4
+
+
+def _term_width():
+    """The terminal's column count, with the standard non-TTY fallback."""
+    return _shutil.get_terminal_size(TERM_SIZE_FALLBACK).columns
+
+
 def _wrap_description(text, width):
     """Wrap a description string to fit within a given width.
 
@@ -109,7 +135,7 @@ def _print_legend_entry(marker, text, term_width, *, color=()):
     """
     prefix = f"  {marker} "                 # plain -> drives all width/indent math
     indent = " " * len(prefix)
-    avail = max(20, term_width - len(prefix))
+    avail = max(MIN_DESC_WIDTH, term_width - len(prefix))
     lines = _wrap_description(text, avail)
     shown_marker = marker
     if color and _colors.should_use_color():
@@ -235,8 +261,8 @@ def render_list(args, projects, engine=None) -> int:
             desc = project.description or ""
             # Width-aware truncation (was a hard 57-char cut).
             _fl_avail = max(
-                20,
-                _shutil.get_terminal_size((80, 24)).columns
+                MIN_DESC_WIDTH,
+                _term_width()
                 - (2 + name_width + 2 + kit_col_width + 2),
             )
             if len(desc) > _fl_avail:
@@ -409,7 +435,7 @@ def render_list(args, projects, engine=None) -> int:
             return entry["name"]
         return f"{entry['name']} {''.join(marker_strs)}"
 
-    term_width = _shutil.get_terminal_size((80, 24)).columns
+    term_width = _term_width()
 
     def _print_styled_row(styled, plain, target_width, suffix):
         """Print row with width padding computed on plain (unstyled) label,
@@ -1169,8 +1195,8 @@ def render_info(args, projects, engine) -> int:
     _label = "Description: "
     _indent = " " * len(_label)
     _desc = project.description or ""
-    _term_width = _shutil.get_terminal_size((80, 24)).columns
-    _wrap_width = max(20, _term_width - len(_label))
+    _tw = _term_width()
+    _wrap_width = max(MIN_DESC_WIDTH, _tw - len(_label))
     _wrapped = _wrap_description(_desc, _wrap_width)
     print(f"{_label}{_wrapped[0]}")
     for _line in _wrapped[1:]:
@@ -1250,7 +1276,7 @@ def render_info(args, projects, engine) -> int:
             if _use_color else "Details:"
         )
         print(details_header)
-        term_width = _shutil.get_terminal_size((80, 24)).columns
+        term_width = _term_width()
         indent = "  "
         wrap_width = max(20, term_width - len(indent))
         for line in long_desc.splitlines():
@@ -1390,13 +1416,13 @@ def render_kit_list(args, kits, projects) -> int:
         name = kit.kit_name or kit.name
         active = _dim(" (always active)") if kit.always_active else ""
         tool_count = len(kit.tools or [])
-        print(f"  {_bold(f'{name:<16}')} {tool_count} tool(s){active}")
+        print(f"  {_bold(f'{name:<{KIT_NAME_COL}}')} {tool_count} tool(s){active}")
         if kit.description:
             # Word-wrap the kit description to terminal width with the
             # 4-space hanging indent (the render_list discipline; was an
             # unwrapped line the terminal broke mid-word).
             _ks_avail = max(
-                20, _shutil.get_terminal_size((80, 24)).columns - 4)
+                MIN_DESC_WIDTH, _term_width() - SUMMARY_INDENT)
             for _ks_line in _wrap_description(kit.description, _ks_avail):
                 print(f"    {_ks_line}")
     return 0
@@ -1709,10 +1735,10 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
             shadow_marker = _shadow(" [shadowed]") if shadowed else ""
             # Truncate the description to the REAL terminal width (was a
             # hard 57-char cut that wasted wide terminals).
-            _tr_term_width = _shutil.get_terminal_size((80, 24)).columns
+            _tr_term_width = _term_width()
             _tr_used = (len(branch_indent) + len(tool_prefix) + len(fqcn)
                         + (len(" [shadowed]") if shadowed else 0) + 2)
-            _tr_avail = max(20, _tr_term_width - _tr_used)
+            _tr_avail = max(MIN_DESC_WIDTH, _tr_term_width - _tr_used)
             if len(desc) > _tr_avail:
                 desc = desc[:_tr_avail - 3] + "..."
             print(f"{branch_indent}{tool_prefix}{fqcn}{shadow_marker}  {desc}")

@@ -107,7 +107,13 @@ def build_parser(projects, engine=None):
 # The remaining dazzlecmd consumer is `_cmd_kit_list`'s virtual-kit listing
 # (Category C; deferred to X-22-full collapse). Re-export keeps that consumer
 # working without import-path edits while eliminating duplicate-code drift.
-from dazzlecmd_lib.default_meta_commands import _wrap_description  # noqa: F401
+from dazzlecmd_lib.default_meta_commands import (  # noqa: F401
+    _wrap_description,
+    KIT_NAME_COL,
+    MIN_DESC_WIDTH,
+    SUMMARY_INDENT,
+    TERM_SIZE_FALLBACK,
+)
 
 
 def _build_categorized_help(projects):
@@ -137,18 +143,27 @@ def _build_categorized_help(projects):
 
     # Detect terminal width for description truncation
     import shutil
-    term_width = shutil.get_terminal_size((80, 24)).columns
+    term_width = shutil.get_terminal_size(TERM_SIZE_FALLBACK).columns
 
     # Build output
     lines = []
     name_width = 16
-    desc_width = term_width - name_width - 4  # 2 indent + 2 gap
+
+    def _one_line_row(name, desc):
+        """One row, truncated to the REAL line budget. A name longer than
+        ``name_width`` overflows its column, so the description budget must
+        be computed from the ACTUAL printed prefix (2 indent + name-or-column
+        + 2 gap) -- a fixed budget let long-named rows exceed the terminal
+        width and the terminal hard-wrapped the tail mid-word."""
+        used = 2 + max(name_width, len(name)) + 2
+        avail = term_width - used
+        if avail > MIN_DESC_WIDTH and len(desc) > avail:
+            desc = desc[:avail - 3] + "..."
+        return f"  {name:<{name_width}}  {desc}"
 
     lines.append("commands:")
     for cmd, desc in builtins:
-        if desc_width > 20 and len(desc) > desc_width:
-            desc = desc[:desc_width - 3] + "..."
-        lines.append(f"  {cmd:<{name_width}}  {desc}")
+        lines.append(_one_line_row(cmd, desc))
 
     # Tool categories by namespace
     for ns in sorted(namespaces.keys()):
@@ -156,9 +171,7 @@ def _build_categorized_help(projects):
         lines.append("")
         lines.append(f"{ns} tools:")
         for name, desc in sorted(tools):
-            if desc_width > 20 and len(desc) > desc_width:
-                desc = desc[:desc_width - 3] + "..."
-            lines.append(f"  {name:<{name_width}}  {desc}")
+            lines.append(_one_line_row(name, desc))
 
     lines.append("")
     lines.append("Run 'dz <command> --help' for details on a specific command.")
@@ -731,7 +744,7 @@ def _cmd_kit_list(args, kits, projects, engine=None):
                 rows.append((ref_name, "", "(not found)"))
 
         import shutil
-        term_width = shutil.get_terminal_size((80, 24)).columns
+        term_width = shutil.get_terminal_size(TERM_SIZE_FALLBACK).columns
 
         name_width = max(len(r[0]) for r in rows)
         platform_width = max(len(r[1]) for r in rows)
@@ -765,8 +778,8 @@ def _cmd_kit_list(args, kits, projects, engine=None):
         # lib's render_kit_status). Pad INSIDE the colorize so the 16-char
         # field math runs on plain text and ANSI never skews alignment.
         name_styled = (
-            _colors.colorize(f"{name:<16}", _colors.BOLD)
-            if _use_color else f"{name:<16}"
+            _colors.colorize(f"{name:<{KIT_NAME_COL}}", _colors.BOLD)
+            if _use_color else f"{name:<{KIT_NAME_COL}}"
         )
         print(f"  {name_styled} {tool_count} tool(s)  [{status}]")
         if kit.description:
@@ -776,7 +789,9 @@ def _cmd_kit_list(args, kits, projects, engine=None):
             # _wrap_description import (a local import here would shadow the
             # drill-in's use below into an UnboundLocalError).
             import shutil as _shutil_kl
-            avail = max(20, _shutil_kl.get_terminal_size((80, 24)).columns - 4)
+            avail = max(MIN_DESC_WIDTH,
+                        _shutil_kl.get_terminal_size(TERM_SIZE_FALLBACK).columns
+                        - SUMMARY_INDENT)
             for line in _wrap_description(kit.description, avail):
                 print(f"    {line}")
     return 0
@@ -831,7 +846,7 @@ def _render_virtual_kit_aliases(kit, projects, engine):
     print("  " + "-" * (len(header) - 2))
 
     import shutil
-    term_width = shutil.get_terminal_size((80, 24)).columns
+    term_width = shutil.get_terminal_size(TERM_SIZE_FALLBACK).columns
     desc_col = 2 + alias_width + 2 + target_width + 2
     desc_max = term_width - desc_col
 

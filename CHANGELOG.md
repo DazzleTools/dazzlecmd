@@ -4,6 +4,14 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.23] - 2026-06-11
+
+**`dz -h` long-name overflow fixed + display-layout constants (no behavior change).** The help epilog truncated descriptions against a fixed budget, so a tool name longer than the 16-char column (e.g. `claude-session-metadata`) pushed its description past the terminal edge and the terminal hard-wrapped the tail mid-word; each row now budgets from its ACTUAL printed prefix (still one line per tool). The display magic numbers are now named constants in the lib (`TERM_SIZE_FALLBACK`, `MIN_DESC_WIDTH`, `KIT_NAME_COL`, `SUMMARY_INDENT` + a `_term_width()` helper), consumed by both the lib renderers and dazzlecmd's CLI -- data-computed widths (the #48 discipline) remain the preferred pattern for columns.
+
+### Versions
+
+- dazzlecmd 0.9.22 -> 0.9.23 (PATCH); dazzlecmd-lib 0.8.23 -> 0.8.24 (PATCH); dazzle-dz -> 0.9.23.
+
 ## [0.9.22] - 2026-06-11
 
 **`dz kit list` kit names render BOLD** -- the row anchor stands out (matches the lib's `render_kit_status`, which already bolded names). Color-gated (`should_use_color`): piped output stays plain, so scripts and the byte-gate see identical bytes. dazzlecmd-side only (`cli.py`'s custom kit-list handler); the lib is unchanged.
@@ -3089,7 +3097,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.22...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.23...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

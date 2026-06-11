@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.24] - 2026-06-11
+
+Ships with dazzlecmd v0.9.23 -- display-layout constants. `TERM_SIZE_FALLBACK` (80, 24), `MIN_DESC_WIDTH` (20), `KIT_NAME_COL` (16), `SUMMARY_INDENT` (4) + `_term_width()` replace the scattered magic numbers across the renderers (data-computed column widths stay the preferred pattern). Pure refactor: byte-gate-identical.
+
 ## [0.8.23] - 2026-06-11
 
 Ships with dazzlecmd v0.9.21 -- terminal-width-aware kit-status description wrapping (`render_kit_status`) + width-aware truncation in `render_tree` and the flat-list fallback (was hardcoded 57/60 chars).
