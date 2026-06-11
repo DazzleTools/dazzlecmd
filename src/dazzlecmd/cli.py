@@ -1266,7 +1266,16 @@ def _with_template(target_dir, placeholders, defaults):
             print(f"  [with:template] source: {url}")
             return added
     finally:
-        _sh.rmtree(tmp, ignore_errors=True)
+        # Windows: the clone's read-only .git objects make a plain rmtree
+        # fail silently (ignore_errors) and leak the temp dir -- chmod+retry.
+        def _on_rm_error(func, path, _exc):
+            import stat as _stat
+            try:
+                os.chmod(path, _stat.S_IWRITE)
+                func(path)
+            except OSError:
+                pass
+        _sh.rmtree(tmp, onerror=_on_rm_error)
 
     # Bundled minimal fallback (OQ-G2)
     fallback = os.path.join(_find_templates_root(), "repokit_fallback")
