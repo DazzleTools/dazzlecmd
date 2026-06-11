@@ -7,7 +7,7 @@
 [![Installs](https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/djdarcy/d10d1c2194e7a4842e323a9dacef2e08/raw/installs.json)](https://dazzletools.github.io/dazzlecmd/stats/#installs)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](#cross-platform)
 
-> **A tool for tools.**
+> **A tool for tools: many tools, one command.**
 
 A framework for tools -- and for how tools compound on each other. DazzleCMD aggregates many small standalone tools into one discoverable, version-tracked interface, and lets them nest and grow into kits and whole aggregators. Instead of remembering where dozens of scripts live or hunting through folders, just use `dz <tool> [args]`.
 
