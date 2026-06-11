@@ -4,6 +4,24 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.15] - 2026-06-10
+
+**#37 Tier-1 closeout: PowerShell links + aggregator-name audit.** Two of the remaining (non-parked) #37 Tier-1 acceptance criteria. The constitutional `core.links.create_link` now creates Windows directory links via PowerShell `New-Item` (SymbolicLink → Junction fallback) instead of `cmd /c mklink`, which fails silently when invoked as a subprocess from bash/WSL (CLAUDE.md rule #4 self-violation). A `mode.py` audit for aggregator-name hardcoding found one user-facing string (the `ModeRebindContext.undo()` error said `dz mode restore` literally) and fixed it to use the aggregator's `command` — so wtf-windows/amdead see their own CLI name. (Tier-3 convenience features `mode status --complete` / `switch --all` remain parked per the issue, awaiting concrete user demand.)
+
+### Changed
+
+- `core.links._create_link_windows`: PowerShell `New-Item -ItemType SymbolicLink/Junction` (reliable exit codes across invocation contexts; correct single-quote path escaping for spaces). `ModeRebindContext.undo()` error uses `self.command`, not a hardcoded `dz`.
+
+### Added
+
+- `packages/dazzlecmd-lib/tests/test_core_links.py` — create/remove round-trip, spaced-path quoting (the PowerShell-rewrite regression), occupied-target refusal.
+
+### Versions
+
+- dazzlecmd 0.9.14 -> 0.9.15 (PATCH).
+- dazzlecmd-lib 0.8.16 -> 0.8.17 (PATCH).
+- dazzle-dz alias -> 0.9.15; deps re-pinned to >=0.9.15 / >=0.8.17.
+
 ## [0.9.14] - 2026-06-10
 
 **Refactor (DRY): consolidate the two trash-recovery loops.** `cmd_recover` (fuzzy time-pattern, multi-folder) and the new `recover_folder` (exact-name, single-folder) shared their per-entry recovery loop; it's now extracted into one private `_recover_folder_entries` helper that both call. No behavior change — each keeps its own folder-resolution front-end, remove-on-success policy, and summary wording. `recover_folder` gains `metadata_only` parity.
@@ -2967,7 +2985,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.14...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.15...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

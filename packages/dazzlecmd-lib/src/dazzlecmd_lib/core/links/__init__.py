@@ -99,33 +99,49 @@ def create_link(source_path, target_path):
 
 
 def _create_link_windows(source_path, target_path):
-    """Create directory link on Windows: mklink /D -> mklink /J fallback."""
-    # Try symbolic link first
-    try:
-        result = subprocess.run(
-            ["cmd", "/c", "mklink", "/D", target_path, source_path],
-            capture_output=True, text=True, timeout=10
-        )
-        if result.returncode == 0:
-            return "symlink"
-    except (OSError, subprocess.TimeoutExpired):
-        pass
+    """Create a directory link on Windows via PowerShell ``New-Item``.
 
-    # Fall back to junction (no admin required)
-    try:
-        result = subprocess.run(
-            ["cmd", "/c", "mklink", "/J", target_path, source_path],
-            capture_output=True, text=True, timeout=10
+    Tries a symbolic link first (``New-Item -ItemType SymbolicLink``; needs admin
+    or Developer Mode), then falls back to a junction (``New-Item -ItemType
+    Junction``; no elevation, directory-only). Returns "symlink", "junction", or
+    None.
+
+    PowerShell is used instead of ``cmd /c mklink``: mklink fails silently when
+    invoked as a subprocess from bash/WSL (CLAUDE.md rule #4; #37 Tier-1
+    criterion -- "PowerShell New-Item replaces cmd.exe /c mklink"). PowerShell
+    gives reliable exit codes and error reporting across invocation contexts.
+    """
+    def _ps_new_item(item_type):
+        # Single-quote the paths as PowerShell literal strings; double any
+        # embedded single quote (PowerShell's literal-escape). $ErrorAction=Stop
+        # makes a failed New-Item return a non-zero exit code.
+        src = source_path.replace("'", "''")
+        tgt = target_path.replace("'", "''")
+        ps = (
+            "$ErrorActionPreference='Stop'; "
+            f"New-Item -ItemType {item_type} -Path '{tgt}' -Target '{src}' "
+            "| Out-Null"
         )
-        if result.returncode == 0:
-            return "junction"
-    except (OSError, subprocess.TimeoutExpired):
-        pass
+        try:
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
+                capture_output=True, text=True, timeout=15,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            return False
+        # Confirm the link actually materialized (a non-zero rc OR a missing
+        # link both mean failure -> let the next mechanism try).
+        return result.returncode == 0 and is_linked_project(target_path)
+
+    if _ps_new_item("SymbolicLink"):
+        return "symlink"
+    if _ps_new_item("Junction"):
+        return "junction"
 
     print(f"Error: Could not create link: {target_path} -> {source_path}",
           file=sys.stderr)
-    print("  mklink /D failed (may need admin). mklink /J also failed.",
-          file=sys.stderr)
+    print("  New-Item -ItemType SymbolicLink failed (may need admin / Developer "
+          "Mode); Junction also failed.", file=sys.stderr)
     return None
 
 

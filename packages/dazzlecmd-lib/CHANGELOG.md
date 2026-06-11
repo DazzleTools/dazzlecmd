@@ -8,6 +8,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.17] - 2026-06-10
+
+Ships with dazzlecmd v0.9.15 -- #37 Tier-1 closeout: PowerShell link creation + aggregator-name audit.
+
+### Changed
+
+- `core.links._create_link_windows`: creates Windows directory links via PowerShell `New-Item -ItemType SymbolicLink` (→ `Junction` fallback) instead of `cmd /c mklink`. mklink fails silently when run as a subprocess from bash/WSL (CLAUDE.md rule #4); PowerShell gives reliable exit codes and proper path quoting. Confirms the link materialized (`is_linked_project`) before reporting success. Note: `New-Item` auto-creates a missing parent dir (benign; mode switch's namespace dir always exists) and still refuses an occupied target.
+- `mode.ModeRebindContext.undo()`: the out-of-orbit error message uses `self.command` (the aggregator's CLI name) instead of a hardcoded `dz` -- so consumers like wtf-windows/amdead see their own command. Found by a `mode.py` audit for aggregator-name hardcoding (a #37 Tier-1 criterion); no other code-level hardcoding remained.
+
+### Added
+
+- `tests/test_core_links.py` pinning the constitutional `create_link` primitive (round-trip, spaced-path quoting, occupied-target refusal).
+
 ## [0.8.16] - 2026-06-10
 
 Ships with dazzlecmd v0.9.14 -- DRY refactor of the trash-recovery loops. No behavior change.

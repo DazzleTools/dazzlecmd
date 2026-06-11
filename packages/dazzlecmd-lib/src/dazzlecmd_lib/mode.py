@@ -1442,8 +1442,8 @@ class ModeRebindContext:
                 f"was one-way (reversible=False) -- entering the orbit from outside "
                 f"is not auto-invertible by this context (which drives the in-orbit "
                 f"dev<->publish mechanism). If the prior form was an embedded "
-                f"directory, recover it with 'dz mode restore {short}' (#37); a "
-                f"LOCAL_ONLY entry has nothing to recover."
+                f"directory, recover it with '{self.command} mode restore {short}' "
+                f"(#37); a LOCAL_ONLY entry has nothing to recover."
             )
         entity = getattr(self, "_applied_entity", None)
         if entity is None:
