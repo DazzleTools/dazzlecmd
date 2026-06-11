@@ -27,6 +27,11 @@ violation (enforced by ``tests/test_constitutional_contract.py``).
 
 from __future__ import annotations
 
+# Subprocess timeouts (seconds): PowerShell New-Item pays shell startup
+# cost (hence the headroom); rmdir of a junction is a fast local op.
+_PS_LINK_TIMEOUT = 15
+_RMDIR_TIMEOUT = 10
+
 import os
 import subprocess
 import sys
@@ -137,7 +142,7 @@ def _create_link_windows(source_path, target_path):
         try:
             result = subprocess.run(
                 ["powershell", "-NoProfile", "-NonInteractive", "-Command", ps],
-                capture_output=True, text=True, timeout=15,
+                capture_output=True, text=True, timeout=_PS_LINK_TIMEOUT,
             )
         except (OSError, subprocess.TimeoutExpired):
             return False
@@ -180,7 +185,7 @@ def remove_link(target_path):
         if sys.platform == "win32":
             result = subprocess.run(
                 ["cmd", "/c", "rmdir", target_path],
-                capture_output=True, text=True, timeout=10
+                capture_output=True, text=True, timeout=_RMDIR_TIMEOUT
             )
             return result.returncode == 0
         else:

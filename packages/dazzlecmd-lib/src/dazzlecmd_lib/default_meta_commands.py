@@ -1393,19 +1393,26 @@ def render_kit_list(args, kits, projects) -> int:
             if match:
                 p = match[0]
                 desc = p.description or ""
-                if len(desc) > 55:
-                    desc = desc[:52] + "..."
+                # Width-aware truncation budgeted from this row's ACTUAL
+                # printed prefix (a long name overflows its column), replacing
+                # the hardcoded 55-char cut. One line per tool preserved.
+                _rk_used = (2 + max(KIT_NAME_COL, len(display_name)) + 1
+                            + KIT_NAME_COL + 1)
+                _rk_avail = max(MIN_DESC_WIDTH, _term_width() - _rk_used)
+                if len(desc) > _rk_avail:
+                    desc = desc[:_rk_avail - 3] + "..."
                 platform = p.platform or ""
                 # DIM "cross-platform"; leave OS-specific values plain so
                 # they stand out (windows / linux / macos).
                 platform_styled = (
-                    _dim(f"{platform:<16}")
+                    _dim(f"{platform:<{KIT_NAME_COL}}")
                     if _use_color and platform == "cross-platform"
-                    else f"{platform:<16}"
+                    else f"{platform:<{KIT_NAME_COL}}"
                 )
-                print(f"  {display_name:<16} {platform_styled} {desc}")
+                print(f"  {display_name:<{KIT_NAME_COL}} {platform_styled} {desc}")
             else:
-                print(f"  {display_name:<16} {'':16} {_dim('(not found)')}")
+                print(f"  {display_name:<{KIT_NAME_COL}} {'':{KIT_NAME_COL}} "
+                      f"{_dim('(not found)')}")
         print(f"\n  {len(tool_refs)} tool(s)")
         return 0
 

@@ -144,6 +144,15 @@ def _load_full_config(project_root):
 MODE_LOCAL_SCHEMA_VERSION = 2
 
 
+# Subprocess timeouts (seconds) for the git operations a mode swap runs.
+# CLONE is the long pole (a first-time `git submodule add` fetches the whole
+# repo over the network); UPDATE re-checks-out an already-fetched submodule;
+# QUERY covers fast local read-only calls (status/config probes).
+GIT_CLONE_TIMEOUT = 120
+GIT_UPDATE_TIMEOUT = 60
+GIT_QUERY_TIMEOUT = 10
+
+
 def _save_full_config(project_root, data):
     """Save full mode_local.json contents (stamped with the schema version)."""
     config_path = os.path.join(project_root, "mode_local.json")
@@ -833,7 +842,7 @@ def _check_dirty_tree(tool_dir):
     try:
         toplevel = subprocess.run(
             ["git", "-C", tool_dir, "rev-parse", "--show-toplevel"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, timeout=GIT_QUERY_TIMEOUT,
         )
     except (OSError, subprocess.TimeoutExpired):
         return ""
@@ -848,7 +857,7 @@ def _check_dirty_tree(tool_dir):
     try:
         result = subprocess.run(
             ["git", "-C", tool_dir, "status", "--porcelain"],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True, text=True, timeout=GIT_QUERY_TIMEOUT,
         )
     except (OSError, subprocess.TimeoutExpired):
         # `git` missing, or `tool_dir` somehow unreachable. Don't block
@@ -1137,7 +1146,7 @@ def _switch_to_publish(project, project_root, gitmodules, dry_run, force,
             result = subprocess.run(
                 ["git", "-C", project_root, "submodule", "add",
                  remote_url, rel_key],
-                capture_output=True, text=True, timeout=120,
+                capture_output=True, text=True, timeout=GIT_CLONE_TIMEOUT,
             )
             if result.returncode != 0:
                 print(f"Error: git submodule add failed: "
@@ -1176,7 +1185,7 @@ def _switch_to_publish(project, project_root, gitmodules, dry_run, force,
         result = subprocess.run(
             ["git", "-C", project_root, "submodule", "update", "--init",
              submodule_path],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True, text=True, timeout=GIT_UPDATE_TIMEOUT,
         )
         if result.returncode != 0:
             print(f"Error: git submodule update failed: "

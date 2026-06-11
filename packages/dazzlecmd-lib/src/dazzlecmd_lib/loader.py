@@ -212,6 +212,22 @@ def _load_in_repo_kit_manifest(projects_dir, kit_name):
                 hints["manifest"] = inner["manifest"]
             if "tools_dir" in hints and "manifest" in hints:
                 break
+
+        # Description fallback: an embedded AGGREGATOR has no .kit.json, but
+        # its own aggregator.json description IS the right description for
+        # the kit entry (it describes the embedded thing itself -- unlike
+        # inner-kit identity fields, which stay excluded). Surfaces in
+        # `dz kit list`; the registry pointer's name still wins identity.
+        agg_manifest = os.path.join(kit_dir, "aggregator.json")
+        if "description" not in hints and os.path.isfile(agg_manifest):
+            try:
+                with open(agg_manifest, "r", encoding="utf-8") as f:
+                    agg = json.load(f)
+                if agg.get("description"):
+                    hints["description"] = agg["description"]
+            except (json.JSONDecodeError, OSError):
+                pass
+
         return hints if hints else None
 
     return None

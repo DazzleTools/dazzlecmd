@@ -773,7 +773,11 @@ class AggregatorEngine:
         else:
             current = os.path.dirname(os.path.abspath(__file__))
 
-        for _ in range(5):
+        # Walk up at most this many parents looking for tools_dir+kits_dir
+        # (legacy root detection; aggregator.json via find_aggregator_root
+        # is the modern marker with its own documented max_depth).
+        _ROOT_WALK_LIMIT = 5
+        for _ in range(_ROOT_WALK_LIMIT):
             parent = os.path.dirname(current)
             if parent == current:
                 break

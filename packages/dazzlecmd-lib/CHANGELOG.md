@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.25] - 2026-06-11
+
+Ships with dazzlecmd v0.9.24.
+
+### Fixed
+
+- Embedded aggregators (kits with `kits/` but no `.kit.json`, e.g. wtf) now surface their `aggregator.json` description in kit listings (loader hint fallback; identity fields remain excluded).
+
+### Changed
+
+- `render_kit_list` legacy drill-in rows: width-aware truncation budgeted per row (was hardcoded 55); columns use `KIT_NAME_COL`. Named constants for the `find_project_root` walk limit and mode/links subprocess timeouts (`GIT_CLONE_TIMEOUT`/`GIT_UPDATE_TIMEOUT`/`GIT_QUERY_TIMEOUT`, `_PS_LINK_TIMEOUT`/`_RMDIR_TIMEOUT`).
+
 ## [0.8.24] - 2026-06-11
 
 Ships with dazzlecmd v0.9.23 -- display-layout constants. `TERM_SIZE_FALLBACK` (80, 24), `MIN_DESC_WIDTH` (20), `KIT_NAME_COL` (16), `SUMMARY_INDENT` (4) + `_term_width()` replace the scattered magic numbers across the renderers (data-computed column widths stay the preferred pattern). Pure refactor: byte-gate-identical.
