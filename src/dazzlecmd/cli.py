@@ -103,10 +103,9 @@ def build_parser(projects, engine=None):
     return parser
 
 
-# _wrap_description: canonical implementation lives in dazzlecmd_lib.
-# The remaining dazzlecmd consumer is `_cmd_kit_list`'s virtual-kit listing
-# (Category C; deferred to X-22-full collapse). Re-export keeps that consumer
-# working without import-path edits while eliminating duplicate-code drift.
+# Display helpers: canonical implementations live in dazzlecmd_lib.
+# (The kit-list renderer itself moved to the lib in the unification DWP,
+# 2026-06-11 -- dazzlecmd no longer carries a custom _cmd_kit_list.)
 from dazzlecmd_lib.default_meta_commands import (  # noqa: F401
     _wrap_description,
     KIT_NAME_COL,
@@ -546,7 +545,9 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
     elif meta == "info":
         return _cmd_info(args, projects, engine=engine)
     elif meta == "kit_list":
-        return _cmd_kit_list(args, kits, projects, engine=engine)
+        # Unified renderer: the lib handler passes engine (kit-list DWP).
+        from dazzlecmd_lib.default_meta_commands import kit_list_handler
+        return kit_list_handler(args, engine, projects, kits, project_root)
     elif meta == "kit_status":
         return _cmd_kit_status(kits, engine=engine)
     elif meta == "kit":
@@ -644,224 +645,6 @@ def _cmd_info(args, projects, engine):
     from dazzlecmd_lib.default_meta_commands import render_info
     return render_info(args, projects, engine)
 
-
-def _cmd_kit_list(args, kits, projects, engine=None):
-    """List available kits, or tools in a specific kit.
-
-    When invoked without a kit name, shows all discovered kits with
-    enabled/disabled/always-active status based on the user's config.
-    """
-    kit_name = getattr(args, "name", None)
-
-    if not kits:
-        print("No kits found.")
-        return 0
-
-    # Compute enabled/disabled status from config
-    enabled_set = set()
-    disabled_set = set()
-    if engine is not None:
-        config = engine._get_user_config()
-        active_list = config.get("active_kits")
-        disabled_list = config.get("disabled_kits") or []
-        if isinstance(active_list, list):
-            enabled_set = set(active_list)
-        if isinstance(disabled_list, list):
-            disabled_set = set(disabled_list)
-
-    def _kit_status(kit):
-        name = kit.kit_name or kit.name
-        if name in disabled_set:
-            return "disabled"
-        if kit.always_active:
-            return "always active"
-        if enabled_set and name not in enabled_set:
-            return "disabled (not in active_kits)"
-        return "enabled"
-
-    if kit_name:
-        # Show tools in a specific kit
-        matching = [k for k in kits if (k.kit_name or k.name) == kit_name]
-        if not matching:
-            print(f"Kit '{kit_name}' not found. Available kits:")
-            for k in kits:
-                print(f"  {k.kit_name or k.name}")
-            return 1
-
-        kit = matching[0]
-        name = kit.kit_name or kit.name
-        status = _kit_status(kit)
-        is_virtual = kit.virtual is True
-        label = "virtual, " + status if is_virtual else status
-        print(f"Kit: {name} [{label}]")
-        if kit.description:
-            print(f"  {kit.description}")
-        print()
-
-        # Virtual-kit drill-in: show alias FQCN + canonical target +
-        # description for each declared alias. Without this, users
-        # see canonical short names and miss the whole point of the
-        # virtual kit (its aliases).
-        if is_virtual:
-            return _render_virtual_kit_aliases(kit, projects, engine)
-
-        tool_refs = kit.tools or []
-        if not tool_refs:
-            print("  No tools in this kit.")
-            return 0
-
-        # Build rows first so per-column widths can be computed from
-        # actual data instead of the v0.7.28-and-earlier fixed 16-char
-        # columns. Matches the `dz list` flat-fallback layout.
-        rows = []  # (name, platform, description_or_notfound_marker)
-        for ref in sorted(tool_refs):
-            # Modern path: ref is a full FQCN as written by
-            # ``engine._discover_aggregator``'s post-recursion populate
-            # (e.g., ``wtf:core:locked``). Match by ``_fqcn`` directly so
-            # multi-segment FQCNs resolve.
-            match = [p for p in projects if p.fqcn == ref]
-            if match:
-                p = match[0]
-                ref_name = p.name
-            else:
-                # Legacy fallback: parse ref as ``ns:name`` for existing
-                # kit manifests that use 2-segment refs.
-                if ":" in ref:
-                    ns, ref_name = ref.split(":", 1)
-                else:
-                    ns, ref_name = "", ref
-                match = [
-                    p for p in projects
-                    if p.name == ref_name
-                    and (not ns or p.namespace == ns)
-                ]
-            if match:
-                p = match[0]
-                rows.append(
-                    (ref_name, p.platform or "", p.description or "")
-                )
-            else:
-                rows.append((ref_name, "", "(not found)"))
-
-        import shutil
-        term_width = shutil.get_terminal_size(TERM_SIZE_FALLBACK).columns
-
-        name_width = max(len(r[0]) for r in rows)
-        platform_width = max(len(r[1]) for r in rows)
-        indent = "  "
-        # 2 indent + name + 2 gap + platform + 2 gap = description column
-        desc_col = len(indent) + name_width + 2 + platform_width + 2
-        desc_max = term_width - desc_col
-
-        for n, plat, desc in rows:
-            wrapped = _wrap_description(desc, desc_max)
-            print(
-                f"{indent}{n:<{name_width}}  "
-                f"{plat:<{platform_width}}  {wrapped[0]}"
-            )
-            wrap_indent = " " * desc_col
-            for line in wrapped[1:]:
-                print(f"{wrap_indent}{line}")
-
-        print(f"\n  {len(tool_refs)} tool(s)")
-        return 0
-
-    # No name given — list all kits with status
-    _use_color = _colors.should_use_color()
-    for i, kit in enumerate(kits):
-        if i > 0:
-            print()  # blank line separator for readability
-        name = kit.kit_name or kit.name
-        status = _kit_status(kit)
-        tool_count = len(kit.tools or [])
-        # BOLD the kit name so it stands out as the row anchor (matches the
-        # lib's render_kit_status). Pad INSIDE the colorize so the 16-char
-        # field math runs on plain text and ANSI never skews alignment.
-        name_styled = (
-            _colors.colorize(f"{name:<{KIT_NAME_COL}}", _colors.BOLD)
-            if _use_color else f"{name:<{KIT_NAME_COL}}"
-        )
-        print(f"  {name_styled} {tool_count} tool(s)  [{status}]")
-        if kit.description:
-            # Word-wrap to terminal width with a hanging indent -- the
-            # render_list formatting discipline (was an unwrapped line the
-            # terminal broke mid-word). Uses the module-level
-            # _wrap_description import (a local import here would shadow the
-            # drill-in's use below into an UnboundLocalError).
-            import shutil as _shutil_kl
-            avail = max(MIN_DESC_WIDTH,
-                        _shutil_kl.get_terminal_size(TERM_SIZE_FALLBACK).columns
-                        - SUMMARY_INDENT)
-            for line in _wrap_description(kit.description, avail):
-                print(f"    {line}")
-    return 0
-
-
-def _render_virtual_kit_aliases(kit, projects, engine):
-    """Drill-in rendering for a virtual kit: show each alias FQCN with
-    its canonical target and canonical description.
-
-    Works by iterating ``engine.fqcn_index.alias_index`` and filtering
-    to aliases whose virtual-kit prefix matches this kit's name. Falls
-    back to iterating ``kit["tools"]`` + ``kit["name_rewrite"]`` when
-    no engine is available (which shouldn't happen in practice but
-    makes the code robust).
-    """
-    vk_name = kit.kit_name or kit.name
-    name_rewrite = kit.name_rewrite or {}
-    tools = kit.tools or []
-
-    # Build (alias_fqcn, canonical_fqcn, alias_short) rows
-    rows = []
-    if engine is not None and hasattr(engine, "fqcn_index"):
-        for alias_fqcn, canonical_fqcn in engine.fqcn_index.alias_index.items():
-            prefix = f"{vk_name}:"
-            if not alias_fqcn.startswith(prefix):
-                continue
-            alias_short = alias_fqcn[len(prefix):]
-            rows.append((alias_fqcn, canonical_fqcn, alias_short))
-    else:
-        # Fallback: derive from manifest directly
-        for canonical_fqcn in tools:
-            alias_short = name_rewrite.get(canonical_fqcn) or canonical_fqcn.rsplit(":", 1)[-1]
-            rows.append((f"{vk_name}:{alias_short}", canonical_fqcn, alias_short))
-
-    if not rows:
-        print("  No aliases declared in this virtual kit.")
-        return 0
-
-    rows.sort(key=lambda r: r[2])  # sort by alias short
-
-    # Build project lookup for descriptions
-    by_fqcn = {p.fqcn: p for p in projects if p.fqcn}
-
-    # Column widths
-    alias_width = max(len(r[0]) for r in rows)
-    alias_width = max(alias_width, len("Alias FQCN"))
-    target_width = max(len(r[1]) for r in rows)
-    target_width = max(target_width, len("-> Canonical"))
-
-    header = f"  {'Alias FQCN':<{alias_width}}  {'-> Canonical':<{target_width}}  Description"
-    print(header)
-    print("  " + "-" * (len(header) - 2))
-
-    import shutil
-    term_width = shutil.get_terminal_size(TERM_SIZE_FALLBACK).columns
-    desc_col = 2 + alias_width + 2 + target_width + 2
-    desc_max = term_width - desc_col
-
-    for alias_fqcn, canonical_fqcn, _alias_short in rows:
-        target_project = by_fqcn.get(canonical_fqcn)
-        desc = (target_project.description or "") if target_project else "(canonical not discovered)"
-        wrapped = _wrap_description(desc, desc_max)
-        arrow_target = f"-> {canonical_fqcn}"
-        print(f"  {alias_fqcn:<{alias_width}}  {arrow_target:<{target_width}}  {wrapped[0]}")
-        indent = " " * desc_col
-        for line in wrapped[1:]:
-            print(f"{indent}{line}")
-
-    print(f"\n  {len(rows)} alias(es) -> canonical tools")
-    return 0
 
 
 def _cmd_kit_status(kits, engine=None):

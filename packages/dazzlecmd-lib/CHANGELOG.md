@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.26] - 2026-06-11
+
+Ships with dazzlecmd v0.9.26 -- the kit-list renderer unification (the kit-list DWP, 2026-06-11).
+
+### Added
+
+- `render_kit_list(args, kits, projects, engine=None)`: with `engine` (passed by `kit_list_handler` now) renders the FULL view -- config-aware status, data-computed drill-in columns (#48), virtual-kit alias drill-in (`_render_virtual_kit_aliases`, ported from dazzlecmd). `engine=None` renders the historical output unchanged (`_render_kit_list_legacy`). Consumers using the lib default handler are upgraded automatically.
+
 ## [0.8.25] - 2026-06-11
 
 Ships with dazzlecmd v0.9.24.

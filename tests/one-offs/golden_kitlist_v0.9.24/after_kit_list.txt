@@ -1,0 +1,34 @@
+  claude           4 tool(s)  [always active]
+    Virtual kit: Claude Code helpers grouped under a shared prefix. Alias FQCNs
+    like 'claude:cleanup' resolve to the canonical dazzletools tools without
+    physically moving files. See Phase 4e design docs.
+
+  core             8 tool(s)  [always active]
+    Core tools that ship with dazzlecmd - fundamental utilities available
+    everywhere
+
+  dazzletools      17 tool(s)  [always active]
+    DazzleTools collection - cross-platform utilities
+
+  f                4 tool(s)  [always active]
+    Virtual kit: verb-grouped UX overlay for file operations. Aliases f:mv,
+    f:cp, f:ls, f:rm resolve to canonical core tools. Requires user config
+    'list_view: all' to display both canonicals (listall, safedel) AND their
+    f:* aliases side-by-side; otherwise the engine's default alias-preferred
+    mode hides the canonicals behind the aliases.
+
+  media            7 tool(s)  [enabled]
+    Media/ffmpeg toolkit - video, audio, image, gif, and metadata tasks
+
+  windows          3 tool(s)  [always active]
+    Virtual kit: Windows sysadmin tools grouped under a shared prefix. Alias
+    FQCNs like 'dazzletools:windows:sicacls' resolve to canonical dazzletools
+    tools without moving files. Gives Windows-only utilities (ACL/permission
+    fixers, diagnostics export redaction) a clear home separate from the
+    cross-platform dazzletools utilities. 'safe-icacls' is also reachable by
+    its short alias 'sicacls'; 'fixuser' (alias 'fixusr') diagnoses and repairs
+    broken or temporary user profiles.
+
+  wtf              2 tool(s)  [enabled]
+    wtf-windows -- Why is my Windows PC doing that? Many diagnostics, one
+    command.

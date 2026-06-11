@@ -1,0 +1,22 @@
+Kit: core [always active]
+  Core tools that ship with dazzlecmd - fundamental utilities available everywhere
+
+  f-cp     cross-platform  Safe copy with full metadata preservation
+                           (mtime/atime/ctime, ACLs, attributes) and clobber
+                           protection. Wraps preservelib.
+  f-mv     cross-platform  Safe move with full metadata preservation
+                           (mtime/atime/ctime, ACLs, attributes) and clobber
+                           protection. Wraps preservelib.
+  find     cross-platform  Cross-platform file search powered by fd
+  fixpath  cross-platform  Fix mangled paths and optionally open, copy, or
+                           browse files
+  links    cross-platform  Detect and display filesystem links (symlinks,
+                           junctions, hardlinks, dazzlelinks)
+  listall  cross-platform  Flexible directory structure listing with sorting,
+                           collection modes, and output formatting
+  rn       cross-platform  Rename files using regular expressions
+  safedel  cross-platform  Safe file/directory deletion with link-aware
+                           classification, metadata preservation, and
+                           recoverable trash store
+
+  8 tool(s)

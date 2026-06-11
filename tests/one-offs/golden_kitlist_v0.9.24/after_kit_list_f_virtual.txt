@@ -1,0 +1,18 @@
+Kit: f [virtual, always active]
+  Virtual kit: verb-grouped UX overlay for file operations. Aliases f:mv, f:cp, f:ls, f:rm resolve to canonical core tools. Requires user config 'list_view: all' to display both canonicals (listall, safedel) AND their f:* aliases side-by-side; otherwise the engine's default alias-preferred mode hides the canonicals behind the aliases.
+
+  Alias FQCN  -> Canonical  Description
+  -------------------------------------
+  f:cp        -> core:f-cp  Safe copy with full metadata preservation
+                            (mtime/atime/ctime, ACLs, attributes) and clobber
+                            protection. Wraps preservelib.
+  f:ls        -> core:listall  Flexible directory structure listing with sorting,
+                            collection modes, and output formatting
+  f:mv        -> core:f-mv  Safe move with full metadata preservation
+                            (mtime/atime/ctime, ACLs, attributes) and clobber
+                            protection. Wraps preservelib.
+  f:rm        -> core:safedel  Safe file/directory deletion with link-aware
+                            classification, metadata preservation, and
+                            recoverable trash store
+
+  4 alias(es) -> canonical tools

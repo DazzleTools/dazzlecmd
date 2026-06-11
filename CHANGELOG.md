@@ -4,6 +4,14 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.26] - 2026-06-11
+
+**Kit-list renderer unified into the lib (X-22-full bite 1).** `render_kit_list` gains `engine=None` -- the renderer-contract convention (renderers take the engine as the capability handle, like `render_info`). With the engine (which the registry handler already received and previously dropped) the renderer does everything dazzlecmd's custom handler did: config-aware enabled/disabled status, the #48 data-computed drill-in columns with wrapped descriptions, and the virtual-kit alias drill-in. dazzlecmd **deletes its 219-line `_cmd_kit_list`/`_render_virtual_kit_aliases`** and routes through the lib -- and every lib consumer (wtf-style aggregators) is UPGRADED from the legacy view to the full view for free. `engine=None` direct callers get the historical output unchanged. Verified: `dz kit list` / drill-in / virtual drill-in goldens byte-identical before/after.
+
+### Versions
+
+- dazzlecmd 0.9.25 -> 0.9.26 (PATCH); dazzlecmd-lib 0.8.25 -> 0.8.26 (PATCH); dazzle-dz -> 0.9.26.
+
 ## [0.9.25] - 2026-06-11
 
 **`dz new aggregator` inside-an-aggregator guard.** The target is CWD-relative, so running it from within an existing aggregator's tree nested the new project there silently. Clobbering was already impossible (existing paths refused; verified empirically against a sandbox host -- `projects`/`kits` collisions refuse, the host's `aggregator.json` is untouched), but there was no warning. Now a loud stderr note explains the nesting and suggests `cd` elsewhere; the scaffold still proceeds (non-destructive, occasionally intentional). New regression test pins refusal + host-untouched + the warning.
@@ -3113,7 +3121,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.25...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.26...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

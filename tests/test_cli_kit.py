@@ -11,11 +11,16 @@ import pytest
 
 from dazzlecmd.engine import AggregatorEngine
 from dazzlecmd_lib.testing import make_tool, make_kit
+# The kit-list renderer moved to the lib (kit-list unification DWP,
+# 2026-06-11); same signature -- these tests now pin the LIB renderer,
+# which every consumer (dz included) routes through.
+from dazzlecmd_lib.default_meta_commands import (
+    render_kit_list as _cmd_kit_list,
+)
 from dazzlecmd.cli import (
     _cmd_kit_enable,
     _cmd_kit_disable,
     _cmd_kit_focus,
-    _cmd_kit_list,
     _cmd_kit_reset,
     _cmd_kit_favorite,
     _cmd_kit_favorite_migrate_stale,
