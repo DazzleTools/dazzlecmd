@@ -1302,7 +1302,7 @@ def info_handler(args, engine, projects, kits, project_root) -> int:
 
 def kit_parser_factory(subparsers):
     """Register the ``kit`` subparser and its nested ``list``/``status``."""
-    p = subparsers.add_parser("kit", help="Manage kits")
+    p = subparsers.add_parser("kit", help="Manage {kits, aggregators, virtual kits, ...}")
     sub = p.add_subparsers(dest="kit_command")
 
     kit_list_p = sub.add_parser(

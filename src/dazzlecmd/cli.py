@@ -121,7 +121,7 @@ def _build_categorized_help(projects):
     builtins = [
         ("list", "List available tools"),
         ("info <tool>", "Show detailed info about a tool"),
-        ("kit", "Manage kits"),
+        ("kit", "Manage {kits, aggregators, virtual kits, ...}"),
         ("new <name>", "Create a new tool project"),
         ("add", "Import an existing tool/repo"),
         ("mode", "Toggle dev/publish mode"),
@@ -224,7 +224,7 @@ def _register_meta_commands(subparsers):
     info_parser.set_defaults(_meta="info")
 
     # dz kit
-    kit_parser = subparsers.add_parser("kit", help="Manage kits")
+    kit_parser = subparsers.add_parser("kit", help="Manage {kits, aggregators, virtual kits, ...}")
     kit_sub = kit_parser.add_subparsers(dest="kit_command")
 
     kit_list = kit_sub.add_parser(
