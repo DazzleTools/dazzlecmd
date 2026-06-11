@@ -101,13 +101,28 @@ def cmd_list(
     path_pattern: Optional[str] = None,
     age_filter: Optional[str] = None,
     json_output: bool = False,
+    count: Optional[int] = None,
 ) -> int:
-    """List trash contents matching the given pattern."""
+    """List trash contents matching the given pattern.
+
+    ``count`` caps the output to the N MOST RECENT matching folders. The library
+    default is ``None`` -- show all (backward-compatible for non-CLI callers).
+    The ``dz safedel list`` CLI passes ``count=10`` by default so a large trash
+    store doesn't flood the terminal; ``--count 0`` / ``--all`` restores "show
+    all". ``count <= 0`` or ``None`` means no limit.
+    """
     folders = _resolve_folders(
         store, positional_args,
         contains=contains, path_pattern=path_pattern,
         age_filter=age_filter,
     )
+    # `_resolve_folders` returns folders oldest-first; the N most recent are the
+    # tail. Keep that order so the newest still renders last (closest to the
+    # prompt), like `tail`.
+    total = len(folders)
+    truncated = count is not None and count > 0 and total > count
+    if truncated:
+        folders = folders[-count:]
     folder_names = [f.folder_name for f in folders]
 
     if not folder_names:
@@ -131,7 +146,11 @@ def cmd_list(
 
     # Table output
     print(f"\n  Trash store: {store.store_path}")
-    print(f"  {len(folder_names)} matching folder(s):\n")
+    if truncated:
+        print(f"  {len(folder_names)} most recent of {total} folder(s) "
+              f"(--count 0 or --all to show all):\n")
+    else:
+        print(f"  {len(folder_names)} matching folder(s):\n")
 
     for name in folder_names:
         folder = store.get_folder(name)

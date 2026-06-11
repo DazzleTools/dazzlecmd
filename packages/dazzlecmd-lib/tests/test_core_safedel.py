@@ -53,6 +53,54 @@ def test_trash_round_trip_isolated_store(tmp_path):
     assert "keep.txt" in staged
 
 
+def test_cmd_list_count_limits_to_most_recent(tmp_path, capsys):
+    """`cmd_list(count=N)` shows only the N most recent folders + a truncation
+    note; count=0/None shows all (the `dz safedel list` default is 10)."""
+    store = sd.TrashStore(store_path=str(tmp_path / "trash"),
+                          registry_path=str(tmp_path / "reg.json"))
+    for i in range(12):
+        d = tmp_path / f"victim_{i}"
+        d.mkdir()
+        (d / "f.txt").write_text(str(i))
+        assert store.trash([str(d)]).success
+    capsys.readouterr()  # clear trash() chatter
+
+    # default-style cap
+    assert sd.cmd_list(store, [], count=10) == 0
+    out = capsys.readouterr().out
+    assert "10 most recent of 12 folder(s)" in out
+
+    # count=0 -> show all
+    assert sd.cmd_list(store, [], count=0) == 0
+    assert "12 matching folder(s)" in capsys.readouterr().out
+
+    # count=None (library default) -> show all, backward-compatible
+    assert sd.cmd_list(store, [], count=None) == 0
+    assert "12 matching folder(s)" in capsys.readouterr().out
+
+    # fewer entries than the cap -> no truncation note
+    assert sd.cmd_list(store, [], count=50) == 0
+    out = capsys.readouterr().out
+    assert "12 matching folder(s)" in out and "most recent of" not in out
+
+
+def test_list_parser_count_and_all():
+    """The `dz safedel list` parser exposes --count (default 10) and --all."""
+    import importlib.util
+    import os
+    spec = importlib.util.spec_from_file_location(
+        "_safedel_tool",
+        os.path.join(os.path.dirname(__file__), "..", "..", "..",
+                     "projects", "core", "safedel", "safedel.py"),
+    )
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    p = tool._build_list_parser()
+    assert p.parse_args([]).count == 10          # default
+    assert p.parse_args(["--count", "5"]).count == 5
+    assert p.parse_args(["--all"]).all is True
+
+
 def test_links_detection_reexported():
     """core.links exposes the relocated detection surface core.safedel needs."""
     from dazzlecmd_lib.core.links import (

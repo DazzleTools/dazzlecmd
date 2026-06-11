@@ -4,6 +4,21 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.17] - 2026-06-11
+
+**`dz safedel list` defaults to the 10 most recent entries (new `--count` filter).** A long-lived trash store can hold hundreds of folders (e.g. 209); `dz safedel list` used to dump them all. It now shows only the **10 most recent** by default, with a clear note (`10 most recent of 209 folder(s) (--count 0 or --all to show all)`). `--count N` sets the cap; `--count 0` or `--all` shows everything. The library `cmd_list` default stays `None` (show all) so non-CLI consumers are unaffected.
+
+### Added
+
+- `dz safedel list --count N` (default 10) and `--all`. `core.safedel.cmd_list` gains a `count` param (most-recent-N cap; `None`/0 = all).
+
+### Versions
+
+- dazzlecmd 0.9.16 -> 0.9.17 (PATCH).
+- dazzlecmd-lib 0.8.18 -> 0.8.19 (PATCH).
+- safedel tool 0.1.0 -> 0.1.1 (new `--count`/`--all` flags).
+- dazzle-dz alias -> 0.9.17; deps re-pinned to >=0.9.17 / >=0.8.19.
+
 ## [0.9.16] - 2026-06-11
 
 **`dz list` footer marker legend: word-boundary wrapping + colorized markers.** The `[*]`/`[+]`/`[lib]` legend was emitted as one long line and the terminal hard-wrapped it mid-word (e.g. `alias` → `ali`/`as`). It now wraps at word boundaries with a hanging indent — continuation lines align under the start of the text so the marker stands out — mirroring tool-description wrapping. The marker token is also colorized to match the row markers (`[*]` bold-red, `[+]` cyan, `[lib]` green); width/indent math uses the plain marker length so ANSI never disturbs alignment, and color is off for pipes/byte-gate.
@@ -3003,7 +3018,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.16...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.17...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.19] - 2026-06-11
+
+Ships with dazzlecmd v0.9.17 -- `dz safedel list` most-recent-N default.
+
+### Added
+
+- `core.safedel.cmd_list(..., count=None)`: caps the listing to the N most recent matching folders, with a truncation note. Library default is `None` (show all -- backward-compatible for non-CLI consumers); the `dz safedel list` CLI passes `count=10` by default. `count <= 0`/`None` = no limit.
+
 ## [0.8.18] - 2026-06-11
 
 Ships with dazzlecmd v0.9.16 -- `dz list` footer legend wrapping + marker colorization.

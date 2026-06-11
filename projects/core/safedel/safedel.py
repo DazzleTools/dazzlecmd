@@ -122,6 +122,11 @@ def _build_list_parser() -> argparse.ArgumentParser:
     parser.add_argument("--contains", help="Search by filename in trash")
     parser.add_argument("--path", dest="path_pattern", help="Search by original path")
     parser.add_argument("--age", help="Filter by age (e.g., '>30d')")
+    parser.add_argument("--count", type=int, default=10, metavar="N",
+                        help="Show only the N most recent entries "
+                             "(default 10; use 0 for all).")
+    parser.add_argument("--all", action="store_true",
+                        help="Show all entries (same as --count 0).")
     parser.add_argument("--json", "-j", dest="json_output", action="store_true")
     return parser
 
@@ -185,6 +190,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if first in ("list", "ls"):
         args = _build_list_parser().parse_args(argv[1:])
+        # --all is shorthand for "no limit"; otherwise honor --count (default 10).
+        count = 0 if args.all else args.count
         return cmd_list(
             store,
             positional_args=args.time_args,
@@ -192,6 +199,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             path_pattern=args.path_pattern,
             age_filter=args.age,
             json_output=args.json_output,
+            count=count,
         )
 
     elif first in ("recover", "restore"):
