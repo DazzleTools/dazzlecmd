@@ -233,8 +233,14 @@ def render_list(args, projects, engine=None) -> int:
             name = project.name
             kit_name = project.kit_import_name or ""
             desc = project.description or ""
-            if len(desc) > 60:
-                desc = desc[:57] + "..."
+            # Width-aware truncation (was a hard 57-char cut).
+            _fl_avail = max(
+                20,
+                _shutil.get_terminal_size((80, 24)).columns
+                - (2 + name_width + 2 + kit_col_width + 2),
+            )
+            if len(desc) > _fl_avail:
+                desc = desc[:_fl_avail - 3] + "..."
             print(f"  {name:<{name_width}}  {kit_name:<{kit_col_width}}  {desc}")
         print(f"\n  {len(filtered)} tool(s) found")
         return 0
@@ -1386,7 +1392,13 @@ def render_kit_list(args, kits, projects) -> int:
         tool_count = len(kit.tools or [])
         print(f"  {_bold(f'{name:<16}')} {tool_count} tool(s){active}")
         if kit.description:
-            print(f"    {kit.description}")
+            # Word-wrap the kit description to terminal width with the
+            # 4-space hanging indent (the render_list discipline; was an
+            # unwrapped line the terminal broke mid-word).
+            _ks_avail = max(
+                20, _shutil.get_terminal_size((80, 24)).columns - 4)
+            for _ks_line in _wrap_description(kit.description, _ks_avail):
+                print(f"    {_ks_line}")
     return 0
 
 
@@ -1689,13 +1701,20 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
             tool_prefix = "\\-- " if is_last_tool else "+-- "
             fqcn = project.fqcn or project.name or ""
             desc = project.description or ""
-            if len(desc) > 60:
-                desc = desc[:57] + "..."
             # Shadow marker: tools whose short name is reserved by a
             # meta-command are flagged in tree output (per issue #56).
             # BOLD+RED to draw attention, consistent with render_list [*].
             short = project.name or ""
-            shadow_marker = _shadow(" [shadowed]") if short and short in reserved else ""
+            shadowed = bool(short and short in reserved)
+            shadow_marker = _shadow(" [shadowed]") if shadowed else ""
+            # Truncate the description to the REAL terminal width (was a
+            # hard 57-char cut that wasted wide terminals).
+            _tr_term_width = _shutil.get_terminal_size((80, 24)).columns
+            _tr_used = (len(branch_indent) + len(tool_prefix) + len(fqcn)
+                        + (len(" [shadowed]") if shadowed else 0) + 2)
+            _tr_avail = max(20, _tr_term_width - _tr_used)
+            if len(desc) > _tr_avail:
+                desc = desc[:_tr_avail - 3] + "..."
             print(f"{branch_indent}{tool_prefix}{fqcn}{shadow_marker}  {desc}")
 
     # Virtual-kit branches — rendered as [virtual] with -> arrows to canonicals.

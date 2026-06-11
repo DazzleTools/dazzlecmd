@@ -762,7 +762,15 @@ def _cmd_kit_list(args, kits, projects, engine=None):
         tool_count = len(kit.tools or [])
         print(f"  {name:<16} {tool_count} tool(s)  [{status}]")
         if kit.description:
-            print(f"    {kit.description}")
+            # Word-wrap to terminal width with a hanging indent -- the
+            # render_list formatting discipline (was an unwrapped line the
+            # terminal broke mid-word). Uses the module-level
+            # _wrap_description import (a local import here would shadow the
+            # drill-in's use below into an UnboundLocalError).
+            import shutil as _shutil_kl
+            avail = max(20, _shutil_kl.get_terminal_size((80, 24)).columns - 4)
+            for line in _wrap_description(kit.description, avail):
+                print(f"    {line}")
     return 0
 
 
