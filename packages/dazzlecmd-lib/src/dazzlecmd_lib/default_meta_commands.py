@@ -90,6 +90,35 @@ def _wrap_description(text, width):
     return lines
 
 
+def _print_legend_entry(marker, text, term_width, *, color=()):
+    """Print a footer marker-legend entry with word-boundary wrapping and a
+    hanging indent.
+
+    The marker (``[*]``/``[+]``/``[lib]``) sits alone at the left of the first
+    line; wrapped continuation lines align under the START of the text, so the
+    marker stands out -- the same layout discipline as tool-description wrapping
+    (render_list / render_info). Without this the legend was emitted as one long
+    line and the terminal hard-wrapped it mid-word (e.g. "ali" / "as").
+
+    ``color`` is a tuple of ``colors`` codes used to colorize the MARKER token
+    (matching the row markers in ``_label_styled`` -- ``[*]`` bold+red, ``[+]``
+    cyan, ``[lib]`` green). Width/indent math always uses the PLAIN marker
+    length so the ANSI escapes never disturb alignment; color is applied only
+    when ``should_use_color()`` (off for the byte-gate / pipes, so baselines
+    stay plain).
+    """
+    prefix = f"  {marker} "                 # plain -> drives all width/indent math
+    indent = " " * len(prefix)
+    avail = max(20, term_width - len(prefix))
+    lines = _wrap_description(text, avail)
+    shown_marker = marker
+    if color and _colors.should_use_color():
+        shown_marker = _colors.colorize(marker, *color)
+    print(f"  {shown_marker} {lines[0]}")
+    for line in lines[1:]:
+        print(f"{indent}{line}")
+
+
 # ---------------------------------------------------------------------------
 # list
 # ---------------------------------------------------------------------------
@@ -471,25 +500,34 @@ def render_list(args, projects, engine=None) -> int:
         print()
         if has_collision:
             cmd = getattr(engine, "command", None) or "dz"
-            print(
-                f"  [*] short-name collision -- use '{cmd} info <fqcn>' or "
-                f"'{cmd} kit favorite' to disambiguate."
+            _print_legend_entry(
+                "[*]",
+                f"short-name collision -- use '{cmd} info <fqcn>' or "
+                f"'{cmd} kit favorite' to disambiguate.",
+                term_width,
+                color=(_colors.BOLD, _colors.RED),
             )
         if has_alias_marker:
             cmd = getattr(engine, "command", None) or "dz"
-            print(
-                f"  [+] canonical has aliases (virtual-kit overlays and/or "
+            _print_legend_entry(
+                "[+]",
+                f"canonical has aliases (virtual-kit overlays and/or "
                 f"auto-realpath dedup of cross-aggregator embeddings) -- "
-                f"use '{cmd} info <name>' for alias details."
+                f"use '{cmd} info <name>' for alias details.",
+                term_width,
+                color=(_colors.CYAN,),
             )
         if has_lib_marker:
             cmd = getattr(engine, "command", None) or "dz"
             agg = getattr(engine, "name", None) or "dazzlecmd"
-            print(
-                f"  [lib] constitutional primitive (engine in dazzlecmd_lib); "
+            _print_legend_entry(
+                "[lib]",
+                f"constitutional primitive (engine in dazzlecmd_lib); "
                 f"absolute FQCN 'dazzlecmd_lib:core:<name>'. Names show "
                 f"prefixless -- the absolute prepends this aggregator (e.g. "
-                f"'{agg}:core:<name>'); both resolve. '{cmd} info <name>' shows it."
+                f"'{agg}:core:<name>'); both resolve. '{cmd} info <name>' shows it.",
+                term_width,
+                color=(_colors.GREEN,),
             )
 
     # Footer — counts

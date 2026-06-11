@@ -8,6 +8,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.18] - 2026-06-11
+
+Ships with dazzlecmd v0.9.16 -- `dz list` footer legend wrapping + marker colorization.
+
+### Fixed
+
+- `default_meta_commands._print_legend_entry`: the footer marker legend (`[*]`/`[+]`/`[lib]`) now word-wraps to terminal width with a hanging indent (continuation aligned under the text start) instead of being emitted as one long line that the terminal hard-wrapped mid-word. Mirrors the tool-description wrapping discipline.
+
+### Changed
+
+- The footer legend markers are colorized to match the in-list row markers (`[*]` bold+red, `[+]` cyan, `[lib]` green) via the new `color=` kwarg. Width/indent math uses the PLAIN marker length so ANSI escapes never disturb alignment; color applies only when `should_use_color()` (off for pipes/byte-gate, so baselines stay plain).
+
 ## [0.8.17] - 2026-06-10
 
 Ships with dazzlecmd v0.9.15 -- #37 Tier-1 closeout: PowerShell link creation + aggregator-name audit.

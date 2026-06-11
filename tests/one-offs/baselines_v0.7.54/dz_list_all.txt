@@ -118,7 +118,11 @@ wtf:core:
              logged in.
   restarted  Why did my Windows PC restart? One command, instant answers.
 
-  [+] canonical has aliases (virtual-kit overlays and/or auto-realpath dedup of cross-aggregator embeddings) -- use 'dz info <name>' for alias details.
-  [lib] constitutional primitive (engine in dazzlecmd_lib); absolute FQCN 'dazzlecmd_lib:core:<name>'. Names show prefixless -- the absolute prepends this aggregator (e.g. 'dazzlecmd:core:<name>'); both resolve. 'dz info <name>' shows it.
+  [+] canonical has aliases (virtual-kit overlays and/or auto-realpath dedup of
+      cross-aggregator embeddings) -- use 'dz info <name>' for alias details.
+  [lib] constitutional primitive (engine in dazzlecmd_lib); absolute FQCN
+        'dazzlecmd_lib:core:<name>'. Names show prefixless -- the absolute
+        prepends this aggregator (e.g. 'dazzlecmd:core:<name>'); both resolve.
+        'dz info <name>' shows it.
 
   34 tool(s) + 11 alias(es) (45 rows)

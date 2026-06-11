@@ -117,6 +117,31 @@ def test_dz_list_lib_legend():
     assert "dazzlecmd_lib:core:<name>" in out
 
 
+def test_legend_entry_word_wraps_with_hanging_indent(capsys):
+    """The footer marker legend wraps at WORD boundaries (no mid-word breaks like
+    'ali'/'as') and hangs continuation lines under the start of the text, so the
+    marker stands out -- mirroring tool-description wrapping."""
+    from dazzlecmd_lib.default_meta_commands import _print_legend_entry
+    width = 40
+    _print_legend_entry(
+        "[lib]",
+        "constitutional primitive -- use 'dz info <name>' for alias details now",
+        width,
+    )
+    out = capsys.readouterr().out
+    lines = out.splitlines()
+    assert len(lines) > 1                                  # it actually wrapped
+    assert lines[0].startswith("  [lib] ")                 # marker on line 1
+    indent = len("  [lib] ")
+    for cont in lines[1:]:
+        assert cont.startswith(" " * indent)               # hanging indent
+        assert cont[indent:indent + 1] != " "              # text starts, not padding
+    assert all(len(ln) <= width for ln in lines)           # fits -> terminal won't re-wrap
+    # word-boundary: 'alias' is never split (the reported 'ali'/'as' break)
+    assert "alias" in out
+    assert not any(ln.rstrip().endswith("ali") for ln in lines)
+
+
 # --- the overlay is a REAL index entry (#180), not a string shim ---
 
 def test_overlay_alias_is_a_real_index_entry():

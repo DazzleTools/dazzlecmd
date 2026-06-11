@@ -4,6 +4,24 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.16] - 2026-06-11
+
+**`dz list` footer marker legend: word-boundary wrapping + colorized markers.** The `[*]`/`[+]`/`[lib]` legend was emitted as one long line and the terminal hard-wrapped it mid-word (e.g. `alias` → `ali`/`as`). It now wraps at word boundaries with a hanging indent — continuation lines align under the start of the text so the marker stands out — mirroring tool-description wrapping. The marker token is also colorized to match the row markers (`[*]` bold-red, `[+]` cyan, `[lib]` green); width/indent math uses the plain marker length so ANSI never disturbs alignment, and color is off for pipes/byte-gate.
+
+### Fixed
+
+- `dz list` footer legend wrapped mid-word and ignored terminal width; now word-wraps with a hanging indent (`_print_legend_entry`).
+
+### Changed
+
+- `dz list` footer legend markers are colorized to match the in-list markers.
+
+### Versions
+
+- dazzlecmd 0.9.15 -> 0.9.16 (PATCH).
+- dazzlecmd-lib 0.8.17 -> 0.8.18 (PATCH).
+- dazzle-dz alias -> 0.9.16; deps re-pinned to >=0.9.16 / >=0.8.18.
+
 ## [0.9.15] - 2026-06-10
 
 **#37 Tier-1 closeout: PowerShell links + aggregator-name audit.** Two of the remaining (non-parked) #37 Tier-1 acceptance criteria. The constitutional `core.links.create_link` now creates Windows directory links via PowerShell `New-Item` (SymbolicLink → Junction fallback) instead of `cmd /c mklink`, which fails silently when invoked as a subprocess from bash/WSL (CLAUDE.md rule #4 self-violation). A `mode.py` audit for aggregator-name hardcoding found one user-facing string (the `ModeRebindContext.undo()` error said `dz mode restore` literally) and fixed it to use the aggregator's `command` — so wtf-windows/amdead see their own CLI name. (Tier-3 convenience features `mode status --complete` / `switch --all` remain parked per the issue, awaiting concrete user demand.)
@@ -2985,7 +3003,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.15...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.16...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
