@@ -16,6 +16,17 @@ Metadata preservation (ACLs/ADS/timestamps/xattrs) comes from
 ``dazzle_filekit.metadata`` (a declared dependency -- the canonical home of that
 cross-platform code). Link detection comes from the sibling constitutional
 primitive ``dazzlecmd_lib.core.links``.
+
+
+**Deletion-scope policy** (codified 2026-06-11): recoverable deletion governs
+USER-VALUABLE data -- anything a person created or might want back (tool
+directories, documents, configs). Program-owned EPHEMERAL buffers (temp
+download clones, atomic-write temp files, scratch dirs the same operation
+created seconds earlier) are deleted directly: staging them would bloat the
+trash store with worthless copies and dilute the recovery signal. The test:
+"could a human ever want this back?" -- if yes, TrashStore; if it is purely
+a transient vehicle, direct delete with a robust handler (e.g. the Windows
+read-only chmod+retry for git clones).
 """
 from dazzlecmd_lib.core.safedel._store import (
     TrashStore,
