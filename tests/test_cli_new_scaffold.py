@@ -188,9 +188,75 @@ class TestWithComponents:
         assert "ok: docker-test, docker-deploy, ci" in capsys.readouterr().out
 
     def test_all_is_best_effort_with_summary(self, tmp_path, monkeypatch, capsys):
+        """`all` composes best-effort. Hermetic: repokit URLs point at
+        nonexistent LOCAL paths so `common` fails fast offline and `template`
+        falls through to the bundled fallback (4d-6 OQ-G)."""
+        from dazzlecmd import cli as _cli
+        monkeypatch.setattr(_cli, "_resolve_new_defaults", lambda e: {
+            "repokit_common_url": str(tmp_path / "no_such_remote"),
+            "repokit_template_url": str(tmp_path / "no_such_template"),
+        })
         monkeypatch.chdir(tmp_path)
         assert _cmd_new_aggregator(_agg_args("W2", with_components="all")) == 0
         out = capsys.readouterr().out
-        assert "ok: docker-test, docker-deploy, ci" in out
-        assert "skipped: common" in out and "template" in out  # 4d-6 pending
-        assert (tmp_path / "W2" / "Dockerfile.test").is_file()
+        assert "docker-test" in out and "ci" in out
+        assert "skipped: common" in out                  # offline -> hint
+        assert "FALLBACK-MINIMAL" in out                 # template fell back
+        t = tmp_path / "W2"
+        assert (t / "Dockerfile.test").is_file()
+        assert (t / "LICENSE").is_file()                 # bundled fallback
+        assert (t / "CONTRIBUTING.md").is_file()
+
+
+class TestRepoKitComponents:
+    """4d-6: the real common/template appliers (hermetic -- local sources)."""
+
+    def _local_remote(self, tmp_path):
+        """A local git repo standing in for git-repokit-common."""
+        import subprocess
+        remote = tmp_path / "fake_repokit_common"
+        os.makedirs(remote / "hooks")
+        (remote / "install-hooks.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+        for cmd in (["git", "init", "-q", "-b", "main"],
+                    ["git", "add", "-A"],
+                    ["git", "-c", "user.name=t", "-c", "user.email=t@t",
+                     "commit", "-q", "-m", "x"]):
+            subprocess.run(cmd, cwd=str(remote), check=True,
+                           capture_output=True)
+        return remote
+
+    def test_with_common_subtree_from_local_remote(self, tmp_path, monkeypatch,
+                                                   capsys):
+        from dazzlecmd import cli as _cli
+        remote = self._local_remote(tmp_path)
+        monkeypatch.setattr(_cli, "_resolve_new_defaults", lambda e: {
+            "repokit_common_url": str(remote)})
+        monkeypatch.setenv("GIT_AUTHOR_NAME", "t")
+        monkeypatch.setenv("GIT_AUTHOR_EMAIL", "t@t")
+        monkeypatch.setenv("GIT_COMMITTER_NAME", "t")
+        monkeypatch.setenv("GIT_COMMITTER_EMAIL", "t@t")
+        monkeypatch.chdir(tmp_path)
+        assert _cmd_new_aggregator(_agg_args("WC", with_components="common")) == 0
+        out = capsys.readouterr().out
+        assert "ok: common" in out
+        assert "initialized git repository" in out       # fresh scaffold path
+        t = tmp_path / "WC"
+        assert (t / "scripts" / "install-hooks.sh").is_file()
+        assert (t / ".git").exists()
+
+    def test_with_template_local_path_no_clobber(self, tmp_path, monkeypatch,
+                                                 capsys):
+        from dazzlecmd import cli as _cli
+        src = tmp_path / "tmpl_src"
+        os.makedirs(src)
+        (src / "LICENSE.tmpl").write_text("License for {name}\n", encoding="utf-8")
+        (src / "README.md").write_text("TEMPLATE README\n", encoding="utf-8")
+        monkeypatch.setattr(_cli, "_resolve_new_defaults", lambda e: {
+            "repokit_template_path": str(src)})
+        monkeypatch.chdir(tmp_path)
+        assert _cmd_new_aggregator(_agg_args("WT", with_components="template")) == 0
+        t = tmp_path / "WT"
+        assert (t / "LICENSE").read_text(encoding="utf-8") == "License for WT\n"
+        # never clobber: the scaffold's README wins over the template's
+        assert "TEMPLATE README" not in (t / "README.md").read_text(encoding="utf-8")
+        assert "source: local path" in capsys.readouterr().out
