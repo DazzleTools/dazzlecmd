@@ -88,3 +88,18 @@ class TestEngineFullView:
         assert render_kit_list(_args("nope"), kits, projects,
                                engine=_engine()) == 1
         assert "not found" in capsys.readouterr().out
+
+
+class TestConfigBomTolerance:
+    """A UTF-8 BOM in the config file (PowerShell `Out-File -Encoding utf8`
+    writes one) must read cleanly -- no warning, values honored."""
+
+    def test_bom_config_reads_clean(self, tmp_path, capsys, monkeypatch):
+        import codecs
+        from dazzlecmd_lib.config import ConfigManager
+        cfg = tmp_path / "c.json"
+        cfg.write_bytes(codecs.BOM_UTF8 + b'{"_schema_version": 1, "disabled_kits": ["x"]}')
+        monkeypatch.setenv("DAZZLECMD_CONFIG", str(cfg))
+        data = ConfigManager().read()
+        assert data.get("disabled_kits") == ["x"]
+        assert "BOM" not in capsys.readouterr().err

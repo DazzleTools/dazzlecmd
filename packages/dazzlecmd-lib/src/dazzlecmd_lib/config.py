@@ -96,7 +96,10 @@ class ConfigManager:
             return self._cache
 
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            # utf-8-sig: tolerate a UTF-8 BOM (e.g. PowerShell's
+            # `Out-File -Encoding utf8` writes one); reads BOM-less
+            # files identically. Write path stays plain utf-8.
+            with open(path, "r", encoding="utf-8-sig") as f:
                 config = json.load(f)
         except (json.JSONDecodeError, OSError) as exc:
             print(
@@ -157,7 +160,7 @@ class ConfigManager:
         existing = {}
         if os.path.isfile(path):
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, "r", encoding="utf-8-sig") as f:  # BOM-tolerant
                     loaded = json.load(f)
                 if isinstance(loaded, dict):
                     existing = loaded

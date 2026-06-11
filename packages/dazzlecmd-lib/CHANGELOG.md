@@ -8,6 +8,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.27] - 2026-06-11
+
+Ships with dazzlecmd v0.9.27.
+
+### Fixed
+
+- `ConfigManager` read paths use `utf-8-sig`: a UTF-8 BOM in the config file (e.g. PowerShell `Out-File -Encoding utf8`) no longer triggers a read warning; values are honored. Write path unchanged (never emits a BOM).
+
 ## [0.8.26] - 2026-06-11
 
 Ships with dazzlecmd v0.9.26 -- the kit-list renderer unification (the kit-list DWP, 2026-06-11).
