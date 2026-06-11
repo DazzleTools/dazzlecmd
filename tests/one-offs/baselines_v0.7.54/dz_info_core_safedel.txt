@@ -3,7 +3,7 @@ FQCN:        core:safedel
 Absolute:    dazzlecmd_lib:core:safedel   (constitutional; overlaid from dazzlecmd_lib)
 Kit:         core
 Namespace:   core
-Version:     0.1.0
+Version:     0.1.1
 Description: Safe file/directory deletion with link-aware classification,
              metadata preservation, and recoverable trash store
 Platform:    cross-platform

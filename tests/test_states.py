@@ -306,6 +306,69 @@ class TestLiveAliasRoundTrip:
 
 
 # ---------------------------------------------------------------------------
+# PROJECTION axis: group (overlay) / ungroup (virtual kit) via ProjectionContext
+# ---------------------------------------------------------------------------
+class TestProjectionContext:
+    """The naming-axis {group, ungroup} primitive: one mechanism, two directions,
+    both REVERSIBLE and conserving the canonical FQCN (#180). This is the shared
+    path the engine's constitutional overlay (group) and virtual kits (ungroup)
+    now route through."""
+
+    def _idx_with_canonical(self):
+        idx = FQCNIndex()
+        canon = make_tool(name="safedel", namespace="core", _fqcn="core:safedel",
+                          _short_name="safedel", _kit_import_name="core")
+        idx.insert_canonical(canon)
+        return idx, canon
+
+    def test_group_overlay_apply_then_undo(self):
+        from dazzlecmd_lib.groupable import ProjectionContext
+        idx, canon = self._idx_with_canonical()
+        ctx = ProjectionContext(idx, source="overlay")
+        home = "dazzlecmd_lib:core:safedel"
+
+        receipt = canon.group(home, context=ctx)           # overlay = group
+        assert idx.alias_index[home] == "core:safedel"
+        assert idx._alias_sources[home] == "overlay"
+        assert receipt.verb == "group"
+        assert receipt.conserved == "canonical_fqcn"
+        assert receipt.reversible is True
+
+        ctx.undo(receipt)                                  # inverse = drop alias
+        assert home not in idx.alias_index
+        assert "core:safedel" in idx.canonical_index       # canonical conserved
+
+    def test_ungroup_virtual_kit_apply_then_undo(self):
+        from dazzlecmd_lib.groupable import ProjectionContext
+        idx, canon = self._idx_with_canonical()
+        ctx = ProjectionContext(idx, source="kits/wtf.kit.json")
+
+        receipt = canon.ungroup("wtf:safedel", context=ctx)  # virtual kit = ungroup
+        assert idx.alias_index["wtf:safedel"] == "core:safedel"
+        assert receipt.verb == "ungroup"
+        assert receipt.reversible is True
+
+        ctx.undo(receipt)
+        assert "wtf:safedel" not in idx.alias_index
+        assert "core:safedel" in idx.canonical_index
+
+    def test_both_directions_share_mechanism_and_conserve_c1(self):
+        """The symmetry the routing makes explicit: group and ungroup produce a
+        removable alias conserving the same invariant -- no generativity on the
+        projection axis (unlike containment's graduation)."""
+        from dazzlecmd_lib.groupable import ProjectionContext
+        idx, canon = self._idx_with_canonical()
+        ctx = ProjectionContext(idx, source="overlay")
+        r_g = canon.group("home:core:safedel", context=ctx)
+        r_u = canon.ungroup("vk:safedel", context=ctx)
+        assert r_g.conserved == r_u.conserved == "canonical_fqcn"
+        assert r_g.reversible and r_u.reversible
+        ctx.undo(r_g)
+        ctx.undo(r_u)
+        assert idx.canonical_index["core:safedel"] is canon  # C1 survives both
+
+
+# ---------------------------------------------------------------------------
 # Live cross-check: MODE rebind (receipt-level; dry-run, no fs mutation)
 # ---------------------------------------------------------------------------
 class TestLiveModeAgreement:

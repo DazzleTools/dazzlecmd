@@ -278,6 +278,30 @@ class FQCNIndex:
 
         return old_canonical
 
+    def remove_alias(self, alias_fqcn):
+        """Drop an alias entry -- the inverse of ``insert_alias``.
+
+        The runtime ``undo`` of a PROJECTION group/ungroup (overlay / virtual
+        kit): an alias is purely a name projecting onto a canonical, so removing
+        it conserves the canonical and every other name (REVERSIBLE). Cleans
+        ``alias_index``, ``_alias_sources``, and the ``short_index`` bookkeeping
+        the same way ``repoint_alias`` does (an alias short stores the CANONICAL
+        it points at; drop it only if no longer justified). Returns the canonical
+        the alias pointed at, or ``None`` if it wasn't registered (no-op).
+        """
+        canonical = self.alias_index.pop(alias_fqcn, None)
+        if canonical is None:
+            return None
+        self._alias_sources.pop(alias_fqcn, None)
+        alias_short = alias_fqcn.rsplit(":", 1)[-1]
+        bucket = self.short_index.get(alias_short)
+        if bucket and not self._short_still_justified(
+            alias_short, canonical, exclude_alias=alias_fqcn
+        ):
+            if canonical in bucket:
+                bucket.remove(canonical)
+        return canonical
+
     def _short_still_justified(self, short, canonical_fqcn, *, exclude_alias):
         """True if ``canonical_fqcn`` should remain in ``short_index[short]`` for
         a reason OTHER than the alias being repointed away (``exclude_alias``):
@@ -1214,8 +1238,15 @@ class AggregatorEngine:
             rewrites = vk.name_rewrite or {}
             source = vk.kit_source
 
+            # UNGROUP (virtual kit): each declared canonical is projected under an
+            # additional alias name. Same ProjectionContext mechanism as the
+            # constitutional overlay (group), opposite direction -- one primitive,
+            # two directions, conserving the canonical FQCN (#180).
+            from .groupable import ProjectionContext
+            vk_projection = ProjectionContext(self.fqcn_index, source=source)
+
             # Collect failures rather than warning per-alias.
-            missing_targets = []  # KeyError -- canonical not in index
+            missing_targets = []  # canonical not in index
             shadowing_failures = []  # FQCNCollisionError (rule 9b)
             other_failures = []  # any other error
 
@@ -1234,12 +1265,16 @@ class AggregatorEngine:
                     canonical_fqcn, canonical_fqcn
                 )
 
-                try:
-                    self.fqcn_index.insert_alias(
-                        alias_fqcn, resolved_canonical, source=source
-                    )
-                except KeyError:
+                # The verb is called on the canonical TARGET project; a missing
+                # target is the old `insert_alias` KeyError case.
+                target_project = self.fqcn_index.canonical_index.get(
+                    resolved_canonical
+                )
+                if target_project is None:
                     missing_targets.append((alias_fqcn, canonical_fqcn))
+                    continue
+                try:
+                    target_project.ungroup(alias_fqcn, context=vk_projection)
                 except FQCNCollisionError as exc:
                     shadowing_failures.append((alias_fqcn, str(exc)))
                 except Exception as exc:  # pragma: no cover - defensive
@@ -1438,7 +1473,9 @@ class AggregatorEngine:
         it so the display path can make that exclusion.
         """
         from .core import is_constitutional
+        from .groupable import ProjectionContext
 
+        overlay = ProjectionContext(self.fqcn_index, source="overlay")
         for project in self.projects:
             # An auto-realpath-demoted duplicate is not a surfaced canonical;
             # its winner sibling carries the overlay.
@@ -1455,12 +1492,13 @@ class AggregatorEngine:
             # owns the `dazzlecmd_lib:core:*` FQCN.
             if home in self.fqcn_index.canonical_index:
                 continue
+            # GROUP (overlay): the surfaced canonical project gains its home name
+            # as a projection alias. Routed through the Groupable verb so the
+            # PROJECTION-axis {group, ungroup} primitive has ONE mechanism
+            # (ProjectionContext) and the conserved invariant (canonical_fqcn) is
+            # pinned where aliases are created (#180).
             try:
-                self.fqcn_index.insert_alias(
-                    alias_fqcn=home,
-                    canonical_fqcn=canonical,
-                    source="overlay",
-                )
+                project.group(home, context=overlay)
             except (FQCNCollisionError, KeyError) as exc:
                 print(
                     f"Warning: constitutional overlay of '{home}' "

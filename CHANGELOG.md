@@ -4,6 +4,24 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.18] - 2026-06-11
+
+**Overlay + virtual-kit alias creation now routes through the Groupable verbs (the symmetric interface completed).** v0.9.10–9.11 *declared* overlay (`group`) and virtual-kit (`ungroup`) as the `{group, ungroup}` primitive on the PROJECTION axis, but the engine still materialized both with raw `fqcn_index.insert_alias` calls. They now dispatch through `entity.group()` / `entity.ungroup()` with a single new `ProjectionContext` — so the naming-axis symmetry has ONE mechanism, the conserved invariant (`canonical_fqcn`) is pinned where aliases are created, and `undo()` (drop the alias) makes the reversibility real. This also clarifies the cross-axis asymmetry: projection group/ungroup are both REVERSIBLE, vs the CONTAINMENT axis where graduation is GENERATIVE/one-way. Behavior is byte-identical (verified by the full suite + byte-gate). Overhead measured at ~0.5 µs/alias — ~0.05% of one `discover()`; benchmark in `tests/one-offs/bench_grouping_dispatch.py`.
+
+### Added
+
+- `groupable.ProjectionContext` / `ProjectionReceipt` — the runtime mechanism for the PROJECTION-axis group/ungroup (overlay / virtual kit). `FQCNIndex.remove_alias` — the inverse of `insert_alias` (the projection `undo`). `tests/one-offs/bench_grouping_dispatch.py`.
+
+### Changed
+
+- `engine._apply_constitutional_overlay` routes through `project.group(home, context=ProjectionContext(...))`; `engine._apply_virtual_kits` routes through `target.ungroup(alias, context=ProjectionContext(...))`. No user-visible change.
+
+### Versions
+
+- dazzlecmd 0.9.17 -> 0.9.18 (PATCH).
+- dazzlecmd-lib 0.8.19 -> 0.8.20 (PATCH).
+- dazzle-dz alias -> 0.9.18; deps re-pinned to >=0.9.18 / >=0.8.20.
+
 ## [0.9.17] - 2026-06-11
 
 **`dz safedel list` defaults to the 10 most recent entries (new `--count` filter).** A long-lived trash store can hold hundreds of folders (e.g. 209); `dz safedel list` used to dump them all. It now shows only the **10 most recent** by default, with a clear note (`10 most recent of 209 folder(s) (--count 0 or --all to show all)`). `--count N` sets the cap; `--count 0` or `--all` shows everything. The library `cmd_list` default stays `None` (show all) so non-CLI consumers are unaffected.
@@ -3018,7 +3036,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.17...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.18...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

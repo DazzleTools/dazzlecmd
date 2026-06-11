@@ -8,6 +8,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.20] - 2026-06-11
+
+Ships with dazzlecmd v0.9.18 -- overlay/virtual-kit alias creation routed through the Groupable verbs (PROJECTION-axis group/ungroup). No behavior change.
+
+### Added
+
+- `groupable.ProjectionContext` + `groupable.ProjectionReceipt`: the runtime mechanism the PROJECTION-axis `group` (overlay) / `ungroup` (virtual kit) verbs delegate to. `apply(entity, alias_name, *, verb)` inserts a projection alias onto the canonical target; `undo(receipt)` drops it. One mechanism, two directions, both REVERSIBLE, conserving `canonical_fqcn` -- the crisp contrast with the CONTAINMENT axis (graduation = GENERATIVE/one-way).
+- `FQCNIndex.remove_alias(alias_fqcn)`: the inverse of `insert_alias` (cleans `alias_index`, `_alias_sources`, and `short_index` bookkeeping the way `repoint_alias` does). The runtime `undo` of a projection.
+
+### Changed
+
+- `engine._apply_constitutional_overlay` and `engine._apply_virtual_kits` no longer call `fqcn_index.insert_alias` directly -- they dispatch through `entity.group()` / `entity.ungroup()` with a `ProjectionContext`. The aliases registered, their `source` tags, and all `dz list` surfaces are byte-identical; the win is a single invariant-pinning mechanism (verified: full suite + byte-gate green). Measured overhead ~0.5 µs/alias (~0.05% of a `discover()`).
+
 ## [0.8.19] - 2026-06-11
 
 Ships with dazzlecmd v0.9.17 -- `dz safedel list` most-recent-N default.

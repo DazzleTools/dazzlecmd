@@ -187,6 +187,94 @@ class AliasRebindContext:
 
 
 # ===========================================================================
+# Projection -- the group/ungroup verbs on the NAMING axis (overlay / virtual kit)
+# ===========================================================================
+#
+# The PROJECTION axis is the second substrate the {group, ungroup} primitive
+# spans (the first is CONTAINMENT -- kit membership / graduation). On the naming
+# axis the two directions are:
+#
+#   group   = OVERLAY    -- collapse a home namespace's canonical onto THIS
+#                           consumer surface (dazzlecmd_lib:core:safedel projected
+#                           as core:safedel). Many homes group onto one surface.
+#   ungroup = VIRTUAL KIT -- split one canonical into additional alias names
+#                           (core:locked also reachable as wtf:locked). One
+#                           canonical ungroups into many names.
+#
+# Both materialize as a single FQCNIndex alias entry, so they are SYMMETRIC and
+# REVERSIBLE -- the inverse is dropping the alias (remove_alias), and the
+# canonical FQCN (C1) is conserved throughout. This is the crisp contrast with
+# the CONTAINMENT axis, where graduation is GENERATIVE / one-way (a new repo is
+# born, the in-tree form is lost). Routing both projection directions through the
+# SAME verb is what makes that asymmetry-between-axes legible in the code, and
+# pins the invariant (canonical_fqcn) at the one place aliases are created.
+
+
+@dataclass
+class ProjectionReceipt:
+    """The record returned by ``entity.group()`` / ``entity.ungroup()`` on the
+    PROJECTION axis. Enables asserting the transition and composing its inverse
+    (drop the alias)."""
+
+    entity_fqcn: str          # C1 of the canonical the alias projects onto (UNCHANGED)
+    verb: str                 # "group" (overlay) | "ungroup" (virtual kit)
+    alias_fqcn: str           # the projection name that was added / removed
+    canonical_fqcn: str       # what it resolves to (== entity_fqcn)
+    conserved: str            # the invariant kept across the transition
+    reversible: bool          # projection adds/removes are always reversible
+
+
+@dataclass
+class ProjectionContext:
+    """Create (or, via ``undo``, drop) a naming PROJECTION of a canonical -- the
+    runtime mechanism the PROJECTION-axis ``group``/``ungroup`` verbs delegate to.
+
+    The verb is called on the CANONICAL target entity; ``target`` is the alias
+    name to project onto it, and ``source`` tags the provenance ("overlay" for a
+    constitutional overlay, or the virtual-kit manifest path). ``group`` and
+    ``ungroup`` share this one mechanism -- they differ only in DIRECTION/intent
+    (recorded as the receipt ``verb``), because on the naming axis both add a
+    single alias and both invert by removing it (conserving the canonical FQCN).
+
+    The index (duck-typed) must expose ``insert_alias`` and ``remove_alias``.
+    Like ``AliasRebindContext``, this is in-memory only: the FQCN index is rebuilt
+    from manifests/config every CLI invocation, so a projection evaporates with
+    the process -- the value here is the SHARED, invariant-pinning mechanism, not
+    persistence.
+    """
+
+    index: Any
+    source: str = "overlay"
+
+    def apply(self, entity: Any, target: str, *, verb: str = "group") -> ProjectionReceipt:
+        # entity = the canonical target project; `target` = the alias name to add.
+        # `insert_alias` enforces §9b (an alias may not shadow a canonical) and
+        # the single-hop rule, raising as before -- callers keep their handling.
+        self.index.insert_alias(target, entity.fqcn, source=self.source)
+        return ProjectionReceipt(
+            entity_fqcn=entity.fqcn,
+            verb=verb,
+            alias_fqcn=target,
+            canonical_fqcn=entity.fqcn,
+            conserved="canonical_fqcn",
+            reversible=True,
+        )
+
+    def undo(self, receipt: ProjectionReceipt) -> ProjectionReceipt:
+        """Invert a prior ``apply``: drop the projection alias. The canonical and
+        every other name are untouched -- always reversible."""
+        self.index.remove_alias(receipt.alias_fqcn)
+        return ProjectionReceipt(
+            entity_fqcn=receipt.entity_fqcn,
+            verb="ungroup" if receipt.verb == "group" else "group",
+            alias_fqcn=receipt.alias_fqcn,
+            canonical_fqcn=receipt.canonical_fqcn,
+            conserved="canonical_fqcn",
+            reversible=True,
+        )
+
+
+# ===========================================================================
 # Visibility -- the hide/expose verbs and the monotone channel ladder
 # ===========================================================================
 #
@@ -546,6 +634,9 @@ __all__ = [
     "RebindReceipt",
     "RebindContext",
     "AliasRebindContext",
+    # projection (group/ungroup on the naming axis: overlay / virtual kit)
+    "ProjectionReceipt",
+    "ProjectionContext",
     # visibility (hide/expose)
     "VISIBILITY_CHANNELS",
     "VISIBILITY_LADDER",
