@@ -34,6 +34,41 @@ is an explicit per-consumer opt-in. The framework never auto-hides a
 constitutional item -- discoverability is a primary value (a hidden tool is
 one a user can never stumble onto).
 
+The **tool boundary contract** (the links-fork DWP, 2026-06-11). A
+constitutional primitive is an ENGINE in ``dazzlecmd_lib.core.<name>``,
+admitted only because lib code itself requires it -- the bloat guard: the lib
+grows when the framework's own capabilities grow, never for convenience
+(mode-switching needs ``links`` + ``safedel``; nothing in the lib needs
+``find``/``rn``/``listall``, so they stay plain tools). When a user-facing
+tool exposes a primitive:
+
+1. **Engine in the lib** -- all logic, data types, and programmatic command
+   bodies (functions that do + print and are usable without argparse, e.g.
+   safedel's ``cmd_*`` / links' ``scan_directory``).
+2. **CLI in the tool** -- argparse builders, ``main()``/dispatch, help text,
+   display formatting, exit-code policy. The lib never imports argparse for a
+   tool surface.
+3. **No second engine** -- the tool imports the lib engine; a duplicate
+   definition is a contract violation, ENFORCED by
+   ``tests/test_constitutional_contract.py`` (the marker below is a checked
+   claim, not a hand-asserted label).
+4. The ``[lib]`` marker, the overlay alias, and the absolute FQCN
+   ``dazzlecmd_lib:core:<name>`` are derived claims about 1-3 and are
+   therefore always true.
+
+This is the "library of engines wrapped by thin public-facing tools" model:
+internalizing a tool (tool -> lib) and the inverse (demote) are mechanical
+under it, and the future graduation/promotion verbs (#73) get a crisp
+substrate.
+
+A THIRD level is recognized but not yet designed: an engine here may itself
+graduate OUT into an external sub-library (e.g. link/metadata primitives
+finding a better home in dazzle-filekit or a preservelib successor), with
+``core.<name>`` becoming a thin import surface over that dependency. That is
+promotion at the CLASS/LIBRARY boundary -- a different level of indirection
+from dazzlecmd's TOOL boundary -- and is deliberately deferred until a real
+candidate forces the design (see the links-fork DWP addendum, 2026-06-11).
+
 Current inhabitants:
 
 - ``dazzlecmd_lib.core.links`` -- link primitives. Link creation/removal

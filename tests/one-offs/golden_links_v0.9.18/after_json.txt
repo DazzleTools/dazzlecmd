@@ -1,0 +1,46 @@
+[
+  {
+    "path": "C:\\Users\\Extreme\\AppData\\Local\\Temp\\dz_links_golden_fixture\\hard.txt",
+    "name": "hard.txt",
+    "link_type": "hardlink",
+    "target": "C:\\Users\\Extreme\\AppData\\Local\\Temp\\dz_links_golden_fixture\\plain.txt",
+    "broken": false,
+    "link_count": 2,
+    "inode": 16607023635142400,
+    "size": 14,
+    "is_dir": false
+  },
+  {
+    "path": "C:\\Users\\Extreme\\AppData\\Local\\Temp\\dz_links_golden_fixture\\junc",
+    "name": "junc",
+    "link_type": "junction",
+    "target": "C:\\Users\\Extreme\\AppData\\Local\\Temp\\dz_links_golden_fixture\\target_dir",
+    "broken": false,
+    "link_count": 1,
+    "inode": 15199648751589121,
+    "size": 0,
+    "is_dir": true
+  },
+  {
+    "path": "C:\\Users\\Extreme\\AppData\\Local\\Temp\\dz_links_golden_fixture\\plain.txt",
+    "name": "plain.txt",
+    "link_type": "hardlink",
+    "target": "C:\\Users\\Extreme\\AppData\\Local\\Temp\\dz_links_golden_fixture\\hard.txt",
+    "broken": false,
+    "link_count": 2,
+    "inode": 16607023635142400,
+    "size": 14,
+    "is_dir": false
+  },
+  {
+    "path": "C:\\Users\\Extreme\\AppData\\Local\\Temp\\dz_links_golden_fixture\\sym.txt",
+    "name": "sym.txt",
+    "link_type": "symlink",
+    "target": "C:\\Users\\Extreme\\AppData\\Local\\Temp\\dz_links_golden_fixture\\plain.txt",
+    "broken": false,
+    "link_count": 1,
+    "inode": 13229323914614687,
+    "size": 0,
+    "is_dir": false
+  }
+]

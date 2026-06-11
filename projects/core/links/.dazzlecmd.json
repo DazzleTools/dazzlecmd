@@ -1,6 +1,6 @@
 {
     "name": "links",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Detect and display filesystem links (symlinks, junctions, hardlinks, dazzlelinks)",
     "namespace": "core",
     "language": "python",

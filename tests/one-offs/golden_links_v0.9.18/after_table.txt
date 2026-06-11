@@ -1,0 +1,6 @@
+  hard.txt   hardlink     -> ~\AppData\Local\Temp\dz_links_golden_fixture\plain.txt  (2 links)  
+  junc/  junction     -> ~\AppData\Local\Temp\dz_links_golden_fixture\target_dir  
+  plain.txt   hardlink     -> ~\AppData\Local\Temp\dz_links_golden_fixture\hard.txt  (2 links)  
+  sym.txt   symlink      -> ~\AppData\Local\Temp\dz_links_golden_fixture\plain.txt  
+
+  4 link(s) found: 2 hardlink, 1 junction, 1 symlink

@@ -4,6 +4,25 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.19] - 2026-06-11
+
+**Fix the links fork — engine/CLI split completed + the constitutional boundary contract, enforced.** The user caught `links [lib]` rendering in `dz list`; recon found worse: the v0.9.4 relocation had copied the links tool's *entire file* (CLI included) into the lib **byte-identically**, and the tool was never rewired — two 28.6KB engines destined to drift, argparse/display dead weight inside the lib, and a `[lib]`/`Absolute:` claim describing a copy that wasn't the one running. Fixed to safedel-parity: the lib keeps the ENGINE only (detection, `LinkInfo`, `scan_directory`); the tool is now a thin CLI importing it. Golden-output capture proves the tool's help/table/JSON output is **byte-identical** before/after. The boundary contract (engine in lib; CLI in tool; no second engine; lib admission only when lib code itself needs the primitive) is now written in `core/__init__.py` and **enforced by `test_constitutional_contract.py`** — a constitutional name whose tool doesn't wrap its lib engine fails CI (verified to catch a revert of this very fix).
+
+### Fixed
+
+- `links [lib]` / `Absolute: dazzlecmd_lib:core:links` is now a true claim: `projects/core/links/links.py` wraps `dazzlecmd_lib.core.links` (was a self-contained byte-identical fork). The lib's `core/links/_detect.py` sheds its ~150-line CLI tail (`display_*`, `build_parser`, `main`).
+
+### Added
+
+- `tests/test_constitutional_contract.py` (lib): per-constitutional-name checks — engine package exists, tool imports it, tool defines no duplicate engine symbols. `core.links` exports widened (`scan_directory`, `matches_filter`, `canonicalize_target`, `ALL_LINK_TYPES`). Golden capture script `tests/one-offs/golden_links_v0.9.18/`.
+
+### Versions
+
+- dazzlecmd 0.9.18 -> 0.9.19 (PATCH).
+- dazzlecmd-lib 0.8.20 -> 0.8.21 (PATCH).
+- links tool 0.1.0 -> 0.1.1 (rewired onto the lib engine; CLI surface unchanged).
+- dazzle-dz alias -> 0.9.19; deps re-pinned to >=0.9.19 / >=0.8.21.
+
 ## [0.9.18] - 2026-06-11
 
 **Overlay + virtual-kit alias creation now routes through the Groupable verbs (the symmetric interface completed).** v0.9.10–9.11 *declared* overlay (`group`) and virtual-kit (`ungroup`) as the `{group, ungroup}` primitive on the PROJECTION axis, but the engine still materialized both with raw `fqcn_index.insert_alias` calls. They now dispatch through `entity.group()` / `entity.ungroup()` with a single new `ProjectionContext` — so the naming-axis symmetry has ONE mechanism, the conserved invariant (`canonical_fqcn`) is pinned where aliases are created, and `undo()` (drop the alias) makes the reversibility real. This also clarifies the cross-axis asymmetry: projection group/ungroup are both REVERSIBLE, vs the CONTAINMENT axis where graduation is GENERATIVE/one-way. Behavior is byte-identical (verified by the full suite + byte-gate). Overhead measured at ~0.5 µs/alias — ~0.05% of one `discover()`; benchmark in `tests/one-offs/bench_grouping_dispatch.py`.
@@ -3036,7 +3055,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.18...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.19...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

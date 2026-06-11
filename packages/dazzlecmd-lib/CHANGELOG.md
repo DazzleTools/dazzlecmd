@@ -8,6 +8,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.21] - 2026-06-11
+
+Ships with dazzlecmd v0.9.19 -- the links fork fixed + the constitutional tool boundary contract, enforced.
+
+### Fixed
+
+- `core/links/_detect.py` was a byte-identical copy of the links TOOL (v0.9.4 relocated the whole file, CLI included). The CLI tail (`shorten_path`, `display_table`, `display_json`, `build_parser`, `main`) is removed -- the lib keeps the ENGINE only (detection/classification/`scan_directory`, all returning data). `_matches_filter` is now public `matches_filter` (the CLI's single-file branch needs it).
+
+### Added
+
+- The **constitutional tool boundary contract**, stated in `core/__init__.py`: (1) engine in the lib, (2) CLI in the tool, (3) no second engine, (4) the `[lib]`/overlay/absolute-FQCN markers are derived checked claims; admission to `core` requires that LIB code itself needs the primitive (the bloat guard).
+- `tests/test_constitutional_contract.py` -- enforces 1-3 for every `_CONSTITUTIONAL_NAMES` member (parametrized; a new name without a compliant tool fails). Verified to catch a revert of the links rewire.
+- `core.links` exports widened: `scan_directory`, `matches_filter`, `canonicalize_target`, `ALL_LINK_TYPES`.
+
 ## [0.8.20] - 2026-06-11
 
 Ships with dazzlecmd v0.9.18 -- overlay/virtual-kit alias creation routed through the Groupable verbs (PROJECTION-axis group/ungroup). No behavior change.

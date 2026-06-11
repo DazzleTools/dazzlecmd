@@ -15,6 +15,14 @@ unchanged. The non-link path helpers (``resolve_relative_path``,
 ``ensure_windows_executable_suffix``, ``translate_wsl_path``,
 ``which_with_pathext``) stay in ``paths`` -- they are general path utilities,
 not constitutional link primitives.
+
+**Boundary contract** (see ``dazzlecmd_lib.core.__init__`` for the full
+statement): this package is the link ENGINE -- detection, classification,
+creation, scanning; everything returns data. The user-facing ``dz links`` CLI
+(argparse, table/JSON display, exit codes) lives in the ``projects/core/links``
+tool, which imports this engine -- the same engine/CLI split as
+``core.safedel`` and its tool. A duplicate engine in the tool is a contract
+violation (enforced by ``tests/test_constitutional_contract.py``).
 """
 
 from __future__ import annotations
@@ -30,7 +38,10 @@ import sys
 # (create_link, remove_link, ...) are defined below.
 from dazzlecmd_lib.core.links._detect import (  # noqa: E402,F401
     detect_link,
+    scan_directory,
+    matches_filter,
     canonicalize_path,
+    canonicalize_target,
     LinkInfo,
     LINK_SYMLINK,
     LINK_JUNCTION,
@@ -38,6 +49,7 @@ from dazzlecmd_lib.core.links._detect import (  # noqa: E402,F401
     LINK_SHORTCUT,
     LINK_URLSHORTCUT,
     LINK_DAZZLELINK,
+    ALL_LINK_TYPES,
 )
 
 

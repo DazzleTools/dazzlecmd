@@ -1,0 +1,21 @@
+usage: dz links [-h] [-r] [-d DEPTH] [--type LINK_TYPE] [--broken] [--json]
+                [-v]
+                [paths ...]
+
+Detect and display filesystem links
+
+positional arguments:
+  paths                 Files or directories to scan (default: current
+                        directory)
+
+options:
+  -h, --help            show this help message and exit
+  -r, --recursive       Scan directories recursively
+  -d DEPTH, --depth DEPTH
+                        Maximum depth for recursive scan (implies -r)
+  --type LINK_TYPE, -t LINK_TYPE
+                        Filter by link type: symlink, junction, hardlink,
+                        shortcut, urlshortcut, dazzlelink (comma-separated)
+  --broken, -b          Show only broken links
+  --json, -j            Output as JSON
+  -v, --verbose         Show detailed info (inode, size, full paths)
