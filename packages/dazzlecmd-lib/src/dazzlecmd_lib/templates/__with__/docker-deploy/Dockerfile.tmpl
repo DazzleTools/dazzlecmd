@@ -1,0 +1,11 @@
+# Distribution image for {name} -- the aggregator runs in a container.
+# Build:  docker build -t {name_underscore} .
+# Run:    docker run --rm {name_underscore} list
+FROM python:3.12-slim
+
+WORKDIR /app
+COPY . .
+RUN pip install --no-cache-dir .
+
+ENTRYPOINT ["{command}"]
+CMD ["list"]

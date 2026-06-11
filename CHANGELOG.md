@@ -4,6 +4,14 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.28] - 2026-06-11
+
+**`--with` composable scaffolding components (4d-5).** `dz new aggregator <name> --with docker-test,docker-deploy,ci` (or `all`) layers reproducible-test/distribution Dockerfiles and GitHub Actions workflow stubs onto the scaffold. Composition is BEST-EFFORT (OQ-D1): a failed component warns and the rest continue, with an end summary (`--with summary: ok: ... | skipped: ...`). Unknown components fail clean BEFORE any disk writes. `common`/`template` (RepoKit) report unavailable with actionable hints until 4d-6 lands. Templates ship in the lib under `templates/__with__/` (the `__*__` convention keeps them out of language scaffolds).
+
+### Versions
+
+- dazzlecmd 0.9.27 -> 0.9.28 (PATCH); dazzlecmd-lib 0.8.27 -> 0.8.28 (PATCH; ships the __with__ templates); dazzle-dz -> 0.9.28.
+
 ## [0.9.27] - 2026-06-11
 
 **Config reader tolerates a UTF-8 BOM.** PowerShell's `Out-File -Encoding utf8` writes a BOM; the config reader now uses `utf-8-sig` on its read paths (reads BOM'd and BOM-less files identically; the write path still never emits one). Found by the tester-unbounded run. Also: HV.6 verified live -- a wtf-windows checkout on lib 0.8.26 renders the FULL kit-list view (status brackets, wrapped descriptions, data-computed drill-in) with zero wtf-side changes.
@@ -3129,7 +3137,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.27...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.28...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

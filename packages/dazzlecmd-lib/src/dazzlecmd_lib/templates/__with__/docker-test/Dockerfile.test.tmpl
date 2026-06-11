@@ -1,0 +1,10 @@
+# Reproducible test environment for {name}
+# Build:  docker build -f Dockerfile.test -t {name_underscore}-test .
+# Run:    docker run --rm {name_underscore}-test
+FROM python:3.12-slim
+
+WORKDIR /app
+COPY . .
+RUN pip install --no-cache-dir -e . pytest
+
+CMD ["python", "-m", "pytest", "tests", "-q"]

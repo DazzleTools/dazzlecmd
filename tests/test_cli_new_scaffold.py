@@ -27,6 +27,7 @@ def _agg_args(name, **kw):
         name=name, command=kw.get("command"), description=kw.get("description", ""),
         tools_dir=kw.get("tools_dir"), manifest=kw.get("manifest"),
         with_starter=kw.get("with_starter", False),
+        with_components=kw.get("with_components"),
     )
 
 
@@ -152,3 +153,44 @@ class TestNewAggregator:
         # Host untouched.
         assert host_manifest.read_text(encoding="utf-8") == before
         assert sorted(os.listdir(host / "projects")) == []
+
+
+class TestWithComponents:
+    """4d-5: the --with composable scaffolding framework (best-effort, OQ-D1)."""
+
+    def test_parse_expands_all_and_dedups(self):
+        from dazzlecmd.cli import _parse_with_spec
+        assert _parse_with_spec("docker-test,ci,docker-test") == ["docker-test", "ci"]
+        assert _parse_with_spec("all") == [
+            "common", "template", "docker-test", "docker-deploy", "ci"]
+        assert _parse_with_spec(None) == []
+        with pytest.raises(ValueError):
+            _parse_with_spec("nope")
+
+    def test_unknown_component_fails_before_any_writes(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        assert _cmd_new_aggregator(_agg_args("W0", with_components="bogus")) == 1
+        assert not (tmp_path / "W0").exists()
+
+    def test_docker_and_ci_components_apply(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+        assert _cmd_new_aggregator(
+            _agg_args("W1", with_components="docker-test,docker-deploy,ci")) == 0
+        t = tmp_path / "W1"
+        for rel in ("Dockerfile.test", "docker-compose.test.yml", "Dockerfile",
+                    ".github/workflows/test.yml", ".github/workflows/release.yml"):
+            assert (t / rel).is_file(), rel
+        # placeholders substituted, GitHub ${{ }} syntax untouched
+        df = (t / "Dockerfile.test").read_text(encoding="utf-8")
+        assert "w1-test" in df and "{name" not in df
+        ci = (t / ".github/workflows/test.yml").read_text(encoding="utf-8")
+        assert "${{ matrix.os }}" in ci
+        assert "ok: docker-test, docker-deploy, ci" in capsys.readouterr().out
+
+    def test_all_is_best_effort_with_summary(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+        assert _cmd_new_aggregator(_agg_args("W2", with_components="all")) == 0
+        out = capsys.readouterr().out
+        assert "ok: docker-test, docker-deploy, ci" in out
+        assert "skipped: common" in out and "template" in out  # 4d-6 pending
+        assert (tmp_path / "W2" / "Dockerfile.test").is_file()

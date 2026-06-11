@@ -469,6 +469,11 @@ def _register_meta_commands(subparsers):
         "--with-starter", action="store_true",
         help="Include a starter 'hello' tool in <tools-dir>/core/",
     )
+    new_agg_parser.add_argument(
+        "--with", dest="with_components", default=None, metavar="C1,C2",
+        help="Composable scaffolding components (comma-separated): "
+             "docker-test, docker-deploy, ci, common, template, all",
+    )
     new_agg_parser.set_defaults(_meta="new_aggregator")
 
     # Bare ``dz new`` with no type -> show help
@@ -1107,6 +1112,90 @@ def _scaffold_starter_tool(project_root, kit, tool_name="hello"):
     return 0
 
 
+# --- `--with` composable scaffolding components (4d-5, Tier-2 synthesis) ----
+#
+# Each component is a function (target_dir, placeholders) -> list-of-added
+# (relative paths), raising ComponentUnavailable with a reason when it cannot
+# apply. Composition is BEST-EFFORT (OQ-D1): a failed component warns and the
+# rest continue; a summary prints at the end. `common`/`template` (RepoKit,
+# network/external) land in 4d-6 -- until then they report unavailable with
+# the install pointer rather than failing silently.
+
+class _ComponentUnavailable(Exception):
+    pass
+
+
+def _with_copy_component(component_dir_name):
+    """An applier that copies templates/__with__/<name>/ into the target."""
+    def _apply(target_dir, placeholders):
+        src = os.path.join(_find_templates_root(), "__with__", component_dir_name)
+        if not os.path.isdir(src):
+            raise _ComponentUnavailable(f"template dir missing: {src}")
+        return _copy_template_tree(src, target_dir, placeholders)
+    return _apply
+
+
+def _with_repokit_stub(what, hint):
+    def _apply(target_dir, placeholders):
+        raise _ComponentUnavailable(f"{what} lands with RepoKit integration "
+                                    f"(4d-6). {hint}")
+    return _apply
+
+
+_WITH_COMPONENTS = {
+    "docker-test": _with_copy_component("docker-test"),
+    "docker-deploy": _with_copy_component("docker-deploy"),
+    "ci": _with_copy_component("ci"),
+    "common": _with_repokit_stub(
+        "git-repokit-common subtree",
+        "Meanwhile: git subtree add --prefix=scripts "
+        "https://github.com/DazzleTools/git-repokit-common.git main --squash"),
+    "template": _with_repokit_stub(
+        "git-repokit-template files",
+        "Meanwhile copy README/LICENSE/CONTRIBUTING from the template repo."),
+}
+_WITH_ALL = ("common", "template", "docker-test", "docker-deploy", "ci")
+
+
+def _parse_with_spec(spec):
+    """Parse a --with comma-list; expand `all`; reject unknown names."""
+    requested = [c.strip().lower() for c in (spec or "").split(",") if c.strip()]
+    expanded = []
+    for c in requested:
+        for name in (_WITH_ALL if c == "all" else (c,)):
+            if name not in _WITH_COMPONENTS:
+                raise ValueError(
+                    f"unknown --with component '{c}' "
+                    f"(valid: {', '.join([*_WITH_COMPONENTS, 'all'])})")
+            if name not in expanded:
+                expanded.append(name)
+    return expanded
+
+
+def _apply_with_components(target_dir, components, placeholders):
+    """Apply components best-effort; print the summary; return 0 always
+    (composition failures are warnings, not scaffold failures -- OQ-D1)."""
+    ok, skipped = [], []
+    for name in components:
+        try:
+            added = _WITH_COMPONENTS[name](target_dir, placeholders)
+            ok.append(name)
+            for rel in added:
+                print(f"  [with:{name}] {rel}")
+        except _ComponentUnavailable as exc:
+            skipped.append((name, str(exc)))
+        except Exception as exc:  # best-effort: never kill the scaffold
+            skipped.append((name, f"failed: {exc}"))
+    if ok or skipped:
+        parts = []
+        if ok:
+            parts.append("ok: " + ", ".join(ok))
+        if skipped:
+            parts.append("skipped: " + "; ".join(f"{n} ({r})" for n, r in skipped))
+        print(f"\n--with summary: {' | '.join(parts)}")
+    return 0
+
+
 def _cmd_new_aggregator(args, engine=None):
     """``dz new aggregator <name>`` -- scaffold a STANDALONE aggregator project.
 
@@ -1131,6 +1220,12 @@ def _cmd_new_aggregator(args, engine=None):
     tools_dir = args.tools_dir or new_defaults.get("tools_dir") or "projects"
     manifest = args.manifest or new_defaults.get("manifest") or ".dazzlecmd.json"
     description = args.description or f"{name} -- a dazzlecmd-lib aggregator"
+
+    try:
+        with_components = _parse_with_spec(getattr(args, "with_components", None))
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
 
     target = os.path.abspath(name)
     if os.path.exists(target):
@@ -1204,6 +1299,9 @@ def _cmd_new_aggregator(args, engine=None):
                 "long_description": "",
             })
             created.append(os.path.join(tools_dir, "core", "hello", ""))
+
+    if with_components:
+        _apply_with_components(target, with_components, placeholders)
 
     print(f"Created aggregator '{name}' at {target}")
     for path in sorted(created):

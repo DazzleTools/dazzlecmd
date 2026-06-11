@@ -1,0 +1,22 @@
+name: release
+
+# Stub: builds the sdist/wheel on tag push. Extend with PyPI publishing
+# (pypa/gh-action-pypi-publish) when {name} is ready to release.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build
+      - run: python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/

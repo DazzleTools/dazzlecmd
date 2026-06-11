@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.28] - 2026-06-11
+
+Ships with dazzlecmd v0.9.28 -- the `templates/__with__/` component trees (docker-test, docker-deploy, ci) consumed by `dz new ... --with` (4d-5). The `__*__` directory convention keeps them out of per-language scaffold copies.
+
 ## [0.8.27] - 2026-06-11
 
 Ships with dazzlecmd v0.9.27.
