@@ -39,6 +39,9 @@ DEFAULT_RESERVED_COMMANDS = frozenset({
     "tree",     # Show the aggregator tree
     "setup",    # Run a tool's declared setup script
     "version",  # Show version info
+    "action",   # Operate on metadata-plane annotations (dz action <type>
+                # <dot-expr>; pluggable types, `run` native first). Reserved
+                # AHEAD of the #87 framework so no tool can squat the verb.
 })
 
 # The minimal user-facing meta-command set -- what an aggregator that is a

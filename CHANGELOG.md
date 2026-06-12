@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.33] - 2026-06-12
+
+### Changed
+
+- **`action` joins `DEFAULT_RESERVED_COMMANDS`.** Forward namespace protection for the planned `dz action <type> <dot-expr>` metadata-plane framework (#87: pluggable action types operating on annotations, `run` native first) -- reserving the verb now means no tool can squat the name before the framework lands. A tool named `action` can no longer be created in any aggregator; no existing tool uses the name. Regression test pins the reservation.
+
+### Versions
+
+- dazzlecmd 0.9.32 -> 0.9.33 (PATCH); dazzlecmd-lib 0.8.32 -> 0.8.33 (PATCH -- the reserved-set change is lib-side); dazzle-dz -> 0.9.33.
+
 ## [0.9.32] - 2026-06-12
 
 ### Fixed
@@ -3171,7 +3181,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.32...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.33...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

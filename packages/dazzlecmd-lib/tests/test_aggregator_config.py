@@ -336,3 +336,11 @@ class TestFindAggregatorRoot:
         # ...but anchor to my package -> resolves to MY aggregator, not other.
         result = find_aggregator_root(str(my_pkg))
         assert result == os.path.abspath(str(my_agg))
+
+
+def test_action_verb_reserved_ahead_of_framework():
+    """'action' is reserved BEFORE the dz-action metadata framework lands
+    (dazzlecmd#87) so no tool can squat the verb. Pins the forward
+    reservation -- removing it would let a kit tool shadow the planned
+    `dz action <type> <dot-expr>` surface."""
+    assert "action" in DEFAULT_RESERVED_COMMANDS
