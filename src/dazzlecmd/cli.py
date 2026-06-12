@@ -1143,11 +1143,18 @@ _GIT_SUBTREE_TIMEOUT = 180  # network fetch of a whole repo
 
 
 def _run_git(args_list, cwd, timeout):
-    """Run git, return (rc, combined_output). Missing git -> (127, message)."""
+    """Run git, return (rc, combined_output). Missing git -> (127, message).
+
+    Runs with a sanitized environment (repo-location GIT_* vars stripped) so
+    the repository is always resolved from ``cwd`` -- never from ambient hook
+    state (git exports GIT_DIR to hook subprocesses, which would silently
+    point every call here at the HOOK'S repository).
+    """
     import subprocess as _sp
+    from dazzlecmd_lib.mode import sanitized_git_env
     try:
         r = _sp.run(["git"] + args_list, cwd=cwd, capture_output=True,
-                    text=True, timeout=timeout)
+                    text=True, timeout=timeout, env=sanitized_git_env())
         return r.returncode, (r.stdout + r.stderr).strip()
     except FileNotFoundError:
         return 127, "git not found on PATH"
@@ -2065,8 +2072,10 @@ def _cmd_kit_add(args, project_root, engine):
     cmd += [url, f"projects/{name}"]
 
     print(f"Running: {' '.join(cmd)}")
+    from dazzlecmd_lib.mode import sanitized_git_env
     try:
-        result = _subprocess.run(cmd, cwd=project_root)
+        result = _subprocess.run(cmd, cwd=project_root,
+                                 env=sanitized_git_env())
     except FileNotFoundError:
         print(
             "Error: git not found. Install git and retry.",

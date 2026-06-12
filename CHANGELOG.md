@@ -4,6 +4,14 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.30] - 2026-06-11
+
+**Git subprocess calls are immune to hook-exported GIT_* environment variables.** git exports repo-location variables (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, ...) to hook subprocesses -- so any `dz` git operation running under a git hook (e.g. a pre-push hook that runs the test suite, or `dz` invoked from a hook script) silently addressed the HOOK'S repository instead of the one named with `-C`: `rev-parse --show-toplevel` reports the cwd as toplevel when GIT_DIR is set (defeating the own-toplevel safety guards of v0.9.29), and write commands like `git subtree add` mutate the wrong repo. Found when the repo's own pre-push hook ran pytest and 4 sandboxed tests failed against dazzlecmd's working tree. Fix: new `dazzlecmd_lib.mode.sanitized_git_env()` strips the repo-location set (the `git rev-parse --local-env-vars` family; author/committer/ssh vars preserved) and EVERY production git call site passes it -- mode.py's dirty-tree pre-check + submodule add/update, dz's `_run_git` (all `--with` appliers and template clones), and `dz kit add`'s submodule add. Autouse conftest fixtures additionally strip the set for the test suite itself; regression tests pin the leak scenario verbatim (`tests/test_git_env_sanitization.py`).
+
+### Versions
+
+- dazzlecmd 0.9.29 -> 0.9.30 (PATCH); dazzlecmd-lib 0.8.29 -> 0.8.30 (PATCH; new `sanitized_git_env` export); dazzle-dz -> 0.9.30.
+
 ## [0.9.29] - 2026-06-11
 
 **`--with common` and `--with template` are real (4d-6 -- RepoKit integration; completes the `dz new` redesign #35 cluster).** `common` adds the git-repokit-common subtree at `scripts/` (initializing git + an initial commit on a fresh scaffold, with local `core.autocrlf=false` and a racy-git index refresh -- both Windows-bitten in development); `template` resolves local-first (`new.repokit_template_path`) -> shallow-clone of git-repokit-template -> the lib-bundled FALLBACK-MINIMAL LICENSE/CONTRIBUTING stubs with a clear warning (OQ-D2/G), never overwriting scaffold files. Unavailability is a warning, never a block (OQ-G1). **Safety fix found by the hermetic tests:** ambient `rev-parse` discovery could walk up to an ANCESTOR repo (e.g. a scaffold under the user's home, itself a git repo) and subtree into the WRONG repository -- the applier now requires the target to be its own toplevel, else initializes a fresh nested-safe repo. Config: `new.repokit_common_url` / `new.repokit_template_path` / `new.repokit_template_url`. Delegation to repokit-the-tool tracked in git-repokit#14.
@@ -3145,7 +3153,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.29...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.30...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

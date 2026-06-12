@@ -152,6 +152,44 @@ GIT_CLONE_TIMEOUT = 120
 GIT_UPDATE_TIMEOUT = 60
 GIT_QUERY_TIMEOUT = 10
 
+# Repository-location environment variables (the set `git rev-parse
+# --local-env-vars` reports). git EXPORTS these to hook subprocesses
+# (pre-push, post-checkout, ...), so any of our git calls running under a
+# hook would silently address the HOOK'S repository instead of the one we
+# name with `-C`: with GIT_DIR set, `rev-parse --show-toplevel` reports the
+# cwd as toplevel (defeating own-toplevel guards) and write commands like
+# `subtree add` mutate the wrong repo. We always address repos explicitly,
+# so these must never be inherited. Author/committer/ssh/askpass vars are
+# deliberately NOT stripped.
+_GIT_REPO_LOCATION_VARS = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_PREFIX",
+    "GIT_INTERNAL_SUPER_PREFIX",
+    "GIT_SHALLOW_FILE",
+    "GIT_GRAFT_FILE",
+    "GIT_NAMESPACE",
+    "GIT_QUARANTINE_PATH",
+)
+
+
+def sanitized_git_env():
+    """A copy of the environment safe for spawning git against an EXPLICIT repo.
+
+    Strips the repo-location variables above so a git subprocess resolves the
+    repository from its ``-C``/``cwd`` argument -- never from ambient hook
+    state. Pass as ``env=`` to every git ``subprocess`` call.
+    """
+    env = dict(os.environ)
+    for var in _GIT_REPO_LOCATION_VARS:
+        env.pop(var, None)
+    return env
+
 
 def _save_full_config(project_root, data):
     """Save full mode_local.json contents (stamped with the schema version)."""
@@ -843,6 +881,7 @@ def _check_dirty_tree(tool_dir):
         toplevel = subprocess.run(
             ["git", "-C", tool_dir, "rev-parse", "--show-toplevel"],
             capture_output=True, text=True, timeout=GIT_QUERY_TIMEOUT,
+            env=sanitized_git_env(),
         )
     except (OSError, subprocess.TimeoutExpired):
         return ""
@@ -858,6 +897,7 @@ def _check_dirty_tree(tool_dir):
         result = subprocess.run(
             ["git", "-C", tool_dir, "status", "--porcelain"],
             capture_output=True, text=True, timeout=GIT_QUERY_TIMEOUT,
+            env=sanitized_git_env(),
         )
     except (OSError, subprocess.TimeoutExpired):
         # `git` missing, or `tool_dir` somehow unreachable. Don't block
@@ -1147,6 +1187,7 @@ def _switch_to_publish(project, project_root, gitmodules, dry_run, force,
                 ["git", "-C", project_root, "submodule", "add",
                  remote_url, rel_key],
                 capture_output=True, text=True, timeout=GIT_CLONE_TIMEOUT,
+                env=sanitized_git_env(),
             )
             if result.returncode != 0:
                 print(f"Error: git submodule add failed: "
@@ -1186,6 +1227,7 @@ def _switch_to_publish(project, project_root, gitmodules, dry_run, force,
             ["git", "-C", project_root, "submodule", "update", "--init",
              submodule_path],
             capture_output=True, text=True, timeout=GIT_UPDATE_TIMEOUT,
+            env=sanitized_git_env(),
         )
         if result.returncode != 0:
             print(f"Error: git submodule update failed: "

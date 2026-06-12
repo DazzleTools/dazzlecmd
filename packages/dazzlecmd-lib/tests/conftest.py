@@ -40,3 +40,18 @@ def assert_no_shim_access():
             DazzleEntity._warn_on_shim = prev
 
     return _run
+
+
+@pytest.fixture(autouse=True)
+def _strip_git_hook_env(monkeypatch):
+    """Strip repo-location GIT_* vars so the suite is immune to git hooks.
+
+    git exports GIT_DIR (and friends) to hook subprocesses; a suite run from
+    a pre-push hook would otherwise have every sandboxed git call silently
+    address the hook's repository. Mirrors the same fixture in the parent
+    repo's tests/conftest.py; production code uses
+    ``dazzlecmd_lib.mode.sanitized_git_env`` for its own calls.
+    """
+    from dazzlecmd_lib.mode import _GIT_REPO_LOCATION_VARS
+    for var in _GIT_REPO_LOCATION_VARS:
+        monkeypatch.delenv(var, raising=False)

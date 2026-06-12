@@ -52,6 +52,30 @@ def _reset_runner_registry():
 
 
 @pytest.fixture(autouse=True)
+def _strip_git_hook_env(monkeypatch):
+    """Strip repo-location GIT_* vars so the suite is immune to git hooks.
+
+    git EXPORTS GIT_DIR (and friends) to hook subprocesses. When this suite
+    runs under a hook (the repo's pre-push hook runs pytest), every git
+    subprocess in the sandboxed tests would otherwise inherit them and
+    silently operate against the HOOK'S repository -- `rev-parse
+    --show-toplevel` reports the cwd as toplevel (work tree defaults to cwd
+    when GIT_DIR is set), defeating the own-toplevel guards. Production code
+    sanitizes its own git calls (`dazzlecmd_lib.mode.sanitized_git_env`);
+    this fixture protects test-helper git calls and any future unsanitized
+    site from flapping the suite. Found 2026-06-11: a blocked `git push`
+    failed 4 tests that pass everywhere else.
+    """
+    for var in ("GIT_DIR", "GIT_WORK_TREE", "GIT_IMPLICIT_WORK_TREE",
+                "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY",
+                "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_COMMON_DIR",
+                "GIT_PREFIX", "GIT_INTERNAL_SUPER_PREFIX",
+                "GIT_SHALLOW_FILE", "GIT_GRAFT_FILE", "GIT_NAMESPACE",
+                "GIT_QUARANTINE_PATH"):
+        monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _isolate_user_config(monkeypatch, tmp_path_factory):
     """Point ``DAZZLECMD_CONFIG`` at a nonexistent path for every test.
 
