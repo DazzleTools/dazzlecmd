@@ -218,6 +218,8 @@ class TestRepoKitComponents:
         os.makedirs(remote / "hooks")
         (remote / "install-hooks.sh").write_text("#!/bin/sh\n", encoding="utf-8")
         for cmd in (["git", "init", "-q", "-b", "main"],
+                    ["git", "config", "commit.gpgsign", "false"],
+                    ["git", "config", "tag.gpgsign", "false"],
                     ["git", "add", "-A"],
                     ["git", "-c", "user.name=t", "-c", "user.email=t@t",
                      "commit", "-q", "-m", "x"]):

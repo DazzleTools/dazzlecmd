@@ -76,6 +76,31 @@ def _strip_git_hook_env(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _unsign_test_git_commits(monkeypatch):
+    """No git commit made during a test run may GPG-sign.
+
+    Sandbox fixture repos inherit the user's GLOBAL gitconfig; with
+    ``commit.gpgsign=true`` there, every fixture commit (and every
+    production-code commit exercised in a sandbox, e.g. the scaffold
+    applier's initial commit) pops a pinentry/Kleopatra prompt -- and a
+    cancelled prompt fails the test. Project convention is that git-using
+    tests run unsigned against non-real repos (see test_git_snapshot.py /
+    test_mode_parameterization.py, which configure their fixtures
+    explicitly); this fixture enforces it suite-wide via git's
+    environment-config mechanism (git >= 2.31) so a forgetful future
+    fixture can't reintroduce the spam. The repo-location sanitization
+    above deliberately does NOT strip GIT_CONFIG_* (it is not a
+    repo-location var), so this injection survives production's
+    sanitized_git_env().
+    """
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "2")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "commit.gpgsign")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "false")
+    monkeypatch.setenv("GIT_CONFIG_KEY_1", "tag.gpgsign")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_1", "false")
+
+
+@pytest.fixture(autouse=True)
 def _isolate_user_config(monkeypatch, tmp_path_factory):
     """Point ``DAZZLECMD_CONFIG`` at a nonexistent path for every test.
 

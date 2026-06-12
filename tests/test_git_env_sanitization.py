@@ -31,7 +31,10 @@ def _make_repo(path, dirty=False):
     tracked = os.path.join(path, "tracked.txt")
     with open(tracked, "w", encoding="utf-8") as f:
         f.write("content")
-    for cmd in (["init", "-q"], ["add", "-A"],
+    for cmd in (["init", "-q"],
+                ["config", "commit.gpgsign", "false"],
+                ["config", "tag.gpgsign", "false"],
+                ["add", "-A"],
                 ["commit", "-q", "-m", "init"]):
         subprocess.run(["git", "-C", path] + cmd, check=True, env=env,
                        capture_output=True, text=True)

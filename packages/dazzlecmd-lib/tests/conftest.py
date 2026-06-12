@@ -55,3 +55,19 @@ def _strip_git_hook_env(monkeypatch):
     from dazzlecmd_lib.mode import _GIT_REPO_LOCATION_VARS
     for var in _GIT_REPO_LOCATION_VARS:
         monkeypatch.delenv(var, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _unsign_test_git_commits(monkeypatch):
+    """No git commit made during a test run may GPG-sign (no pinentry spam).
+
+    Mirrors the same fixture in the parent repo's tests/conftest.py --
+    project convention is that git-using tests run unsigned against
+    non-real repos. Enforced suite-wide via git's environment-config
+    mechanism (git >= 2.31).
+    """
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "2")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "commit.gpgsign")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "false")
+    monkeypatch.setenv("GIT_CONFIG_KEY_1", "tag.gpgsign")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_1", "false")
