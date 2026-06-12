@@ -161,3 +161,10 @@ private/claude/
 private/temp/
 private/notes/
 private/docs/
+
+# Local-only kit/aggregator hookups (not shipped publicly).
+# wtf-windows is wired in locally as the recursion proof (aggregator
+# embedding aggregator); it returns to public tracking when wtf-windows
+# reaches its public milestone.
+/projects/wtf/
+/kits/wtf.kit.json

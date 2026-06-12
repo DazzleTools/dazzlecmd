@@ -4,6 +4,14 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.31] - 2026-06-11
+
+**The wtf-windows kit/aggregator hookup is detached from the public repo.** It was wired in (as a git submodule + `kits/wtf.kit.json` pointer) to prove dazzlecmd's recursion story -- an aggregator embedding another aggregator, each able to incorporate the other -- and that proof is complete and regression-tested (`tests/test_engine_recursive.py`, including `CircularDependencyError` cycle detection for the mutual-embed case). wtf-windows is pre-release; the hookup returns when it reaches its public milestone. The public repo's `projects/wtf` pointer was also stale (it referenced an unpublished commit, breaking `--recurse-submodules` clones) -- detaching fixes that. Local development setups keep the kit by placing the checkout at `projects/wtf/` + the registry at `kits/wtf.kit.json` (both now gitignored). **Noted gap, promoted to the kit-lifecycle work (#52):** detaching took raw git surgery (`git rm --cached`, `.gitmodules` edit, ignore entries); `dz kit` has `add` but no `detach`/`remove` inverse.
+
+### Versions
+
+- dazzlecmd 0.9.30 -> 0.9.31 (PATCH); dazzlecmd-lib 0.8.30 -> 0.8.31 (PATCH, lockstep -- no lib changes); dazzle-dz -> 0.9.31.
+
 ## [0.9.30] - 2026-06-11
 
 **Git subprocess calls are immune to hook-exported GIT_* environment variables.** git exports repo-location variables (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE, ...) to hook subprocesses -- so any `dz` git operation running under a git hook (e.g. a pre-push hook that runs the test suite, or `dz` invoked from a hook script) silently addressed the HOOK'S repository instead of the one named with `-C`: `rev-parse --show-toplevel` reports the cwd as toplevel when GIT_DIR is set (defeating the own-toplevel safety guards of v0.9.29), and write commands like `git subtree add` mutate the wrong repo. Found when the repo's own pre-push hook ran pytest and 4 sandboxed tests failed against dazzlecmd's working tree. Fix: new `dazzlecmd_lib.mode.sanitized_git_env()` strips the repo-location set (the `git rev-parse --local-env-vars` family; author/committer/ssh vars preserved) and EVERY production git call site passes it -- mode.py's dirty-tree pre-check + submodule add/update, dz's `_run_git` (all `--with` appliers and template clones), and `dz kit add`'s submodule add. Autouse conftest fixtures additionally strip the set for the test suite itself; regression tests pin the leak scenario verbatim (`tests/test_git_env_sanitization.py`).
@@ -3153,7 +3161,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.30...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.31...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
