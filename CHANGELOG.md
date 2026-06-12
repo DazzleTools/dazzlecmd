@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.32] - 2026-06-12
+
+### Fixed
+
+- **Bare `dz kit` (no subcommand) crashed with NameError.** The v0.9.26 kit-list unification deleted dz's local `_cmd_kit_list` but the bare-`kit` dispatch branch still referenced it. Caught by CI's flake8 F821 gate on the first post-hold push -- the full suite, two tester passes, and the byte-gate all missed it because nothing exercised the bare form (the v0.9.26 acceptance check grepped for the *definition* being gone, not for stale *references*). Bare `dz kit` now routes to the same unified lib renderer as `dz kit list` (verified byte-identical) and a dispatch-level regression test pins it.
+
+### Versions
+
+- dazzlecmd 0.9.31 -> 0.9.32 (PATCH); dazzlecmd-lib 0.8.31 -> 0.8.32 (PATCH, lockstep -- no lib changes); dazzle-dz -> 0.9.32.
+
 ## [0.9.31] - 2026-06-11
 
 **The wtf-windows kit/aggregator hookup is detached from the public repo.** It was wired in (as a git submodule + `kits/wtf.kit.json` pointer) to prove dazzlecmd's recursion story -- an aggregator embedding another aggregator, each able to incorporate the other -- and that proof is complete and regression-tested (`tests/test_engine_recursive.py`, including `CircularDependencyError` cycle detection for the mutual-embed case). wtf-windows is pre-release; the hookup returns when it reaches its public milestone. The public repo's `projects/wtf` pointer was also stale (it referenced an unpublished commit, breaking `--recurse-submodules` clones) -- detaching fixes that. Local development setups keep the kit by placing the checkout at `projects/wtf/` + the registry at `kits/wtf.kit.json` (both now gitignored). **Noted gap, promoted to the kit-lifecycle work (#52):** detaching took raw git surgery (`git rm --cached`, `.gitmodules` edit, ignore entries); `dz kit` has `add` but no `detach`/`remove` inverse.
@@ -3161,7 +3171,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.31...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.32...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

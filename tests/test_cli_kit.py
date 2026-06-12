@@ -796,3 +796,34 @@ class TestKitListDrillInColumnWidths:
         out = capsys.readouterr().out
         assert "ghost" in out
         assert "(not found)" in out
+
+
+class TestBareKitDispatch:
+    """Bare ``dz kit`` (no subcommand) must behave exactly like ``dz kit list``.
+
+    Regression pin for the v0.9.26 kit-list unification leftover: dz's
+    ``_cmd_kit_list`` was deleted but the ``meta == "kit"`` dispatch branch
+    still referenced it, so bare ``dz kit`` crashed with NameError. The full
+    suite, two tester passes, and the byte-gate ALL missed it because nothing
+    exercised the bare form; CI's flake8 F821 gate caught it post-push. This
+    test goes through real argv parsing + dispatch (not a direct handler
+    call) because the bug lived in dispatch.
+    """
+
+    def _run_main(self, monkeypatch, capsys, argv):
+        import sys as _sys
+        from dazzlecmd import cli as _cli
+        monkeypatch.setattr(_sys, "argv", ["dz"] + argv)
+        try:
+            rc = _cli.main()
+        except SystemExit as exc:  # argparse exits are part of the contract
+            rc = exc.code
+        return rc, capsys.readouterr().out
+
+    def test_bare_kit_matches_kit_list(self, monkeypatch, capsys):
+        rc_bare, out_bare = self._run_main(monkeypatch, capsys, ["kit"])
+        rc_list, out_list = self._run_main(monkeypatch, capsys, ["kit", "list"])
+        assert rc_bare == 0
+        assert rc_list == 0
+        assert out_bare == out_list
+        assert out_bare.strip()  # renders something, not an empty pass

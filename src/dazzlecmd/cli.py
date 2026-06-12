@@ -556,8 +556,13 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
     elif meta == "kit_status":
         return _cmd_kit_status(kits, engine=engine)
     elif meta == "kit":
-        # bare "dz kit" with no subcommand
-        return _cmd_kit_list(args, kits, projects, engine=engine)
+        # bare "dz kit" with no subcommand behaves like "dz kit list"
+        # (routed to the same unified lib renderer; the v0.9.26 unification
+        # deleted dz's _cmd_kit_list but left this branch pointing at it --
+        # caught by CI's F821 gate, missed by the suite because nothing
+        # exercised the bare form).
+        from dazzlecmd_lib.default_meta_commands import kit_list_handler
+        return kit_list_handler(args, engine, projects, kits, project_root)
     # Phase 3: kit management
     elif meta == "kit_enable":
         return _cmd_kit_enable(args, engine)
