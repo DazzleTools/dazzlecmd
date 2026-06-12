@@ -9,7 +9,7 @@
 
 > **A tool for tools: many tools, one command.**
 
-A framework for tools -- and for how tools compound on each other. DazzleCMD aggregates many small standalone tools into one discoverable, version-tracked interface, and lets them nest and grow into kits and whole aggregators. Instead of remembering where dozens of scripts live or hunting through folders, just use `dz <tool> [args]`.
+A unified framework for tools -- and for how tools compound on each other. DazzleCMD aggregates many small standalone tools into one discoverable, version-tracked interface, and lets them nest and grow into nestable kits and standalone aggregators. Instead of remembering where dozens of scripts live or hunting through folders, just use `dz <tool> [args]`.
 
 ## Why DazzleCMD?
 
@@ -21,7 +21,9 @@ Enter `dz`...
 
 DazzleCMD provides a single entry point for all your tools. Each tool keeps its own structure and versioning. Dazzlecmd simply provides the discovery and dispatch layer. Tools that grow complex enough can "graduate" to their own repos (which can in turn be nested internal to "dz" as git submodules). Tools that stay small stay organized, easy to find, and simple to track.
 
-And it isn't just for *your* tools: `dz kit add <github-url>` pulls your own collection -- or anyone else's kit or aggregator -- onto any machine in one command, and every tool in it is instantly runnable, whatever language it's written in. It's package-manager convenience (think pip or brew) for scripts that never had to *become* packages first -- which makes a plain folder of utilities genuinely cross-platform and shareable.
+It isn't just for *your* tools either: `dz kit add <github-url>`. This pulls your own collection (or anyone else's kit or aggregator) onto any machine in a single command, making every tool instantly runnable, whatever language it happens to be written in. DazzleCMD provides package-manager convenience (think pip or brew) for scripts that never had to *become* packages first, making a plain folder of utilities cross-platform and shareable.
+
+And tools you *didn't* write are fair game too. On the roadmap: **recipes** -- wrap the commands you already use (`grep`, `fd`, `sed`, that one `ffmpeg` incantation) with the exact flags and environment variables that took an afternoon to get right. `dz grep.recipe` will list the grep invocations you've saved; `dz action run grep.recipe.1` replays one, remembered environment included. It's an annotation system *and* the runtime for those annotations: instead of spelunking `.bash_history`, keeping a notes file, or maintaining machine-specific `setenv.sh`/`setenv.cmd` scripts, the working knowledge around your commands gets versioned with your repo -- pull it down on any machine (Windows, Linux, macOS, BSD) and it arrives ready to run. In other words, `dz` is quietly a portable build environment, growing outward from the dispatch layer.
 
 ## Features
 
