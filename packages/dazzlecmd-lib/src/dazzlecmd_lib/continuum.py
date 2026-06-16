@@ -260,3 +260,222 @@ class _ContinuumLens:
         """This framing's pole: ``warm_pole`` for warm, ``cold_pole`` for cold."""
         return (self.continuum.warm_pole() if self.sign > 0
                 else self.continuum.cold_pole())
+
+
+# ===========================================================================
+# ContinuumSpace -- N parallel Continuums composed on a shared PRESENCE scale.
+# ===========================================================================
+# A domain-NEUTRAL composition primitive: take N Continuum axes (each a distinct
+# mechanism) and project every (axis, level) onto ONE shared signed PRESENCE
+# scale -- "how much of the axis's quality is expressed" -- so the orthogonal
+# axes become comparable and a strict merged order (the *spectrum*) emerges.
+# "next colder / next warmer" navigation is then well-defined ACROSS axes.
+#
+# PRESENCE is a general abstraction, NOT visibility: warm = MORE present, cold =
+# LESS present, of WHATEVER quality the axis measures -- water for wet/dry, heat
+# for hot/cold, loudness for quiet/loud, listing for visible/hidden, dispatch for
+# enabled/disabled. It applies to ANY abstract type; visibility is just one axis.
+# Presence is the grouping<->ungrouping reading of warm/cold at the space level
+# (group = make more present, ungroup = make less present).
+#
+# Concrete (the canonical dazzlecmd presence space): silence, hide, shadow,
+# disable, detach, remove are DIFFERENT mechanisms (different config keys, code
+# paths) but ALL move a tool MORE or LESS present. A ContinuumSpace aligns them on
+# one scale so "the next STRONGER (colder) / WEAKER (warmer) move" is well-defined
+# across those orthogonal mechanisms -- the keystone of the same-bones thesis at
+# the verb layer.
+#
+# Membership is LOOSE/STRUCTURAL (matching the ContinuumProtocol idiom): an axis
+# joins by satisfying ContinuumProtocol AND declaring its presence coordinates
+# (level -> signed scale int). No inheritance; the "is presence-aligned" contract
+# is verified at construction, the same way the constitutional boundary is test-
+# enforced rather than typed. PURE -- composition + ordering over declared data;
+# the effectful group/ungroup EXECUTION lives in the consuming Contexts.
+
+
+@runtime_checkable
+class ContinuumSpaceProtocol(Protocol):
+    """The structural contract a continuum space satisfies (the lift-to-
+    dazzle-lib interface; nothing is forced to subclass)."""
+
+    name: str
+    meaning: str
+
+    def presence_of(self, axis: str, level: str) -> int: ...
+    def spectrum(self) -> Tuple[Tuple[str, str], ...]: ...
+    def colder_than(self, axis: str, level: str) -> Optional[Tuple[str, str]]: ...
+    def warmer_than(self, axis: str, level: str) -> Optional[Tuple[str, str]]: ...
+
+
+@dataclass(frozen=True)
+class ContinuumSpace:
+    """A composition of N parallel :class:`Continuum` axes on a shared PRESENCE scale.
+
+    ``axes`` maps an axis name to its Continuum (the mechanism). ``presence``
+    maps each axis's level to a SIGNED presence coordinate -- how much of that
+    axis's quality is expressed: ``0`` is the axis's NEUTRAL (its rank-0 level --
+    the space-level zero every axis's default collapses onto), ``<0`` is LESS
+    present (cold), ``>0`` is MORE present (warm). The non-zero coordinates form
+    one strict merged order across all axes -- the *spectrum* -- so
+    ``colder_than``/``warmer_than`` can hop between axes (one axis's cold rung to
+    another's).
+
+    PRESENCE is a GENERAL abstraction, NOT tied to visibility -- the quality being
+    measured is per-instance (water for wet/dry, heat for hot/cold, listing for
+    visible/hidden, dispatch for enabled/disabled). warm = more present, cold =
+    less present is the grouping<->ungrouping reading of the {P, not-P} / RGB-CMYK
+    duality (see the directionality / 4-fold note). ``meaning`` is a caller-
+    supplied, human-readable description of WHAT this space's scale measures (e.g.
+    "output visibility", "how wet", "task priority") so the space is self-
+    describing and interrogable via :meth:`describe` -- one reads it to judge what
+    fits. ``invariant`` names the conserved quantity at the shared 0 (per-instance,
+    like a Continuum's) -- NOT the scale's name. Navigation is framing-NEUTRAL
+    (absolute warm/cold); a surface binds "stronger/weaker" (or ``--adjacent``).
+
+    Contract (verified at construction + by the contract tests):
+    - ``axes`` and ``presence`` name exactly the same axes;
+    - each axis's presence map covers exactly that Continuum's levels;
+    - presence is ALIGNED: strictly increasing cold->warm, with the neutral
+      (rank-0) level -- and only it -- at presence 0;
+    - all non-zero coordinates are unique across the whole space (a strict merged
+      order).
+    """
+
+    name: str
+    axes: Mapping[str, "Continuum"]
+    presence: Mapping[str, Mapping[str, int]]
+    meaning: str = ""
+    invariant: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.axes:
+            raise ContinuumError(f"continuum space {self.name!r} has no axes")
+        object.__setattr__(self, "axes", dict(self.axes))
+        object.__setattr__(self, "presence",
+                           {a: dict(m) for a, m in self.presence.items()})
+        if set(self.axes) != set(self.presence):
+            raise ContinuumError(
+                f"continuum space {self.name!r}: axes {sorted(self.axes)} and "
+                f"presence keys {sorted(self.presence)} must name the same axes"
+            )
+        seen_coords = {}  # non-zero coord -> (axis, level), for global uniqueness
+        for aname, cont in self.axes.items():
+            pmap = self.presence[aname]
+            if set(pmap) != set(cont.ranks):
+                raise ContinuumError(
+                    f"space {self.name!r} axis {aname!r}: presence levels "
+                    f"{sorted(pmap)} must cover exactly the continuum's levels "
+                    f"{sorted(cont.ranks)}"
+                )
+            # presence 0 <-> the neutral (rank-0) level, and only it.
+            for lvl, p in pmap.items():
+                if (cont.rank(lvl) == 0) != (p == 0):
+                    raise ContinuumError(
+                        f"space {self.name!r} axis {aname!r} level {lvl!r}: "
+                        f"presence 0 must align with the neutral (rank-0) level "
+                        f"(<0 = suppressed, >0 = amplified)"
+                    )
+            # presence-aligned: strictly increasing along cold->warm rank order
+            # (spans the full signed range -- <0 suppressed, 0 neutral, >0 amplified).
+            ordered = cont.levels()  # cold -> warm
+            ps = [pmap[lvl] for lvl in ordered]
+            if any(ps[i] >= ps[i + 1] for i in range(len(ps) - 1)):
+                raise ContinuumError(
+                    f"space {self.name!r} axis {aname!r}: presence must be "
+                    f"strictly increasing cold->warm (presence-aligned); got "
+                    f"{list(zip(ordered, ps))}"
+                )
+            # non-zero coordinates are globally unique (the merged order is a
+            # strict total order; neutrals share 0 and are the space-level zero).
+            for lvl, p in pmap.items():
+                if p != 0:
+                    if p in seen_coords:
+                        oa, ol = seen_coords[p]
+                        raise ContinuumError(
+                            f"space {self.name!r}: presence {p} reused by "
+                            f"({oa},{ol}) and ({aname},{lvl}) -- non-zero "
+                            f"coordinates must be unique across the space"
+                        )
+                    seen_coords[p] = (aname, lvl)
+
+    # -- axis access ---------------------------------------------------------
+    def axis(self, name: str) -> "Continuum":
+        try:
+            return self.axes[name]
+        except KeyError:
+            raise ContinuumError(
+                f"{name!r} is not an axis of space {self.name!r}; "
+                f"axes: {tuple(self.axes)}"
+            )
+
+    def presence_of(self, axis: str, level: str) -> int:
+        """The shared-scale presence coordinate of ``(axis, level)`` (0 = fully
+        present, <0 = suppressed)."""
+        self.axis(axis).rank(level)  # validate level membership
+        return self.presence[axis][level]
+
+    def is_neutral(self, axis: str, level: str) -> bool:
+        """True when ``(axis, level)`` is fully present (presence 0)."""
+        return self.presence_of(axis, level) == 0
+
+    # -- the merged presence spectrum + navigation ---------------------------
+    def spectrum(self) -> Tuple[Tuple[str, str], ...]:
+        """All NON-NEUTRAL states, warm -> cold (descending presence): the
+        navigable merged ladder. The shared neutral (presence 0 -- the space-
+        level zero every axis's default collapses onto) is the implicit center
+        and is not listed. The proof the axes share one scale:
+        ``... featured > [neutral] > silenced > hidden > shadowed > disabled ...``
+        """
+        items = [(a, lvl) for a, m in self.presence.items()
+                 for lvl, p in m.items() if p != 0]
+        items.sort(key=lambda al: self.presence[al[0]][al[1]], reverse=True)
+        return tuple(items)
+
+    def colder_than(self, axis: str, level: str) -> Optional[Tuple[str, str]]:
+        """The next COLDER (more-ungrouped) coordinate on the merged scale, or
+        ``None`` at the cold pole. Crosses axes at adjacent presence (e.g.
+        ``shadowed`` -> ``disabled``); landing on the shared zero returns THIS
+        axis's neutral. Framing-NEUTRAL -- a surface labels it 'stronger'/'weaker'
+        (or shows both via ``--adjacent``) per its own figure pole."""
+        cur = self.presence_of(axis, level)
+        colder = [(a, lvl, p) for a, m in self.presence.items()
+                  for lvl, p in m.items() if p < cur]
+        if not colder:
+            return None
+        target = max(p for _, _, p in colder)        # closest-colder presence
+        if target == 0:
+            return (axis, self.axis(axis).neutral())  # the shared zero -> own default
+        return next((a, lvl) for a, lvl, p in colder if p == target)
+
+    def warmer_than(self, axis: str, level: str) -> Optional[Tuple[str, str]]:
+        """The next WARMER (more-grouped) coordinate on the merged scale, or
+        ``None`` at the warm pole. Symmetric to :meth:`colder_than` -- e.g. from
+        a suppressed state up to its axis's neutral, or from neutral up to an
+        amplified (``>0``) state if any axis has one."""
+        cur = self.presence_of(axis, level)
+        warmer = [(a, lvl, p) for a, m in self.presence.items()
+                  for lvl, p in m.items() if p > cur]
+        if not warmer:
+            return None
+        target = min(p for _, _, p in warmer)        # closest-warmer presence
+        if target == 0:
+            return (axis, self.axis(axis).neutral())
+        return next((a, lvl) for a, lvl, p in warmer if p == target)
+
+    # -- interrogation -------------------------------------------------------
+    def describe(self) -> str:
+        """A human-readable summary -- what this space MEANS, the axes that
+        compose it (with their presence coordinates), and the merged spectrum --
+        so a caller can see at a glance what the space measures and judge what
+        fits it. The self-describing affordance for a domain-neutral primitive."""
+        lines = [f"ContinuumSpace {self.name!r}: "
+                 f"{self.meaning or '(no stated meaning)'}"]
+        if self.invariant:
+            lines.append(f"  conserved at 0: {self.invariant}")
+        for aname, cont in self.axes.items():
+            rungs = ", ".join(f"{lvl}[{self.presence_of(aname, lvl):+d}]"
+                              for lvl in cont.levels())  # cold -> warm
+            lines.append(f"  axis {aname!r}: {rungs}")
+        spec = " > ".join(f"{a}:{lvl}" for a, lvl in self.spectrum())
+        lines.append(f"  spectrum (warm->cold): {spec or '(none)'}")
+        return "\n".join(lines)

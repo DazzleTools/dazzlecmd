@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.35] - 2026-06-16
+
+### Added
+
+- **`ContinuumSpace` -- composing N parallel `Continuum` axes on one shared PRESENCE scale.** A new pure dazzlecmd-lib type (in `continuum.py`), domain-NEUTRAL: each member axis is a distinct mechanism but all align to one SIGNED presence coordinate -- `<0` less present (cold), `0` the axis's neutral, `>0` more present (warm) -- so the non-zero coordinates form one strict merged order, the *spectrum*. `colder_than`/`warmer_than` navigate it, hopping axes at adjacent presence (e.g. `shadowed` on a visibility axis to `disabled` on an activation axis), so a surface can offer the "next stronger / next weaker" (or `--adjacent`) move across the whole verb family with no special-casing. **Presence is a GENERAL abstraction -- "how much of a quality is expressed" -- NOT tied to visibility:** it ranks wet/dry (water), hot/cold (heat), visible/hidden (listing), enabled/disabled (dispatch), priority, cost, ... It is the grouping<->ungrouping reading of `warm`/`cold` (warm = more present / group, cold = less present / ungroup); navigation is framing-NEUTRAL, so a surface binds "stronger/weaker" to its own figure pole. A caller-supplied `meaning` makes each space self-describing via `describe()` (interrogate what it measures + what fits). Membership is LOOSE -- structural (`ContinuumProtocol`) + a presence-alignment contract checked at construction, not inheritance -- keeping axes pure and effectful Contexts separate. `ContinuumSpaceProtocol` is the lift-to-`dazzle-lib` interface; the purity guard still holds. 18 tests (cross-axis + amplification navigation, the alignment/uniqueness contract, `meaning`/`describe`, the protocol).
+
+### Notes
+
+- **Generality validated against two composition shapes** (one-off proofs under `tests/one-offs/thinking/`): the presence spectrum (`continuumspace_presence_spectrum.py` -- visibility + activation share one warmth spine, "stronger than shadowed" hops to disabled) and the log-lib `intensity x tags` (`continuumspace_loglib_composition.py`). The loglib spike confirmed `Continuum` covers the loglib's intensity + the `passes()` gate exactly, and that `ContinuumSpace` correctly scopes to the *presence* composition: the loglib's channels are HOMOGENEOUS cursors on one Continuum (a sibling "CursorBank" shape), which `ContinuumSpace` rightly rejects (its merged-order uniqueness fires). Both compositions rest on `Continuum`; the dazzle-lib lift (#188) should name both.
+
+### Versions
+
+- dazzlecmd 0.9.34 -> 0.9.35 (PATCH); dazzlecmd-lib 0.8.34 -> 0.8.35 (PATCH -- new `ContinuumSpace` in the `continuum` module); dazzle-dz -> 0.9.35.
+
 ## [0.9.34] - 2026-06-16
 
 ### Added
@@ -3195,7 +3209,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.34...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.35...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

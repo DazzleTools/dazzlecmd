@@ -10,6 +10,8 @@ from dazzlecmd_lib.continuum import (
     ContinuumProtocol,
     ContinuumError,
     ContinuumBoundaryError,
+    ContinuumSpace,
+    ContinuumSpaceProtocol,
 )
 
 
@@ -214,3 +216,208 @@ class TestPurity:
                        "import pathlib", "from os", "from subprocess",
                        "import platform", "open("):
             assert banned not in src, f"continuum.py must not use {banned!r} (purity charter)"
+
+
+# --- ContinuumSpace: N parallel axes on one shared presence scale -----------
+def _activation():
+    """The activation axis: enabled(0, neutral) .. disabled(-1, cold pole)."""
+    return Continuum(
+        name="activation",
+        ranks={"enabled": 0, "disabled": -1},
+        invariant="dispatch_active",
+    )
+
+
+def _kit_presence_space():
+    """Two PARALLEL presence axes composed on one scale -- visibility (the
+    existing 4-level ladder) and activation (enabled/disabled). The declared
+    presence projection places `disabled` colder than `shadowed`, so the merged
+    spectrum is the proof they share 'presence':
+        visible/enabled(0) > silenced(-1) > hidden(-2) > shadowed(-3) > disabled(-4)
+    """
+    return ContinuumSpace(
+        name="kit_presence",
+        meaning="how present a tool is to dz (listing + dispatch)",
+        axes={"visibility": _visibility(), "activation": _activation()},
+        presence={
+            "visibility": {"visible": 0, "silenced": -1, "hidden": -2, "shadowed": -3},
+            "activation": {"enabled": 0, "disabled": -4},
+        },
+    )
+
+
+class TestContinuumSpace:
+    def test_presence_of_and_neutral(self):
+        s = _kit_presence_space()
+        assert s.presence_of("visibility", "visible") == 0
+        assert s.presence_of("visibility", "shadowed") == -3
+        assert s.presence_of("activation", "disabled") == -4
+        assert s.is_neutral("visibility", "visible")
+        assert s.is_neutral("activation", "enabled")
+        assert not s.is_neutral("visibility", "hidden")
+
+    def test_spectrum_is_the_merged_warmth_ladder(self):
+        """The shared scale orders the SUPPRESSION states across both axes,
+        warm->cold -- the visible proof the axes share 'presence'."""
+        assert _kit_presence_space().spectrum() == (
+            ("visibility", "silenced"),
+            ("visibility", "hidden"),
+            ("visibility", "shadowed"),
+            ("activation", "disabled"),
+        )
+
+    def test_stronger_weaker_within_an_axis(self):
+        """Matches the user's example: hidden -> stronger=shadow, weaker=silence."""
+        s = _kit_presence_space()
+        assert s.colder_than("visibility", "hidden") == ("visibility", "shadowed")
+        assert s.warmer_than("visibility", "hidden") == ("visibility", "silenced")
+
+    def test_stronger_crosses_axes(self):
+        """The point of the SPACE: the next-stronger move can hop axes -- colder
+        than shadowed (visibility) is disabled (activation)."""
+        s = _kit_presence_space()
+        assert s.colder_than("visibility", "shadowed") == ("activation", "disabled")
+        assert s.warmer_than("activation", "disabled") == ("visibility", "shadowed")
+
+    def test_poles_return_none(self):
+        s = _kit_presence_space()
+        assert s.colder_than("activation", "disabled") is None    # cold pole
+        assert s.warmer_than("visibility", "visible") is None      # warm pole (fully present)
+
+    def test_from_fully_present_stronger_is_gentlest_suppression(self):
+        s = _kit_presence_space()
+        # from neutral on either axis, "stronger" = the warmest suppression.
+        assert s.colder_than("visibility", "visible") == ("visibility", "silenced")
+        assert s.colder_than("activation", "enabled") == ("visibility", "silenced")
+
+    def test_warmest_suppression_returns_to_its_axis_neutral(self):
+        s = _kit_presence_space()
+        assert s.warmer_than("visibility", "silenced") == ("visibility", "visible")
+
+    def test_satisfies_protocol(self):
+        assert isinstance(_kit_presence_space(), ContinuumSpaceProtocol)
+
+    def test_amplification_navigates_above_neutral(self):
+        """A >0 (amplified) axis composed with visibility: 'warmer than visible'
+        now EXISTS (featured), and the merged spectrum spans both signs -- proof
+        the signed scale (the >0 refinement) navigates end to end."""
+        prominence = Continuum(
+            name="prominence",
+            ranks={"dimmed": -1, "normal": 0, "featured": 1},
+            invariant="display_prominence",
+        )
+        s = ContinuumSpace(
+            name="kit_presence_amp",
+            axes={"visibility": _visibility(), "prominence": prominence},
+            presence={
+                "visibility": {"visible": 0, "silenced": -1, "hidden": -2, "shadowed": -3},
+                "prominence": {"dimmed": -5, "normal": 0, "featured": 5},
+            },
+        )
+        # featured (+5) is warmer than the (formerly top) visible(0):
+        assert s.warmer_than("visibility", "visible") == ("prominence", "featured")
+        # from an amplified state, colder returns to that axis's own neutral:
+        assert s.colder_than("prominence", "featured") == ("prominence", "normal")
+        # the merged spectrum spans both signs, warm -> cold:
+        assert s.spectrum()[0] == ("prominence", "featured")     # warmest
+        assert s.spectrum()[-1] == ("prominence", "dimmed")      # coldest
+
+    def test_meaning_is_supplied_and_describable(self):
+        """A space carries a caller-supplied MEANING so it is self-describing /
+        interrogable -- and presence is GENERAL (wet/dry here), not visibility."""
+        moisture = Continuum(name="moisture", ranks={"dry": -1, "damp": 0, "wet": 1})
+        s = ContinuumSpace(
+            name="wetness", meaning="how much water is present (wet <-> dry)",
+            axes={"moisture": moisture},
+            presence={"moisture": {"dry": -1, "damp": 0, "wet": 1}},
+        )
+        assert s.meaning == "how much water is present (wet <-> dry)"
+        desc = s.describe()
+        assert "wetness" in desc and "wet <-> dry" in desc   # the meaning is surfaced
+        assert "moisture" in desc                            # the axis is surfaced
+        assert "wet[+1]" in desc and "dry[-1]" in desc       # rungs with coords
+        # presence navigates the general scale just like any other:
+        assert s.colder_than("moisture", "wet") == ("moisture", "damp")  # wet -> damp -> dry
+        assert s.warmer_than("moisture", "dry") == ("moisture", "damp")
+
+    def test_describe_without_meaning_is_graceful(self):
+        s = ContinuumSpace(
+            name="bare", axes={"activation": _activation()},
+            presence={"activation": {"enabled": 0, "disabled": -1}},
+        )
+        assert "(no stated meaning)" in s.describe()
+
+
+class TestContinuumSpaceContract:
+    """The membership contract -- structural + presence-aligned + unique merged
+    order -- verified by construction-time validation (the loose, test-enforced
+    alternative to inheritance)."""
+
+    def test_axes_and_presence_must_match(self):
+        with pytest.raises(ContinuumError, match="name the same axes"):
+            ContinuumSpace(
+                name="bad", axes={"visibility": _visibility()},
+                presence={"activation": {"enabled": 0, "disabled": -1}},
+            )
+
+    def test_presence_must_cover_exactly_the_levels(self):
+        with pytest.raises(ContinuumError, match="cover exactly"):
+            ContinuumSpace(
+                name="bad", axes={"activation": _activation()},
+                presence={"activation": {"enabled": 0}},  # missing 'disabled'
+            )
+
+    def test_neutral_must_be_at_presence_zero(self):
+        with pytest.raises(ContinuumError, match="neutral .*level"):
+            ContinuumSpace(
+                name="bad", axes={"activation": _activation()},
+                presence={"activation": {"enabled": -1, "disabled": -2}},  # no 0
+            )
+
+    def test_amplification_presence_accepted(self):
+        """>0 presence (MORE present than neutral -- verbosity, GUI prominence)
+        is VALID: 0=neutral is not a ceiling (the 2026-06-16 signed-scale
+        refinement). <0 suppressed, 0 neutral, >0 amplified."""
+        prominence = Continuum(
+            name="prominence",
+            ranks={"dimmed": -1, "normal": 0, "featured": 1},
+            invariant="display_prominence",
+        )
+        s = ContinuumSpace(
+            name="amp", axes={"prominence": prominence},
+            presence={"prominence": {"dimmed": -1, "normal": 0, "featured": 1}},
+        )
+        assert s.presence_of("prominence", "featured") == 1
+        assert s.presence_of("prominence", "dimmed") == -1
+
+    def test_misaligned_presence_rejected(self):
+        """presence must increase cold->warm; a warmer level mustn't be colder."""
+        with pytest.raises(ContinuumError, match="presence-aligned"):
+            ContinuumSpace(
+                name="bad",
+                axes={"visibility": _visibility()},
+                # hidden(-2 rank) given a WARMER presence than silenced(-1 rank): misaligned
+                presence={"visibility": {"visible": 0, "silenced": -2,
+                                         "hidden": -1, "shadowed": -3}},
+            )
+
+    def test_duplicate_suppression_coord_rejected(self):
+        with pytest.raises(ContinuumError, match="unique across the space"):
+            ContinuumSpace(
+                name="bad",
+                axes={"visibility": _visibility(), "activation": _activation()},
+                presence={
+                    "visibility": {"visible": 0, "silenced": -1, "hidden": -2, "shadowed": -3},
+                    "activation": {"enabled": 0, "disabled": -3},  # collides with shadowed
+                },
+            )
+
+
+class TestContinuumSpacePurityShim:
+    """The space lives in the same PURE module -- the existing purity guard
+    (TestPurity.test_continuum_is_pure) already covers it; this just pins that
+    ContinuumSpace is importable from the pure module without effects."""
+
+    def test_space_is_in_the_pure_module(self):
+        import dazzlecmd_lib.continuum as mod
+        assert mod.ContinuumSpace.__module__ == "dazzlecmd_lib.continuum"
