@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.34] - 2026-06-16
+
+### Added
+
+- **`Continuum` -- the signed ordered-axis primitive (the bones of every Groupable verb's ladder).** A new pure, import-clean dazzlecmd-lib module (`continuum.py`): states totally ordered by a SIGNED rank with an invariant-bearing ZERO (`cold pole (-N) ... 0 (neutral/invariant) ... warm pole (+M)`), generalizing the THAC0 logger model so one primitive serves visibility, activation, the load spectrum, and log verbosity. Provides `rank`/`neutral`/`cold_pole`/`warm_pole`/`step`/`passes` (the THAC0 emit gate) + a channel backing (`channels_at`/`level_for_channels`), and the **`warm`/`cold` lens** directional framings ({P, not-P} / RGB-CMYK duality): `c.warm.more` / `c.cold.more` are unambiguous within a lens, cross-lens identity `warm.more == cold.less` (replaces an ambiguous bare `more`/`less`). A `ContinuumProtocol` is the lift-to-`dazzle-lib` interface; a purity guard keeps it effect-free so it can become a bedrock interface importable by every project. 23 tests, both backings.
+
+### Changed
+
+- **`VisibilityContext` re-homed onto the `Continuum`** (behavior-identical; the abstraction proving itself on a live, tested Groupable). `VISIBILITY_CONTINUUM` is the source of truth; direction enforcement (signed rank), channel presets, cold-pole C3 refusal, and undo all flow through it. `VISIBILITY_LADDER`/`VISIBILITY_ORDER`/`level_for_channels` remain derived shims (public surface intact). No dispatch/output change -- visibility tests + full suite green.
+
+### Versions
+
+- dazzlecmd 0.9.33 -> 0.9.34 (PATCH); dazzlecmd-lib 0.8.33 -> 0.8.34 (PATCH -- new `continuum` module + visibility re-home); dazzle-dz -> 0.9.34. (NOTE: 0.9.34-37 also exist on the abandoned `archive/detach-attach-v0.9.34-37` branch -- a preserved, rewound-past experiment; main's 0.9.34 is this Continuum work.)
+
 ## [0.9.33] - 2026-06-12
 
 ### Changed
@@ -3181,7 +3195,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.33...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.34...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
