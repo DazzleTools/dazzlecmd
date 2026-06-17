@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.40] - 2026-06-17
+
+### Changed
+
+- **`ContainmentContext` now runs on the generic `TransitionContext` (B2b-1 of the Groupable<->Continuum<->states unification).** The `group`/`ungroup` in-tree membership verbs execute through the one generic executor (B2) — a `detect`/`write`/`check`/`invert` hook-set over the `containment` axis. Behavior is byte-identical (same idempotent add/remove, the GRADUATE `#73` refusal and the C3 "a constitutional item may be grouped/hidden but never ungrouped" refusal, the `ContainmentReceipt` shape), but `reversible` + the conserved-invariant NAME now trace to the declared containment edge (`local_incorporability`) in `build_default_registry()` rather than a hardcoded literal. `ProjectionContext` stays bespoke (a multi-valued add/remove-named-member shape, not a single-value axis move); `AliasRebindContext` migrates next (B2b-2).
+
+### Versions
+
+- dazzlecmd 0.9.39 -> 0.9.40 (PATCH); dazzlecmd-lib 0.8.39 -> 0.8.40 (PATCH -- `ContainmentContext` on `TransitionContext`); dazzle-dz -> 0.9.40.
+
 ## [0.9.39] - 2026-06-17
 
 ### Added
@@ -3277,7 +3287,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.39...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.40...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

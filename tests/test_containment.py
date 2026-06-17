@@ -167,3 +167,18 @@ class TestRegistry:
     def test_graduation_composite_registered(self):
         names = {c.name for c in build_default_registry().composites()}
         assert "graduation" in names
+
+
+# ---------------------------------------------------------------------------
+# B2b -- containment runs on the generic TransitionContext (registry-sourced)
+# ---------------------------------------------------------------------------
+def test_containment_receipt_sources_invariant_from_registry():
+    """AC4: after migrating onto TransitionContext, the ContainmentReceipt's
+    reversible + conserved-name trace to the DECLARED containment edge (the
+    registry is on the verb's runtime path), not a hardcoded literal."""
+    kit = _boundary()
+    r = _tool().group("core", context=ContainmentContext(kit))
+    edge = next(t for t in build_default_registry().for_verb("group")
+                if t.axis == "containment")
+    assert r.invariant.conserved_quantity_name == edge.conserved == "local_incorporability"
+    assert r.reversible is edge.reversible is True

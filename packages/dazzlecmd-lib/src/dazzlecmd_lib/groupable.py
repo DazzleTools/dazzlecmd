@@ -778,6 +778,17 @@ class ContainmentContext:
     def __init__(self, boundary):
         self.boundary = boundary      # a Kit entity exposing a `.tools` list
         self._applied_entity = None
+        # B2b: run on the generic executor -- it resolves the declared containment
+        # edge (so reversible/conserved come from the registry, not a literal --
+        # F3) and orchestrates detect -> check -> write; the boundary-specific
+        # substrate + guards are the hooks below.
+        self._tc = TransitionContext(
+            _DEFAULT_REGISTRY, "containment",
+            detect=self._current_boundary,
+            write=self._write_membership,
+            check=self._check_move,
+            invert=self._invert_move,
+        )
 
     def _tools(self):
         return list(getattr(self.boundary, "tools", []) or [])
@@ -785,12 +796,19 @@ class ContainmentContext:
     def contains(self, entity):
         return entity.fqcn in self._tools()
 
-    def apply(self, entity, target, *, verb):
-        fqcn = entity.fqcn
+    # -- the containment-specific hooks the generic executor calls -------------
+    def _current_boundary(self, entity):
+        """This entity's current boundary in THIS context (its fqcn if a member,
+        else None) -- the single value the containment axis carries here."""
+        return self.boundary.fqcn if entity.fqcn in self._tools() else None
+
+    def _check_move(self, entity, target, verb, prev):
+        """Pre-flight: refuse the GENERATIVE graduation regime (#73) and C3
+        (a constitutional item may be grouped/hidden but never ungrouped)."""
         # Graduation regime: generative (tool -> own repo); fs+git is #73.
         if target == self.GRADUATE:
             raise CriticalityBoundaryError(
-                f"graduation of {fqcn} is generative (tool -> own git repo): the "
+                f"graduation of {entity.fqcn} is generative (tool -> own git repo): the "
                 f"transition is declared in the registry as a CompositeTransition, "
                 f"but its fs+git execution lands with #73. Only the reversible "
                 f"in-tree move is wired here."
@@ -799,32 +817,48 @@ class ContainmentContext:
         # out of the tree.
         if verb == "ungroup" and getattr(entity, "always_active", False):
             raise CriticalityBoundaryError(
-                f"{fqcn} is constitutional (always_active) -- it may be grouped or "
+                f"{entity.fqcn} is constitutional (always_active) -- it may be grouped or "
                 f"hidden but never ungrouped out of the tree (C3)."
             )
 
-        was_in = fqcn in self._tools()
-        prev = self.boundary.fqcn if was_in else None
+    def _write_membership(self, entity, target, prev):
+        """Add (group) or remove (ungroup) the entity from the boundary's tools.
+        ``target is None`` is the ungroup signal (the only verb with a None
+        target); both directions are idempotent."""
+        fqcn = entity.fqcn
         tools = self._tools()
-        if verb == "group":
-            if fqcn not in tools:
-                tools.append(fqcn)
-            new = self.boundary.fqcn
-        elif verb == "ungroup":
+        if target is None:                       # ungroup
             if fqcn in tools:
                 tools.remove(fqcn)
-            new = None
-        else:
-            raise ValueError(f"unknown containment verb {verb!r}")
+        else:                                    # group
+            if fqcn not in tools:
+                tools.append(fqcn)
         setattr(self.boundary, "tools", tools)
+        return None
+
+    def _invert_move(self, receipt):
+        """The inverse in-tree move for undo: re-group what was ungrouped, and
+        vice versa."""
+        if receipt.verb == "group":
+            return (None, "ungroup")
+        return (self.boundary.fqcn, "group")
+
+    # -- the operation (runs on the generic executor) --------------------------
+    def apply(self, entity, target, *, verb):
+        r = self._tc.apply(entity, target, verb=verb)
         self._applied_entity = entity
+        # new_state is the boundary on group, None on ungroup (byte-identical to
+        # the prior hand-rolled receipt); reversible + the conserved-invariant
+        # NAME now come from the declared containment edge (r.reversible/r.conserved).
+        new = self.boundary.fqcn if verb == "group" else None
         return ContainmentReceipt(
-            entity_fqcn=fqcn,
+            entity_fqcn=r.entity_fqcn,
             sub_kind="containment",
-            previous_state=prev,
+            previous_state=r.previous_state,
             new_state=new,
-            invariant=ContainmentInvariant(conserved_value=fqcn),
-            reversible=True,
+            invariant=ContainmentInvariant(
+                conserved_quantity_name=r.conserved, conserved_value=r.entity_fqcn),
+            reversible=r.reversible,
             verb=verb,
         )
 
