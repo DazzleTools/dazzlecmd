@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.42] - 2026-06-17
+
+### Added
+
+- **`dz kit visibility ... --cascade` — apply a SLICE of presence rungs in one move (B2c of the Groupable<->Continuum<->states unification).** The general `ContinuumSpace` apply-mode: bare `--cascade` = slice-to-0 (subsume the current rung + all weaker toward neutral, e.g. `hide --cascade` also silences); `--cascade=down`/`=up[:N]` = toward a pole / N rung-steps; `--cascade=lo,hi` = a signed offset window (`+` = warmer / more visible). Additive (turns the slice's rungs on/off; leaves rungs outside it untouched); prints the affected rungs + their verbs; C3 applies the safe rungs but refuses the constitutional cold-pole (`shadowed`) rung. Default (no flag) is the single-rung write, unchanged. Backed by two pure `ContinuumSpace` primitives -- `slice` (a signed rung-step window) and `cascade_to_neutral` (the bare default) -- reusable by any presence-space surface in any app.
+
+### Versions
+
+- dazzlecmd 0.9.41 -> 0.9.42 (PATCH); dazzlecmd-lib 0.8.41 -> 0.8.42 (PATCH -- `ContinuumSpace.slice`/`cascade_to_neutral`); dazzle-dz -> 0.9.42.
+
 ## [0.9.41] - 2026-06-17
 
 ### Changed
@@ -3297,7 +3307,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.41...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.42...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

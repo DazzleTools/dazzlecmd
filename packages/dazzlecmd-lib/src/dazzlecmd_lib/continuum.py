@@ -482,6 +482,43 @@ class ContinuumSpace:
             return (axis, self.axis(axis).neutral())
         return next((a, lvl) for a, lvl, p in warmer if p == target)
 
+    # -- slicing (the `--cascade` apply-mode: a signed RANGE of rungs) --------
+    def slice(self, axis: str, level: str, *, lo: int = 0, hi: int = 0) -> Tuple[str, ...]:
+        """The ordered levels of ``axis`` in a signed RUNG-STEP window around
+        ``level``: from ``lo`` steps (negative = colder / less present) to ``hi``
+        steps (positive = warmer / more present), inclusive, clamped to the axis
+        bounds. ``lo == hi == 0`` is just ``level``; a pole-to-pole window is the
+        degenerate 'whole axis' case.
+
+        The general SLICE the ``--cascade`` apply-mode walks: a surface turns ON
+        each rung in the slice (ADDITIVE -- it does not clear rungs outside the
+        slice). Sign follows presence polarity (``+`` = warmer). e.g. for a
+        visibility space, ``slice("visibility", "hidden", lo=-1, hi=+2)`` is the
+        ``--cascade {-1,+2}`` window (one colder + current + two warmer)."""
+        cont = self.axis(axis)
+        cont.rank(level)                       # validate membership (raises)
+        ordered = cont.levels()                # cold -> warm
+        i = ordered.index(level)
+        lo_i = max(0, i + lo)
+        hi_i = min(len(ordered) - 1, i + hi)
+        return ordered[lo_i:hi_i + 1]
+
+    def cascade_to_neutral(self, axis: str, level: str) -> Tuple[str, ...]:
+        """The bare ``--cascade`` default: ``level`` + every rung BETWEEN it and
+        the neutral (presence 0), inclusive of ``level`` and EXCLUDING the neutral
+        itself (the neutral is the no-op 'off' state). Subsumes the current rung
+        and all *weaker* ones toward 0 -- the monotone bundle. Direction falls out
+        of ``level``'s presence sign (a cold level sweeps warmer toward 0; a warm
+        level sweeps colder toward 0), returned cold->warm."""
+        p = self.presence_of(axis, level)
+        if p == 0:
+            return ()                          # already neutral -- nothing to set
+        return tuple(
+            lvl for lvl in self.axis(axis).levels()       # cold -> warm
+            if (p < 0 and p <= self.presence_of(axis, lvl) < 0)
+            or (p > 0 and 0 < self.presence_of(axis, lvl) <= p)
+        )
+
     # -- interrogation -------------------------------------------------------
     def describe(self) -> str:
         """A human-readable summary -- what this space MEANS, the axes that

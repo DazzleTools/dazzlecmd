@@ -477,6 +477,12 @@ def _vis(engine, fqcn, level, direction):
         _Args(fqcn=fqcn, level=level, direction=direction), engine)
 
 
+def _vis_cascade(engine, fqcn, level, direction, cascade):
+    """Invoke the visibility handler with a ``--cascade`` spec (B2c-2)."""
+    return _cmd_kit_visibility_set(
+        _Args(fqcn=fqcn, level=level, direction=direction, cascade=cascade), engine)
+
+
 def _resolved(canonical):
     """A ``(project, ctx)`` pair as ``engine.resolve_command`` would return --
     lets a test exercise the name-resolution path without real discovery."""
@@ -909,3 +915,82 @@ class TestBareKitDispatch:
         assert rc_list == 0
         assert out_bare == out_list
         assert out_bare.strip()  # renders something, not an empty pass
+
+
+# ---------------------------------------------------------------------------
+# dz kit visibility --cascade (B2c-2): apply a SLICE of presence rungs at once
+# ---------------------------------------------------------------------------
+
+
+class TestKitVisibilityCascade:
+    def test_hide_cascade_bare_is_slice_to_neutral(self, tmp_path, monkeypatch):
+        # hide --cascade => {hidden, silenced} (current + weaker toward 0), additive.
+        engine = _engine(tmp_path, monkeypatch)
+        rc = _vis_cascade(engine, "x:y:tool", "hidden", "suppress", "@neutral")
+        assert rc == 0
+        config = _read_config(tmp_path)
+        assert "x:y:tool" in config["hidden_tools"]
+        assert "x:y:tool" in config["silenced_hints"]["tools"]
+        assert "x:y:tool" not in (config.get("shadowed_tools") or [])   # NOT shadowed
+
+    def test_hide_cascade_down_escalates_toward_pole(self, tmp_path, monkeypatch):
+        # hide --cascade=down => toward the cold pole = {hidden, shadowed}.
+        engine = _engine(tmp_path, monkeypatch)
+        rc = _vis_cascade(engine, "x:y:tool", "hidden", "suppress", "down")
+        assert rc == 0
+        config = _read_config(tmp_path)
+        assert "x:y:tool" in config["hidden_tools"]
+        assert "x:y:tool" in config["shadowed_tools"]
+        assert "x:y:tool" not in ((config.get("silenced_hints") or {}).get("tools") or [])  # NOT silenced
+
+    def test_silence_cascade_bare_is_just_silenced(self, tmp_path, monkeypatch):
+        engine = _engine(tmp_path, monkeypatch)
+        _vis_cascade(engine, "x:y:tool", "silenced", "suppress", "@neutral")
+        config = _read_config(tmp_path)
+        assert "x:y:tool" in config["silenced_hints"]["tools"]
+        assert "x:y:tool" not in (config.get("hidden_tools") or [])
+
+    def test_range_window_offsets(self, tmp_path, monkeypatch):
+        # --cascade=-1,0 from hidden = {shadowed, hidden} (one colder + current).
+        engine = _engine(tmp_path, monkeypatch)
+        _vis_cascade(engine, "x:y:tool", "hidden", "suppress", "-1,0")
+        config = _read_config(tmp_path)
+        assert "x:y:tool" in config["hidden_tools"]
+        assert "x:y:tool" in config["shadowed_tools"]
+
+    def test_cascade_restore_clears_the_bundle(self, tmp_path, monkeypatch):
+        engine = _engine(tmp_path, monkeypatch)
+        _vis_cascade(engine, "x:y:tool", "hidden", "suppress", "@neutral")  # set
+        _vis_cascade(engine, "x:y:tool", "hidden", "restore", "@neutral")   # clear
+        config = _read_config(tmp_path)
+        assert "x:y:tool" not in (config.get("hidden_tools") or [])
+        assert "x:y:tool" not in ((config.get("silenced_hints") or {}).get("tools") or [])
+
+    def test_cascade_C3_applies_safe_rungs_refuses_cold_pole(self, tmp_path, monkeypatch, capsys):
+        """shadow --cascade on a constitutional tool: applies the safe rungs
+        (silenced+hidden), REFUSES the cold-pole (shadowed) rung (C3), rc 0."""
+        engine = _engine(tmp_path, monkeypatch)
+        engine.resolve_command = (
+            lambda name: _resolved("core:safedel")
+            if name in ("safedel", "core:safedel") else (None, None))
+        rc = _vis_cascade(engine, "safedel", "shadowed", "suppress", "@neutral")
+        assert rc == 0                                          # apply-rest, not whole refusal
+        config = _read_config(tmp_path)
+        assert "core:safedel" in config["hidden_tools"]
+        assert "core:safedel" in config["silenced_hints"]["tools"]
+        assert "core:safedel" not in (config.get("shadowed_tools") or [])  # C3 refused
+        assert "constitutional" in capsys.readouterr().err.lower()
+
+    def test_bad_cascade_spec_errors(self, tmp_path, monkeypatch, capsys):
+        engine = _engine(tmp_path, monkeypatch)
+        rc = _vis_cascade(engine, "x:y:tool", "hidden", "suppress", "garbage,1,2")
+        assert rc == 1
+        assert "cascade" in capsys.readouterr().err.lower()
+
+    def test_default_no_cascade_unchanged(self, tmp_path, monkeypatch):
+        # No cascade attr => single-rung path (byte-identical to pre-B2c).
+        engine = _engine(tmp_path, monkeypatch)
+        _vis(engine, "x:y:tool", "hidden", "suppress")
+        config = _read_config(tmp_path)
+        assert "x:y:tool" in config["hidden_tools"]
+        assert "x:y:tool" not in ((config.get("silenced_hints") or {}).get("tools") or [])  # ONLY hidden

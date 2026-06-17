@@ -349,6 +349,18 @@ def _register_meta_commands(subparsers):
     vis_unshadow.add_argument("fqcn", help="FQCN (or short name) to unshadow")
     vis_unshadow.set_defaults(_meta="kit_visibility_set", level="shadowed", direction="restore")
 
+    # `--cascade` (B2c) -- the general ContinuumSpace apply-mode: apply a SLICE of
+    # adjacent presence rungs in one move instead of just this one. Bare = to
+    # neutral (subsume the weaker rungs); `=lo,hi` = a signed offset window
+    # (+ = warmer/more visible, - = colder); `=up|down[:N]` = toward a pole / N
+    # steps. Default OFF = the single-rung write (unchanged). Use the `=` form for
+    # values so a leading `-` isn't read as a flag (e.g. `--cascade=-1,2`).
+    for _vp in (vis_silence, vis_unsilence, vis_hide, vis_unhide, vis_shadow, vis_unshadow):
+        _vp.add_argument(
+            "--cascade", nargs="?", const="@neutral", default=None, metavar="RANGE",
+            help="also apply adjacent presence rungs (bare=to-neutral; "
+                 "=lo,hi window e.g. =-1,2; =up|down[:N] toward a pole / N steps)")
+
     kit_visibility.set_defaults(_meta="kit_visibility")
 
     kit_add = kit_sub.add_parser(
@@ -1909,14 +1921,21 @@ def _cmd_kit_visibility_set(args, engine):
         print("Error: engine unavailable", file=sys.stderr)
         return 1
     from dazzlecmd_lib.groupable import KIT_PRESENCE_SPACE
+    space = KIT_PRESENCE_SPACE
 
-    rung = KIT_PRESENCE_SPACE.payload_for("visibility", args.level)
     add = args.direction == "suppress"
     canonical, project = _resolve_visibility_target(engine, args.fqcn)
     if project is None:
         print(f"Note: '{args.fqcn}' didn't resolve to a known tool; recording "
               f"as-is (it takes effect if that tool appears).", file=sys.stderr)
 
+    # --cascade (B2c): apply a SLICE of adjacent presence rungs at once (the
+    # general ContinuumSpace apply-mode), instead of just this one rung.
+    if getattr(args, "cascade", None) is not None:
+        return _apply_visibility_cascade(
+            engine, space, canonical, project, args.level, add, args.cascade)
+
+    rung = space.payload_for("visibility", args.level)
     # C3: a constitutional tool may be hidden but never shadowed (the rung
     # declares the policy; the resolved entity supplies the status).
     if add and rung.forbids_constitutional and _is_constitutional_entity(project):
@@ -1939,6 +1958,67 @@ def _cmd_kit_visibility_set(args, engine):
             return 0
         engine._write_user_config(rung.write(config, canonical, add=False))
         print(f"Restored: {canonical} (no longer {rung.level})")
+    return 0
+
+
+def _resolve_cascade_slice(space, axis, current, spec):
+    """Resolve a ``--cascade`` spec to the ordered levels it touches.
+
+    ``@neutral`` (bare) = the current rung + all weaker toward neutral
+    (``space.cascade_to_neutral``); ``up``/``down``[``:N``] = toward the warm/cold
+    pole, or N rung-steps; ``lo,hi`` = a signed rung-step offset window (``+`` =
+    warmer / more present). Raises ``ValueError`` on a malformed spec."""
+    if spec == "@neutral":
+        return list(space.cascade_to_neutral(axis, current))
+    n = len(space.axis(axis).levels())
+    if spec in ("up", "down") or spec.startswith("up:") or spec.startswith("down:"):
+        direction, _, count = spec.partition(":")
+        steps = int(count) if count else n          # bare up/down = to the pole
+        if steps < 0:
+            raise ValueError("step count must be >= 0")
+        if direction == "up":                       # warmer / more present
+            return list(space.slice(axis, current, lo=0, hi=steps))
+        return list(space.slice(axis, current, lo=-steps, hi=0))   # down = colder
+    parts = spec.split(",")
+    if len(parts) != 2:
+        raise ValueError("expected 'lo,hi' (e.g. -1,2) or 'up|down[:N]'")
+    return list(space.slice(axis, current, lo=int(parts[0]), hi=int(parts[1])))
+
+
+def _apply_visibility_cascade(engine, space, canonical, project, current_level, add, spec):
+    """Apply a visibility verb with ``--cascade``: set (suppress) or clear
+    (restore) each rung in the resolved slice ADDITIVELY -- it turns the slice's
+    rungs on/off and leaves rungs outside the slice untouched. Prints the affected
+    rungs; refuses the constitutional cold-pole rung (C3) but applies the rest."""
+    axis = "visibility"
+    try:
+        levels = _resolve_cascade_slice(space, axis, current_level, spec)
+    except ValueError as e:
+        print(f"Error: bad --cascade value {spec!r}: {e}", file=sys.stderr)
+        return 1
+    rungs = [r for r in (space.payload_for(axis, lvl) for lvl in levels) if r is not None]
+    if not rungs:
+        print(f"{canonical}: nothing to cascade (already at neutral).")
+        return 0
+    desc = ", ".join(f"{r.level} ({r.verb if add else r.unverb})" for r in rungs)
+    print(f"Cascade {'suppress' if add else 'restore'} {canonical}: {desc}")
+    applied, unchanged, refused = [], [], []
+    for r in rungs:
+        if add and r.forbids_constitutional and _is_constitutional_entity(project):
+            refused.append(r.level)
+            continue
+        config = engine._get_user_config()
+        if r.present(config, canonical) == add:
+            unchanged.append(r.level)
+            continue
+        engine._write_user_config(r.write(config, canonical, add=add))
+        applied.append(r.level)
+    if applied:
+        print(f"  {'set' if add else 'cleared'}: {', '.join(applied)}")
+    if unchanged:
+        print(f"  unchanged: {', '.join(unchanged)}")
+    if refused:
+        print(f"  refused (constitutional -- C3): {', '.join(refused)}", file=sys.stderr)
     return 0
 
 

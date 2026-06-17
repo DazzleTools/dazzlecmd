@@ -434,3 +434,49 @@ class TestContinuumSpacePurityShim:
     def test_space_is_in_the_pure_module(self):
         import dazzlecmd_lib.continuum as mod
         assert mod.ContinuumSpace.__module__ == "dazzlecmd_lib.continuum"
+
+
+class TestContinuumSpaceSlice:
+    """B2c-1: the `--cascade` apply-mode primitives -- a signed RANGE window
+    (`slice`) and the bare-cascade default (`cascade_to_neutral`)."""
+
+    def test_slice_single_rung_is_default(self):
+        s = _kit_presence_space()
+        assert s.slice("visibility", "hidden") == ("hidden",)
+
+    def test_slice_signed_window(self):
+        s = _kit_presence_space()
+        # one colder + current + two warmer -- the `--cascade {-1,+2}` window.
+        assert s.slice("visibility", "hidden", lo=-1, hi=2) == (
+            "shadowed", "hidden", "silenced", "visible")
+
+    def test_slice_warmer_only(self):
+        s = _kit_presence_space()
+        assert s.slice("visibility", "hidden", lo=0, hi=1) == ("hidden", "silenced")
+
+    def test_slice_clamps_at_poles(self):
+        s = _kit_presence_space()
+        assert s.slice("visibility", "visible", lo=0, hi=2) == ("visible",)
+        assert s.slice("visibility", "shadowed", lo=-2, hi=0) == ("shadowed",)
+
+    def test_slice_unknown_level_raises(self):
+        s = _kit_presence_space()
+        with pytest.raises(ContinuumError):
+            s.slice("visibility", "nope")
+
+    def test_cascade_to_neutral_subsumes_current_and_weaker(self):
+        s = _kit_presence_space()
+        # hide --cascade => {hidden, silenced} (current + weaker toward 0), NOT shadowed.
+        assert s.cascade_to_neutral("visibility", "hidden") == ("hidden", "silenced")
+        assert s.cascade_to_neutral("visibility", "shadowed") == (
+            "shadowed", "hidden", "silenced")
+        assert s.cascade_to_neutral("visibility", "silenced") == ("silenced",)
+
+    def test_cascade_to_neutral_at_neutral_is_empty(self):
+        s = _kit_presence_space()
+        assert s.cascade_to_neutral("visibility", "visible") == ()
+        assert s.cascade_to_neutral("activation", "enabled") == ()
+
+    def test_cascade_to_neutral_other_axis(self):
+        s = _kit_presence_space()
+        assert s.cascade_to_neutral("activation", "disabled") == ("disabled",)
