@@ -33,6 +33,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import (
+    Any,
     FrozenSet,
     Mapping,
     Optional,
@@ -302,6 +303,7 @@ class ContinuumSpaceProtocol(Protocol):
     meaning: str
 
     def presence_of(self, axis: str, level: str) -> int: ...
+    def payload_for(self, axis: str, level: str) -> Any: ...
     def spectrum(self) -> Tuple[Tuple[str, str], ...]: ...
     def colder_than(self, axis: str, level: str) -> Optional[Tuple[str, str]]: ...
     def warmer_than(self, axis: str, level: str) -> Optional[Tuple[str, str]]: ...
@@ -346,6 +348,12 @@ class ContinuumSpace:
     presence: Mapping[str, Mapping[str, int]]
     meaning: str = ""
     invariant: str = ""
+    # Optional caller-supplied TYPED payload per (axis, level) -- the "templated
+    # object" a rung carries beyond its signed coordinate (a domain rung type,
+    # e.g. a visibility VERB binding). The space HOLDS + exposes it opaquely
+    # (``payload_for``); it never interprets or calls it -- so the primitive stays
+    # pure + domain-neutral while consumers get a typed object, not a string dict.
+    payloads: Mapping[str, Mapping[str, Any]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.axes:
@@ -353,6 +361,8 @@ class ContinuumSpace:
         object.__setattr__(self, "axes", dict(self.axes))
         object.__setattr__(self, "presence",
                            {a: dict(m) for a, m in self.presence.items()})
+        object.__setattr__(self, "payloads",
+                           {a: dict(m) for a, m in self.payloads.items()})
         if set(self.axes) != set(self.presence):
             raise ContinuumError(
                 f"continuum space {self.name!r}: axes {sorted(self.axes)} and "
@@ -407,6 +417,15 @@ class ContinuumSpace:
                 f"{name!r} is not an axis of space {self.name!r}; "
                 f"axes: {tuple(self.axes)}"
             )
+
+    def payload_for(self, axis: str, level: str) -> Any:
+        """The caller-supplied TYPED payload at ``(axis, level)`` -- the rung's
+        "templated object" beyond its coordinate -- or ``None`` if none was
+        supplied. Returned opaquely: the consumer knows its type and calls its
+        methods (no string dict). Pairs with navigation: ``colder_than`` ->
+        ``payload_for`` walks to a neighbour and exposes its object."""
+        self.axis(axis).rank(level)  # validate level membership
+        return self.payloads.get(axis, {}).get(level)
 
     def presence_of(self, axis: str, level: str) -> int:
         """The shared-scale presence coordinate of ``(axis, level)`` (0 = fully

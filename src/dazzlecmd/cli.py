@@ -315,36 +315,39 @@ def _register_meta_commands(subparsers):
     vis_status.add_argument("fqcn", help="FQCN to inspect")
     vis_status.set_defaults(_meta="kit_visibility_status")
 
+    # The six toggles all route to ONE handler (_cmd_kit_visibility_set); each
+    # carries its (level, direction) -- the per-verb knowledge is the typed rung
+    # in KIT_PRESENCE_SPACE, not here.
     vis_silence = vis_sub.add_parser(
         "silence", help="Suppress the rerooting hint for a tool (presence: silenced)")
-    vis_silence.add_argument("fqcn", help="FQCN to silence")
-    vis_silence.set_defaults(_meta="kit_silence")
+    vis_silence.add_argument("fqcn", help="FQCN (or short name) to silence")
+    vis_silence.set_defaults(_meta="kit_visibility_set", level="silenced", direction="suppress")
 
     vis_unsilence = vis_sub.add_parser(
         "unsilence", help="Restore the rerooting hint")
-    vis_unsilence.add_argument("fqcn", help="FQCN to unsilence")
-    vis_unsilence.set_defaults(_meta="kit_unsilence")
+    vis_unsilence.add_argument("fqcn", help="FQCN (or short name) to unsilence")
+    vis_unsilence.set_defaults(_meta="kit_visibility_set", level="silenced", direction="restore")
 
     vis_hide = vis_sub.add_parser(
         "hide", help="Omit a tool from listings -- still dispatchable (presence: hidden)")
-    vis_hide.add_argument("fqcn", help="FQCN to hide")
-    vis_hide.set_defaults(_meta="kit_hide")
+    vis_hide.add_argument("fqcn", help="FQCN (or short name) to hide")
+    vis_hide.set_defaults(_meta="kit_visibility_set", level="hidden", direction="suppress")
 
     vis_unhide = vis_sub.add_parser(
         "unhide", help="Restore a hidden tool to listings")
-    vis_unhide.add_argument("fqcn", help="FQCN to unhide")
-    vis_unhide.set_defaults(_meta="kit_unhide")
+    vis_unhide.add_argument("fqcn", help="FQCN (or short name) to unhide")
+    vis_unhide.set_defaults(_meta="kit_visibility_set", level="hidden", direction="restore")
 
     vis_shadow = vis_sub.add_parser(
         "shadow",
         help="Remove a tool from dispatch + free its short name (presence: shadowed)")
-    vis_shadow.add_argument("fqcn", help="FQCN to shadow")
-    vis_shadow.set_defaults(_meta="kit_shadow")
+    vis_shadow.add_argument("fqcn", help="FQCN (or short name) to shadow")
+    vis_shadow.set_defaults(_meta="kit_visibility_set", level="shadowed", direction="suppress")
 
     vis_unshadow = vis_sub.add_parser(
         "unshadow", help="Restore a shadowed tool to dispatch")
-    vis_unshadow.add_argument("fqcn", help="FQCN to unshadow")
-    vis_unshadow.set_defaults(_meta="kit_unshadow")
+    vis_unshadow.add_argument("fqcn", help="FQCN (or short name) to unshadow")
+    vis_unshadow.set_defaults(_meta="kit_visibility_set", level="shadowed", direction="restore")
 
     kit_visibility.set_defaults(_meta="kit_visibility")
 
@@ -584,18 +587,8 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
         return _cmd_kit_favorite(args, engine)
     elif meta == "kit_unfavorite":
         return _cmd_kit_unfavorite(args, engine)
-    elif meta == "kit_silence":
-        return _cmd_kit_silence(args, engine)
-    elif meta == "kit_unsilence":
-        return _cmd_kit_unsilence(args, engine)
-    elif meta == "kit_shadow":
-        return _cmd_kit_shadow(args, engine)
-    elif meta == "kit_unshadow":
-        return _cmd_kit_unshadow(args, engine)
-    elif meta == "kit_hide":
-        return _cmd_kit_hide(args, engine)
-    elif meta == "kit_unhide":
-        return _cmd_kit_unhide(args, engine)
+    elif meta == "kit_visibility_set":
+        return _cmd_kit_visibility_set(args, engine)
     elif meta == "kit_visibility":
         return _cmd_kit_visibility_list(engine)
     elif meta == "kit_visibility_status":
@@ -1870,138 +1863,82 @@ def _cmd_kit_unfavorite(args, engine):
     return 0
 
 
-def _cmd_kit_silence(args, engine):
-    """Add an FQCN to silenced_hints.tools."""
-    fqcn = args.fqcn
+def _resolve_visibility_target(engine, name):
+    """Resolve a user-typed name (short name | FQCN | alias) to
+    ``(canonical_fqcn, project)`` via the engine's dispatch-grade resolver.
+    Returns ``(name, None)`` when nothing matches -- the caller warns + writes the
+    raw input (permissive for not-yet-discovered / pointer-kit tools). Resolving
+    here is what makes a short name effective AND keeps C3 uncircumventable."""
+    resolver = getattr(engine, "resolve_command", None)
+    if resolver is None:
+        return name, None
+    try:
+        project, ctx = resolver(name)
+    except Exception:
+        return name, None
+    if project is None:
+        return name, None
+    canonical = (getattr(ctx, "canonical_fqcn", None)
+                 or getattr(project, "fqcn", None) or name)
+    return canonical, project
+
+
+def _is_constitutional_entity(project):
+    """True if a resolved project is constitutional / always_active (the C3 gate)."""
+    if project is None:
+        return False
+    if getattr(project, "always_active", False):
+        return True
+    try:
+        from dazzlecmd_lib.core import is_constitutional
+    except Exception:
+        return False
+    return ((getattr(project, "namespace", "") or "") == "core"
+            and is_constitutional(getattr(project, "name", "") or ""))
+
+
+def _cmd_kit_visibility_set(args, engine):
+    """The single visibility-toggle handler for all six verbs.
+
+    Resolves the name to its canonical FQCN, looks up the TYPED rung from
+    ``KIT_PRESENCE_SPACE`` (``args.level``), enforces C3, and writes via the rung.
+    The CLI carries no per-verb config keys or verb tables -- the container
+    (the rung object) holds the binding. ``args.direction`` is "suppress" | "restore".
+    """
     if engine is None:
         print("Error: engine unavailable", file=sys.stderr)
         return 1
+    from dazzlecmd_lib.groupable import KIT_PRESENCE_SPACE
 
-    config = engine._get_user_config()
-    silenced = dict(config.get("silenced_hints") or {})
-    tools = list(silenced.get("tools") or [])
-    if fqcn not in tools:
-        tools.append(fqcn)
-    silenced["tools"] = tools
-    silenced.setdefault("kits", [])
+    rung = KIT_PRESENCE_SPACE.payload_for("visibility", args.level)
+    add = args.direction == "suppress"
+    canonical, project = _resolve_visibility_target(engine, args.fqcn)
+    if project is None:
+        print(f"Note: '{args.fqcn}' didn't resolve to a known tool; recording "
+              f"as-is (it takes effect if that tool appears).", file=sys.stderr)
 
-    engine._write_user_config({"silenced_hints": silenced})
-    print(f"Silenced rerooting hint for: {fqcn}")
-    return 0
-
-
-def _cmd_kit_unsilence(args, engine):
-    """Remove an FQCN from silenced_hints.tools."""
-    fqcn = args.fqcn
-    if engine is None:
-        print("Error: engine unavailable", file=sys.stderr)
+    # C3: a constitutional tool may be hidden but never shadowed (the rung
+    # declares the policy; the resolved entity supplies the status).
+    if add and rung.forbids_constitutional and _is_constitutional_entity(project):
+        print(f"Refused: {canonical} is constitutional -- it may be hidden but "
+              f"never shadowed (C3: dz depends on it; removing it would break "
+              f"dispatch).", file=sys.stderr)
         return 1
 
     config = engine._get_user_config()
-    silenced = dict(config.get("silenced_hints") or {})
-    tools = list(silenced.get("tools") or [])
-    if fqcn not in tools:
-        print(f"'{fqcn}' was not silenced.")
-        return 0
-    tools.remove(fqcn)
-    silenced["tools"] = tools
-    silenced.setdefault("kits", [])
-
-    engine._write_user_config({"silenced_hints": silenced})
-    print(f"Unsilenced rerooting hint for: {fqcn}")
-    return 0
-
-
-def _cmd_kit_shadow(args, engine):
-    """Add an FQCN to shadowed_tools (presence: shadowed). Refuses a
-    constitutional tool -- C3: it may be hidden but never removed from dispatch."""
-    fqcn = args.fqcn
-    if engine is None:
-        print("Error: engine unavailable", file=sys.stderr)
-        return 1
-
-    # C3: a constitutional / always_active tool may be hidden but never shadowed
-    # -- shadowing removes it from dispatch, and dz depends on it.
-    from dazzlecmd_lib.core import is_constitutional
-    for p in (getattr(engine, "projects", None) or []):
-        if (getattr(p, "fqcn", None) or "") != fqcn:
-            continue
-        is_const = ((getattr(p, "namespace", "") or "") == "core"
-                    and is_constitutional(getattr(p, "name", "") or ""))
-        if is_const or getattr(p, "always_active", False):
-            print(
-                f"Refused: {fqcn} is constitutional -- it may be hidden but never "
-                f"shadowed (C3: dz depends on it; removing it would break dispatch).",
-                file=sys.stderr,
-            )
-            return 1
-        break
-
-    config = engine._get_user_config()
-    shadowed = list(config.get("shadowed_tools") or [])
-    if fqcn not in shadowed:
-        shadowed.append(fqcn)
-
-    engine._write_user_config({"shadowed_tools": shadowed})
-    print(f"Shadowed: {fqcn}")
-    print(f"  This tool will not appear in 'dz list' or be dispatchable.")
-    return 0
-
-
-def _cmd_kit_unshadow(args, engine):
-    """Remove an FQCN from shadowed_tools."""
-    fqcn = args.fqcn
-    if engine is None:
-        print("Error: engine unavailable", file=sys.stderr)
-        return 1
-
-    config = engine._get_user_config()
-    shadowed = list(config.get("shadowed_tools") or [])
-    if fqcn not in shadowed:
-        print(f"'{fqcn}' was not shadowed.")
-        return 0
-    shadowed.remove(fqcn)
-
-    engine._write_user_config({"shadowed_tools": shadowed})
-    print(f"Unshadowed: {fqcn}")
-    return 0
-
-
-def _cmd_kit_hide(args, engine):
-    """Add an FQCN to hidden_tools (display-off, still dispatchable)."""
-    fqcn = args.fqcn
-    if engine is None:
-        print("Error: engine unavailable", file=sys.stderr)
-        return 1
-
-    config = engine._get_user_config()
-    hidden = list(config.get("hidden_tools") or [])
-    if fqcn not in hidden:
-        hidden.append(fqcn)
-
-    engine._write_user_config({"hidden_tools": hidden})
-    print(f"Hidden: {fqcn}")
-    print("  Omitted from 'dz list'/'dz tree' but still dispatchable by name")
-    print("  (reveal with 'dz list --show-hidden').")
-    return 0
-
-
-def _cmd_kit_unhide(args, engine):
-    """Remove an FQCN from hidden_tools."""
-    fqcn = args.fqcn
-    if engine is None:
-        print("Error: engine unavailable", file=sys.stderr)
-        return 1
-
-    config = engine._get_user_config()
-    hidden = list(config.get("hidden_tools") or [])
-    if fqcn not in hidden:
-        print(f"'{fqcn}' was not hidden.")
-        return 0
-    hidden.remove(fqcn)
-
-    engine._write_user_config({"hidden_tools": hidden})
-    print(f"Unhidden: {fqcn}")
+    was = rung.present(config, canonical)
+    if add:
+        if was:
+            print(f"{canonical} is already {rung.level}.")
+            return 0
+        engine._write_user_config(rung.write(config, canonical, add=True))
+        print(f"{rung.level.capitalize()}: {canonical}")
+    else:
+        if not was:
+            print(f"{canonical} was not {rung.level}.")
+            return 0
+        engine._write_user_config(rung.write(config, canonical, add=False))
+        print(f"Restored: {canonical} (no longer {rung.level})")
     return 0
 
 
@@ -2049,46 +1986,47 @@ def _cmd_kit_visibility_list(engine):
 
 
 def _cmd_kit_visibility_status(args, engine):
-    """Show a tool's current presence level + the next STRONGER / WEAKER move --
-    the KIT_PRESENCE_SPACE navigator (frame-free: both neighbors at once)."""
+    """Show a tool's current presence level + both neighbour moves -- the
+    KIT_PRESENCE_SPACE navigator. Reads the TYPED rungs (no verb tables): the
+    current channels via each rung's ``present``, the moves via the neighbour
+    rungs' ``verb``/``unverb``. Labels are bound to this surface's frame
+    ("visibility" reads warm = visible), so it says less/more visible -- the
+    space's colder/warmer is framing-neutral, the surface names the direction."""
     if engine is None:
         print("Error: engine unavailable", file=sys.stderr)
         return 1
     from dazzlecmd_lib.groupable import KIT_PRESENCE_SPACE, level_for_channels
 
-    fqcn = args.fqcn
+    canonical, project = _resolve_visibility_target(engine, args.fqcn)
     config = engine._get_user_config()
-    silenced_tools = (config.get("silenced_hints") or {}).get("tools") or []
-    hidden = config.get("hidden_tools") or []
-    shadowed = config.get("shadowed_tools") or []
 
+    # Current channels, read THROUGH the typed rungs (no hardcoded config keys).
     suppressed = set()
-    if fqcn in silenced_tools:
-        suppressed.add("hints")
-    if fqcn in hidden:
-        suppressed.add("display")
-    if fqcn in shadowed:
-        suppressed.add("resolution")
+    for lvl in ("silenced", "hidden", "shadowed"):
+        rung = KIT_PRESENCE_SPACE.payload_for("visibility", lvl)
+        if rung is not None and rung.present(config, canonical):
+            suppressed.add(rung.channel)
     level = level_for_channels(suppressed)  # visible | silenced | hidden | shadowed
 
-    # verb to REACH a colder rung (suppress), and to leave one (the un-verb).
-    SUPPRESS = {"silenced": "silence", "hidden": "hide", "shadowed": "shadow"}
-    RESTORE = {"silenced": "unsilence", "hidden": "unhide", "shadowed": "unshadow"}
-
-    # Direction labels are bound to THIS surface's frame ("visibility" reads
-    # warm = visible), so the navigator says "less/more visible" rather than the
-    # frame-leaking "stronger/weaker". The space's colder/warmer is framing-
-    # neutral; the surface names the directions (the 4-fold focus-relative rule).
-    print(f"{fqcn}")
+    print(f"{canonical}")
     print(f"  presence: {level}")
     colder = KIT_PRESENCE_SPACE.colder_than("visibility", level)
     warmer = KIT_PRESENCE_SPACE.warmer_than("visibility", level)
     if colder:
-        print(f"  less visible -> dz kit visibility {SUPPRESS[colder[1]]} {fqcn}")
+        reach = KIT_PRESENCE_SPACE.payload_for("visibility", colder[1])
+        # C3-aware: don't recommend a move the surface will refuse. A
+        # constitutional tool may be hidden but never shadowed, so at `hidden`
+        # the colder rung is unreachable -- say so instead of suggesting it.
+        if reach.forbids_constitutional and _is_constitutional_entity(project):
+            print(f"  less visible -> (none: {canonical} is constitutional -- "
+                  f"'{reach.verb}' refused by C3; {level} is the max veil)")
+        else:
+            print(f"  less visible -> dz kit visibility {reach.verb} {canonical}")
     else:
         print("  less visible -> (already least visible: shadowed)")
     if warmer:
-        print(f"  more visible -> dz kit visibility {RESTORE[level]} {fqcn}")
+        leave = KIT_PRESENCE_SPACE.payload_for("visibility", level)
+        print(f"  more visible -> dz kit visibility {leave.unverb} {canonical}")
     else:
         print("  more visible -> (already fully visible)")
     return 0

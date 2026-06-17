@@ -25,12 +25,7 @@ from dazzlecmd.cli import (
     _cmd_kit_favorite,
     _cmd_kit_favorite_migrate_stale,
     _cmd_kit_unfavorite,
-    _cmd_kit_silence,
-    _cmd_kit_unsilence,
-    _cmd_kit_shadow,
-    _cmd_kit_unshadow,
-    _cmd_kit_hide,
-    _cmd_kit_unhide,
+    _cmd_kit_visibility_set,
     _cmd_kit_visibility_list,
     _cmd_kit_visibility_status,
     _suggest_favorite_replacement,
@@ -476,25 +471,44 @@ class TestSuggestFavoriteReplacement:
 # ---------------------------------------------------------------------------
 
 
+def _vis(engine, fqcn, level, direction):
+    """Invoke the unified visibility handler (args carry level + direction)."""
+    return _cmd_kit_visibility_set(
+        _Args(fqcn=fqcn, level=level, direction=direction), engine)
+
+
+def _resolved(canonical):
+    """A ``(project, ctx)`` pair as ``engine.resolve_command`` would return --
+    lets a test exercise the name-resolution path without real discovery."""
+    proj = type("_P", (), {
+        "fqcn": canonical,
+        "namespace": canonical.split(":", 1)[0],
+        "name": canonical.rsplit(":", 1)[-1],
+        "always_active": False,
+    })()
+    ctx = type("_Ctx", (), {"canonical_fqcn": canonical})()
+    return proj, ctx
+
+
 class TestKitSilence:
 
     def test_silence_adds_to_list(self, tmp_path, monkeypatch):
         engine = _engine(tmp_path, monkeypatch)
-        _cmd_kit_silence(_Args(fqcn="a:b:c:d:leaf"), engine)
+        _vis(engine, "a:b:c:d:leaf", "silenced", "suppress")
         config = _read_config(tmp_path)
         assert "a:b:c:d:leaf" in config["silenced_hints"]["tools"]
 
     def test_silence_idempotent(self, tmp_path, monkeypatch):
         engine = _engine(tmp_path, monkeypatch)
-        _cmd_kit_silence(_Args(fqcn="a:b:c:d:leaf"), engine)
-        _cmd_kit_silence(_Args(fqcn="a:b:c:d:leaf"), engine)
+        _vis(engine, "a:b:c:d:leaf", "silenced", "suppress")
+        _vis(engine, "a:b:c:d:leaf", "silenced", "suppress")
         config = _read_config(tmp_path)
         assert config["silenced_hints"]["tools"].count("a:b:c:d:leaf") == 1
 
     def test_unsilence_removes(self, tmp_path, monkeypatch):
         engine = _engine(tmp_path, monkeypatch)
-        _cmd_kit_silence(_Args(fqcn="a:b:c:d:leaf"), engine)
-        _cmd_kit_unsilence(_Args(fqcn="a:b:c:d:leaf"), engine)
+        _vis(engine, "a:b:c:d:leaf", "silenced", "suppress")
+        _vis(engine, "a:b:c:d:leaf", "silenced", "restore")
         config = _read_config(tmp_path)
         assert "a:b:c:d:leaf" not in config["silenced_hints"]["tools"]
 
@@ -508,41 +522,47 @@ class TestKitShadow:
 
     def test_shadow_adds_to_list(self, tmp_path, monkeypatch):
         engine = _engine(tmp_path, monkeypatch)
-        _cmd_kit_shadow(_Args(fqcn="core:safedel"), engine)
+        _vis(engine, "x:y:tool", "shadowed", "suppress")
         config = _read_config(tmp_path)
-        assert "core:safedel" in config["shadowed_tools"]
+        assert "x:y:tool" in config["shadowed_tools"]
 
     def test_shadow_idempotent(self, tmp_path, monkeypatch):
         engine = _engine(tmp_path, monkeypatch)
-        _cmd_kit_shadow(_Args(fqcn="core:safedel"), engine)
-        _cmd_kit_shadow(_Args(fqcn="core:safedel"), engine)
+        _vis(engine, "x:y:tool", "shadowed", "suppress")
+        _vis(engine, "x:y:tool", "shadowed", "suppress")
         config = _read_config(tmp_path)
-        assert config["shadowed_tools"].count("core:safedel") == 1
+        assert config["shadowed_tools"].count("x:y:tool") == 1
 
     def test_unshadow_removes(self, tmp_path, monkeypatch):
         engine = _engine(tmp_path, monkeypatch)
-        _cmd_kit_shadow(_Args(fqcn="x:y:tool"), engine)
-        _cmd_kit_unshadow(_Args(fqcn="x:y:tool"), engine)
+        _vis(engine, "x:y:tool", "shadowed", "suppress")
+        _vis(engine, "x:y:tool", "shadowed", "restore")
         config = _read_config(tmp_path)
         assert "x:y:tool" not in config["shadowed_tools"]
 
-    def test_shadow_refuses_constitutional_C3(self, tmp_path, monkeypatch, capsys):
-        """C3: a constitutional tool may be hidden but NEVER shadowed (it would be
-        removed from dispatch, and dz depends on it). Requires the tool to be
-        discoverable so the check can resolve it."""
+    def test_short_name_resolves_to_canonical(self, tmp_path, monkeypatch):
+        """A short name resolves to its canonical FQCN BEFORE writing -- so the
+        entry is effective (matches the FQCN the filters use), not inert."""
         engine = _engine(tmp_path, monkeypatch)
+        engine.resolve_command = (
+            lambda name: _resolved("mykit:mytool") if name == "mt" else (None, None))
+        _vis(engine, "mt", "silenced", "suppress")
+        config = _read_config(tmp_path)
+        assert config["silenced_hints"]["tools"] == ["mykit:mytool"]  # canonical, not "mt"
 
-        class _P:  # minimal discovered-project stand-in
-            fqcn = "core:safedel"
-            namespace = "core"
-            name = "safedel"
-            always_active = False
-
-        engine.projects = [_P()]
-        rc = _cmd_kit_shadow(_Args(fqcn="core:safedel"), engine)
-        assert rc == 1                                   # refused
+    def test_shadow_refuses_constitutional_C3(self, tmp_path, monkeypatch, capsys):
+        """C3: a constitutional tool may be hidden but NEVER shadowed. The short
+        name resolves to the canonical first, so the guard CANNOT be dodged by
+        passing the short name (the bug this closes)."""
+        engine = _engine(tmp_path, monkeypatch)
+        engine.resolve_command = (
+            lambda name: _resolved("core:safedel")
+            if name in ("safedel", "core:safedel") else (None, None))
+        rc = _vis(engine, "safedel", "shadowed", "suppress")  # SHORT name
+        assert rc == 1                                          # refused
         config = _read_config(tmp_path)
         assert "core:safedel" not in (config.get("shadowed_tools") or [])
+        assert "safedel" not in (config.get("shadowed_tools") or [])
         assert "constitutional" in capsys.readouterr().err.lower()
 
 
@@ -562,9 +582,9 @@ class TestKitVisibilityList:
     def test_visibility_list_shows_all_three_rungs(self, tmp_path, monkeypatch, capsys):
         """Includes the HIDDEN rung the old `silenced` query omitted (G11)."""
         engine = _engine(tmp_path, monkeypatch)
-        _cmd_kit_silence(_Args(fqcn="a:b:c:d:leaf"), engine)
-        _cmd_kit_hide(_Args(fqcn="m:n:widget"), engine)
-        _cmd_kit_shadow(_Args(fqcn="x:y:tool"), engine)
+        _vis(engine, "a:b:c:d:leaf", "silenced", "suppress")
+        _vis(engine, "m:n:widget", "hidden", "suppress")
+        _vis(engine, "x:y:tool", "shadowed", "suppress")
         capsys.readouterr()  # drain setup output
         _cmd_kit_visibility_list(engine)
         out = capsys.readouterr().out
@@ -574,7 +594,8 @@ class TestKitVisibilityList:
 
 
 class TestKitVisibilityStatus:
-    """The KIT_PRESENCE_SPACE navigator: current level + next stronger/weaker."""
+    """The KIT_PRESENCE_SPACE navigator: current level + less/more visible moves
+    (read from the typed rungs)."""
 
     def test_status_visible(self, tmp_path, monkeypatch, capsys):
         engine = _engine(tmp_path, monkeypatch)
@@ -586,13 +607,30 @@ class TestKitVisibilityStatus:
 
     def test_status_after_hide_shows_neighbors(self, tmp_path, monkeypatch, capsys):
         engine = _engine(tmp_path, monkeypatch)
-        _cmd_kit_hide(_Args(fqcn="x:y:tool"), engine)
+        _vis(engine, "x:y:tool", "hidden", "suppress")
         capsys.readouterr()
         _cmd_kit_visibility_status(_Args(fqcn="x:y:tool"), engine)
         out = capsys.readouterr().out
         assert "presence: hidden" in out
-        assert "shadow x:y:tool" in out        # stronger
-        assert "unhide x:y:tool" in out        # weaker
+        assert "shadow x:y:tool" in out        # less visible
+        assert "unhide x:y:tool" in out        # more visible
+
+    def test_status_is_c3_aware_for_constitutional(self, tmp_path, monkeypatch, capsys):
+        """The navigator never recommends a move the surface refuses: a
+        constitutional tool at `hidden` annotates that shadow is C3-blocked
+        instead of suggesting `dz kit visibility shadow ...` (which would fail)."""
+        engine = _engine(tmp_path, monkeypatch)
+        engine.resolve_command = (
+            lambda name: _resolved("core:safedel")
+            if name in ("safedel", "core:safedel") else (None, None))
+        _vis(engine, "safedel", "hidden", "suppress")  # hide allowed on constitutional
+        capsys.readouterr()
+        _cmd_kit_visibility_status(_Args(fqcn="safedel"), engine)
+        out = capsys.readouterr().out
+        assert "presence: hidden" in out
+        assert "refused by C3" in out                  # annotated...
+        assert "dz kit visibility shadow" not in out   # ...NOT recommended as a command
+        assert "unhide core:safedel" in out            # more visible still offered
 
 
 class TestKitStatusDisplay:

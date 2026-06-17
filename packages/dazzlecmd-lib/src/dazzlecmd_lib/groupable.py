@@ -337,16 +337,74 @@ def level_for_channels(suppressed):
     return VISIBILITY_CONTINUUM.level_for_channels(frozenset(suppressed))
 
 
+@dataclass(frozen=True)
+class VisibilityRung:
+    """The TYPED payload for one visibility rung -- the verbs that reach/leave it,
+    the channel it introduces, and where it writes -- so consumers read typed
+    fields + call methods instead of an in-CLI string table. The typed-object
+    successor to the CLI's old ``SUPPRESS``/``RESTORE`` dicts (consolidation DWP
+    2026-06-17); the deeper ``states.py`` ``Transition`` unification is #188.
+    """
+
+    level: str
+    verb: str            # the command that REACHES this rung (suppress)
+    unverb: str          # the command that LEAVES it (restore)
+    channel: str         # the visibility channel it introduces
+    config_key: str      # the user-config key it writes
+    config_nested: bool = False           # True for silenced_hints (.tools)
+    forbids_constitutional: bool = False  # C3: shadowed refuses constitutional
+
+    def write(self, config, fqcn, *, add):
+        """Return the config-update that adds/removes ``fqcn`` at this rung's
+        target. PURE over the config mapping -- the engine performs the write."""
+        if self.config_nested:
+            section = dict(config.get(self.config_key) or {})
+            tools = list(section.get("tools") or [])
+            if add and fqcn not in tools:
+                tools.append(fqcn)
+            elif not add and fqcn in tools:
+                tools.remove(fqcn)
+            section["tools"] = tools
+            section.setdefault("kits", [])
+            return {self.config_key: section}
+        items = list(config.get(self.config_key) or [])
+        if add and fqcn not in items:
+            items.append(fqcn)
+        elif not add and fqcn in items:
+            items.remove(fqcn)
+        return {self.config_key: items}
+
+    def present(self, config, fqcn):
+        """Whether ``fqcn`` currently sits at this rung in ``config``."""
+        if self.config_nested:
+            return fqcn in ((config.get(self.config_key) or {}).get("tools") or [])
+        return fqcn in (config.get(self.config_key) or [])
+
+
+# The typed payloads for the suppression rungs (visible = the warm pole, no
+# payload). One source of truth for the verb<->rung<->config binding.
+VISIBILITY_RUNGS = {
+    "silenced": VisibilityRung(
+        "silenced", "silence", "unsilence", "hints", "silenced_hints",
+        config_nested=True),
+    "hidden": VisibilityRung(
+        "hidden", "hide", "unhide", "display", "hidden_tools"),
+    "shadowed": VisibilityRung(
+        "shadowed", "shadow", "unshadow", "resolution", "shadowed_tools",
+        forbids_constitutional=True),
+}
+
 # The kit-presence space: the visibility ladder as ONE presence axis on a shared
-# scale. The `dz kit visibility` surface navigates it (--adjacent / --stronger /
-# --weaker: the next move toward or away from "present"). Single-axis today (a
-# tool's output + dispatch presence); activation and load/pointer compose here as
-# further axes per the ContinuumSpace DWP (2026-06-16) -- the seam is ready.
+# scale, each rung carrying its typed VisibilityRung payload. The `dz kit
+# visibility` surface navigates it and READS the rung objects (no string table).
+# Single-axis today; activation / load compose as further axes per the
+# ContinuumSpace DWP -- the seam is ready.
 KIT_PRESENCE_SPACE = ContinuumSpace(
     name="kit_presence",
     meaning="how present a tool is to dz (listing + dispatch)",
     axes={"visibility": VISIBILITY_CONTINUUM},
     presence={"visibility": dict(VISIBILITY_CONTINUUM.ranks)},
+    payloads={"visibility": VISIBILITY_RUNGS},
     invariant="canonical_dispatch",
 )
 

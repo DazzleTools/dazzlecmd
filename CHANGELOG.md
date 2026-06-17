@@ -4,6 +4,26 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.37] - 2026-06-17
+
+### Fixed
+
+- **`dz kit visibility {silence,hide,shadow} <short-name>` now resolves to the canonical FQCN before writing.** Previously a short name (e.g. `safedel`) was written verbatim, which never matched the FQCN-keyed filters (a silent inert no-op) AND let `shadow <short-name>` BYPASS the C3 constitutional guard. The verbs now resolve via the engine (dispatch-grade): a resolved short name writes the canonical FQCN (effective), an unresolved name warns instead of silently writing an inert entry, and C3 (a constitutional tool may be hidden but never shadowed) can no longer be dodged by passing the short name.
+
+### Changed
+
+- **Visibility verbs consolidated into one container-driven handler.** The six toggle handlers (silence/unsilence, hide/unhide, shadow/unshadow) collapse into a single `_cmd_kit_visibility_set` driven by the TYPED `VisibilityRung` payload now carried on `KIT_PRESENCE_SPACE`. The verb<->rung<->config binding lives in one typed object (the container), not per-handler string tables (`SUPPRESS`/`RESTORE`) and hardcoded config keys; `dz kit visibility status` reads the same rungs. This avoids the dict-everything regression the 0.8.x DazzleEntity migration removed (deeper `states.py` `Transition` unification tracked for #188).
+- `dz kit visibility -h`: `status` is listed first (the generic inspect verb) ahead of the domain toggles.
+- **`dz kit visibility status` is C3-aware**: for a constitutional tool at `hidden`, it annotates that `shadow` is refused (the cold rung is unreachable -- "hidden is the max veil") instead of recommending a move the surface would reject. The navigator no longer suggests dead-end actions.
+
+### Added
+
+- **`ContinuumSpace` typed-payload slot** (`payloads` + `payload_for`): each rung can carry a caller-supplied TYPED object (the "templated object"); the space holds + returns it opaquely (never interprets or calls it), so the primitive stays pure + domain-neutral while consumers get a typed object, not a string dict. `VisibilityRung` is the first payload.
+
+### Versions
+
+- dazzlecmd 0.9.36 -> 0.9.37 (PATCH); dazzlecmd-lib 0.8.36 -> 0.8.37 (PATCH -- `ContinuumSpace.payloads` + `VisibilityRung`); dazzle-dz -> 0.9.37.
+
 ## [0.9.36] - 2026-06-16
 
 ### Added
@@ -3228,7 +3248,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.36...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.37...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

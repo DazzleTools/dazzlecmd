@@ -297,6 +297,19 @@ class TestContinuumSpace:
     def test_satisfies_protocol(self):
         assert isinstance(_kit_presence_space(), ContinuumSpaceProtocol)
 
+    def test_payload_for_holds_typed_objects_opaquely(self):
+        """A rung can carry a caller-supplied TYPED payload (the 'templated
+        object'); the space returns it by identity and never interprets it --
+        the typed-rung mechanism, not a string dict."""
+        marker = object()
+        s = ContinuumSpace(
+            name="p", axes={"activation": _activation()},
+            presence={"activation": {"enabled": 0, "disabled": -1}},
+            payloads={"activation": {"disabled": marker}},
+        )
+        assert s.payload_for("activation", "disabled") is marker  # exact object
+        assert s.payload_for("activation", "enabled") is None     # none supplied
+
     def test_amplification_navigates_above_neutral(self):
         """A >0 (amplified) axis composed with visibility: 'warmer than visible'
         now EXISTS (featured), and the merged spectrum spans both signs -- proof

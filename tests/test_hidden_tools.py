@@ -140,10 +140,16 @@ class TestKitHideCommands:
         base.update(over)
         return _Args(**base)
 
+    @staticmethod
+    def _hide(engine, fqcn, direction="suppress"):
+        """The hide/unhide verbs now route through the unified handler."""
+        from dazzlecmd.cli import _cmd_kit_visibility_set
+        return _cmd_kit_visibility_set(
+            _Args(fqcn=fqcn, level="hidden", direction=direction), engine)
+
     def test_kit_hide_writes_config_and_list_omits(self, tmp_path, monkeypatch, capsys):
-        from dazzlecmd.cli import _cmd_kit_hide
         engine = _engine(tmp_path, monkeypatch, hidden=None)
-        rc = _cmd_kit_hide(_Args(fqcn="core:zzsecret"), engine)
+        rc = self._hide(engine, "core:zzsecret")
         assert rc == 0
         cfg = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
         assert "core:zzsecret" in cfg["hidden_tools"]
@@ -153,25 +159,22 @@ class TestKitHideCommands:
         assert "fixpath" in out and "zzsecret" not in out
 
     def test_kit_unhide_restores(self, tmp_path, monkeypatch, capsys):
-        from dazzlecmd.cli import _cmd_kit_hide, _cmd_kit_unhide
         engine = _engine(tmp_path, monkeypatch, hidden=None)
-        _cmd_kit_hide(_Args(fqcn="core:zzsecret"), engine)
-        rc = _cmd_kit_unhide(_Args(fqcn="core:zzsecret"), engine)
+        self._hide(engine, "core:zzsecret")
+        rc = self._hide(engine, "core:zzsecret", direction="restore")
         assert rc == 0
         cfg = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
         assert "core:zzsecret" not in cfg.get("hidden_tools", [])
 
     def test_kit_unhide_not_hidden_is_graceful(self, tmp_path, monkeypatch, capsys):
-        from dazzlecmd.cli import _cmd_kit_unhide
         engine = _engine(tmp_path, monkeypatch, hidden=None)
-        rc = _cmd_kit_unhide(_Args(fqcn="core:nope"), engine)
+        rc = self._hide(engine, "core:nope", direction="restore")
         assert rc == 0
         assert "was not hidden" in capsys.readouterr().out
 
     def test_kit_hide_is_idempotent(self, tmp_path, monkeypatch, capsys):
-        from dazzlecmd.cli import _cmd_kit_hide
         engine = _engine(tmp_path, monkeypatch, hidden=None)
-        _cmd_kit_hide(_Args(fqcn="core:zzsecret"), engine)
-        _cmd_kit_hide(_Args(fqcn="core:zzsecret"), engine)
+        self._hide(engine, "core:zzsecret")
+        self._hide(engine, "core:zzsecret")
         cfg = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
         assert cfg["hidden_tools"].count("core:zzsecret") == 1
