@@ -241,35 +241,60 @@ class AliasRebindContext:
     index: Any
     alias: str
 
-    def apply(self, entity: Any, target: str) -> RebindReceipt:
+    def __post_init__(self):
+        # B2b-2: run `apply` on the generic executor (the routing/rebind edge), so
+        # the receipt's reversible/conserved come from the registry (F3). detect/
+        # check/write are the alias-specific hooks; `undo` stays bespoke (it is
+        # ENTITY-FREE -- see below).
+        self._tc = TransitionContext(
+            _DEFAULT_REGISTRY, "routing",
+            detect=self._detect, write=self._write, check=self._check,
+        )
+
+    def _detect(self, entity: Any) -> Any:
+        """The canonical THIS alias currently points at (None if unregistered)."""
+        return self.index.alias_index.get(self.alias)
+
+    def _check(self, entity: Any, target: str, verb: str, prev: Any) -> None:
         # Receiver precondition: the receiver must CURRENTLY own this alias
         # (the alias must resolve to the receiver's canonical FQCN). This one
         # check catches both wrong-index and wrong-receiver. The inverse call is
         # therefore made on the NEW owner -- "receiver = current owner" stays
         # consistent across the round-trip (DWP addendum H1).
-        current = self.index.alias_index.get(self.alias)
-        if current is None:
+        if prev is None:
             raise KeyError(
                 f"alias {self.alias!r} is not registered in this index"
             )
-        if current != entity.fqcn:
+        if prev != entity.fqcn:
             raise ValueError(
                 f"rebind receiver mismatch: alias {self.alias!r} currently "
-                f"points at {current!r}, not the receiver {entity.fqcn!r}. "
+                f"points at {prev!r}, not the receiver {entity.fqcn!r}. "
                 f"Call rebind on the alias's current owner."
             )
-        previous = self.index.repoint_alias(self.alias, target)
+
+    def _write(self, entity: Any, target: str, prev: Any) -> None:
+        # repoint_alias enforces target-is-canonical (raises KeyError otherwise)
+        # + the §9b/single-hop rules + short-index bookkeeping -- callers keep
+        # their handling (the KeyError on a non-canonical target propagates here).
+        self.index.repoint_alias(self.alias, target)
+        return None
+
+    def apply(self, entity: Any, target: str) -> RebindReceipt:
+        r = self._tc.apply(entity, target, verb="rebind")
+        # reversible + the conserved-invariant NAME now come from the declared
+        # routing/rebind edge (r.reversible / r.conserved), not a literal. prev
+        # is the detect reading (== repoint's prior target, single-threaded).
         return RebindReceipt(
-            entity_fqcn=entity.fqcn,        # C1 -- unchanged by the rebind
+            entity_fqcn=r.entity_fqcn,      # C1 -- unchanged by the rebind
             sub_kind="alias",
-            previous_state=previous,        # repoint back here to invert
-            new_state=target,
+            previous_state=r.previous_state,  # repoint back here to invert
+            new_state=r.new_state,
             invariant=RebindInvariant(
-                conserved_quantity_name="single_hop_rule",
-                conserved_value=entity.fqcn,
+                conserved_quantity_name=r.conserved,
+                conserved_value=r.entity_fqcn,
                 restore_path="repoint the alias back to previous_state",
             ),
-            reversible=True,                # alias repoint is always reversible
+            reversible=r.reversible,        # from the declared edge
         )
 
     def undo(self, receipt: RebindReceipt) -> RebindReceipt:

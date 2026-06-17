@@ -21,7 +21,7 @@ from dazzlecmd_lib.groupable import (
     RebindReceipt,
     RebindInvariant,
 )
-from dazzlecmd_lib.states import assert_round_trip
+from dazzlecmd_lib.states import assert_round_trip, build_default_registry
 from dazzlecmd_lib.testing import make_tool
 
 
@@ -369,3 +369,18 @@ class TestUndo:
         )
         with pytest.raises(RebindError, match="prior apply"):
             ctx.undo(fake)
+
+
+# ---------------------------------------------------------------------------
+# B2b-2 -- alias rebind runs `apply` on the generic TransitionContext
+# ---------------------------------------------------------------------------
+def test_alias_rebind_receipt_sources_invariant_from_registry():
+    """AC4: after migrating onto TransitionContext, the RebindReceipt's reversible
+    + conserved-name trace to the DECLARED routing/rebind edge (the registry is on
+    the alias-rebind runtime path), not a hardcoded literal."""
+    idx, c1, c2 = _idx_two_canonicals_one_alias()
+    r = c1.rebind("core:cleanup", context=AliasRebindContext(idx, "claude:cleanup"))
+    edge = next(t for t in build_default_registry().for_verb("rebind")
+                if t.axis == "routing")
+    assert r.invariant.conserved_quantity_name == edge.conserved == "single_hop_rule"
+    assert r.reversible is edge.reversible is True

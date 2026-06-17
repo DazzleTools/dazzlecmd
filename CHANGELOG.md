@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.41] - 2026-06-17
+
+### Changed
+
+- **`AliasRebindContext.apply` now runs on the generic `TransitionContext` (B2b-2 of the Groupable<->Continuum<->states unification).** The alias `rebind` executes through the one generic executor over the `routing` axis (`detect` = the alias's current canonical, `check` = the receiver-precondition, `write` = `repoint_alias`); its `RebindReceipt`'s `reversible` + conserved-invariant NAME now trace to the declared routing/rebind edge (`single_hop_rule`) rather than a hardcoded literal. Behavior is byte-identical (the receiver/existence guards, idempotence, short-index coherence). `undo` stays bespoke — it is ENTITY-FREE by design (repoints back without needing the new owner). This closes **B2b**: containment + rebind are migrated; `ProjectionContext` stays bespoke (a multi-valued add/remove-named-member shape, not a single-value axis move) and `mode.py`'s `ModeRebindContext` folds in when mode-switch becomes a Groupable verb.
+
+### Versions
+
+- dazzlecmd 0.9.40 -> 0.9.41 (PATCH); dazzlecmd-lib 0.8.40 -> 0.8.41 (PATCH -- `AliasRebindContext` on `TransitionContext`); dazzle-dz -> 0.9.41.
+
 ## [0.9.40] - 2026-06-17
 
 ### Changed
@@ -3287,7 +3297,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.40...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.41...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
