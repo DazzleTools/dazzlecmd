@@ -4,6 +4,21 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.38] - 2026-06-17
+
+### Changed
+
+- **`states.py` and `continuum.py` are now connected at L0 (B1 of the Groupable<->Continuum<->states unification).** A `StateAxis` may carry its signed/ordered backing as a `Continuum` -- the *StateAxis HAS-A Continuum* seam; when it does, the axis's ordered value set DERIVES from the continuum (one source -- no `values`/`ranks` drift) and a guard refuses a `values=` that disagrees with it. The pure `VISIBILITY_CONTINUUM` instance moved from `groupable.py` (L2) down into `states.py` (L0, where the state registry that DECLARES the axes owns it); `groupable.py` re-imports the SAME instance, so `KIT_PRESENCE_SPACE` and the visibility shims are byte-identical and `VISIBILITY_VALUES` now derives from it. No behavior change: `states.py` stays off the runtime dispatch path, the `dz kit visibility` surface is byte-identical, and both L0 modules stay import-pure.
+- `build_default_registry()` docstring corrected: the VISIBILITY/CONTAINMENT/PROJECTION edges are declared (each added by the commit that made its verb a live Groupable method); only the ACTIVATION transitions remain absent (until `dz kit enable`/`disable` become Groupable verbs).
+
+### Added
+
+- **`EntityState.coordinates_in(space)`** -- locates an observed state as a POINT in a `ContinuumSpace` (its per-axis presence coordinate), the executable reading of "an `EntityState` is a point in the space"; `ContinuumSpaceProtocol` gains `axes` so the tie is cleanly typed.
+
+### Versions
+
+- dazzlecmd 0.9.37 -> 0.9.38 (PATCH); dazzlecmd-lib 0.8.37 -> 0.8.38 (PATCH -- `StateAxis.continuum` seam + `VISIBILITY_CONTINUUM` relocation + `EntityState.coordinates_in` + `ContinuumSpaceProtocol.axes`); dazzle-dz -> 0.9.38.
+
 ## [0.9.37] - 2026-06-17
 
 ### Fixed
@@ -3248,7 +3263,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.37...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.38...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

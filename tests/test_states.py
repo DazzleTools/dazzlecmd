@@ -26,7 +26,9 @@ import pytest
 
 from dazzlecmd_lib.engine import FQCNIndex
 from dazzlecmd_lib.entity import build_entity
-from dazzlecmd_lib.groupable import AliasRebindContext, CriticalityBoundaryError
+from dazzlecmd_lib.groupable import (
+    AliasRebindContext, CriticalityBoundaryError, KIT_PRESENCE_SPACE,
+)
 from dazzlecmd_lib.testing import make_tool
 from dazzlecmd_lib.states import (
     OPEN,
@@ -38,6 +40,8 @@ from dazzlecmd_lib.states import (
     StateAxis,
     Transition,
     TransitionRegistry,
+    VISIBILITY_CONTINUUM,
+    VISIBILITY_VALUES,
     assert_round_trip,
     observe,
     build_default_registry,
@@ -528,3 +532,73 @@ class TestPlatformIntegration:
         assert observed == len(engine.projects)
         assert "tool" in kinds_seen
         assert modes_seen and modes_seen <= set(MODE_VALUES)
+
+
+# ---------------------------------------------------------------------------
+# B1 -- the StateAxis HAS-A Continuum seam (states.py <-> continuum.py connect)
+# ---------------------------------------------------------------------------
+class TestStateAxisContinuum:
+    """B1: a StateAxis carries its signed/ordered backing as a Continuum, and its
+    ordered value set DERIVES from it -- ONE source, no values/ranks drift."""
+
+    def test_visibility_continuum_is_one_instance_across_modules(self):
+        # The pure Continuum moved to states.py (L0); groupable re-imports the
+        # SAME object -- identity, not a value-equal copy (a copy could drift).
+        from dazzlecmd_lib import groupable as g
+        from dazzlecmd_lib import states as s
+        assert g.VISIBILITY_CONTINUUM is s.VISIBILITY_CONTINUUM is VISIBILITY_CONTINUUM
+
+    def test_visibility_values_derive_byte_identical(self):
+        # Derived warm->cold; identical to the prior hand-written literal.
+        assert VISIBILITY_VALUES == ("visible", "silenced", "hidden", "shadowed")
+        assert VISIBILITY_VALUES == VISIBILITY_CONTINUUM.levels()[::-1]
+
+    def test_axis_with_continuum_derives_values(self):
+        ax = StateAxis(name="visibility", continuum=VISIBILITY_CONTINUUM)
+        assert ax.values == ("visible", "silenced", "hidden", "shadowed")
+        assert ax.admits("hidden") and not ax.admits("nope")
+
+    def test_axis_values_and_continuum_agreeing_is_ok(self):
+        ax = StateAxis(name="visibility",
+                       values=("visible", "silenced", "hidden", "shadowed"),
+                       continuum=VISIBILITY_CONTINUUM)
+        assert set(ax.values) == set(VISIBILITY_CONTINUUM.ranks)
+
+    def test_axis_values_and_continuum_disagreeing_raises(self):
+        # The drift guard: an axis has ONE value set.
+        with pytest.raises(ValueError, match="disagree with continuum"):
+            StateAxis(name="x", values=("a", "b"), continuum=VISIBILITY_CONTINUUM)
+
+    def test_registry_visibility_axis_is_continuum_backed(self):
+        reg = build_default_registry()
+        ax = reg.axis("visibility")
+        assert ax.continuum is VISIBILITY_CONTINUUM
+        assert tuple(ax.values) == ("visible", "silenced", "hidden", "shadowed")
+
+    def test_visibility_transitions_endpoints_are_continuum_levels(self):
+        # The registry and the Continuum agree on the axis's states: every
+        # declared visibility edge's endpoints are levels of the continuum.
+        reg = build_default_registry()
+        levels = set(VISIBILITY_CONTINUUM.ranks)
+        edges = reg.for_axis("visibility")
+        assert edges
+        for t in edges:
+            for fv in t.from_values:
+                assert fv in levels, (t.verb, fv)
+            assert t.to_value is OPEN or t.to_value in levels
+
+
+class TestEntityStateAsPoint:
+    """B1: an EntityState is a POINT in a ContinuumSpace (coordinates_in)."""
+
+    def test_visibility_state_locates_in_kit_presence_space(self):
+        st = EntityState("core:find", {"visibility": "hidden"})
+        assert st.coordinates_in(KIT_PRESENCE_SPACE) == {"visibility": -2}
+        st0 = EntityState("core:find", {"visibility": "visible"})
+        assert st0.coordinates_in(KIT_PRESENCE_SPACE) == {"visibility": 0}
+
+    def test_partial_observation_is_a_partial_point(self):
+        # An axis the state does not carry is skipped (no KeyError, no zero-fill);
+        # an axis the SPACE does not define is likewise absent from the point.
+        st = EntityState("core:find", {"mode": "symlink"})  # no visibility reading
+        assert st.coordinates_in(KIT_PRESENCE_SPACE) == {}

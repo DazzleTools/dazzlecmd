@@ -51,6 +51,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable, Mapping, Optional, Tuple
 
+from .continuum import Continuum, ContinuumSpaceProtocol
+
 
 # ---------------------------------------------------------------------------
 # OPEN -- the sentinel for open-valued axes / wildcards
@@ -110,11 +112,15 @@ class StateAxis:
     """One dimension of state, plus where its truth lives.
 
     ``values`` is the allowed value set, or ``None`` for an open-valued axis
-    (ROUTING ranges over all FQCNs). ``read_only`` marks an axis that the verbs
-    do not transition directly (KIND -- changed only by graduation, a composite).
-    ``detect`` is an optional reader hook into the substrate; it is intentionally
-    left ``None`` in the default registry so this module imports nothing from
-    ``mode``/``engine`` -- the axis documents its substrate, the consumer reads it.
+    (ROUTING ranges over all FQCNs). When a ``continuum`` is supplied -- the
+    signed, ordered backing (the unification's *StateAxis HAS-A Continuum* seam,
+    B1) -- ``values`` DERIVES from it (single source: no ``values``/``ranks``
+    drift); passing both that disagree is a contract breach, raised here.
+    ``read_only`` marks an axis that the verbs do not transition directly (KIND
+    -- changed only by graduation, a composite). ``detect`` is an optional reader
+    hook into the substrate; it is intentionally left ``None`` in the default
+    registry so this module imports nothing from ``mode``/``engine`` -- the axis
+    documents its substrate, the consumer reads it.
     """
 
     name: str
@@ -122,6 +128,22 @@ class StateAxis:
     read_only: bool = False
     substrate: str = ""
     detect: Optional[Callable[..., Any]] = None
+    continuum: Optional[Continuum] = None
+
+    def __post_init__(self) -> None:
+        # The HAS-A Continuum seam (B1): when an axis carries its signed/ordered
+        # backing, the ordered value set IS the Continuum's -- derive it
+        # (warm->cold) so there is ONE source, and refuse a ``values=`` that
+        # disagrees rather than silently preferring one (the drift guard).
+        if self.continuum is not None:
+            if self.values is None:
+                object.__setattr__(self, "values", self.continuum.levels()[::-1])
+            elif set(self.values) != set(self.continuum.ranks):
+                raise ValueError(
+                    f"StateAxis {self.name!r}: values {tuple(self.values)!r} "
+                    f"disagree with continuum {self.continuum.name!r} levels "
+                    f"{tuple(self.continuum.ranks)!r} -- an axis has one value set"
+                )
 
     def admits(self, value: Any) -> bool:
         """True if ``value`` is a legal value on this axis (open axes admit any)."""
@@ -158,6 +180,18 @@ class EntityState:
     def on(self, *axes: str) -> "EntityState":
         """A restriction of this observation to ``axes`` (for subset equality)."""
         return EntityState(self.fqcn, {a: self.values[a] for a in axes if a in self.values})
+
+    def coordinates_in(self, space: ContinuumSpaceProtocol) -> Mapping[str, int]:
+        """This observation as a POINT in a :class:`ContinuumSpace` -- the signed
+        presence coordinate for each of the space's axes that this state carries.
+
+        The executable reading of "an ``EntityState`` is a point in the space"
+        (the unification target): it pairs the OBSERVED value on each axis with
+        the space's shared presence scale. Axes the state does not carry are
+        skipped (a partial observation is a partial point); a carried value that
+        is not a level of its axis surfaces as the Continuum's own error."""
+        return {axis: space.presence_of(axis, self.values[axis])
+                for axis in space.axes if axis in self.values}
 
 
 # ---------------------------------------------------------------------------
@@ -473,7 +507,29 @@ def observe(registry: TransitionRegistry, fqcn: str, **axis_values: Any) -> Enti
 # imports nothing from ``mode``; ``test_states.py`` cross-checks them against the
 # constants so drift is caught).
 MODE_VALUES: Tuple[str, ...] = ("symlink", "submodule", "embedded", "missing", "local-only")
-VISIBILITY_VALUES: Tuple[str, ...] = ("visible", "silenced", "hidden", "shadowed")
+
+# The VISIBILITY axis is a CONTINUUM (the signed, channel-backed source of truth):
+# ``visible`` is rank 0 (veil-free; canonical_dispatch intact), each colder rung
+# suppresses one more surface (hints -> display -> resolution), ``shadowed`` is the
+# cold pole (refused for constitutional items -- C3). hide = step COLDER; expose =
+# step WARMER. This is the ONE source for the axis's ordered values; it lived in
+# ``groupable.py`` until B1 moved it down to L0 so the registry that DECLARES the
+# axes owns it (``groupable.py`` re-imports it for its derived shims +
+# ``KIT_PRESENCE_SPACE``).
+VISIBILITY_CONTINUUM = Continuum(
+    name="visibility",
+    ranks={"visible": 0, "silenced": -1, "hidden": -2, "shadowed": -3},
+    invariant="canonical_dispatch",
+    channels={
+        "visible": frozenset(),
+        "silenced": frozenset({"hints"}),
+        "hidden": frozenset({"hints", "display"}),
+        "shadowed": frozenset({"hints", "display", "resolution"}),
+    },
+)
+# Single source: the value set DERIVES from the continuum (warm->cold), byte-
+# identical to the prior literal ``("visible","silenced","hidden","shadowed")``.
+VISIBILITY_VALUES: Tuple[str, ...] = VISIBILITY_CONTINUUM.levels()[::-1]
 ACTIVATION_VALUES: Tuple[str, ...] = ("active", "inactive")
 KIND_VALUES: Tuple[str, ...] = ("tool", "kit", "aggregator")
 
@@ -486,12 +542,16 @@ _MODE_OUT_OF_ORBIT: Tuple[str, ...] = ("embedded", "local-only")
 def build_default_registry() -> TransitionRegistry:
     """Build the reference registry for the dazzlecmd toolset.
 
-    Registers the four entity-state axes (KIND/MODE/VISIBILITY/ACTIVATION) plus
-    the index-level ROUTING axis, and DECLARES the transitions that already ship
-    live (the two ``rebind`` mechanisms -- alias routing and dev<->publish
-    mode-switch). Visibility and activation transitions are intentionally absent
-    until ``hide``/``expose`` and kit-activation become Groupable verbs; the
-    GENERATIVE graduation edges land in the ``group``/``ungroup`` design pass.
+    Registers the entity-state axes (KIND/MODE/VISIBILITY/ACTIVATION plus the
+    open-valued CONTAINMENT/PROJECTION naming axes) and the index-level ROUTING
+    axis, and DECLARES the live transitions: the ``rebind`` mechanisms (alias
+    routing + dev<->publish mode-switch), the VISIBILITY ``hide``/``expose``
+    ladder, the CONTAINMENT and PROJECTION ``group``/``ungroup`` edges, and the
+    GENERATIVE ``graduation`` composite. Each edge-set was added BY the commit
+    that made its verb a live Groupable method (the intended trigger -- the
+    registry is filled by the verb, never ahead of it). Only the ACTIVATION
+    transitions remain absent: they land when ``dz kit enable``/``disable``
+    become Groupable verbs (B4 of the unification).
     """
     reg = TransitionRegistry()
 
@@ -505,7 +565,7 @@ def build_default_registry() -> TransitionRegistry:
         substrate="filesystem (detect_tool_state)",
     ))
     reg.register_axis(StateAxis(
-        name="visibility", values=VISIBILITY_VALUES,
+        name="visibility", continuum=VISIBILITY_CONTINUUM,
         substrate="user config (silenced_hints / shadowed_tools / planned hidden_tools)",
     ))
     reg.register_axis(StateAxis(
@@ -657,6 +717,7 @@ __all__ = [
     "observe",
     "build_default_registry",
     "MODE_VALUES",
+    "VISIBILITY_CONTINUUM",
     "VISIBILITY_VALUES",
     "ACTIVATION_VALUES",
     "KIND_VALUES",

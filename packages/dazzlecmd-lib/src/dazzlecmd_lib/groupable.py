@@ -31,7 +31,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from dazzlecmd_lib.continuum import Continuum, ContinuumSpace
+from dazzlecmd_lib.continuum import ContinuumSpace
+from dazzlecmd_lib.states import VISIBILITY_CONTINUUM
 
 
 class CriticalityBoundaryError(Exception):
@@ -300,27 +301,14 @@ class ProjectionContext:
 
 VISIBILITY_CHANNELS = ("hints", "display", "resolution")
 
-# Monotone presets: each level's suppressed-channel set is a superset of the
-# previous. Visible suppresses nothing; Shadowed suppresses everything.
-# The visibility ladder is a CONTINUUM (the source of truth): a signed,
-# channel-backed axis with an invariant-bearing zero. `visible` is rank 0 (the
-# neutral/invariant state -- veil-free, canonical_dispatch intact); each colder
-# rung suppresses one more surface (hints -> display -> resolution); `shadowed`
-# is the cold pole (the THAC0 hard wall, refused for constitutional items).
-# hide = step COLDER (less); expose = step WARMER (more). The verbs flow through
-# this object (the Continuum proving itself on a live, tested Groupable); the
-# module-level names below are DERIVED shims preserving the public surface.
-VISIBILITY_CONTINUUM = Continuum(
-    name="visibility",
-    ranks={"visible": 0, "silenced": -1, "hidden": -2, "shadowed": -3},
-    invariant="canonical_dispatch",
-    channels={
-        "visible": frozenset(),
-        "silenced": frozenset({"hints"}),
-        "hidden": frozenset({"hints", "display"}),
-        "shadowed": frozenset({"hints", "display", "resolution"}),
-    },
-)
+# The visibility CONTINUUM (the signed, channel-backed source of truth) now lives
+# in ``states.py`` at L0, where the state registry that DECLARES the axes owns it
+# (B1 of the unification); it is imported above. ``visible`` is rank 0 (veil-free,
+# canonical_dispatch intact); each colder rung suppresses one more surface (hints
+# -> display -> resolution); ``shadowed`` is the cold pole (refused for
+# constitutional items -- C3). hide = step COLDER (less); expose = step WARMER
+# (more). The module-level names below are DERIVED shims preserving the public
+# surface (and ``KIT_PRESENCE_SPACE`` composes the one instance).
 
 # Derived shims (continuum = source of truth): the level->channels presets and
 # the weakest->strongest order, kept for the existing public surface.

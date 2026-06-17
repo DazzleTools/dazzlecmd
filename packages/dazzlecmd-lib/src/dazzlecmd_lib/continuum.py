@@ -301,6 +301,7 @@ class ContinuumSpaceProtocol(Protocol):
 
     name: str
     meaning: str
+    axes: Mapping[str, Continuum]
 
     def presence_of(self, axis: str, level: str) -> int: ...
     def payload_for(self, axis: str, level: str) -> Any: ...
