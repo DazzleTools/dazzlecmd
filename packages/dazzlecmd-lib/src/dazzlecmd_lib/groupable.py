@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from dazzlecmd_lib.continuum import ContinuumSpace
-from dazzlecmd_lib.states import VISIBILITY_CONTINUUM
+from dazzlecmd_lib.states import VISIBILITY_CONTINUUM, Reversibility, build_default_registry
 
 
 class CriticalityBoundaryError(Exception):
@@ -56,6 +56,119 @@ class RebindError(Exception):
     mode-switch returned a non-zero exit code). The transition's success/failure
     is the mechanism's; this surfaces it as the verb's typed failure.
     """
+
+
+# ===========================================================================
+# The generic transition executor -- the N-Contexts -> 1 collapse (B2)
+# ===========================================================================
+# Every effectful Groupable verb does the same dance: read the entity's current
+# value off its substrate, resolve the DECLARED edge for the verb (so the receipt
+# reports the registry's reversibility/conserved rather than a hardcoded literal
+# -- the F3 "receipts stop hardcoding truth" intent), refuse it if it crosses a
+# criticality boundary, write the substrate, and return a receipt.
+# ``TransitionContext`` owns that shared orchestration ONCE; the per-axis
+# substrate I/O + policy are small consumer-supplied hooks bound to a handle, so
+# the L0 registry/continuum stay pure (they DECLARE the axes; the consumer
+# reads/writes them). The visibility verb runs on this in B2; containment /
+# projection / rebind migrate onto it in B2b.
+
+_DEFAULT_REGISTRY = build_default_registry()
+
+
+@dataclass(frozen=True)
+class Receipt:
+    """The generic record one transition leaves -- the collapse of the per-verb
+    ``*Receipt`` types.
+
+    ``conserved`` (the C2 invariant NAME) and ``reversible`` are READ FROM the
+    declared :class:`~dazzlecmd_lib.states.Transition`, not hardcoded per verb.
+    ``payload`` carries any axis-specific extra (e.g. visibility's channel deltas)
+    until the per-axis receipts fully dissolve (B2b)."""
+
+    entity_fqcn: str
+    axis: str
+    previous_state: Any
+    new_state: Any
+    conserved: str
+    reversible: bool
+    verb: str
+    payload: Any = None
+
+
+class TransitionContext:
+    """One generic executor for any state axis.
+
+    The shared apply/undo/criticality/receipt logic lives here ONCE; the per-axis
+    substrate I/O + policy are consumer-supplied hooks bound to a handle:
+
+    - ``detect(entity) -> current_value`` -- read the axis value off the substrate.
+    - ``write(entity, target, prev) -> payload`` -- persist the move; return any
+      axis-specific receipt payload (or ``None``).
+    - ``check(entity, target, verb, prev)`` -- OPTIONAL axis pre-flight (direction
+      guards, target validity, the C3 constitutional refusal); raises to refuse.
+    - ``invert(receipt) -> (target, verb)`` -- OPTIONAL inverse move for ``undo``
+      (defaults to re-applying ``previous_state`` with the same verb).
+
+    ``apply`` resolves the declared edge for ``(verb, axis)`` so the receipt's
+    ``conserved``/``reversible`` come from the registry (F3), and refuses a
+    ``REFUSED_AT_BOUNDARY`` edge generically. The substrate hooks keep ``states``
+    / ``continuum`` import-pure -- they declare the axis; the handle reads/writes.
+    """
+
+    def __init__(self, registry, axis_name, *, detect, write, check=None, invert=None):
+        self._registry = registry
+        self._axis_name = axis_name
+        self._detect = detect
+        self._write = write
+        self._check = check
+        self._invert = invert
+        self._applied_entity = None
+
+    def _edge(self, verb):
+        edges = [t for t in self._registry.for_verb(verb) if t.axis == self._axis_name]
+        if not edges:
+            raise LookupError(
+                f"no declared transition for verb {verb!r} on axis {self._axis_name!r}"
+            )
+        return edges[0]
+
+    def current(self, entity):
+        """The entity's current value on this axis (via the detect hook)."""
+        return self._detect(entity)
+
+    def apply(self, entity, target, *, verb):
+        prev = self._detect(entity)
+        if self._check is not None:
+            self._check(entity, target, verb, prev)
+        edge = self._edge(verb)
+        if edge.reversibility is Reversibility.REFUSED_AT_BOUNDARY:
+            raise CriticalityBoundaryError(
+                f"{entity.fqcn}: {verb} on {self._axis_name} is refused at the "
+                f"criticality boundary ({edge.conserved} cannot be preserved)"
+            )
+        payload = self._write(entity, target, prev)
+        self._applied_entity = entity
+        return Receipt(
+            entity_fqcn=entity.fqcn,
+            axis=self._axis_name,
+            previous_state=prev,
+            new_state=target,
+            conserved=edge.conserved,
+            reversible=edge.reversible,
+            verb=verb,
+            payload=payload,
+        )
+
+    def undo(self, receipt):
+        if self._applied_entity is None:
+            raise RebindError(
+                "TransitionContext.undo() requires a prior apply() on this context."
+            )
+        if self._invert is not None:
+            target, verb = self._invert(receipt)
+        else:
+            target, verb = receipt.previous_state, receipt.verb
+        return self.apply(self._applied_entity, target, verb=verb)
 
 
 @dataclass(frozen=True)
@@ -464,6 +577,17 @@ class VisibilityContext:
         self.engine = engine
         self.frame = frame
         self._applied_entity = None  # captured at apply() so undo() can re-target
+        # B2: run on the generic executor. It resolves the DECLARED visibility
+        # edge (so reversible/conserved come from the registry, not a hardcoded
+        # literal -- F3) and orchestrates detect -> check -> write -> Receipt; the
+        # visibility-specific substrate + guards are the hooks below.
+        self._tc = TransitionContext(
+            _DEFAULT_REGISTRY, "visibility",
+            detect=self.current_level,
+            write=self._write_and_delta,
+            check=self._check_move,
+            invert=self._invert_move,
+        )
 
     # -- config <-> channel mapping ------------------------------------------
     def _read_suppressed(self, fqcn):
@@ -508,8 +632,10 @@ class VisibilityContext:
             "shadowed_tools": shadowed,
         })
 
-    # -- the operation -------------------------------------------------------
-    def apply(self, entity, target, *, verb):
+    # -- the visibility-specific hooks the generic executor calls --------------
+    def _check_move(self, entity, target, verb, prev):
+        """Pre-flight: frame support, target validity, the direction guard, and
+        C3 (constitutional items may be hidden, never shadowed)."""
         if self.frame is not None:
             raise CriticalityBoundaryError(
                 "frame-relative visibility is not wired in this slice -- only the "
@@ -519,8 +645,6 @@ class VisibilityContext:
             raise ValueError(
                 f"unknown visibility level {target!r}; expected one of {VISIBILITY_ORDER}"
             )
-        fqcn = entity.fqcn
-        prev = self.current_level(entity)
         # Direction via the continuum's SIGNED rank: hide steps COLDER (lower
         # rank, more suppressed); expose steps WARMER (higher rank). A move in
         # the wrong direction is "backwards."
@@ -539,23 +663,43 @@ class VisibilityContext:
         # (shadowed) -- Hidden is the maximum veil a consumer may apply.
         if target == c.cold_pole() and getattr(entity, "always_active", False):
             raise CriticalityBoundaryError(
-                f"{fqcn} is constitutional (always_active) -- it may be hidden but "
+                f"{entity.fqcn} is constitutional (always_active) -- it may be hidden but "
                 f"never shadowed (C3: constitutional items are never removed)."
             )
 
+    def _write_and_delta(self, entity, target, prev):
+        """Persist the move and return the per-channel deltas for the receipt."""
+        fqcn = entity.fqcn
         before = self._read_suppressed(fqcn)
         self._write_level(fqcn, target)
         after = set(VISIBILITY_CONTINUUM.channels_at(target))
+        return {
+            "suppressed": tuple(sorted(after - before)),
+            "restored": tuple(sorted(before - after)),
+        }
+
+    def _invert_move(self, receipt):
+        """The inverse move for undo: restore the prior level (hide<->expose)."""
+        verb = "expose" if VISIBILITY_CONTINUUM.is_warmer(
+            receipt.previous_state, receipt.new_state) else "hide"
+        return (receipt.previous_state, verb)
+
+    # -- the operation (runs on the generic executor) --------------------------
+    def apply(self, entity, target, *, verb):
+        r = self._tc.apply(entity, target, verb=verb)
         self._applied_entity = entity
+        # reversible + the conserved-invariant NAME now come FROM the declared
+        # transition (r.reversible / r.conserved), not a hardcoded literal (F3).
         return VisibilityReceipt(
-            entity_fqcn=fqcn,
+            entity_fqcn=r.entity_fqcn,
             sub_kind="visibility",
-            previous_state=prev,
-            new_state=target,
-            invariant=VisibilityInvariant(conserved_value=fqcn),
-            reversible=True,
-            channels_suppressed=tuple(sorted(after - before)),
-            channels_restored=tuple(sorted(before - after)),
+            previous_state=r.previous_state,
+            new_state=r.new_state,
+            invariant=VisibilityInvariant(
+                conserved_quantity_name=r.conserved, conserved_value=r.entity_fqcn),
+            reversible=r.reversible,
+            channels_suppressed=r.payload["suppressed"],
+            channels_restored=r.payload["restored"],
             verb=verb,
         )
 
@@ -702,6 +846,9 @@ __all__ = [
     # errors
     "CriticalityBoundaryError",
     "RebindError",
+    # generic transition executor (the N-Contexts -> 1 collapse, B2)
+    "Receipt",
+    "TransitionContext",
     # rebind
     "RebindInvariant",
     "RebindReceipt",

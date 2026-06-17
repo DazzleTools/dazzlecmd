@@ -19,6 +19,8 @@ from dazzlecmd_lib.groupable import (
     CriticalityBoundaryError,
     Frame,
     RebindError,
+    Receipt,
+    TransitionContext,
     VisibilityContext,
     VisibilityInvariant,
     VisibilityReceipt,
@@ -215,3 +217,88 @@ def test_level_for_channels_monotone():
     assert level_for_channels({"hints", "display", "resolution"}) == "shadowed"
     # non-preset set maps to the highest level it satisfies
     assert level_for_channels({"display"}) == "hidden"
+
+
+# ---------------------------------------------------------------------------
+# B2 -- the generic TransitionContext (the N-Contexts -> 1 collapse) and the
+# proof that visibility now SOURCES reversible/conserved from the registry.
+# ---------------------------------------------------------------------------
+class TestTransitionContextGeneric:
+    """The generic executor, exercised standalone over an in-memory substrate --
+    proving it is engine-independent and sources policy from the declared edge."""
+
+    def _toy(self):
+        """A toy visibility substrate (fqcn -> level) + detect/write hooks."""
+        store = {}
+        def detect(e):
+            return store.get(e.fqcn, "visible")
+        def write(e, target, prev):
+            store[e.fqcn] = target
+            return {"from": prev}
+        return store, detect, write
+
+    def test_apply_sources_conserved_and_reversible_from_registry(self):
+        reg = build_default_registry()
+        store, detect, write = self._toy()
+        tc = TransitionContext(reg, "visibility", detect=detect, write=write)
+        ent = _tool()
+        r = tc.apply(ent, "hidden", verb="hide")
+        assert isinstance(r, Receipt)
+        assert r.axis == "visibility"
+        assert r.previous_state == "visible" and r.new_state == "hidden"
+        # conserved + reversible come FROM the declared edge, not a literal (F3).
+        edge = next(t for t in reg.for_verb("hide") if t.axis == "visibility")
+        assert r.conserved == edge.conserved == "canonical_dispatch"
+        assert r.reversible is edge.reversible is True
+        assert r.verb == "hide" and r.payload == {"from": "visible"}
+        assert store[ent.fqcn] == "hidden"
+
+    def test_undo_uses_invert_hook(self):
+        reg = build_default_registry()
+        store, detect, write = self._toy()
+        tc = TransitionContext(reg, "visibility", detect=detect, write=write,
+                               invert=lambda rc: (rc.previous_state, "expose"))
+        ent = _tool()
+        r = tc.apply(ent, "hidden", verb="hide")
+        u = tc.undo(r)
+        assert store[ent.fqcn] == "visible"        # restored
+        assert u.verb == "expose" and u.new_state == "visible"
+
+    def test_check_hook_refuses_before_write(self):
+        reg = build_default_registry()
+        store, detect, _ = self._toy()
+        def write(e, t, p):
+            raise AssertionError("write must not run when check refuses")
+        def check(e, t, v, p):
+            raise ValueError("nope")
+        tc = TransitionContext(reg, "visibility", detect=detect, write=write, check=check)
+        with pytest.raises(ValueError, match="nope"):
+            tc.apply(_tool(), "hidden", verb="hide")
+        assert store == {}                         # nothing written
+
+    def test_unknown_verb_raises_lookuperror(self):
+        reg = build_default_registry()
+        _, detect, write = self._toy()
+        tc = TransitionContext(reg, "visibility", detect=detect, write=write)
+        with pytest.raises(LookupError):
+            tc.apply(_tool(), "hidden", verb="bogus")
+
+    def test_undo_without_apply_raises(self):
+        reg = build_default_registry()
+        _, detect, write = self._toy()
+        tc = TransitionContext(reg, "visibility", detect=detect, write=write)
+        with pytest.raises(RebindError):
+            tc.undo(Receipt("core:x", "visibility", "hidden", "visible",
+                            "canonical_dispatch", True, "expose"))
+
+
+def test_visibility_receipt_sources_invariant_from_registry(tmp_path, monkeypatch):
+    """AC4: after B2 the VisibilityReceipt's conserved-name + reversible trace to
+    the DECLARED visibility edge (the registry is on the visibility runtime path),
+    not a hardcoded literal."""
+    eng = _engine(tmp_path, monkeypatch)
+    r = VisibilityContext(eng).apply(_tool(), "hidden", verb="hide")
+    edge = next(t for t in build_default_registry().for_verb("hide")
+                if t.axis == "visibility")
+    assert r.invariant.conserved_quantity_name == edge.conserved == "canonical_dispatch"
+    assert r.reversible is edge.reversible is True

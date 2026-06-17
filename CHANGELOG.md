@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.39] - 2026-06-17
+
+### Added
+
+- **Generic `TransitionContext` + `Receipt` (dazzlecmd-lib) — the N-Contexts→1 collapse (B2 of the Groupable<->Continuum<->states unification).** One executor for any state axis: it resolves the DECLARED edge for `(verb, axis)` so a receipt's `reversible`/`conserved` come FROM the registry (not a hardcoded literal — the F3 "receipts stop hardcoding truth" intent), enforces `REFUSED_AT_BOUNDARY` generically, and orchestrates detect→check→write→Receipt. The per-axis substrate I/O + policy are small consumer-supplied hooks (`detect`/`write`/`check`/`invert`) bound to a handle, so `states`/`continuum` stay import-pure.
+
+### Changed
+
+- **`VisibilityContext` now runs on the generic `TransitionContext`** — byte-identical behavior (same direction guards + messages, the C3 cold-pole refusal, and the `VisibilityReceipt` shape incl. channel deltas), but its `reversible` + conserved-invariant NAME now trace to the declared visibility edge in `build_default_registry()` rather than being hardcoded. The visibility verb path is the first axis on the generic executor; containment/projection/rebind migrate onto it next (B2b), and the CLI `dz kit visibility` rung surface — a separate, unchanged encoding — unifies onto the verb path later (B2c).
+
+### Versions
+
+- dazzlecmd 0.9.38 -> 0.9.39 (PATCH); dazzlecmd-lib 0.8.38 -> 0.8.39 (PATCH -- generic `TransitionContext`/`Receipt`; `VisibilityContext` re-expressed over it); dazzle-dz -> 0.9.39.
+
 ## [0.9.38] - 2026-06-17
 
 ### Changed
@@ -3263,7 +3277,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.38...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.39...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
