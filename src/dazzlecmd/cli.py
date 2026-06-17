@@ -295,50 +295,58 @@ def _register_meta_commands(subparsers):
     kit_unfavorite.add_argument("short", help="Short name to unbind")
     kit_unfavorite.set_defaults(_meta="kit_unfavorite")
 
-    kit_silence = kit_sub.add_parser(
-        "silence",
-        help="Silence the rerooting hint for a specific tool (by FQCN)",
+    # ----- Visibility: how PRESENT a tool is on one presence axis
+    # (visible -> silenced -> hidden -> shadowed). Nested under `dz kit
+    # visibility` so the top level stays legible; the toggles keep their original
+    # `_meta` (dispatch unchanged). The bare form lists all non-default; `status`
+    # shows a tool's level + the next stronger/weaker move (KIT_PRESENCE_SPACE).
+    kit_visibility = kit_sub.add_parser(
+        "visibility",
+        help="How present a tool is: silence/hide/shadow + the presence spectrum",
     )
-    kit_silence.add_argument("fqcn", help="FQCN to silence")
-    kit_silence.set_defaults(_meta="kit_silence")
+    vis_sub = kit_visibility.add_subparsers(dest="visibility_command")
 
-    kit_unsilence = kit_sub.add_parser(
-        "unsilence", help="Restore the rerooting hint for a tool"
-    )
-    kit_unsilence.add_argument("fqcn", help="FQCN to unsilence")
-    kit_unsilence.set_defaults(_meta="kit_unsilence")
+    # `status` first -- the generic inspect verb (not a domain toggle). The
+    # blank-line separator + the wider generic-first grouping land with the
+    # v0.9.37 kit -h help formatter.
+    vis_status = vis_sub.add_parser(
+        "status",
+        help="Show a tool's presence level + the less/more visible move")
+    vis_status.add_argument("fqcn", help="FQCN to inspect")
+    vis_status.set_defaults(_meta="kit_visibility_status")
 
-    kit_shadow = kit_sub.add_parser(
+    vis_silence = vis_sub.add_parser(
+        "silence", help="Suppress the rerooting hint for a tool (presence: silenced)")
+    vis_silence.add_argument("fqcn", help="FQCN to silence")
+    vis_silence.set_defaults(_meta="kit_silence")
+
+    vis_unsilence = vis_sub.add_parser(
+        "unsilence", help="Restore the rerooting hint")
+    vis_unsilence.add_argument("fqcn", help="FQCN to unsilence")
+    vis_unsilence.set_defaults(_meta="kit_unsilence")
+
+    vis_hide = vis_sub.add_parser(
+        "hide", help="Omit a tool from listings -- still dispatchable (presence: hidden)")
+    vis_hide.add_argument("fqcn", help="FQCN to hide")
+    vis_hide.set_defaults(_meta="kit_hide")
+
+    vis_unhide = vis_sub.add_parser(
+        "unhide", help="Restore a hidden tool to listings")
+    vis_unhide.add_argument("fqcn", help="FQCN to unhide")
+    vis_unhide.set_defaults(_meta="kit_unhide")
+
+    vis_shadow = vis_sub.add_parser(
         "shadow",
-        help="Hide a tool entirely from dz (useful when it exists standalone)",
-    )
-    kit_shadow.add_argument("fqcn", help="FQCN to shadow")
-    kit_shadow.set_defaults(_meta="kit_shadow")
+        help="Remove a tool from dispatch + free its short name (presence: shadowed)")
+    vis_shadow.add_argument("fqcn", help="FQCN to shadow")
+    vis_shadow.set_defaults(_meta="kit_shadow")
 
-    kit_unshadow = kit_sub.add_parser(
-        "unshadow", help="Restore a shadowed tool to dz's dispatch"
-    )
-    kit_unshadow.add_argument("fqcn", help="FQCN to unshadow")
-    kit_unshadow.set_defaults(_meta="kit_unshadow")
+    vis_unshadow = vis_sub.add_parser(
+        "unshadow", help="Restore a shadowed tool to dispatch")
+    vis_unshadow.add_argument("fqcn", help="FQCN to unshadow")
+    vis_unshadow.set_defaults(_meta="kit_unshadow")
 
-    kit_hide = kit_sub.add_parser(
-        "hide",
-        help="Hide a tool from listings (display-off) -- it stays dispatchable",
-    )
-    kit_hide.add_argument("fqcn", help="FQCN to hide")
-    kit_hide.set_defaults(_meta="kit_hide")
-
-    kit_unhide = kit_sub.add_parser(
-        "unhide", help="Restore a hidden tool to listings"
-    )
-    kit_unhide.add_argument("fqcn", help="FQCN to unhide")
-    kit_unhide.set_defaults(_meta="kit_unhide")
-
-    kit_silenced = kit_sub.add_parser(
-        "silenced",
-        help="Show all silenced hints and shadowed tools",
-    )
-    kit_silenced.set_defaults(_meta="kit_silenced")
+    kit_visibility.set_defaults(_meta="kit_visibility")
 
     kit_add = kit_sub.add_parser(
         "add", help="Add a kit from a git URL via submodule"
@@ -588,8 +596,10 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
         return _cmd_kit_hide(args, engine)
     elif meta == "kit_unhide":
         return _cmd_kit_unhide(args, engine)
-    elif meta == "kit_silenced":
-        return _cmd_kit_silenced(engine)
+    elif meta == "kit_visibility":
+        return _cmd_kit_visibility_list(engine)
+    elif meta == "kit_visibility_status":
+        return _cmd_kit_visibility_status(args, engine)
     elif meta == "kit_add":
         return _cmd_kit_add(args, project_root, engine)
     elif meta == "tree":
@@ -1903,11 +1913,29 @@ def _cmd_kit_unsilence(args, engine):
 
 
 def _cmd_kit_shadow(args, engine):
-    """Add an FQCN to shadowed_tools."""
+    """Add an FQCN to shadowed_tools (presence: shadowed). Refuses a
+    constitutional tool -- C3: it may be hidden but never removed from dispatch."""
     fqcn = args.fqcn
     if engine is None:
         print("Error: engine unavailable", file=sys.stderr)
         return 1
+
+    # C3: a constitutional / always_active tool may be hidden but never shadowed
+    # -- shadowing removes it from dispatch, and dz depends on it.
+    from dazzlecmd_lib.core import is_constitutional
+    for p in (getattr(engine, "projects", None) or []):
+        if (getattr(p, "fqcn", None) or "") != fqcn:
+            continue
+        is_const = ((getattr(p, "namespace", "") or "") == "core"
+                    and is_constitutional(getattr(p, "name", "") or ""))
+        if is_const or getattr(p, "always_active", False):
+            print(
+                f"Refused: {fqcn} is constitutional -- it may be hidden but never "
+                f"shadowed (C3: dz depends on it; removing it would break dispatch).",
+                file=sys.stderr,
+            )
+            return 1
+        break
 
     config = engine._get_user_config()
     shadowed = list(config.get("shadowed_tools") or [])
@@ -1977,50 +2005,92 @@ def _cmd_kit_unhide(args, engine):
     return 0
 
 
-def _cmd_kit_silenced(engine):
-    """Show all silenced_hints and shadowed_tools entries."""
+def _cmd_kit_visibility_list(engine):
+    """Overview: every tool at non-default presence, by rung -- silenced (hint
+    off) / hidden (listing off) / shadowed (dispatch off). Replaces the old
+    `silenced` query and adds the `hidden` rung it had omitted. Favorites are a
+    different axis (short-name resolution) -- see `dz kit favorite`."""
     if engine is None:
         print("Error: engine unavailable", file=sys.stderr)
         return 1
 
     config = engine._get_user_config()
     silenced = config.get("silenced_hints") or {}
-    shadowed = config.get("shadowed_tools") or []
-    favorites = config.get("favorites") or {}
-
     silenced_tools = silenced.get("tools") or []
     silenced_kits = silenced.get("kits") or []
+    hidden = config.get("hidden_tools") or []
+    shadowed = config.get("shadowed_tools") or []
 
-    print("Silenced hints:")
-    if silenced_tools:
-        print("  tools:")
-        for fqcn in silenced_tools:
-            print(f"    - {fqcn}")
-    else:
-        print("  tools: (none)")
+    def _rung(label, items):
+        print(f"{label}")
+        if items:
+            for it in items:
+                print(f"  - {it}")
+        else:
+            print("  (none)")
+
+    print("Tool presence (non-default rungs; visible = default, not listed):")
+    print()
+    _rung("silenced  (rerooting hint off):", silenced_tools)
     if silenced_kits:
         print("  kits:")
         for kit in silenced_kits:
             print(f"    - {kit}")
-    else:
-        print("  kits: (none)")
-
     print()
-    print("Shadowed tools:")
-    if shadowed:
-        for fqcn in shadowed:
-            print(f"  - {fqcn}")
-    else:
-        print("  (none)")
-
+    _rung("hidden    (omitted from listings, still dispatchable):", hidden)
     print()
-    print("Favorites:")
-    if favorites:
-        for short, fqcn in favorites.items():
-            print(f"  {short} -> {fqcn}")
-    else:
-        print("  (none)")
+    _rung("shadowed  (removed from dispatch, short name freed):", shadowed)
 
+    if not (silenced_tools or silenced_kits or hidden or shadowed):
+        print()
+        print("Everything is fully present. Adjust with "
+              "'dz kit visibility silence|hide|shadow <fqcn>'.")
+    return 0
+
+
+def _cmd_kit_visibility_status(args, engine):
+    """Show a tool's current presence level + the next STRONGER / WEAKER move --
+    the KIT_PRESENCE_SPACE navigator (frame-free: both neighbors at once)."""
+    if engine is None:
+        print("Error: engine unavailable", file=sys.stderr)
+        return 1
+    from dazzlecmd_lib.groupable import KIT_PRESENCE_SPACE, level_for_channels
+
+    fqcn = args.fqcn
+    config = engine._get_user_config()
+    silenced_tools = (config.get("silenced_hints") or {}).get("tools") or []
+    hidden = config.get("hidden_tools") or []
+    shadowed = config.get("shadowed_tools") or []
+
+    suppressed = set()
+    if fqcn in silenced_tools:
+        suppressed.add("hints")
+    if fqcn in hidden:
+        suppressed.add("display")
+    if fqcn in shadowed:
+        suppressed.add("resolution")
+    level = level_for_channels(suppressed)  # visible | silenced | hidden | shadowed
+
+    # verb to REACH a colder rung (suppress), and to leave one (the un-verb).
+    SUPPRESS = {"silenced": "silence", "hidden": "hide", "shadowed": "shadow"}
+    RESTORE = {"silenced": "unsilence", "hidden": "unhide", "shadowed": "unshadow"}
+
+    # Direction labels are bound to THIS surface's frame ("visibility" reads
+    # warm = visible), so the navigator says "less/more visible" rather than the
+    # frame-leaking "stronger/weaker". The space's colder/warmer is framing-
+    # neutral; the surface names the directions (the 4-fold focus-relative rule).
+    print(f"{fqcn}")
+    print(f"  presence: {level}")
+    colder = KIT_PRESENCE_SPACE.colder_than("visibility", level)
+    warmer = KIT_PRESENCE_SPACE.warmer_than("visibility", level)
+    if colder:
+        print(f"  less visible -> dz kit visibility {SUPPRESS[colder[1]]} {fqcn}")
+    else:
+        print("  less visible -> (already least visible: shadowed)")
+    if warmer:
+        print(f"  more visible -> dz kit visibility {RESTORE[level]} {fqcn}")
+    else:
+        print("  more visible -> (already fully visible)")
     return 0
 
 

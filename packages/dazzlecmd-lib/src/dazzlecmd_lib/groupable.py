@@ -31,7 +31,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from dazzlecmd_lib.continuum import Continuum
+from dazzlecmd_lib.continuum import Continuum, ContinuumSpace
 
 
 class CriticalityBoundaryError(Exception):
@@ -335,6 +335,20 @@ def level_for_channels(suppressed):
     level that introduces ``display`` == Hidden). Kept as a module function for
     the existing public surface."""
     return VISIBILITY_CONTINUUM.level_for_channels(frozenset(suppressed))
+
+
+# The kit-presence space: the visibility ladder as ONE presence axis on a shared
+# scale. The `dz kit visibility` surface navigates it (--adjacent / --stronger /
+# --weaker: the next move toward or away from "present"). Single-axis today (a
+# tool's output + dispatch presence); activation and load/pointer compose here as
+# further axes per the ContinuumSpace DWP (2026-06-16) -- the seam is ready.
+KIT_PRESENCE_SPACE = ContinuumSpace(
+    name="kit_presence",
+    meaning="how present a tool is to dz (listing + dispatch)",
+    axes={"visibility": VISIBILITY_CONTINUUM},
+    presence={"visibility": dict(VISIBILITY_CONTINUUM.ranks)},
+    invariant="canonical_dispatch",
+)
 
 
 @dataclass(frozen=True)

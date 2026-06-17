@@ -4,6 +4,25 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.36] - 2026-06-16
+
+### Added
+
+- **`dz kit visibility` -- one home for the presence verbs + a navigator.** The visibility toggles move under `dz kit visibility` (status, then silence/unsilence, hide/unhide, shadow/unshadow), de-cluttering the top-level `dz kit` menu from 16 subcommands to 10. `dz kit visibility status <fqcn>` is the `KIT_PRESENCE_SPACE` navigator: it shows the tool's presence level (visible/silenced/hidden/shadowed) and both neighbor moves -- the verb to run, labelled in the surface's own frame (`less visible` / `more visible`, not frame-leaking "stronger/weaker"). e.g. `hidden` -> less visible: `shadow`, more visible: `unhide`. Bare `dz kit visibility` lists every tool at a non-default rung INCLUDING hidden (which the old `dz kit silenced` query omitted).
+- **`KIT_PRESENCE_SPACE`** (`groupable.py`) -- the visibility ladder as a `ContinuumSpace` presence axis; the seam the navigator reads and where activation / load axes will compose.
+
+### Changed
+
+- **`dz kit shadow <fqcn>` now refuses a constitutional tool (C3).** A constitutional item (e.g. `core:safedel`) may be hidden but never shadowed -- shadowing removes it from dispatch, and dz depends on it. Previously the shadow silently succeeded.
+
+### Removed
+
+- **Top-level `dz kit silence|unsilence|hide|unhide|shadow|unshadow` and `dz kit silenced`** -- moved under `dz kit visibility ...` (with `silenced` becoming the bare `dz kit visibility` overview). Pre-release surface change; no back-compat aliases.
+
+### Versions
+
+- dazzlecmd 0.9.35 -> 0.9.36 (PATCH); dazzlecmd-lib 0.8.35 -> 0.8.36 (PATCH -- `KIT_PRESENCE_SPACE`); dazzle-dz -> 0.9.36.
+
 ## [0.9.35] - 2026-06-16
 
 ### Added
@@ -3209,7 +3228,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.35...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.36...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -29,7 +29,10 @@ from dazzlecmd.cli import (
     _cmd_kit_unsilence,
     _cmd_kit_shadow,
     _cmd_kit_unshadow,
-    _cmd_kit_silenced,
+    _cmd_kit_hide,
+    _cmd_kit_unhide,
+    _cmd_kit_visibility_list,
+    _cmd_kit_visibility_status,
     _suggest_favorite_replacement,
 )
 
@@ -518,37 +521,78 @@ class TestKitShadow:
 
     def test_unshadow_removes(self, tmp_path, monkeypatch):
         engine = _engine(tmp_path, monkeypatch)
-        _cmd_kit_shadow(_Args(fqcn="core:safedel"), engine)
-        _cmd_kit_unshadow(_Args(fqcn="core:safedel"), engine)
+        _cmd_kit_shadow(_Args(fqcn="x:y:tool"), engine)
+        _cmd_kit_unshadow(_Args(fqcn="x:y:tool"), engine)
         config = _read_config(tmp_path)
-        assert "core:safedel" not in config["shadowed_tools"]
+        assert "x:y:tool" not in config["shadowed_tools"]
 
-
-# ---------------------------------------------------------------------------
-# dz kit silenced (show)
-# ---------------------------------------------------------------------------
-
-
-class TestKitSilenced:
-
-    def test_silenced_empty(self, tmp_path, monkeypatch, capsys):
+    def test_shadow_refuses_constitutional_C3(self, tmp_path, monkeypatch, capsys):
+        """C3: a constitutional tool may be hidden but NEVER shadowed (it would be
+        removed from dispatch, and dz depends on it). Requires the tool to be
+        discoverable so the check can resolve it."""
         engine = _engine(tmp_path, monkeypatch)
-        rc = _cmd_kit_silenced(engine)
-        assert rc == 0
-        captured = capsys.readouterr()
-        assert "(none)" in captured.out
 
-    def test_silenced_populated(self, tmp_path, monkeypatch, capsys):
+        class _P:  # minimal discovered-project stand-in
+            fqcn = "core:safedel"
+            namespace = "core"
+            name = "safedel"
+            always_active = False
+
+        engine.projects = [_P()]
+        rc = _cmd_kit_shadow(_Args(fqcn="core:safedel"), engine)
+        assert rc == 1                                   # refused
+        config = _read_config(tmp_path)
+        assert "core:safedel" not in (config.get("shadowed_tools") or [])
+        assert "constitutional" in capsys.readouterr().err.lower()
+
+
+# ---------------------------------------------------------------------------
+# dz kit visibility (overview + status navigator)
+# ---------------------------------------------------------------------------
+
+
+class TestKitVisibilityList:
+
+    def test_visibility_list_empty(self, tmp_path, monkeypatch, capsys):
+        engine = _engine(tmp_path, monkeypatch)
+        rc = _cmd_kit_visibility_list(engine)
+        assert rc == 0
+        assert "(none)" in capsys.readouterr().out
+
+    def test_visibility_list_shows_all_three_rungs(self, tmp_path, monkeypatch, capsys):
+        """Includes the HIDDEN rung the old `silenced` query omitted (G11)."""
         engine = _engine(tmp_path, monkeypatch)
         _cmd_kit_silence(_Args(fqcn="a:b:c:d:leaf"), engine)
-        _cmd_kit_shadow(_Args(fqcn="core:safedel"), engine)
-        _cmd_kit_favorite(_Args(short="foo", fqcn="core:fixpath"), engine)
-        capsys.readouterr()  # drain the output from the setup calls
-        _cmd_kit_silenced(engine)
-        captured = capsys.readouterr()
-        assert "a:b:c:d:leaf" in captured.out
-        assert "core:safedel" in captured.out
-        assert "foo -> core:fixpath" in captured.out
+        _cmd_kit_hide(_Args(fqcn="m:n:widget"), engine)
+        _cmd_kit_shadow(_Args(fqcn="x:y:tool"), engine)
+        capsys.readouterr()  # drain setup output
+        _cmd_kit_visibility_list(engine)
+        out = capsys.readouterr().out
+        assert "a:b:c:d:leaf" in out   # silenced
+        assert "m:n:widget" in out     # hidden (the rung the old query missed)
+        assert "x:y:tool" in out       # shadowed
+
+
+class TestKitVisibilityStatus:
+    """The KIT_PRESENCE_SPACE navigator: current level + next stronger/weaker."""
+
+    def test_status_visible(self, tmp_path, monkeypatch, capsys):
+        engine = _engine(tmp_path, monkeypatch)
+        _cmd_kit_visibility_status(_Args(fqcn="x:y:tool"), engine)
+        out = capsys.readouterr().out
+        assert "presence: visible" in out
+        assert "less visible -> dz kit visibility silence x:y:tool" in out
+        assert "more visible -> (already fully visible)" in out  # warm pole
+
+    def test_status_after_hide_shows_neighbors(self, tmp_path, monkeypatch, capsys):
+        engine = _engine(tmp_path, monkeypatch)
+        _cmd_kit_hide(_Args(fqcn="x:y:tool"), engine)
+        capsys.readouterr()
+        _cmd_kit_visibility_status(_Args(fqcn="x:y:tool"), engine)
+        out = capsys.readouterr().out
+        assert "presence: hidden" in out
+        assert "shadow x:y:tool" in out        # stronger
+        assert "unhide x:y:tool" in out        # weaker
 
 
 class TestKitStatusDisplay:
