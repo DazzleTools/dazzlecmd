@@ -32,10 +32,12 @@ dependencies = [
     # stay optional/undeclared; pydantic is the one unconditional import.)
     "pydantic>=2.0",
     # The shared pure primitives live in the dazzle-lib bedrock: Continuum
-    # (0.3.0), the state-system machinery (0.4.0), AND the transition executor
-    # Receipt/TransitionContext (0.5.0). dazzlecmd_lib.continuum/.states/.groupable
-    # re-export them (states/groupable keep only dazzlecmd's own registry + contexts).
-    "dazzle-lib>=0.5.0",
+    # (0.3.0), the state-system machinery (0.4.0), the transition executor
+    # Receipt/TransitionContext (0.5.0), AND the CLOSED composition algebra --
+    # ContinuumSpace.compose/normal_form, recursive + functionally complete (0.6.0).
+    # dazzlecmd_lib.continuum/.states/.contexts re-export them (the domain registry +
+    # contexts + KIT_PRESENCE_SPACE stay in dazzlecmd).
+    "dazzle-lib>=0.6.0",
     # dazzlecmd_lib.core.safedel (the constitutional recoverable-delete primitive)
     # uses dazzle_filekit.metadata for cross-platform metadata preservation
     # (ACLs/ADS/timestamps/xattrs). filekit is the canonical home of that code.

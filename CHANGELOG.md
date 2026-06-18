@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.47] - 2026-06-18
+
+### Changed
+
+- **`ContinuumSpace` is now closed under composition (the functionally-complete composition algebra), via `dazzle-lib>=0.6.0`.** A dimension may be a `Continuum` or a `ContinuumSpace` (recursive); `ContinuumSpace.compose(...)` returns a `ContinuumSpace` (closure) and `normal_form()` folds arbitrary nesting to the flat leaf product -- so `{Continuum, ContinuumSpace, compose}` is complete the way `{+, x, ^}` is. Alignment (the single merged presence spectrum) is now a per-(sub-)space **property** rather than a hard requirement: aligned spaces (e.g. `KIT_PRESENCE_SPACE`) behave exactly as before; `compose`d product spaces hold differently-scaled dimensions and refuse cross-axis navigation by design (scale-safety). No dazzlecmd behavior change (suite 1530 + byte-gate identical; `KIT_PRESENCE_SPACE` byte-identical). Validated experiment-first by representing the arithmetic operation hierarchy in the system (`tests/one-offs/arithmetic_as_continuumspace_completeness.py`, 15/15): `+/-`,`x/div` = degenerate/commutative continuums (= "Groupables"), `^/log/root` = the full non-commutative continuum, `group` = the compression between levels. This finalizes the bedrock composition algebra ahead of the gold-standard kit-lifecycle build.
+
+### Versions
+
+- dazzlecmd 0.9.46 -> 0.9.47 (PATCH); dazzlecmd-lib 0.8.46 -> 0.8.47 (PATCH -- `dazzle-lib>=0.6.0` dep); dazzle-dz -> 0.9.47. dazzle-lib 0.5.0 -> 0.6.0 (closed-composition algebra).
+
 ## [0.9.46] - 2026-06-18
 
 ### Changed
@@ -3353,7 +3363,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.46...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.47...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
