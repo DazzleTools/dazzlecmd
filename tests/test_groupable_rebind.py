@@ -14,7 +14,7 @@ import pytest
 
 from dazzlecmd_lib.engine import FQCNIndex
 from dazzlecmd_lib.entity import build_entity
-from dazzlecmd_lib.groupable import (
+from dazzlecmd_lib.contexts import (
     AliasRebindContext,
     CriticalityBoundaryError,
     RebindError,

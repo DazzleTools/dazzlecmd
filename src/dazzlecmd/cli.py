@@ -1920,7 +1920,7 @@ def _cmd_kit_visibility_set(args, engine):
     if engine is None:
         print("Error: engine unavailable", file=sys.stderr)
         return 1
-    from dazzlecmd_lib.groupable import KIT_PRESENCE_SPACE
+    from dazzlecmd_lib.contexts import KIT_PRESENCE_SPACE
     space = KIT_PRESENCE_SPACE
 
     add = args.direction == "suppress"
@@ -2075,7 +2075,7 @@ def _cmd_kit_visibility_status(args, engine):
     if engine is None:
         print("Error: engine unavailable", file=sys.stderr)
         return 1
-    from dazzlecmd_lib.groupable import KIT_PRESENCE_SPACE, level_for_channels
+    from dazzlecmd_lib.contexts import KIT_PRESENCE_SPACE, level_for_channels
 
     canonical, project = _resolve_visibility_target(engine, args.fqcn)
     config = engine._get_user_config()

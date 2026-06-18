@@ -73,7 +73,7 @@ class Groupable:
       consumer (may be hidden, never ungrouped).
 
     Behavioral phase (#84): the verbs are state-transition operators, and all
-    five are now LIVE (see ``dazzlecmd_lib.groupable``) -- ``rebind``
+    five are now LIVE (see ``dazzlecmd_lib.contexts``) -- ``rebind``
     (alias + mode-switch), ``hide``/``expose`` (the visibility ladder), and
     ``group``/``ungroup`` (in-tree containment). Each delegates to a context.
     The one deferred MECHANIC is graduation -- ``ungroup``'s GENERATIVE regime
@@ -92,7 +92,7 @@ class Groupable:
 
     def group(self, target: Any, *, context: Any) -> Any:
         """P: incorporate this entity into the boundary ``target`` (a kit), within
-        ``context`` (a ``dazzlecmd_lib.groupable.ContainmentContext``). A
+        ``context`` (a ``dazzlecmd_lib.contexts.ContainmentContext``). A
         reversible in-tree move -- C2 = ``local_incorporability`` (files + canonical
         FQCN untouched). Returns a ``ContainmentReceipt``."""
         if context is None:
@@ -116,7 +116,7 @@ class Groupable:
     def hide(self, to: str = "hidden", *, context: Any) -> Any:
         """Walk DOWN the visibility ladder (toward MORE suppression) to ``to``
         (``"silenced"`` / ``"hidden"`` / ``"shadowed"``), within ``context`` (a
-        ``dazzlecmd_lib.groupable.VisibilityContext``).
+        ``dazzlecmd_lib.contexts.VisibilityContext``).
 
         Dispatch always survives (C2 = ``canonical_dispatch``); shadowing a
         constitutional (``always_active``) item raises ``CriticalityBoundaryError``
@@ -146,7 +146,7 @@ class Groupable:
         The verb is entity-local in spirit (the same-bones thesis: entities ARE
         Groupable), but the mechanism is not -- alias routing lives on the
         ``FQCNIndex``, mode state on the filesystem -- so ``context`` (a
-        ``dazzlecmd_lib.groupable.RebindContext``: ``AliasRebindContext`` /
+        ``dazzlecmd_lib.contexts.RebindContext``: ``AliasRebindContext`` /
         ``ModeRebindContext``) carries the handle plus the identity the verb
         itself can't (e.g. WHICH alias). Returns a ``RebindReceipt``; raises
         ``CriticalityBoundaryError`` when the transition's invariant cannot be

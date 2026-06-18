@@ -1,10 +1,18 @@
-"""Behavioral types for the ``Groupable`` verbs -- the state-transition operators.
+"""dazzlecmd's per-verb CONTEXTS -- the state-transition operators bound to its substrates.
 
-This module houses the verb-support types so ``entity.py`` stays focused on the
-entity model. It imports NOTHING from ``engine``/``mode`` -- each context
-receives the handle it operates on (an ``FQCNIndex``, a filesystem context),
-which keeps this module dependency-light and the verbs unit-testable against
-real components.
+This module (renamed from ``groupable.py`` in B3d, once the generic machinery
+lifted out) houses the dazzlecmd-specific verb contexts that BIND the bedrock's
+generic :class:`~dazzle_lib.transitions.TransitionContext` engine to dazzlecmd's
+substrates -- ``AliasRebindContext`` (FQCN index), ``VisibilityContext`` /
+``ContainmentContext`` / ``ProjectionContext`` (config + tree) -- plus their
+per-verb ``*Receipt`` / ``*Invariant`` types, ``KIT_PRESENCE_SPACE``, and ``Frame``.
+The generic primitives (``Receipt``, ``TransitionContext``, the criticality
+errors) now live in the dazzle-lib bedrock (B3a-B3c) and are re-exported at the
+top of this module; ``RebindError`` is a back-compat alias of ``TransitionError``.
+
+It still imports NOTHING from ``engine``/``mode`` -- each context receives the
+handle it operates on (an ``FQCNIndex``, a filesystem context), which keeps this
+module dependency-light and the verbs unit-testable against real components.
 
 Design (see the #84 behavioral-phase DWP + its 2026-06-09 hole-review addendum):
 
@@ -36,7 +44,7 @@ from dazzlecmd_lib.states import VISIBILITY_CONTINUUM, build_default_registry
 
 # The generic transition executor (Receipt + TransitionContext) and its typed
 # failures were lifted to the dazzle-lib bedrock (B3c; dazzle_lib.transitions).
-# Re-exported here so every ``from dazzlecmd_lib.groupable import ...`` keeps
+# Re-exported here so every ``from dazzlecmd_lib.contexts import ...`` keeps
 # resolving. The executor's one consumer-coupling -- an ``entity.fqcn`` access --
 # is now a domain-neutral ``identity_of`` hook the per-verb contexts below supply
 # (``identity_of=lambda e: e.fqcn``). ``RebindError`` stays as a back-compat alias

@@ -184,7 +184,7 @@ class TestParity:
     the re-home is behavior-identical (keystone of the vertical slice)."""
 
     def test_matches_groupable_level_for_channels(self):
-        from dazzlecmd_lib.groupable import (
+        from dazzlecmd_lib.contexts import (
             level_for_channels as inline, VISIBILITY_LADDER, VISIBILITY_ORDER,
         )
         v = _visibility()

@@ -32,7 +32,7 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from dazzlecmd_lib.entity import build_entity
-from dazzlecmd_lib.groupable import (
+from dazzlecmd_lib.contexts import (
     CriticalityBoundaryError,
     RebindError,
     RebindInvariant,

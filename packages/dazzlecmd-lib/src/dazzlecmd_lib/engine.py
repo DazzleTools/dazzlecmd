@@ -1246,7 +1246,7 @@ class AggregatorEngine:
             # additional alias name. Same ProjectionContext mechanism as the
             # constitutional overlay (group), opposite direction -- one primitive,
             # two directions, conserving the canonical FQCN (#180).
-            from .groupable import ProjectionContext
+            from .contexts import ProjectionContext
             vk_projection = ProjectionContext(self.fqcn_index, source=source)
 
             # Collect failures rather than warning per-alias.
@@ -1477,7 +1477,7 @@ class AggregatorEngine:
         it so the display path can make that exclusion.
         """
         from .core import is_constitutional
-        from .groupable import ProjectionContext
+        from .contexts import ProjectionContext
 
         overlay = ProjectionContext(self.fqcn_index, source="overlay")
         for project in self.projects:

@@ -26,7 +26,7 @@ import pytest
 
 from dazzlecmd_lib.engine import FQCNIndex
 from dazzlecmd_lib.entity import build_entity
-from dazzlecmd_lib.groupable import (
+from dazzlecmd_lib.contexts import (
     AliasRebindContext, CriticalityBoundaryError, KIT_PRESENCE_SPACE,
 )
 from dazzlecmd_lib.testing import make_tool
@@ -330,7 +330,7 @@ class TestProjectionContext:
         return idx, canon
 
     def test_group_overlay_apply_then_undo(self):
-        from dazzlecmd_lib.groupable import ProjectionContext
+        from dazzlecmd_lib.contexts import ProjectionContext
         idx, canon = self._idx_with_canonical()
         ctx = ProjectionContext(idx, source="overlay")
         home = "dazzlecmd_lib:core:safedel"
@@ -347,7 +347,7 @@ class TestProjectionContext:
         assert "core:safedel" in idx.canonical_index       # canonical conserved
 
     def test_ungroup_virtual_kit_apply_then_undo(self):
-        from dazzlecmd_lib.groupable import ProjectionContext
+        from dazzlecmd_lib.contexts import ProjectionContext
         idx, canon = self._idx_with_canonical()
         ctx = ProjectionContext(idx, source="kits/wtf.kit.json")
 
@@ -364,7 +364,7 @@ class TestProjectionContext:
         """The symmetry the routing makes explicit: group and ungroup produce a
         removable alias conserving the same invariant -- no generativity on the
         projection axis (unlike containment's graduation)."""
-        from dazzlecmd_lib.groupable import ProjectionContext
+        from dazzlecmd_lib.contexts import ProjectionContext
         idx, canon = self._idx_with_canonical()
         ctx = ProjectionContext(idx, source="overlay")
         r_g = canon.group("home:core:safedel", context=ctx)
@@ -548,7 +548,7 @@ class TestStateAxisContinuum:
     def test_visibility_continuum_is_one_instance_across_modules(self):
         # The pure Continuum moved to states.py (L0); groupable re-imports the
         # SAME object -- identity, not a value-equal copy (a copy could drift).
-        from dazzlecmd_lib import groupable as g
+        from dazzlecmd_lib import contexts as g
         from dazzlecmd_lib import states as s
         assert g.VISIBILITY_CONTINUUM is s.VISIBILITY_CONTINUUM is VISIBILITY_CONTINUUM
 

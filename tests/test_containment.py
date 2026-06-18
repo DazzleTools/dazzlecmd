@@ -14,7 +14,7 @@ invariant => generative), NOT the union of the legs' classes.
 
 import pytest
 
-from dazzlecmd_lib.groupable import (
+from dazzlecmd_lib.contexts import (
     ContainmentContext,
     ContainmentInvariant,
     ContainmentReceipt,

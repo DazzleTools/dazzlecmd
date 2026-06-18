@@ -15,7 +15,7 @@ import json
 import pytest
 
 from dazzlecmd.engine import AggregatorEngine
-from dazzlecmd_lib.groupable import (
+from dazzlecmd_lib.contexts import (
     CriticalityBoundaryError,
     Frame,
     RebindError,

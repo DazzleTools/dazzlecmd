@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.46] - 2026-06-18
+
+### Changed
+
+- **`dazzlecmd_lib.groupable` renamed to `dazzlecmd_lib.contexts` (B3d).** Once the generic machinery lifted to the bedrock (B3a-B3c), the module's honest content is dazzlecmd's per-verb *contexts* (`AliasRebindContext`, `VisibilityContext`, `ContainmentContext`, `ProjectionContext`) + their `*Receipt`/`*Invariant` types + `KIT_PRESENCE_SPACE` + `Frame`, which BIND the bedrock's `TransitionContext` to dazzlecmd's substrates. Renamed via `git mv` (history preserved); all importers updated (`engine.py`, `mode.py`, `cli.py`, tests). No back-compat shim -- the module is internal (not re-exported by `__init__`), so it's a clean break, not a fallback. The lifted primitives are still re-exported at the top of `contexts.py`; `RebindError` remains a `TransitionError` alias.
+
+### Added
+
+- **Import-layering contract (`tests/test_layering.py`, B3e) -- the capstone of the lift.** A stdlib AST test (same idiom as dazzle-lib's `test_charter.py`, no import-linter dependency, always runs) that locks the downward-only layering `dazzlecmd -> dazzlecmd_lib -> dazzle_lib`: (A) `dazzlecmd_lib` never imports the `dazzlecmd` app; (B) the lift-shims (`continuum`/`states`/`contexts`) import their primitives FROM `dazzle_lib` (consume the bedrock, don't re-derive it); (C) `dazzle_lib` imports nothing from the consumers above it. Nothing can drift back into the bedrock without failing the suite.
+
+### Versions
+
+- dazzlecmd 0.9.45 -> 0.9.46 (PATCH); dazzlecmd-lib 0.8.45 -> 0.8.46 (PATCH -- module rename + layering contract); dazzle-dz -> 0.9.46. dazzle-lib unchanged (consumer-side only).
+
 ## [0.9.45] - 2026-06-18
 
 ### Changed
@@ -3339,7 +3353,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.45...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.46...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
