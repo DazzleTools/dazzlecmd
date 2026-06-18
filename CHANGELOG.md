@@ -4,6 +4,17 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.44] - 2026-06-17
+
+### Changed
+
+- **The generic state-system machinery lifted to the `dazzle-lib` foundation (B3b of the unification's lift).** The L0 types -- `StateAxis`, `EntityState`, `Transition`, `CompositeTransition`, `TransitionRegistry`, `Reversibility`, `OPEN`, `assert_round_trip`, `observe` -- moved to `dazzle_lib.states` (dazzle-lib 0.4.0; charter-safe: stdlib + the `Continuum` primitive only, no I/O). `dazzlecmd_lib.states` is now a **partial** shim: it re-exports those types (every `from dazzlecmd_lib.states import ...` is unchanged) and KEEPS what is genuinely dazzlecmd's -- the reference registry (`build_default_registry`, the MODE/VISIBILITY/KIND/ACTIVATION value sets, `VISIBILITY_CONTINUUM`). The bedrock ships the vocabulary; the consumer declares its instances. `dazzlecmd-lib` now requires `dazzle-lib>=0.4.0`. No behavior change (suite 1527 + byte-gate green). Verbatim-faithful: the lifted definitions are AST-identical to the pre-lift source (proven by `tests/one-offs/verify_states_lift.py`), per the move-code discipline.
+- **Identity vocabulary neutralized in the bedrock.** The lifted state system named its identity field `fqcn` -- the *aggregator* addressing concept, which doesn't belong in the domain-neutral bedrock. Renamed to a generic `identity`: `EntityState.fqcn` -> `.identity`, `Transition.fqcn_fate` / `CompositeTransition.fqcn_fate` -> `.identity_fate`, `observe(reg, fqcn, ...)` -> `observe(reg, identity, ...)`, and the REVERSIBLE-edge error dropped the constitutional `C1` label. The concept is unchanged (dazzlecmd fills `identity` with its FQCN); only the dazzlecmd-specific NAME left the bedrock. Done before any consumer shipped against dazzle-lib 0.4.0. `verify_states_lift.py` proves the lift changed nothing *except* this decided neutralization.
+
+### Versions
+
+- dazzlecmd 0.9.43 -> 0.9.44 (PATCH); dazzlecmd-lib 0.8.43 -> 0.8.44 (PATCH -- states partial shim + `dazzle-lib>=0.4.0` dep); dazzle-dz -> 0.9.44.
+
 ## [0.9.43] - 2026-06-17
 
 ### Changed
@@ -3317,7 +3328,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.43...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.44...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

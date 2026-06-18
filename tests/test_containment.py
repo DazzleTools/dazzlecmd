@@ -118,7 +118,7 @@ class TestCompositeTransition:
     def test_graduation_is_generative(self):
         grad = build_default_registry().composite("graduation")
         assert grad.reversibility is Reversibility.GENERATIVE
-        assert grad.fqcn_fate == "reborn"
+        assert grad.identity_fate == "reborn"
         assert "remote_url" in grad.creates
         assert "in_tree_coupling" in grad.loses
         assert grad.axes == ("kind", "mode")

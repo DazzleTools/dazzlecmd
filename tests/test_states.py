@@ -106,7 +106,7 @@ class TestStateAxis:
 class TestEntityState:
     def test_access_and_get(self):
         s = EntityState("core:t", {"mode": "submodule", "visibility": "visible"})
-        assert s.fqcn == "core:t"
+        assert s.identity == "core:t"
         assert s["mode"] == "submodule"
         assert s.get("activation", "active") == "active"
 
@@ -119,7 +119,7 @@ class TestEntityState:
     def test_is_frozen(self):
         s = EntityState("core:t", {"mode": "submodule"})
         with pytest.raises(Exception):
-            s.fqcn = "other:t"  # frozen dataclass
+            s.identity = "other:t"  # frozen dataclass
 
 
 class TestTransitionConstruction:
@@ -132,15 +132,15 @@ class TestTransitionConstruction:
         t = Transition(axis="kind", from_values=("tool",), to_value="aggregator",
                        verb="ungroup", reversibility=Reversibility.GENERATIVE,
                        creates=("own_repo",), loses=("in_tree_coupling",),
-                       fqcn_fate="reborn")
+                       identity_fate="reborn")
         assert t.creates == ("own_repo",)
-        assert t.fqcn_fate == "reborn"
+        assert t.identity_fate == "reborn"
 
     def test_reversible_must_preserve_c1(self):
         with pytest.raises(ValueError, match="preserve"):
             Transition(axis="mode", from_values=("symlink",), to_value="submodule",
                        verb="rebind", reversibility=Reversibility.REVERSIBLE,
-                       fqcn_fate="reborn")
+                       identity_fate="reborn")
 
     def test_reversible_property(self):
         t = Transition(axis="routing", from_values=(OPEN,), to_value=OPEN,
@@ -219,7 +219,7 @@ class TestRegistryProperties:
         revs = reg.by_reversibility(Reversibility.REVERSIBLE)
         assert revs  # there is at least one (alias + in-orbit mode)
         for t in revs:
-            assert t.fqcn_fate == "preserved", t
+            assert t.identity_fate == "preserved", t
             assert t.conserved, f"REVERSIBLE edge must name its conserved invariant: {t}"
 
     def test_no_single_axis_generative_but_composite_graduation_is(self):
@@ -459,7 +459,7 @@ class TestPlatformIntegration:
         reg = build_default_registry()
         s = observe(reg, "core:x", kind="tool", mode="embedded",
                     visibility="visible", activation="active")
-        assert s.fqcn == "core:x" and s["mode"] == "embedded"
+        assert s.identity == "core:x" and s["mode"] == "embedded"
         with pytest.raises(ValueError, match="not admitted"):
             observe(reg, "core:x", mode="frobnicated")
         with pytest.raises(KeyError, match="unknown axis"):
@@ -530,7 +530,7 @@ class TestPlatformIntegration:
             kinds_seen.add(ent.type)
             # The real platform reading must be expressible in the model.
             st = observe(reg, ent.fqcn, **readings)
-            assert st.fqcn == ent.fqcn
+            assert st.identity == ent.fqcn
             observed += 1
 
         assert observed == len(engine.projects)
