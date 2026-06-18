@@ -78,8 +78,11 @@ class Classification:
 
 def _normalize_path_no_resolve(path: str) -> str:
     """Normalize path format without resolving symlinks/junctions."""
-    from dazzle_filekit.paths import normalize_path_no_resolve
-    return str(normalize_path_no_resolve(path))
+    # filekit 0.3.0 removed normalize_path_no_resolve (clean break); the
+    # canonical normalize_cross_platform_path defaults to resolve=False, which
+    # is the same link-safe normalization.
+    from dazzle_filekit.paths import normalize_cross_platform_path
+    return str(normalize_cross_platform_path(path))
 
 
 def classify(path: str) -> Classification:

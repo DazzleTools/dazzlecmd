@@ -47,9 +47,9 @@ def canonicalize_path(path):
       \\\\?\\C:\\... ->  C:\\...              (extended-length prefix)
       ~/foo         ->  C:\\Users\\Me\\foo   (tilde expansion)
 
-    Uses dazzle_filekit.paths.normalize_path() when available for
-    symlink resolution and robust normalization. Uses unctools for
-    UNC path canonicalization when available.
+    Uses dazzle_filekit.paths.normalize_cross_platform_path(resolve=True)
+    when available for symlink resolution and robust normalization. Uses
+    unctools for UNC path canonicalization when available.
     """
     if not path:
         return path
@@ -72,10 +72,12 @@ def canonicalize_path(path):
     if sys.platform == "win32" and path.startswith("\\\\?\\"):
         path = path[4:]
 
-    # Try dazzle_filekit for robust normalization (resolve symlinks, etc.)
+    # Try dazzle_filekit for robust normalization (resolve symlinks, etc.).
+    # filekit 0.3.0 removed normalize_path (clean break) -- the canonical
+    # normalize_cross_platform_path(resolve=True) is the same link-following form.
     try:
-        from dazzle_filekit.paths import normalize_path as fk_normalize
-        return str(fk_normalize(path))
+        from dazzle_filekit.paths import normalize_cross_platform_path
+        return str(normalize_cross_platform_path(path, resolve=True))
     except ImportError:
         pass
 
