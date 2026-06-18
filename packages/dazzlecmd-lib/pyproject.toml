@@ -31,6 +31,10 @@ dependencies = [
     # (colorama and distro are imported best-effort under try/except, so they
     # stay optional/undeclared; pydantic is the one unconditional import.)
     "pydantic>=2.0",
+    # The Continuum primitive (continuum.py) lives in the dazzle-lib bedrock
+    # (lifted in dazzlecmd 0.9.43 / dazzle-lib 0.3.0); dazzlecmd_lib.continuum is a
+    # thin re-export shim. The dazzle-* stack's shared pure-primitive foundation.
+    "dazzle-lib>=0.3.0",
     # dazzlecmd_lib.core.safedel (the constitutional recoverable-delete primitive)
     # uses dazzle_filekit.metadata for cross-platform metadata preservation
     # (ACLs/ADS/timestamps/xattrs). filekit is the canonical home of that code.

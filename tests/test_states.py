@@ -222,11 +222,15 @@ class TestRegistryProperties:
             assert t.fqcn_fate == "preserved", t
             assert t.conserved, f"REVERSIBLE edge must name its conserved invariant: {t}"
 
-    def test_no_generative_yet_but_contract_enforced(self):
-        """Graduation's GENERATIVE edges land in the group/ungroup pass (Step 5).
-        Until then the registry has none -- but the type enforces their contract."""
+    def test_no_single_axis_generative_but_composite_graduation_is(self):
+        """`by_reversibility` scans SINGLE-AXIS transitions (``._transitions``), of
+        which none is GENERATIVE -- the generative move is graduation, a COMPOSITE
+        (``._composites``), which IS generative. This pins the split storage so the
+        empty ``by_reversibility`` result is NOT misread as 'no generative edges'
+        (the graduation composite has shipped since the group/ungroup pass)."""
         reg = build_default_registry()
-        assert reg.by_reversibility(Reversibility.GENERATIVE) == ()
+        assert reg.by_reversibility(Reversibility.GENERATIVE) == ()   # single-axis: none
+        assert reg.composite("graduation").reversibility is Reversibility.GENERATIVE
 
     def test_mode_declares_a_refused_class(self):
         reg = build_default_registry()

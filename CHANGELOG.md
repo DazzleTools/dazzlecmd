@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.43] - 2026-06-17
+
+### Changed
+
+- **The `Continuum` primitive lifted to the `dazzle-lib` foundation (B3a of the Groupable<->Continuum<->states unification's lift).** `Continuum`/`ContinuumSpace` + their protocols moved verbatim to `dazzle_lib.continuum` (dazzle-lib 0.3.0; its charter evolved "types only" -> "types + pure primitives", still stdlib-only + side-effect-free). `dazzlecmd_lib.continuum` is now a transparent re-export shim, so every existing `from dazzlecmd_lib.continuum import ...` is unchanged; `dazzlecmd-lib` declares `dazzle-lib>=0.3.0` as a dependency. The domain spaces (`VISIBILITY_CONTINUUM`, `KIT_PRESENCE_SPACE`) stay in dazzlecmd. No behavior change (suite 1527 + byte-gate green; the lift surfaced + fixed one module-location test). Also folds in the B3-pre test hygiene (`Continuum.compare`/positive-slice/amplified-cascade coverage; the misleading single-axis-GENERATIVE test clarified). The shared-package distribution (dazzle-lib on GitHub + PyPI, fresh install) is the lift's final test, deferred to the consumer-functional declaration.
+
+### Versions
+
+- dazzlecmd 0.9.42 -> 0.9.43 (PATCH); dazzlecmd-lib 0.8.42 -> 0.8.43 (PATCH -- continuum re-export shim + `dazzle-lib>=0.3.0` dep); dazzle-dz -> 0.9.43.
+
 ## [0.9.42] - 2026-06-17
 
 ### Added
@@ -3307,7 +3317,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.42...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.43...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

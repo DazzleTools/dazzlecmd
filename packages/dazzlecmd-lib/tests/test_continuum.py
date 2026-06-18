@@ -427,13 +427,18 @@ class TestContinuumSpaceContract:
 
 
 class TestContinuumSpacePurityShim:
-    """The space lives in the same PURE module -- the existing purity guard
-    (TestPurity.test_continuum_is_pure) already covers it; this just pins that
-    ContinuumSpace is importable from the pure module without effects."""
+    """Post-B3a the Continuum primitive lives in the dazzle-lib FOUNDATION
+    (``dazzle_lib.continuum``, charter-guarded there); ``dazzlecmd_lib.continuum``
+    re-exports it, so the historical import path resolves to the SAME class."""
 
-    def test_space_is_in_the_pure_module(self):
-        import dazzlecmd_lib.continuum as mod
-        assert mod.ContinuumSpace.__module__ == "dazzlecmd_lib.continuum"
+    def test_space_is_lifted_to_the_foundation(self):
+        import dazzlecmd_lib.continuum as shim
+        import dazzle_lib.continuum as foundation
+        # the primitive now lives in the bedrock...
+        assert shim.ContinuumSpace.__module__ == "dazzle_lib.continuum"
+        # ...and the dazzlecmd re-export is the SAME object (the shim is transparent).
+        assert shim.ContinuumSpace is foundation.ContinuumSpace
+        assert shim.Continuum is foundation.Continuum
 
 
 class TestContinuumSpaceSlice:
@@ -480,3 +485,30 @@ class TestContinuumSpaceSlice:
     def test_cascade_to_neutral_other_axis(self):
         s = _kit_presence_space()
         assert s.cascade_to_neutral("activation", "disabled") == ("disabled",)
+
+    def test_slice_positive_only_window(self):
+        # a window entirely WARMER than the anchor (+1..+2 from hidden).
+        s = _kit_presence_space()
+        assert s.slice("visibility", "hidden", lo=1, hi=2) == ("silenced", "visible")
+
+    def test_cascade_to_neutral_from_amplified(self):
+        # a space WITH a >0 (amplified) level exercises the p>0 branch of
+        # cascade_to_neutral (the visibility/activation spaces are all <=0).
+        s = ContinuumSpace(
+            name="prom", meaning="prominence",
+            axes={"prominence": Continuum(name="prominence",
+                                          ranks={"dimmed": -1, "normal": 0, "featured": 1})},
+            presence={"prominence": {"dimmed": -1, "normal": 0, "featured": 1}},
+        )
+        assert s.cascade_to_neutral("prominence", "featured") == ("featured",)
+        assert s.cascade_to_neutral("prominence", "dimmed") == ("dimmed",)
+        assert s.cascade_to_neutral("prominence", "normal") == ()
+
+
+def test_continuum_compare_is_signed():
+    # `compare` (the signed -1/0/+1 order check) had no coverage; it lifts to
+    # dazzle-lib in B3a, so it must travel with a test.
+    c = _visibility()
+    assert c.compare("visible", "shadowed") == 1     # visible is warmer
+    assert c.compare("shadowed", "visible") == -1
+    assert c.compare("hidden", "hidden") == 0
