@@ -240,7 +240,7 @@ class TestTransitionContextGeneric:
     def test_apply_sources_conserved_and_reversible_from_registry(self):
         reg = build_default_registry()
         store, detect, write = self._toy()
-        tc = TransitionContext(reg, "visibility", detect=detect, write=write)
+        tc = TransitionContext(reg, "visibility", detect=detect, write=write, identity_of=lambda e: e.fqcn)
         ent = _tool()
         r = tc.apply(ent, "hidden", verb="hide")
         assert isinstance(r, Receipt)
@@ -257,7 +257,8 @@ class TestTransitionContextGeneric:
         reg = build_default_registry()
         store, detect, write = self._toy()
         tc = TransitionContext(reg, "visibility", detect=detect, write=write,
-                               invert=lambda rc: (rc.previous_state, "expose"))
+                               invert=lambda rc: (rc.previous_state, "expose"),
+                               identity_of=lambda e: e.fqcn)
         ent = _tool()
         r = tc.apply(ent, "hidden", verb="hide")
         u = tc.undo(r)
@@ -271,7 +272,8 @@ class TestTransitionContextGeneric:
             raise AssertionError("write must not run when check refuses")
         def check(e, t, v, p):
             raise ValueError("nope")
-        tc = TransitionContext(reg, "visibility", detect=detect, write=write, check=check)
+        tc = TransitionContext(reg, "visibility", detect=detect, write=write, check=check,
+                               identity_of=lambda e: e.fqcn)
         with pytest.raises(ValueError, match="nope"):
             tc.apply(_tool(), "hidden", verb="hide")
         assert store == {}                         # nothing written
@@ -279,14 +281,14 @@ class TestTransitionContextGeneric:
     def test_unknown_verb_raises_lookuperror(self):
         reg = build_default_registry()
         _, detect, write = self._toy()
-        tc = TransitionContext(reg, "visibility", detect=detect, write=write)
+        tc = TransitionContext(reg, "visibility", detect=detect, write=write, identity_of=lambda e: e.fqcn)
         with pytest.raises(LookupError):
             tc.apply(_tool(), "hidden", verb="bogus")
 
     def test_undo_without_apply_raises(self):
         reg = build_default_registry()
         _, detect, write = self._toy()
-        tc = TransitionContext(reg, "visibility", detect=detect, write=write)
+        tc = TransitionContext(reg, "visibility", detect=detect, write=write, identity_of=lambda e: e.fqcn)
         with pytest.raises(RebindError):
             tc.undo(Receipt("core:x", "visibility", "hidden", "visible",
                             "canonical_dispatch", True, "expose"))

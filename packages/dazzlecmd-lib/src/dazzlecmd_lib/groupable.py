@@ -32,143 +32,25 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from dazzlecmd_lib.continuum import ContinuumSpace
-from dazzlecmd_lib.states import VISIBILITY_CONTINUUM, Reversibility, build_default_registry
+from dazzlecmd_lib.states import VISIBILITY_CONTINUUM, build_default_registry
 
+# The generic transition executor (Receipt + TransitionContext) and its typed
+# failures were lifted to the dazzle-lib bedrock (B3c; dazzle_lib.transitions).
+# Re-exported here so every ``from dazzlecmd_lib.groupable import ...`` keeps
+# resolving. The executor's one consumer-coupling -- an ``entity.fqcn`` access --
+# is now a domain-neutral ``identity_of`` hook the per-verb contexts below supply
+# (``identity_of=lambda e: e.fqcn``). ``RebindError`` stays as a back-compat alias
+# of the neutral ``TransitionError`` (the executor's failure is not rebind-specific).
+from dazzle_lib.transitions import (  # noqa: F401
+    CriticalityBoundaryError,
+    Receipt,
+    TransitionContext,
+    TransitionError,
+)
 
-class CriticalityBoundaryError(Exception):
-    """Raised when a transition would cross a criticality boundary.
-
-    The conserved invariant (C2) cannot be preserved, so the transition would
-    be irreversible/non-restorable -- it is refused rather than performed.
-
-    Example: a mode-switch ``rebind`` whose published state cannot be re-derived
-    (no remote URL resolvable) would be a lossy, unrecoverable change.
-
-    This is a PRE-FLIGHT refusal (the invariant check fails before any change).
-    """
-
-
-class RebindError(Exception):
-    """Raised when a rebind transition fails to APPLY.
-
-    Distinct from :class:`CriticalityBoundaryError` (a pre-flight refusal): the
-    invariant was fine, but the underlying mechanism failed mid-apply (e.g. the
-    mode-switch returned a non-zero exit code). The transition's success/failure
-    is the mechanism's; this surfaces it as the verb's typed failure.
-    """
-
-
-# ===========================================================================
-# The generic transition executor -- the N-Contexts -> 1 collapse (B2)
-# ===========================================================================
-# Every effectful Groupable verb does the same dance: read the entity's current
-# value off its substrate, resolve the DECLARED edge for the verb (so the receipt
-# reports the registry's reversibility/conserved rather than a hardcoded literal
-# -- the F3 "receipts stop hardcoding truth" intent), refuse it if it crosses a
-# criticality boundary, write the substrate, and return a receipt.
-# ``TransitionContext`` owns that shared orchestration ONCE; the per-axis
-# substrate I/O + policy are small consumer-supplied hooks bound to a handle, so
-# the L0 registry/continuum stay pure (they DECLARE the axes; the consumer
-# reads/writes them). The visibility verb runs on this in B2; containment /
-# projection / rebind migrate onto it in B2b.
+RebindError = TransitionError
 
 _DEFAULT_REGISTRY = build_default_registry()
-
-
-@dataclass(frozen=True)
-class Receipt:
-    """The generic record one transition leaves -- the collapse of the per-verb
-    ``*Receipt`` types.
-
-    ``conserved`` (the C2 invariant NAME) and ``reversible`` are READ FROM the
-    declared :class:`~dazzlecmd_lib.states.Transition`, not hardcoded per verb.
-    ``payload`` carries any axis-specific extra (e.g. visibility's channel deltas)
-    until the per-axis receipts fully dissolve (B2b)."""
-
-    entity_fqcn: str
-    axis: str
-    previous_state: Any
-    new_state: Any
-    conserved: str
-    reversible: bool
-    verb: str
-    payload: Any = None
-
-
-class TransitionContext:
-    """One generic executor for any state axis.
-
-    The shared apply/undo/criticality/receipt logic lives here ONCE; the per-axis
-    substrate I/O + policy are consumer-supplied hooks bound to a handle:
-
-    - ``detect(entity) -> current_value`` -- read the axis value off the substrate.
-    - ``write(entity, target, prev) -> payload`` -- persist the move; return any
-      axis-specific receipt payload (or ``None``).
-    - ``check(entity, target, verb, prev)`` -- OPTIONAL axis pre-flight (direction
-      guards, target validity, the C3 constitutional refusal); raises to refuse.
-    - ``invert(receipt) -> (target, verb)`` -- OPTIONAL inverse move for ``undo``
-      (defaults to re-applying ``previous_state`` with the same verb).
-
-    ``apply`` resolves the declared edge for ``(verb, axis)`` so the receipt's
-    ``conserved``/``reversible`` come from the registry (F3), and refuses a
-    ``REFUSED_AT_BOUNDARY`` edge generically. The substrate hooks keep ``states``
-    / ``continuum`` import-pure -- they declare the axis; the handle reads/writes.
-    """
-
-    def __init__(self, registry, axis_name, *, detect, write, check=None, invert=None):
-        self._registry = registry
-        self._axis_name = axis_name
-        self._detect = detect
-        self._write = write
-        self._check = check
-        self._invert = invert
-        self._applied_entity = None
-
-    def _edge(self, verb):
-        edges = [t for t in self._registry.for_verb(verb) if t.axis == self._axis_name]
-        if not edges:
-            raise LookupError(
-                f"no declared transition for verb {verb!r} on axis {self._axis_name!r}"
-            )
-        return edges[0]
-
-    def current(self, entity):
-        """The entity's current value on this axis (via the detect hook)."""
-        return self._detect(entity)
-
-    def apply(self, entity, target, *, verb):
-        prev = self._detect(entity)
-        if self._check is not None:
-            self._check(entity, target, verb, prev)
-        edge = self._edge(verb)
-        if edge.reversibility is Reversibility.REFUSED_AT_BOUNDARY:
-            raise CriticalityBoundaryError(
-                f"{entity.fqcn}: {verb} on {self._axis_name} is refused at the "
-                f"criticality boundary ({edge.conserved} cannot be preserved)"
-            )
-        payload = self._write(entity, target, prev)
-        self._applied_entity = entity
-        return Receipt(
-            entity_fqcn=entity.fqcn,
-            axis=self._axis_name,
-            previous_state=prev,
-            new_state=target,
-            conserved=edge.conserved,
-            reversible=edge.reversible,
-            verb=verb,
-            payload=payload,
-        )
-
-    def undo(self, receipt):
-        if self._applied_entity is None:
-            raise RebindError(
-                "TransitionContext.undo() requires a prior apply() on this context."
-            )
-        if self._invert is not None:
-            target, verb = self._invert(receipt)
-        else:
-            target, verb = receipt.previous_state, receipt.verb
-        return self.apply(self._applied_entity, target, verb=verb)
 
 
 @dataclass(frozen=True)
@@ -249,6 +131,7 @@ class AliasRebindContext:
         self._tc = TransitionContext(
             _DEFAULT_REGISTRY, "routing",
             detect=self._detect, write=self._write, check=self._check,
+            identity_of=lambda e: e.fqcn,
         )
 
     def _detect(self, entity: Any) -> Any:
@@ -285,13 +168,13 @@ class AliasRebindContext:
         # routing/rebind edge (r.reversible / r.conserved), not a literal. prev
         # is the detect reading (== repoint's prior target, single-threaded).
         return RebindReceipt(
-            entity_fqcn=r.entity_fqcn,      # C1 -- unchanged by the rebind
+            entity_fqcn=r.entity_identity,      # C1 -- unchanged by the rebind
             sub_kind="alias",
             previous_state=r.previous_state,  # repoint back here to invert
             new_state=r.new_state,
             invariant=RebindInvariant(
                 conserved_quantity_name=r.conserved,
-                conserved_value=r.entity_fqcn,
+                conserved_value=r.entity_identity,
                 restore_path="repoint the alias back to previous_state",
             ),
             reversible=r.reversible,        # from the declared edge
@@ -612,6 +495,7 @@ class VisibilityContext:
             write=self._write_and_delta,
             check=self._check_move,
             invert=self._invert_move,
+            identity_of=lambda e: e.fqcn,
         )
 
     # -- config <-> channel mapping ------------------------------------------
@@ -716,12 +600,12 @@ class VisibilityContext:
         # reversible + the conserved-invariant NAME now come FROM the declared
         # transition (r.reversible / r.conserved), not a hardcoded literal (F3).
         return VisibilityReceipt(
-            entity_fqcn=r.entity_fqcn,
+            entity_fqcn=r.entity_identity,
             sub_kind="visibility",
             previous_state=r.previous_state,
             new_state=r.new_state,
             invariant=VisibilityInvariant(
-                conserved_quantity_name=r.conserved, conserved_value=r.entity_fqcn),
+                conserved_quantity_name=r.conserved, conserved_value=r.entity_identity),
             reversible=r.reversible,
             channels_suppressed=r.payload["suppressed"],
             channels_restored=r.payload["restored"],
@@ -813,6 +697,7 @@ class ContainmentContext:
             write=self._write_membership,
             check=self._check_move,
             invert=self._invert_move,
+            identity_of=lambda e: e.fqcn,
         )
 
     def _tools(self):
@@ -877,12 +762,12 @@ class ContainmentContext:
         # NAME now come from the declared containment edge (r.reversible/r.conserved).
         new = self.boundary.fqcn if verb == "group" else None
         return ContainmentReceipt(
-            entity_fqcn=r.entity_fqcn,
+            entity_fqcn=r.entity_identity,
             sub_kind="containment",
             previous_state=r.previous_state,
             new_state=new,
             invariant=ContainmentInvariant(
-                conserved_quantity_name=r.conserved, conserved_value=r.entity_fqcn),
+                conserved_quantity_name=r.conserved, conserved_value=r.entity_identity),
             reversible=r.reversible,
             verb=verb,
         )

@@ -4,6 +4,17 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.45] - 2026-06-18
+
+### Changed
+
+- **The generic transition executor lifted to the `dazzle-lib` foundation (B3c of the unification's lift).** `Receipt` + `TransitionContext` (and the typed failures `CriticalityBoundaryError` / `TransitionError`) moved to `dazzle_lib.transitions` (dazzle-lib 0.5.0; charter-safe: stdlib + `dazzle_lib.states` only). `dazzlecmd_lib.groupable` re-exports them, so every existing `from dazzlecmd_lib.groupable import ...` is unchanged; `RebindError` stays as a back-compat alias of `TransitionError`. The per-verb contexts (`AliasRebindContext`, `VisibilityContext`, `ContainmentContext`, plus mode switch / projection) keep binding the executor to their substrates and stay in dazzlecmd. `dazzlecmd-lib` now requires `dazzle-lib>=0.5.0`.
+- **The executor's one consumer-coupling neutralized.** It reached into `entity.fqcn`; that is now a domain-neutral `identity_of` hook (the same shape as the `detect`/`write` hooks), and the generic `Receipt.entity_fqcn` field became `Receipt.entity_identity` (carrying B3b's `fqcn`->`identity` neutralization through to the executor). dazzlecmd's contexts pass `identity_of=lambda e: e.fqcn`; the per-verb `*Receipt` domain types keep their own `entity_fqcn` (it IS the dazzlecmd FQCN). Unlike B3a/B3b (verbatim lifts), this is a lift-with-generalization -- behavior-equivalence is proven by the suite (1527 passed + byte-gate unchanged). Move-code fidelity is still proven, adapted: `tests/one-offs/verify_transitions_lift.py` applies the enumerated seam transforms to the verbatim baseline and asserts the executor's `_edge`/`apply`/`undo`/`current` logic is AST-identical -- so ONLY the deliberate seam changes differ, nothing was dropped. The dead `Reversibility` import dropped from `groupable.py`.
+
+### Versions
+
+- dazzlecmd 0.9.44 -> 0.9.45 (PATCH); dazzlecmd-lib 0.8.44 -> 0.8.45 (PATCH -- groupable executor re-export shim + `dazzle-lib>=0.5.0` dep); dazzle-dz -> 0.9.45.
+
 ## [0.9.44] - 2026-06-17
 
 ### Changed
@@ -3328,7 +3339,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.44...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.45...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
