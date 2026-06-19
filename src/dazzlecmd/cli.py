@@ -1921,7 +1921,10 @@ def _cmd_kit_visibility_set(args, engine):
         print("Error: engine unavailable", file=sys.stderr)
         return 1
     from dazzlecmd_lib.contexts import KIT_PRESENCE_SPACE
-    space = KIT_PRESENCE_SPACE
+    # KIT_PRESENCE_SPACE is the multi-axis PRODUCT (visibility x activation); the
+    # visibility navigator reads its ALIGNED ``axes["visibility"]`` sub-space (the
+    # product itself is non-aligned and refuses cross-axis nav -- scale-safety).
+    space = KIT_PRESENCE_SPACE.axes["visibility"]
 
     add = args.direction == "suppress"
     canonical, project = _resolve_visibility_target(engine, args.fqcn)
@@ -2077,23 +2080,27 @@ def _cmd_kit_visibility_status(args, engine):
         return 1
     from dazzlecmd_lib.contexts import KIT_PRESENCE_SPACE, level_for_channels
 
+    # KIT_PRESENCE_SPACE is the multi-axis PRODUCT (visibility x activation); read
+    # its ALIGNED ``axes["visibility"]`` sub-space for the navigator (the product
+    # itself refuses cross-axis nav, so read the sub-space -- scale-safety).
+    vis = KIT_PRESENCE_SPACE.axes["visibility"]
     canonical, project = _resolve_visibility_target(engine, args.fqcn)
     config = engine._get_user_config()
 
     # Current channels, read THROUGH the typed rungs (no hardcoded config keys).
     suppressed = set()
     for lvl in ("silenced", "hidden", "shadowed"):
-        rung = KIT_PRESENCE_SPACE.payload_for("visibility", lvl)
+        rung = vis.payload_for("visibility", lvl)
         if rung is not None and rung.present(config, canonical):
             suppressed.add(rung.channel)
     level = level_for_channels(suppressed)  # visible | silenced | hidden | shadowed
 
     print(f"{canonical}")
     print(f"  presence: {level}")
-    colder = KIT_PRESENCE_SPACE.colder_than("visibility", level)
-    warmer = KIT_PRESENCE_SPACE.warmer_than("visibility", level)
+    colder = vis.colder_than("visibility", level)
+    warmer = vis.warmer_than("visibility", level)
     if colder:
-        reach = KIT_PRESENCE_SPACE.payload_for("visibility", colder[1])
+        reach = vis.payload_for("visibility", colder[1])
         # C3-aware: don't recommend a move the surface will refuse. A
         # constitutional tool may be hidden but never shadowed, so at `hidden`
         # the colder rung is unreachable -- say so instead of suggesting it.
@@ -2105,7 +2112,7 @@ def _cmd_kit_visibility_status(args, engine):
     else:
         print("  less visible -> (already least visible: shadowed)")
     if warmer:
-        leave = KIT_PRESENCE_SPACE.payload_for("visibility", level)
+        leave = vis.payload_for("visibility", level)
         print(f"  more visible -> dz kit visibility {leave.unverb} {canonical}")
     else:
         print("  more visible -> (already fully visible)")

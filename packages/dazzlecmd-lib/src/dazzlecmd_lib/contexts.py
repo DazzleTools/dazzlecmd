@@ -40,7 +40,11 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from dazzlecmd_lib.continuum import ContinuumSpace
-from dazzlecmd_lib.states import VISIBILITY_CONTINUUM, build_default_registry
+from dazzlecmd_lib.states import (
+    ACTIVATION_CONTINUUM,
+    VISIBILITY_CONTINUUM,
+    build_default_registry,
+)
 
 # The generic transition executor (Receipt + TransitionContext) and its typed
 # failures were lifted to the dazzle-lib bedrock (B3c; dazzle_lib.transitions).
@@ -411,17 +415,36 @@ VISIBILITY_RUNGS = {
         forbids_constitutional=True),
 }
 
-# The kit-presence space: the visibility ladder as ONE presence axis on a shared
-# scale, each rung carrying its typed VisibilityRung payload. The `dz kit
-# visibility` surface navigates it and READS the rung objects (no string table).
-# Single-axis today; activation / load compose as further axes per the
-# ContinuumSpace DWP -- the seam is ready.
-KIT_PRESENCE_SPACE = ContinuumSpace(
-    name="kit_presence",
-    meaning="how present a tool is to dz (listing + dispatch)",
+# The ALIGNED visibility presence space: the visibility ladder as ONE presence
+# axis on a merged signed scale, each rung carrying its typed VisibilityRung
+# payload. Its merged spectrum is what the `dz kit visibility` navigator and
+# ``EntityState.coordinates_in`` read (``presence_of``/``colder_than`` are aligned-
+# space operations). It is one DIMENSION of kit-presence -- KIT_PRESENCE_SPACE
+# composes it (below) with activation.
+VISIBILITY_PRESENCE_SPACE = ContinuumSpace(
+    name="visibility_presence",
+    meaning="how present a tool is on the visibility ladder (listing + dispatch)",
     axes={"visibility": VISIBILITY_CONTINUUM},
     presence={"visibility": dict(VISIBILITY_CONTINUUM.ranks)},
     payloads={"visibility": VISIBILITY_RUNGS},
+    invariant="canonical_dispatch",
+)
+
+# The kit-presence space: visibility x activation as a PRODUCT (the v0.6.0
+# "alignment is a property" design). "How present a kit is" is multi-dimensional
+# (visible? its kit active? -- and, at the capstone, member? materialized?), so
+# the canonical KIT_PRESENCE_SPACE is the PRODUCT of those dimensions. Composing
+# activation into the ALIGNED visibility space as a further aligned axis would
+# absorb activation into the visibility navigator's merged spectrum; instead the
+# axes compose as INDEPENDENT dimensions (presence=None). So the navigator reads
+# the aligned ``axes["visibility"]`` sub-space byte-identically, the SH pairwise
+# QuadrantView (visibility x activation) lives at the product level, and cross-axis
+# navigation is refused by design (scale-safety). This is the production-resident
+# substrate the activation re-expression + the attach/detach capstone build on.
+KIT_PRESENCE_SPACE = ContinuumSpace.compose(
+    "kit_presence",
+    {"visibility": VISIBILITY_PRESENCE_SPACE, "activation": ACTIVATION_CONTINUUM},
+    meaning="how present a tool is (listing + dispatch) x whether its kit dispatches",
     invariant="canonical_dispatch",
 )
 

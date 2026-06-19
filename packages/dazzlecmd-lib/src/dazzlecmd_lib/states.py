@@ -71,7 +71,21 @@ VISIBILITY_CONTINUUM = Continuum(
 # Single source: the value set DERIVES from the continuum (warm->cold), byte-
 # identical to the prior literal ``("visible","silenced","hidden","shadowed")``.
 VISIBILITY_VALUES: Tuple[str, ...] = VISIBILITY_CONTINUUM.levels()[::-1]
-ACTIVATION_VALUES: Tuple[str, ...] = ("active", "inactive")
+
+# The ACTIVATION axis as a signed Continuum (mirrors VISIBILITY_CONTINUUM): ``active``
+# is the neutral/fully-present pole (rank 0 -- a kit's default), ``inactive`` is
+# suppressed (-1). Giving activation a Continuum (not just a value tuple) lets it
+# COMPOSE as a presence axis alongside visibility -- the multi-axis KIT_PRESENCE
+# product. The conserved quantity at rank 0 is the kit's re-activatable config
+# membership: enable<->disable is a reversible config toggle, never a removal, so
+# the axis round-trips (the B4 activation-as-Groupable seam).
+ACTIVATION_CONTINUUM = Continuum(
+    name="activation",
+    ranks={"active": 0, "inactive": -1},
+    invariant="kit_activation",
+)
+# Derived warm->cold, byte-identical to the prior literal ``("active","inactive")``.
+ACTIVATION_VALUES: Tuple[str, ...] = ACTIVATION_CONTINUUM.levels()[::-1]
 KIND_VALUES: Tuple[str, ...] = ("tool", "kit", "aggregator")
 
 # The two MODE states that constitute the dev<->publish orbit (in-orbit =
@@ -261,6 +275,7 @@ __all__ = [
     "MODE_VALUES",
     "VISIBILITY_CONTINUUM",
     "VISIBILITY_VALUES",
+    "ACTIVATION_CONTINUUM",
     "ACTIVATION_VALUES",
     "KIND_VALUES",
     "build_default_registry",

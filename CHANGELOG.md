@@ -4,6 +4,25 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.48] - 2026-06-19
+
+### Added
+
+- **`ACTIVATION_CONTINUUM` (`dazzlecmd_lib.states`)** -- the kit-activation axis as a signed `Continuum` mirroring `VISIBILITY_CONTINUUM`: `active` is the neutral/fully-present pole (rank 0, a kit's default), `inactive` is suppressed (-1). Giving activation a Continuum (not just a value tuple) lets it COMPOSE as a presence axis. `ACTIVATION_VALUES` now DERIVES from it (`...levels()[::-1]`), byte-identical to the prior `("active","inactive")` literal.
+- **The multi-axis kit-presence space -- the first production consumer of the SH-redesign's multi-axis `ContinuumSpace`.** `KIT_PRESENCE_SPACE` is now the PRODUCT of `visibility x activation` (`ContinuumSpace.compose(...)`, `presence=None`). The former single-axis aligned space is split out as **`VISIBILITY_PRESENCE_SPACE`** (the aligned visibility ladder whose merged spectrum the `dz kit visibility` navigator + `EntityState.coordinates_in` read); `KIT_PRESENCE_SPACE` composes it with `ACTIVATION_CONTINUUM`. The `dz kit visibility` navigator reads the aligned `KIT_PRESENCE_SPACE.axes["visibility"]` sub-space **byte-identically**, the SH pairwise `QuadrantView(visibility, activation)` now has a real production axis pair, and the product refuses cross-axis navigation by design (scale-safety). This is the production-resident substrate the activation re-expression (next) + the attach/detach capstone (#80/#86: visibility x activation x membership x materialization) build on.
+
+### Changed
+
+- `tests/test_states.py` `TestEntityStateAsPoint` (B1: "an `EntityState` is a point") evolved with the infrastructure: a point is located in the aligned `VISIBILITY_PRESENCE_SPACE` (the concept, preserved), and a new case asserts `KIT_PRESENCE_SPACE` is now the 2-axis product whose merged coordinate is refused at the product level and read per aligned sub-space.
+
+### Notes
+
+- Byte-transparent integration: `dz kit visibility` output unchanged (byte-gate identical at the parked-WIP baseline); suite 1530 -> 1531 (+ the product-shape test). The "production uses the new dazzle-lib symbols" grep flips from empty to a hit (`ACTIVATION_CONTINUUM` consumed in production). Refs #188/#84 (the redesign threads), #80/#86 (the capstone the substrate feeds).
+
+### Versions
+
+- dazzlecmd 0.9.47 -> 0.9.48 (PATCH); dazzlecmd-lib 0.8.47 -> 0.8.48 (PATCH -- `ACTIVATION_CONTINUUM` + the multi-axis `KIT_PRESENCE_SPACE` product); dazzle-dz -> 0.9.48. dazzle-lib unchanged (consumer-side composition only).
+
 ## [0.9.47] - 2026-06-18
 
 ### Changed
@@ -3363,7 +3382,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.47...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.48...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

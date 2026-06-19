@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.48] - 2026-06-19
+
+Ships with dazzlecmd v0.9.48 -- the multi-axis kit-presence integration (the first production consumer of the SH-redesign's multi-axis `ContinuumSpace`). Adds `ACTIVATION_CONTINUUM` (`states`) -- kit activation as a signed `Continuum` (active=0 neutral, inactive=-1), with `ACTIVATION_VALUES` now derived from it. `contexts` splits the former single-axis `KIT_PRESENCE_SPACE` into the aligned **`VISIBILITY_PRESENCE_SPACE`** (the visibility ladder, whose merged spectrum drives the navigator + `coordinates_in`) and recomposes **`KIT_PRESENCE_SPACE`** as the PRODUCT `compose(visibility=VISIBILITY_PRESENCE_SPACE, activation=ACTIVATION_CONTINUUM)`. Byte-transparent for consumers that read the aligned visibility sub-space (`KIT_PRESENCE_SPACE.axes["visibility"]`); the product refuses cross-axis navigation by design (scale-safety). (Entries for 0.8.30-0.8.47 were folded into the dazzlecmd CHANGELOG; this resumes the lib log for a notable API addition.)
+
 ## [0.8.29] - 2026-06-11
 
 Ships with dazzlecmd v0.9.29 -- `templates/repokit_fallback/` (minimal LICENSE/CONTRIBUTING stubs used by `--with template` when git-repokit-template is unreachable, per OQ-G2).

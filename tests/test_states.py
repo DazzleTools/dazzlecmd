@@ -26,8 +26,12 @@ import pytest
 
 from dazzlecmd_lib.engine import FQCNIndex
 from dazzlecmd_lib.entity import build_entity
+from dazzlecmd_lib.continuum import ContinuumError
 from dazzlecmd_lib.contexts import (
-    AliasRebindContext, CriticalityBoundaryError, KIT_PRESENCE_SPACE,
+    AliasRebindContext,
+    CriticalityBoundaryError,
+    KIT_PRESENCE_SPACE,
+    VISIBILITY_PRESENCE_SPACE,
 )
 from dazzlecmd_lib.testing import make_tool
 from dazzlecmd_lib.states import (
@@ -593,16 +597,35 @@ class TestStateAxisContinuum:
 
 
 class TestEntityStateAsPoint:
-    """B1: an EntityState is a POINT in a ContinuumSpace (coordinates_in)."""
+    """B1: an EntityState is a POINT in a ContinuumSpace (coordinates_in).
 
-    def test_visibility_state_locates_in_kit_presence_space(self):
+    A coordinate is read in an ALIGNED presence space (a merged spectrum).
+    KIT_PRESENCE_SPACE is now the multi-axis PRODUCT (visibility x activation),
+    so a point is located in its aligned ``axes["visibility"]`` sub-space
+    (== VISIBILITY_PRESENCE_SPACE); the product itself has no merged spectrum.
+    """
+
+    def test_visibility_state_locates_in_visibility_presence_space(self):
         st = EntityState("core:find", {"visibility": "hidden"})
-        assert st.coordinates_in(KIT_PRESENCE_SPACE) == {"visibility": -2}
+        assert st.coordinates_in(VISIBILITY_PRESENCE_SPACE) == {"visibility": -2}
         st0 = EntityState("core:find", {"visibility": "visible"})
-        assert st0.coordinates_in(KIT_PRESENCE_SPACE) == {"visibility": 0}
+        assert st0.coordinates_in(VISIBILITY_PRESENCE_SPACE) == {"visibility": 0}
 
     def test_partial_observation_is_a_partial_point(self):
         # An axis the state does not carry is skipped (no KeyError, no zero-fill);
         # an axis the SPACE does not define is likewise absent from the point.
         st = EntityState("core:find", {"mode": "symlink"})  # no visibility reading
-        assert st.coordinates_in(KIT_PRESENCE_SPACE) == {}
+        assert st.coordinates_in(VISIBILITY_PRESENCE_SPACE) == {}
+
+    def test_kit_presence_space_is_the_multi_axis_product(self):
+        # The multi-axis integration: KIT_PRESENCE_SPACE is the PRODUCT of
+        # visibility x activation. A point is read in an aligned sub-space; the
+        # product itself refuses a merged coordinate (no shared spectrum --
+        # scale-safety), so you locate via axes["visibility"].
+        assert set(KIT_PRESENCE_SPACE.axes) == {"visibility", "activation"}
+        assert not KIT_PRESENCE_SPACE.is_aligned
+        st = EntityState("core:find", {"visibility": "hidden"})
+        assert (st.coordinates_in(KIT_PRESENCE_SPACE.axes["visibility"])
+                == {"visibility": -2})
+        with pytest.raises(ContinuumError):
+            st.coordinates_in(KIT_PRESENCE_SPACE)
