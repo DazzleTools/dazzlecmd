@@ -428,6 +428,12 @@ def cmd_status(projects, project_root, tool_filter=None, kit_filter=None, *,
             ns_dir = os.path.join(projects_dir, ns)
             if not os.path.isdir(ns_dir) or ns.startswith("."):
                 continue
+            # Skip a nested aggregator-as-kit (it has its own kits/): its subdirs
+            # (src/, kits/, tests/, ...) are NOT tools -- the engine namespace-remaps
+            # its real tools as <ns>:<inner-ns>:<tool>. Flat-scanning them here would
+            # surface phantom rows like `src wtf` / `kits wtf`.
+            if os.path.isdir(os.path.join(ns_dir, "kits")):
+                continue
             for name in sorted(os.listdir(ns_dir)):
                 if name in known_names or name.startswith("."):
                     continue
@@ -762,6 +768,11 @@ def _find_undiscovered_tool(tool_name, project_root, *, tools_dir):
     for namespace in os.listdir(projects_dir):
         ns_dir = os.path.join(projects_dir, namespace)
         if not os.path.isdir(ns_dir) or namespace.startswith("."):
+            continue
+        # Skip a nested aggregator-as-kit (its tools are namespace-remapped, not
+        # flat <ns>:<tool>; the engine resolves them) -- don't mis-resolve one of
+        # its subdirs (src/, kits/, ...) as a tool.
+        if os.path.isdir(os.path.join(ns_dir, "kits")):
             continue
         tool_dir = os.path.join(ns_dir, tool_name)
         if os.path.exists(tool_dir) or is_linked_project(tool_dir):

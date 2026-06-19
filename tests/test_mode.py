@@ -22,6 +22,32 @@ from dazzlecmd.mode import (
 from dazzlecmd_lib.paths import is_linked_project, remove_link
 
 
+class TestNestedAggregatorNotFlatScanned:
+    """Path-depth bug fix: a nested aggregator-as-kit (projects/<agg>/ with its own
+    kits/) must NOT have its subdirs (src/, kits/, ...) mis-resolved as flat
+    <ns>:<tool> tools -- the same assumption that surfaced phantom `src wtf` /
+    `kits wtf` rows in `dz mode status`. Guards `_find_undiscovered_tool` (the
+    dispatch-relevant path) + the cmd_status scan (same guard)."""
+
+    def test_subdir_of_nested_aggregator_does_not_resolve(self, tmp_path):
+        from dazzlecmd_lib.mode import _find_undiscovered_tool
+        agg = tmp_path / "projects" / "agg"
+        (agg / "kits").mkdir(parents=True)   # the marker: agg is an aggregator
+        (agg / "src").mkdir()                # a subdir that is NOT a tool
+        assert _find_undiscovered_tool(
+            "src", str(tmp_path), tools_dir="projects") is None
+        assert _find_undiscovered_tool(
+            "kits", str(tmp_path), tools_dir="projects") is None
+
+    def test_flat_tool_still_resolves(self, tmp_path):
+        from dazzlecmd_lib.mode import _find_undiscovered_tool
+        tool = tmp_path / "projects" / "core" / "mytool"
+        tool.mkdir(parents=True)             # core has no kits/ -> a flat namespace
+        result = _find_undiscovered_tool(
+            "mytool", str(tmp_path), tools_dir="projects")
+        assert result is not None and result.name == "mytool"
+
+
 class TestDetectToolState:
     """Tests for tool state detection."""
 

@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.51] - 2026-06-19
+
+Ships with dazzlecmd v0.9.53 -- fixes a path-depth bug in `mode`: `cmd_status` and `_find_undiscovered_tool` flat-scanned `projects/<ns>/<name>` and bucketed each `<name>` as a tool, so a nested aggregator-as-kit (`projects/<agg>/` with its own `kits/`) surfaced its structure dirs (`src`, `kits`, `tests`, ...) as phantom `<agg>:<subdir>` tools and could mis-resolve a `mode switch` target. Both scans now skip a directory that is itself an aggregator (`os.path.isdir(ns_dir/"kits")`).
+
 ## [0.8.50] - 2026-06-19
 
 Ships with dazzlecmd v0.9.50 -- kit-lifecycle slice 2 (the gold-standard build). Adds the `membership` state axis (`states` -- REVERSIBLE `group`/`ungroup`, conserved `kit_registration`, distinct from the tool-in-kit `containment` axis) and **`KitMembershipContext`** (`contexts`): the persisting SIBLING of `ContainmentContext` (NOT a subclass -- substrate is the `kits/*.kit.json` registry files, persists to disk; `group` registers, `ungroup` deregisters with byte-identical round-trip; C3 refuses `always_active`). The seam `remove` (slice 3) and `detach` (slice 4) compose onto.

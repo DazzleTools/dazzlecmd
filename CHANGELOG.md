@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.53] - 2026-06-19
+
+### Fixed
+
+- **`dz mode status` no longer lists a nested aggregator's subdirectories as phantom tools.** The undiscovered-tool scan (`mode.cmd_status`) and `_find_undiscovered_tool` flat-scanned `projects/<ns>/<name>` and bucketed every `<name>` as a tool `<ns>:<name>` -- so a nested aggregator-as-kit like `projects/wtf/` (which has its own `kits/`) surfaced its structure dirs (`config`, `docs`, `kits`, `scripts`, `src`, `tests`) as phantom `wtf` tools (live: 43 -> 36 rows after the fix), and `dz mode switch <subdir>` could mis-resolve a non-tool directory. Fix: both scans now skip a directory that is itself an aggregator (`os.path.isdir(ns_dir/"kits")` -- the same marker the engine uses); its real tools are namespace-remapped (`<ns>:<inner-ns>:<tool>`) and resolved by the engine, not the flat scan. The second path-shape bug surfaced by the v0.9.52 audit.
+
+### Versions
+
+- dazzlecmd 0.9.52 -> 0.9.53 (PATCH); dazzlecmd-lib 0.8.50 -> 0.8.51 (PATCH -- the `mode.py` scan guards); dazzle-dz -> 0.9.53. dazzle-lib unchanged.
+
 ## [0.9.52] - 2026-06-19
 
 ### Fixed
@@ -3438,7 +3448,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.52...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.53...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
