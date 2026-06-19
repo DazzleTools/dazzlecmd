@@ -20,6 +20,7 @@ from dazzlecmd_lib.default_meta_commands import (
 from dazzlecmd.cli import (
     _cmd_kit_enable,
     _cmd_kit_disable,
+    _cmd_kit_remove,
     _cmd_kit_focus,
     _cmd_kit_reset,
     _cmd_kit_favorite,
@@ -176,6 +177,88 @@ class TestKitFocus:
     def test_focus_unknown_kit_errors(self, tmp_path, monkeypatch):
         engine = _engine(tmp_path, monkeypatch)
         rc = _cmd_kit_focus(_Args(name="ghost"), engine.kits, engine)
+        assert rc == 1
+
+
+# ---------------------------------------------------------------------------
+# dz kit remove (strong-remove: deregister + safedel + deactivate)
+# ---------------------------------------------------------------------------
+
+
+class TestKitRemove:
+    """kit-lifecycle slice 3 -- the strong-remove pole, end-to-end via the handler.
+    Real git submodule surgery is exercised by the human checklist; here the
+    local-only path (registry ungroup + safedel + deactivate) is the unit coverage."""
+
+    def _make_kit_on_disk(self, tmp_path, name, source="https://x/y.git"):
+        proj = tmp_path / "projects" / name
+        proj.mkdir(parents=True)
+        (proj / "tool.py").write_text("print('hi')\n", encoding="utf-8")
+        kits = tmp_path / "kits"
+        kits.mkdir(exist_ok=True)
+        reg = kits / f"{name}.kit.json"
+        reg.write_text(
+            json.dumps({"name": name, "always_active": False, "source": source}),
+            encoding="utf-8")
+        return proj, reg
+
+    def _patch_trash(self, tmp_path, monkeypatch):
+        import shutil
+        import types as _types
+        trashdir = tmp_path / "trash"
+        trashdir.mkdir()
+
+        class _FakeTrash:
+            def trash(self, paths, dry_run=False):
+                for p in paths:
+                    shutil.move(str(p), str(trashdir / os.path.basename(str(p))))
+                return _types.SimpleNamespace(success=True, folder_name="x", errors=[])
+
+        monkeypatch.setattr(
+            "dazzlecmd_lib.core.safedel.TrashStore", lambda *a, **k: _FakeTrash())
+        return trashdir
+
+    def test_remove_local_only_deregisters_trashes_deactivates(self, tmp_path, monkeypatch):
+        proj, reg = self._make_kit_on_disk(tmp_path, "sandbox")
+        trashdir = self._patch_trash(tmp_path, monkeypatch)
+        engine = _engine(tmp_path, monkeypatch)
+        (tmp_path / "config.json").write_text(
+            json.dumps({"active_kits": ["sandbox"], "disabled_kits": []}),
+            encoding="utf-8")
+
+        rc = _cmd_kit_remove(
+            _Args(name="sandbox", dry_run=False, yes=True, force=False),
+            str(tmp_path), engine)
+        assert rc == 0
+        assert not reg.exists()                  # registry deregistered (ungroup)
+        assert not proj.exists()                 # dir trashed (moved)
+        assert (trashdir / "sandbox").exists()   # ... and recoverable
+        cfg = _read_config(tmp_path)
+        assert "sandbox" not in (cfg.get("active_kits") or [])   # deactivated
+
+    def test_remove_constitutional_refused_C3(self, tmp_path, monkeypatch):
+        # 'core' is always_active in the _engine fixture's kits -> C3 refusal.
+        engine = _engine(tmp_path, monkeypatch)
+        rc = _cmd_kit_remove(
+            _Args(name="core", dry_run=False, yes=True, force=False),
+            str(tmp_path), engine)
+        assert rc == 1
+
+    def test_remove_dry_run_changes_nothing(self, tmp_path, monkeypatch):
+        proj, reg = self._make_kit_on_disk(tmp_path, "sandbox")
+        self._patch_trash(tmp_path, monkeypatch)
+        engine = _engine(tmp_path, monkeypatch)
+        rc = _cmd_kit_remove(
+            _Args(name="sandbox", dry_run=True, yes=True, force=False),
+            str(tmp_path), engine)
+        assert rc == 0
+        assert reg.exists() and proj.exists()    # nothing changed
+
+    def test_remove_not_found(self, tmp_path, monkeypatch):
+        engine = _engine(tmp_path, monkeypatch)
+        rc = _cmd_kit_remove(
+            _Args(name="ghost", dry_run=False, yes=True, force=False),
+            str(tmp_path), engine)
         assert rc == 1
 
 

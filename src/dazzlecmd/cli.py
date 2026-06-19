@@ -372,6 +372,19 @@ def _register_meta_commands(subparsers):
     kit_add.add_argument("--shallow", action="store_true", help="Shallow clone")
     kit_add.set_defaults(_meta="kit_add")
 
+    kit_remove = kit_sub.add_parser(
+        "remove",
+        help="Remove a kit -- deregister + safedel its files (recoverable)",
+    )
+    kit_remove.add_argument("name", help="Kit name to remove")
+    kit_remove.add_argument("--dry-run", action="store_true",
+                            help="Print the plan; change nothing")
+    kit_remove.add_argument("--yes", action="store_true",
+                            help="Skip the confirmation prompt")
+    kit_remove.add_argument("--force", action="store_true",
+                            help="Proceed despite a dirty submodule worktree")
+    kit_remove.set_defaults(_meta="kit_remove")
+
     kit_parser.set_defaults(_meta="kit")
 
     # dz tree
@@ -607,6 +620,8 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
         return _cmd_kit_visibility_status(args, engine)
     elif meta == "kit_add":
         return _cmd_kit_add(args, project_root, engine)
+    elif meta == "kit_remove":
+        return _cmd_kit_remove(args, project_root, engine)
     elif meta == "tree":
         return _cmd_tree(args, engine)
     elif meta == "setup":
@@ -2203,6 +2218,146 @@ def _cmd_kit_add(args, project_root, engine):
 
     print()
     print(f"Enable with: dz kit enable {name}")
+    return 0
+
+
+def _cmd_kit_remove(args, project_root, engine):
+    """Remove a kit -- the strong-remove pole of the kit lifecycle.
+
+    Deregisters the kit (git untrack for a submodule + the registry entry, via the
+    membership ``ungroup`` verb / KitMembershipContext), safedel-trashes its files
+    (recoverable -- NEVER a raw delete), and drops any active/disabled config refs.
+    Constitutional / ``always_active`` kits are refused (C3). The weak, keep-as-a-
+    pointer form is ``dz kit detach`` (a later slice).
+    """
+    name = args.name
+    if engine is None:
+        print("Error: engine unavailable", file=sys.stderr)
+        return 1
+
+    # Resolve the kit entity (for C3); it may not be loaded -- that's fine.
+    kit = None
+    for k in (getattr(engine, "kits", []) or []):
+        if (getattr(k, "kit_name", None) or getattr(k, "name", None)) == name:
+            kit = k
+            break
+
+    # C3: constitutional / always_active kits may not be removed.
+    if kit is not None and getattr(kit, "always_active", False):
+        print(f"Refused: '{name}' is constitutional (always_active) -- it may not be "
+              f"removed (C3). Run `dz kit disable {name}` or clear always_active first.",
+              file=sys.stderr)
+        return 1
+
+    target_dir = os.path.join(project_root, "projects", name)
+    registry_path = os.path.join(project_root, "kits", f"{name}.kit.json")
+
+    if not os.path.exists(target_dir) and not os.path.exists(registry_path):
+        print(f"Error: no kit '{name}' found (neither projects/{name}/ nor "
+              f"kits/{name}.kit.json exists).", file=sys.stderr)
+        return 1
+
+    # Record the source URL BEFORE any mutation (the re-add hint; crash-safe).
+    source = None
+    if os.path.exists(registry_path):
+        try:
+            with open(registry_path, encoding="utf-8") as f:
+                source = (json.load(f) or {}).get("source")
+        except Exception:  # noqa: BLE001
+            source = None
+
+    # Is it a git submodule? (governs the untrack mechanism + the dirty-guard.)
+    from dazzlecmd_lib.mode import (
+        parse_gitmodules, sanitized_git_env,
+        _check_dirty_tree, _print_dirty_refusal,
+    )
+    gitmodules = parse_gitmodules(project_root, tools_dir="projects")
+    rel = f"projects/{name}"
+    is_submodule = rel in gitmodules
+
+    # Dirty-tree guard for a submodule worktree -- refuse without --force.
+    if is_submodule and os.path.isdir(target_dir):
+        dirty = _check_dirty_tree(target_dir)
+        if dirty and not getattr(args, "force", False):
+            _print_dirty_refusal(name, target_dir, dirty,
+                                 getattr(engine, "command", "dz"))
+            return 1
+
+    # The plan (shared by --dry-run and the live run).
+    plan = []
+    if is_submodule:
+        plan.append(f"untrack the submodule (git submodule deinit + git rm projects/{name})")
+    if os.path.exists(registry_path):
+        plan.append(f"deregister kits/{name}.kit.json (membership ungroup)")
+    if os.path.isdir(target_dir):
+        plan.append(f"safedel projects/{name}/ -> recoverable trash")
+    plan.append(f"drop '{name}' from active_kits / disabled_kits")
+
+    if getattr(args, "dry_run", False):
+        print(f"Dry run -- `dz kit remove {name}` would:")
+        for step in plan:
+            print(f"  - {step}")
+        return 0
+
+    # Confirmation unless --yes.
+    if not getattr(args, "yes", False):
+        try:
+            resp = input(f"Remove kit '{name}'? Its files go to the recoverable "
+                         f"trash. [y/N] ")
+        except EOFError:
+            resp = ""
+        if resp.strip().lower() not in ("y", "yes"):
+            print("Aborted.")
+            return 0
+
+    # 1. git untrack (submodule -> deinit + rm; the .gitmodules entry is dropped by rm).
+    if is_submodule:
+        import subprocess as _subprocess
+        env = sanitized_git_env()
+        for cmd in (["git", "submodule", "deinit", "-f", "--", rel],
+                    ["git", "rm", "-f", "--", rel]):
+            try:
+                r = _subprocess.run(cmd, cwd=project_root, env=env)
+            except FileNotFoundError:
+                print("Error: git not found.", file=sys.stderr)
+                return 1
+            if r.returncode != 0:
+                print(f"Error: `{' '.join(cmd)}` failed (exit {r.returncode}); "
+                      f"stopped before deregister/trash.", file=sys.stderr)
+                return r.returncode
+
+    # 2. Deregister the registry entry via the membership `ungroup` verb.
+    if os.path.exists(registry_path):
+        import types as _types
+        from dazzlecmd_lib.contexts import KitMembershipContext
+        ref = kit if kit is not None else _types.SimpleNamespace(
+            name=name, kit_name=name, always_active=False)
+        KitMembershipContext(
+            project_root, getattr(engine, "kits", []),
+            boundary_fqcn=getattr(engine, "command", "dz"),
+        ).apply(ref, None, verb="ungroup")
+
+    # 3. safedel the kit dir (recoverable; never a raw delete).
+    trashed = False
+    if os.path.isdir(target_dir):
+        from dazzlecmd_lib.core.safedel import TrashStore
+        try:
+            trashed = bool(TrashStore().trash([target_dir]).success)
+        except Exception as exc:  # noqa: BLE001
+            print(f"Warning: safedel of projects/{name}/ failed: {exc}",
+                  file=sys.stderr)
+
+    # 4. Deactivate -- drop any dangling active/disabled config refs.
+    config = engine._get_user_config()
+    active = [k for k in (config.get("active_kits") or []) if k != name]
+    disabled = [k for k in (config.get("disabled_kits") or []) if k != name]
+    engine._write_user_config({"active_kits": active, "disabled_kits": disabled})
+
+    print(f"Removed kit: {name}")
+    if trashed:
+        print("  Files -> trash (recover with `dz safedel recover last`)")
+    if source:
+        print(f"  Re-add with: dz kit add {source}")
     return 0
 
 

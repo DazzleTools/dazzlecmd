@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.51] - 2026-06-19
+
+### Added
+
+- **`dz kit remove <name>` -- the strong-remove pole of the kit lifecycle (slice 3).** Deregisters a kit (git untrack for a submodule -- `git submodule deinit` + `git rm` -- plus the registry entry, routed through the membership `ungroup` verb / `KitMembershipContext` from slice 2), `safedel`-trashes its `projects/<name>/` files (recoverable ~30d -- NEVER a raw delete), and drops any `active_kits`/`disabled_kits` refs. Constitutional / `always_active` kits are refused (C3); `--dry-run` prints the plan and changes nothing; an interactive confirm guards the delete (skip with `--yes`); a dirty submodule worktree is refused without `--force`. The source URL is recorded before any mutation for the re-add hint. The weak, keep-as-a-pointer form (`detach`) is the next slice.
+
+### Notes
+
+- The git-untrack path was rewound in the detach saga and is rebuilt here against the gold-standard spec (DWP `2026-06-18__04-49-12`). Unit tests cover the local-only path (registry ungroup + safedel + deactivate) + C3 + dry-run + not-found; the real `git submodule` surgery is covered by a human checklist (`tests/checklists/v0.9.51__...`). Byte-gate identical (the new `kit remove` verb doesn't touch `dz info`/`list` output); suite 1538 -> 1542. dazzlecmd-lib UNCHANGED at 0.8.50 (the new code is in `dz`'s `cli.py`, consuming the slice-2 lib context). Refs #80/#86; #52.
+
+### Versions
+
+- dazzlecmd 0.9.50 -> 0.9.51 (PATCH); dazzle-dz -> 0.9.51. dazzlecmd-lib UNCHANGED (0.8.50 -- no lib code changed). dazzle-lib unchanged.
+
 ## [0.9.50] - 2026-06-19
 
 ### Added
@@ -3410,7 +3424,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.50...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.51...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
