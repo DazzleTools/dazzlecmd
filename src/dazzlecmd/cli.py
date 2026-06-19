@@ -2221,6 +2221,32 @@ def _cmd_kit_add(args, project_root, engine):
     return 0
 
 
+def _kit_is_submodule(project_root, name):
+    """True if ``projects/<name>`` is registered as a git submodule.
+
+    ``parse_gitmodules()`` is intentionally TOOL-only -- it drops 2-part KIT paths
+    (its ``len(parts) != 2`` filter only keeps ``<dir>/<ns>/<tool>``). A KIT lives
+    at ``projects/<name>`` (2-part), so kit-level submodule detection reads
+    .gitmodules DIRECTLY for a section whose ``path`` == ``projects/<name>``. (The
+    original is_submodule bug used the tool-filtered helper, so it never saw a kit
+    submodule and the git-untrack never fired.)
+    """
+    import configparser
+    gm = os.path.join(project_root, ".gitmodules")
+    if not os.path.isfile(gm):
+        return False
+    cfg = configparser.ConfigParser()
+    try:
+        cfg.read(gm, encoding="utf-8")
+    except configparser.Error:
+        return False
+    want = f"projects/{name}"
+    for section in cfg.sections():
+        if cfg.has_option(section, "path") and cfg.get(section, "path").strip() == want:
+            return True
+    return False
+
+
 def _cmd_kit_remove(args, project_root, engine):
     """Remove a kit -- the strong-remove pole of the kit lifecycle.
 
@@ -2268,12 +2294,12 @@ def _cmd_kit_remove(args, project_root, engine):
 
     # Is it a git submodule? (governs the untrack mechanism + the dirty-guard.)
     from dazzlecmd_lib.mode import (
-        parse_gitmodules, sanitized_git_env,
-        _check_dirty_tree, _print_dirty_refusal,
+        sanitized_git_env, _check_dirty_tree, _print_dirty_refusal,
     )
-    gitmodules = parse_gitmodules(project_root, tools_dir="projects")
     rel = f"projects/{name}"
-    is_submodule = rel in gitmodules
+    # Detect a KIT submodule directly -- parse_gitmodules is TOOL-only and drops
+    # 2-part kit paths (the original is_submodule bug used it and always got False).
+    is_submodule = _kit_is_submodule(project_root, name)
 
     # Dirty-tree guard for a submodule worktree -- refuse without --force.
     if is_submodule and os.path.isdir(target_dir):
@@ -2310,21 +2336,56 @@ def _cmd_kit_remove(args, project_root, engine):
             print("Aborted.")
             return 0
 
-    # 1. git untrack (submodule -> deinit + rm; the .gitmodules entry is dropped by rm).
+    # 1. git untrack for a submodule. Drop the gitlink from the INDEX with --cached
+    # (KEEPS the worktree on disk so step 3's safedel can back it up), then remove
+    # the .gitmodules + .git/config submodule sections via git's own config editor
+    # (format-preserving; touches only the one section). We deliberately do NOT use
+    # `git submodule deinit` / `git rm -f`: both empty/delete the worktree, which
+    # would destroy the files BEFORE safedel can recover them. `dz kit add` names the
+    # submodule by its path, so the section is `submodule.projects/<name>`.
     if is_submodule:
         import subprocess as _subprocess
+        import shutil as _shutil
         env = sanitized_git_env()
-        for cmd in (["git", "submodule", "deinit", "-f", "--", rel],
-                    ["git", "rm", "-f", "--", rel]):
-            try:
-                r = _subprocess.run(cmd, cwd=project_root, env=env)
-            except FileNotFoundError:
-                print("Error: git not found.", file=sys.stderr)
-                return 1
-            if r.returncode != 0:
-                print(f"Error: `{' '.join(cmd)}` failed (exit {r.returncode}); "
-                      f"stopped before deregister/trash.", file=sys.stderr)
-                return r.returncode
+        sub = f"submodule.{rel}"
+        try:
+            r = _subprocess.run(["git", "rm", "-f", "--cached", "--", rel],
+                                cwd=project_root, env=env)
+        except FileNotFoundError:
+            print("Error: git not found.", file=sys.stderr)
+            return 1
+        if r.returncode != 0:
+            print(f"Error: `git rm --cached {rel}` failed (exit {r.returncode}); "
+                  f"nothing else changed.", file=sys.stderr)
+            return r.returncode
+        # Surgically drop the .gitmodules section (other submodules untouched), then
+        # stage it; clear the .git/config entry (non-zero if absent -- tolerated).
+        _subprocess.run(["git", "config", "--file", ".gitmodules",
+                         "--remove-section", sub], cwd=project_root, env=env)
+        gm = os.path.join(project_root, ".gitmodules")
+        if os.path.isfile(gm):
+            with open(gm, encoding="utf-8") as _f:
+                gm_empty = not _f.read().strip()
+            if gm_empty:
+                os.remove(gm)   # no submodules left -> drop the empty file
+        _subprocess.run(["git", "add", "-A", "--", ".gitmodules"],
+                        cwd=project_root, env=env)
+        _subprocess.run(["git", "config", "--remove-section", sub],
+                        cwd=project_root, env=env)   # .git/config; ok if absent
+        # Drop git's cached submodule repo (regenerable from the remote) so a later
+        # re-add of the same name doesn't collide. git marks its objects read-only,
+        # so clear the bit on error (Windows) rather than silently leaving the cache.
+        cached = os.path.join(project_root, ".git", "modules", "projects", name)
+        if os.path.isdir(cached):
+            import stat as _stat
+
+            def _clear_ro(func, _p, _exc):
+                try:
+                    os.chmod(_p, _stat.S_IWRITE)
+                    func(_p)
+                except OSError:
+                    pass
+            _shutil.rmtree(cached, onerror=_clear_ro)
 
     # 2. Deregister the registry entry via the membership `ungroup` verb.
     if os.path.exists(registry_path):

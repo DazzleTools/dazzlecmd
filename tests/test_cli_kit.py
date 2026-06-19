@@ -21,6 +21,7 @@ from dazzlecmd.cli import (
     _cmd_kit_enable,
     _cmd_kit_disable,
     _cmd_kit_remove,
+    _kit_is_submodule,
     _cmd_kit_focus,
     _cmd_kit_reset,
     _cmd_kit_favorite,
@@ -260,6 +261,30 @@ class TestKitRemove:
             _Args(name="ghost", dry_run=False, yes=True, force=False),
             str(tmp_path), engine)
         assert rc == 1
+
+    def test_kit_is_submodule_honors_2part_kit_path(self, tmp_path):
+        # The bug fix: a KIT lives at the 2-part path projects/<name>; the original
+        # detection reused the TOOL-only parse_gitmodules (which drops 2-part paths)
+        # so is_submodule was always False. _kit_is_submodule reads .gitmodules
+        # directly and MUST see the 2-part kit path.
+        (tmp_path / ".gitmodules").write_text(
+            '[submodule "projects/mykit"]\n'
+            '\tpath = projects/mykit\n'
+            '\turl = https://x/y.git\n', encoding="utf-8")
+        assert _kit_is_submodule(str(tmp_path), "mykit") is True
+        assert _kit_is_submodule(str(tmp_path), "notthere") is False
+
+    def test_kit_is_submodule_not_fooled_by_3part_tool_path(self, tmp_path):
+        # A 3-part TOOL submodule (projects/core/find) must NOT register the kit
+        # name 'core' as a submodule -- the 2-part check is exact on the path.
+        (tmp_path / ".gitmodules").write_text(
+            '[submodule "projects/core/find"]\n'
+            '\tpath = projects/core/find\n'
+            '\turl = https://x/find.git\n', encoding="utf-8")
+        assert _kit_is_submodule(str(tmp_path), "core") is False
+
+    def test_kit_is_submodule_no_gitmodules(self, tmp_path):
+        assert _kit_is_submodule(str(tmp_path), "anything") is False
 
 
 # ---------------------------------------------------------------------------

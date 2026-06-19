@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.52] - 2026-06-19
+
+### Fixed
+
+- **`dz kit remove` now actually untracks a submodule kit (was a silent no-op).** The submodule detection reused the TOOL-only `parse_gitmodules` (which drops 2-part kit paths via its `len(parts) != 2` filter), so `is_submodule` was always `False` for any `dz kit add` kit (they live at `projects/<name>`, 2-part) -- the git untrack never fired, the dirty-guard was bypassed, and remove left an orphan staged gitlink + a stale `.gitmodules` section. Found by the tester-unbounded dummy-submodule run (HOLD). Fix: detect the kit submodule by reading `.gitmodules` directly (`_kit_is_submodule`); and the git sequence is now **non-destructive + recoverable** -- `git rm --cached` keeps the worktree so safedel can back it up, then the `.gitmodules`/`.git/config` sections are removed surgically via `git config --remove-section` (NOT `git submodule deinit`/`git rm -f`, which would delete the files *before* safedel could recover them), plus a read-only-aware `.git/modules` cache cleanup. Validated end-to-end in an isolated tmp git repo (`tests/one-offs/check_kit_remove_submodule.py`, 9/9 -- clean index, recoverable files, `.gitmodules`/`.git/config`/`.git/modules` all clean) plus 3 detection unit tests.
+
+### Notes
+
+- This is the exemplar of a "fixed path-depth assumption" bug class (assuming 3-part tool paths, not honoring 2-part kit paths). A full audit (general-purpose agent) confirmed `parse_gitmodules`'s 3-part filter is correct in all 7 OTHER callers and found one further instance: `dz mode status` / `_find_undiscovered_tool` flat-scan a nested aggregator's subdirs as phantom tools (tracked for a follow-up fix). No fixed-index FQCN-segment bugs (the codebase uses depth-robust first/last anchors). Byte-gate identical; suite green; dazzlecmd-lib UNCHANGED (0.8.50 -- the fix is in `dz`'s `cli.py`). Refs #80/#86.
+
+### Versions
+
+- dazzlecmd 0.9.51 -> 0.9.52 (PATCH); dazzle-dz -> 0.9.52. dazzlecmd-lib UNCHANGED (0.8.50). dazzle-lib unchanged.
+
 ## [0.9.51] - 2026-06-19
 
 ### Added
@@ -3424,7 +3438,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.51...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.52...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
