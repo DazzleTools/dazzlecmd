@@ -4,6 +4,21 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.55] - 2026-06-19
+
+### Added
+
+- **`dz kit detach <name>` -- kit-lifecycle slice 4, step 2 (the weak, keep-as-a-pointer pole).** Detach is a `CompositeTransition` across two presence axes: it writes a `pointer:{materialized:true}` block to the kit's `kits/<name>.kit.json` (LOADING -> pointer: discovery then LISTS the kit but loads none of its tools, via the slice-4-step-1 skip) AND disables the kit (the implicit `loading -> activation` cascade -- a detached kit is also deactivated). The files are KEPT on disk (`materialized:true`); de-materializing is a separate step (#80). Constitutional / `always_active` kits are refused (C3 -- they must stay loaded); only registered kits (with a `kits/<name>.kit.json`) can be detached; `--dry-run` prints the plan and changes nothing; the operation is idempotent. Re-attach with `dz kit attach` (next step). The strong, delete-the-files form is `dz kit remove`.
+- **`KitMembershipContext` gains the LOADING-axis pointer operations (lib).** `set_pointer(kit, materialized=)` / `clear_pointer(kit)` / `pointer_of(kit)` add/remove/read the `pointer` block WITHIN the registry file (group/ungroup add/remove the file itself -- membership; these are loading). The registry is rewritten in the same `indent=4` shape `dz kit add` writes, so set-then-clear round-trips.
+
+### Notes
+
+- The implicit cascade is the per-coupling design from the slice-4 DWP (`2026-06-19__18-38-07`, addenda 1-3): the removal continuum's `loading -> activation` is a dependent pivot (detach ALWAYS disables -- no flag), while `loading -> materialization` is free (detach keeps the files; de-materialize is the separate #80 step). The Gauss-Jordan lens, declared not derived. An end-to-end test pins the detach->rediscover contract (the pointer block detach writes is the shape discovery consumes). Byte-gate identical (4 OK / 6 FAIL parked-WIP baseline); suite 1549 -> 1558. Refs #80/#86.
+
+### Versions
+
+- dazzlecmd 0.9.54 -> 0.9.55 (PATCH); dazzlecmd-lib 0.8.52 -> 0.8.53 (PATCH -- the `KitMembershipContext` pointer ops); dazzle-dz -> 0.9.55. dazzle-lib unchanged.
+
 ## [0.9.54] - 2026-06-19
 
 ### Added
@@ -3462,7 +3477,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.54...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.55...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

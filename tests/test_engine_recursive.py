@@ -236,6 +236,26 @@ class TestPointerKitDiscoverySkip:
         short = {p.short_name for p in engine.projects}
         assert "ptool" in short                          # without pointer -> loads
 
+    def test_detach_handler_then_rediscover_skips_the_kit(self, tmp_path, monkeypatch):
+        # End-to-end contract: the pointer block `dz kit detach` WRITES is the same
+        # shape discovery CONSUMES. Without it, each half could pass in isolation
+        # while the integration silently breaks.
+        import types
+        from dazzlecmd.cli import _cmd_kit_detach
+        monkeypatch.setenv("DAZZLECMD_CONFIG", str(tmp_path / "config.json"))
+        self._build(str(tmp_path), pointer=None)         # extra loads normally first
+        engine = self._discover(str(tmp_path))
+        assert "ptool" in {p.short_name for p in engine.projects}
+
+        rc = _cmd_kit_detach(
+            types.SimpleNamespace(name="extra", dry_run=False), str(tmp_path), engine)
+        assert rc == 0
+
+        engine2 = self._discover(str(tmp_path))
+        assert "extra" in {k.kit_name or k.name for k in engine2.kits}   # still LISTS
+        assert "ptool" not in {p.short_name for p in engine2.projects}   # ... not loaded
+        assert "toolA" in {p.short_name for p in engine2.projects}       # neighbor intact
+
 
 class TestRecursiveDiscovery:
     """Nested aggregator: parent imports child with FQCN remapping."""

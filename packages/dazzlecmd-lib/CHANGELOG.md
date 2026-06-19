@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.53] - 2026-06-19
+
+Ships with dazzlecmd v0.9.55 -- kit-lifecycle slice 4 step 2 (the `detach` substrate). `KitMembershipContext` gains the LOADING-axis pointer operations: `set_pointer(kit, materialized=)` writes a `pointer:{materialized}` block WITHIN the registry file (the file stays -- still a member -- but discovery skips loading its tools); `clear_pointer(kit)` removes it; `pointer_of(kit)` reads it. Where `group`/`ungroup` add/remove the registry FILE (membership), these toggle the loading state inside it. The registry is rewritten in the same `indent=4` shape `dz kit add` writes, so set-then-clear round-trips. This is what `dz kit detach` composes with the activation `disable` (the implicit `loading -> activation` cascade); `dz kit attach` (next) calls `clear_pointer` + `enable`.
+
 ## [0.8.52] - 2026-06-19
 
 Ships with dazzlecmd v0.9.54 -- kit-lifecycle slice 4 step 1 (the LOADING-axis pole). A kit with a `pointer` block on its registry is LISTED but its tools are not loaded: `engine._discover_aggregator` skips a `pointer`-bearing kit from the load set (keeps it in `self.kits`), and `loader.discover_kits` carries the `pointer` block across the in-repo-manifest merge. Default off -- no kit is a pointer unless detached -- so discovery is byte-identical. The seam for `detach`/`attach` (#86) + #80 pointer-fetch.

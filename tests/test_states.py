@@ -677,6 +677,48 @@ class TestKitMembershipContext:
         from dazzlecmd_lib.contexts import ContainmentContext
         assert not issubclass(KitMembershipContext, ContainmentContext)
 
+    def test_set_then_clear_pointer_round_trips(self, tmp_path):
+        # Slice 4: the LOADING axis -- detach (set_pointer) adds a pointer block
+        # WITHIN the registry (the file stays = still a member); attach (clear_pointer)
+        # removes it. Adding-then-removing the trailing key restores the original.
+        kits_dir = tmp_path / "kits"
+        kits_dir.mkdir()
+        reg_file = kits_dir / "sandbox.kit.json"
+        original = (json.dumps({"name": "sandbox", "always_active": False},
+                               indent=4) + "\n")
+        reg_file.write_text(original, encoding="utf-8")
+
+        kit = self._kit("sandbox")
+        ctx = KitMembershipContext(str(tmp_path), [kit], boundary_fqcn="dz")
+        assert ctx.pointer_of(kit) is None                 # loaded to start
+
+        ctx.set_pointer(kit, materialized=True)            # detach (LOADING -> pointer)
+        assert ctx.pointer_of(kit) == {"materialized": True}
+        assert reg_file.exists() and ctx.is_registered(kit)  # still a member
+
+        ctx.clear_pointer(kit)                             # attach (pointer -> LOADING)
+        assert ctx.pointer_of(kit) is None
+        assert reg_file.read_text(encoding="utf-8") == original   # round-trips
+
+    def test_set_pointer_materialized_false_records_unfetched(self, tmp_path):
+        # The #80 not-yet-fetched pole: materialized:false records "declared but no
+        # content on disk" (distinct from detach's materialized:true = content kept).
+        kits_dir = tmp_path / "kits"
+        kits_dir.mkdir()
+        (kits_dir / "ptr.kit.json").write_text(
+            '{"name": "ptr", "always_active": false}', encoding="utf-8")
+        kit = self._kit("ptr")
+        ctx = KitMembershipContext(str(tmp_path), [kit], boundary_fqcn="dz")
+        ctx.set_pointer(kit, materialized=False)
+        assert ctx.pointer_of(kit) == {"materialized": False}
+
+    def test_modify_unregistered_kit_refused(self, tmp_path):
+        # No registry file -> there is no LOADING substrate to write a pointer into.
+        kit = self._kit("ghost")
+        ctx = KitMembershipContext(str(tmp_path), [kit], boundary_fqcn="dz")
+        with pytest.raises(CriticalityBoundaryError, match="no registry entry"):
+            ctx.set_pointer(kit, materialized=True)
+
 
 class TestEntityStateAsPoint:
     """B1: an EntityState is a POINT in a ContinuumSpace (coordinates_in).

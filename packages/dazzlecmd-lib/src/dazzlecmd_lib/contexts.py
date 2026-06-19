@@ -36,6 +36,7 @@ frame-relative, so Frame is only reserved here, not built.
 
 from __future__ import annotations
 
+import json
 import os
 
 from dataclasses import dataclass
@@ -1034,6 +1035,52 @@ class KitMembershipContext:
 
     def is_registered(self, kit):
         return os.path.exists(self._registry_path(_kit_identity(kit)))
+
+    # -- the LOADING axis: the `pointer` block on the registry (detach/attach) --
+    # group/ungroup (above) add/remove the registry FILE (membership). These
+    # add/remove a `pointer` block WITHIN it (loading): the kit stays a registered
+    # member but discovery LISTS it without loading its tools. The kit-presence
+    # space reads this as the LOADING pole; `dz kit detach`/`attach` drive it.
+    def pointer_of(self, kit):
+        """The kit's ``pointer`` block (``{"materialized": bool}``) or ``None`` --
+        the LOADING-axis state. ``None`` = loaded; a block = a pointer (detached)."""
+        path = self._registry_path(_kit_identity(kit))
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path, encoding="utf-8") as f:
+                return (json.load(f) or {}).get("pointer")
+        except (OSError, ValueError):
+            return None
+
+    def set_pointer(self, kit, *, materialized=True):
+        """``detach`` the kit (LOADING -> pointer): write ``pointer:{materialized}``
+        into its registry. The file stays (still a member); discovery then lists it
+        but skips loading its tools. Idempotent. ``materialized`` records whether the
+        content is still on disk (``True`` after detach) vs not-yet-fetched (#80)."""
+        self._modify_registry(
+            kit, lambda d: d.__setitem__("pointer", {"materialized": bool(materialized)}))
+
+    def clear_pointer(self, kit):
+        """``attach`` the kit (pointer -> LOADING): drop the ``pointer`` block so
+        discovery loads its tools again. Idempotent (a no-op if not a pointer)."""
+        self._modify_registry(kit, lambda d: d.pop("pointer", None))
+
+    def _modify_registry(self, kit, mutate):
+        """Read the kit's registry json, apply ``mutate(dict)`` in place, write it
+        back in the same ``indent=4`` shape ``dz kit add`` writes."""
+        name = _kit_identity(kit)
+        path = self._registry_path(name)
+        if not os.path.exists(path):
+            raise CriticalityBoundaryError(
+                f"cannot modify {name}: no registry entry (kits/{name}.kit.json)."
+            )
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f) or {}
+        mutate(data)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+            f.write("\n")
 
     # -- the membership-specific hooks the generic executor calls --------------
     def _current_boundary(self, kit):

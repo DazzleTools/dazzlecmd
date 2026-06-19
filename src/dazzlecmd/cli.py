@@ -385,6 +385,16 @@ def _register_meta_commands(subparsers):
                             help="Proceed despite a dirty submodule worktree")
     kit_remove.set_defaults(_meta="kit_remove")
 
+    kit_detach = kit_sub.add_parser(
+        "detach",
+        help="Detach a kit -- make it a pointer (listed, not loaded) + disable; "
+             "files kept",
+    )
+    kit_detach.add_argument("name", help="Kit name to detach")
+    kit_detach.add_argument("--dry-run", action="store_true",
+                            help="Print the plan; change nothing")
+    kit_detach.set_defaults(_meta="kit_detach")
+
     kit_parser.set_defaults(_meta="kit")
 
     # dz tree
@@ -622,6 +632,8 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
         return _cmd_kit_add(args, project_root, engine)
     elif meta == "kit_remove":
         return _cmd_kit_remove(args, project_root, engine)
+    elif meta == "kit_detach":
+        return _cmd_kit_detach(args, project_root, engine)
     elif meta == "tree":
         return _cmd_tree(args, engine)
     elif meta == "setup":
@@ -2419,6 +2431,74 @@ def _cmd_kit_remove(args, project_root, engine):
         print("  Files -> trash (recover with `dz safedel recover last`)")
     if source:
         print(f"  Re-add with: dz kit add {source}")
+    return 0
+
+
+def _cmd_kit_detach(args, project_root, engine):
+    """Detach a kit -- the weak, keep-as-a-pointer pole of the kit lifecycle.
+
+    A ``CompositeTransition`` across two presence axes: write a
+    ``pointer:{materialized:true}`` block to the kit's registry (LOADING -> pointer:
+    discovery then LISTS the kit but loads none of its tools) AND disable it (the
+    implicit loading->activation cascade -- a detached kit is also deactivated). The
+    files are KEPT on disk (``materialized:true``); de-materializing is a separate
+    step (#80). Re-attach with ``dz kit attach``. Constitutional / ``always_active``
+    kits are refused (C3 -- they must stay loaded). The strong, delete-the-files form
+    is ``dz kit remove``.
+    """
+    name = args.name
+    if engine is None:
+        print("Error: engine unavailable", file=sys.stderr)
+        return 1
+
+    # Resolve the kit entity (for C3); it may not be loaded -- that's fine.
+    kit = None
+    for k in (getattr(engine, "kits", []) or []):
+        if (getattr(k, "kit_name", None) or getattr(k, "name", None)) == name:
+            kit = k
+            break
+
+    # C3: constitutional / always_active kits must stay loaded -- refuse.
+    if kit is not None and getattr(kit, "always_active", False):
+        print(f"Refused: '{name}' is constitutional (always_active) -- it must stay "
+              f"loaded and may not be detached (C3). Clear always_active first.",
+              file=sys.stderr)
+        return 1
+
+    registry_path = os.path.join(project_root, "kits", f"{name}.kit.json")
+    if not os.path.exists(registry_path):
+        print(f"Error: no registered kit '{name}' found (kits/{name}.kit.json does "
+              f"not exist). Only registered kits can be detached.", file=sys.stderr)
+        return 1
+
+    # The membership context owns the registry substrate -> the pointer block.
+    import types as _types
+    from dazzlecmd_lib.contexts import KitMembershipContext, ActivationContext
+    ref = kit if kit is not None else _types.SimpleNamespace(
+        name=name, kit_name=name, always_active=False)
+    membership = KitMembershipContext(
+        project_root, getattr(engine, "kits", []),
+        boundary_fqcn=getattr(engine, "command", "dz"),
+    )
+    already = membership.pointer_of(ref) is not None
+
+    if getattr(args, "dry_run", False):
+        print(f"Dry run -- `dz kit detach {name}` would:")
+        if already:
+            print("  - (already a pointer; re-affirm the pointer block)")
+        print(f"  - write pointer:{{materialized:true}} to kits/{name}.kit.json "
+              f"(loading -> pointer; files kept on disk)")
+        print(f"  - disable '{name}' (the implicit loading -> activation cascade)")
+        return 0
+
+    # 1. LOADING -> pointer: write the pointer block (content kept on disk).
+    membership.set_pointer(ref, materialized=True)
+    # 2. ACTIVATION -> inactive: the implicit cascade -- a detached kit is disabled.
+    ActivationContext(engine).disable(name)
+
+    print(f"Detached kit: {name}")
+    print("  Now a pointer (listed, not loaded); files kept on disk.")
+    print(f"  Re-attach with: dz kit attach {name}")
     return 0
 
 

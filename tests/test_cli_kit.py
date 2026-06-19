@@ -21,6 +21,7 @@ from dazzlecmd.cli import (
     _cmd_kit_enable,
     _cmd_kit_disable,
     _cmd_kit_remove,
+    _cmd_kit_detach,
     _kit_is_submodule,
     _cmd_kit_focus,
     _cmd_kit_reset,
@@ -285,6 +286,91 @@ class TestKitRemove:
 
     def test_kit_is_submodule_no_gitmodules(self, tmp_path):
         assert _kit_is_submodule(str(tmp_path), "anything") is False
+
+
+# ---------------------------------------------------------------------------
+# dz kit detach -- slice 4 step 2 (the weak, keep-as-a-pointer pole)
+# ---------------------------------------------------------------------------
+
+
+class TestKitDetach:
+    """detach = a CompositeTransition across two presence axes: LOADING -> pointer
+    (write pointer:{materialized:true} to the registry) COMPOSED WITH the implicit
+    ACTIVATION -> inactive cascade (a detached kit is also disabled). Files are KEPT
+    (non-destructive, reversible by `dz kit attach`)."""
+
+    def _make_kit_on_disk(self, tmp_path, name, source="https://x/y.git"):
+        proj = tmp_path / "projects" / name
+        proj.mkdir(parents=True)
+        (proj / "tool.py").write_text("print('hi')\n", encoding="utf-8")
+        kits = tmp_path / "kits"
+        kits.mkdir(exist_ok=True)
+        reg = kits / f"{name}.kit.json"
+        reg.write_text(
+            json.dumps({"name": name, "always_active": False, "source": source},
+                       indent=4) + "\n",
+            encoding="utf-8")
+        return proj, reg
+
+    def _pointer_of(self, reg):
+        return json.loads(reg.read_text(encoding="utf-8")).get("pointer")
+
+    def test_detach_writes_pointer_and_disables(self, tmp_path, monkeypatch):
+        proj, reg = self._make_kit_on_disk(tmp_path, "sandbox")
+        engine = _engine(tmp_path, monkeypatch)
+        (tmp_path / "config.json").write_text(
+            json.dumps({"active_kits": ["sandbox"], "disabled_kits": []}),
+            encoding="utf-8")
+
+        rc = _cmd_kit_detach(
+            _Args(name="sandbox", dry_run=False), str(tmp_path), engine)
+        assert rc == 0
+        # LOADING -> pointer: the registry gains pointer:{materialized:true} ...
+        assert self._pointer_of(reg) == {"materialized": True}
+        # ... the registry file and the content both STAY (non-destructive).
+        assert reg.exists() and proj.exists()
+        # ACTIVATION -> inactive: the implicit cascade disabled it.
+        cfg = _read_config(tmp_path)
+        assert "sandbox" in (cfg.get("disabled_kits") or [])
+        assert "sandbox" not in (cfg.get("active_kits") or [])
+
+    def test_detach_constitutional_refused_C3(self, tmp_path, monkeypatch):
+        # 'core' is always_active in the _engine fixture -> must stay loaded (C3).
+        engine = _engine(tmp_path, monkeypatch)
+        rc = _cmd_kit_detach(
+            _Args(name="core", dry_run=False), str(tmp_path), engine)
+        assert rc == 1
+
+    def test_detach_dry_run_changes_nothing(self, tmp_path, monkeypatch):
+        proj, reg = self._make_kit_on_disk(tmp_path, "sandbox")
+        engine = _engine(tmp_path, monkeypatch)
+        (tmp_path / "config.json").write_text(
+            json.dumps({"active_kits": ["sandbox"], "disabled_kits": []}),
+            encoding="utf-8")
+        rc = _cmd_kit_detach(
+            _Args(name="sandbox", dry_run=True), str(tmp_path), engine)
+        assert rc == 0
+        assert self._pointer_of(reg) is None          # no pointer written
+        cfg = _read_config(tmp_path)
+        assert "sandbox" in (cfg.get("active_kits") or [])   # not disabled
+
+    def test_detach_not_registered_errors(self, tmp_path, monkeypatch):
+        # No kits/ghost.kit.json -> only registered kits can be detached.
+        engine = _engine(tmp_path, monkeypatch)
+        rc = _cmd_kit_detach(
+            _Args(name="ghost", dry_run=False), str(tmp_path), engine)
+        assert rc == 1
+
+    def test_detach_idempotent(self, tmp_path, monkeypatch):
+        proj, reg = self._make_kit_on_disk(tmp_path, "sandbox")
+        engine = _engine(tmp_path, monkeypatch)
+        for _ in range(2):
+            rc = _cmd_kit_detach(
+                _Args(name="sandbox", dry_run=False), str(tmp_path), engine)
+            assert rc == 0
+        assert self._pointer_of(reg) == {"materialized": True}
+        cfg = _read_config(tmp_path)
+        assert (cfg.get("disabled_kits") or []).count("sandbox") == 1   # no dup
 
 
 # ---------------------------------------------------------------------------
