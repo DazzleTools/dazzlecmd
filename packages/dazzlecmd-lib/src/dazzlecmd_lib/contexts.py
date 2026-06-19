@@ -36,6 +36,8 @@ frame-relative, so Frame is only reserved here, not built.
 
 from __future__ import annotations
 
+import os
+
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -954,6 +956,161 @@ class ContainmentContext:
         return self.apply(entity, self.boundary.fqcn, verb="group")
 
 
+# ===========================================================================
+# Kit membership -- group/ungroup a KIT in an AGGREGATOR (the persisting sibling)
+# ===========================================================================
+#
+# ContainmentContext above is TOOL-in-kit + IN-MEMORY (a Kit's `.tools` list, rebuilt
+# each invocation). Kit-in-aggregator membership is a DIFFERENT substrate -- the
+# `kits/*.kit.json` registry FILES -- and it PERSISTS (a deregistered kit's entry is
+# gone from disk, no in-memory rebuild). So this is a SIBLING context (same Groupable
+# group/ungroup verbs, the generic executor, a C3 refusal), NOT a subclass: it does
+# not import or extend ContainmentContext's `.tools` model. The strong `remove`
+# (deregister + safedel content + deactivate) and the pointer `detach` COMPOSE onto
+# this `ungroup` in later slices; here only the registry substrate moves.
+
+
+def _kit_identity(kit):
+    """A kit's registry name -- the stem of its ``kits/<name>.kit.json`` file."""
+    return getattr(kit, "kit_name", None) or kit.name
+
+
+@dataclass(frozen=True)
+class KitMembershipInvariant:
+    """C2 for kit-in-aggregator membership: a deregistered kit is restorable.
+
+    The conserved quantity is the kit's REGISTRATION (its registry entry), NOT
+    ContainmentContext's in-memory ``local_incorporability`` -- a different substrate
+    and a different invariant. Plain ungroup restores via re-group (the captured
+    entry); the strong remove additionally safedel-trashes the content so the FILES
+    are recoverable too.
+    """
+
+    conserved_quantity_name: str = "kit_registration"
+    conserved_value: Any = None
+    restore_path: str = "re-group / dz kit add the kit (its registry entry restored)"
+
+
+@dataclass(frozen=True)
+class KitMembershipReceipt:
+    """The record returned by ``KitMembershipContext`` group/ungroup."""
+
+    entity_identity: str          # the kit name
+    sub_kind: str                 # "membership"
+    previous_state: Any           # the aggregator boundary, or None if not a member
+    new_state: Any                # the boundary on group, None on ungroup
+    invariant: KitMembershipInvariant
+    reversible: bool = True
+    verb: str = "group"           # "group" | "ungroup"
+
+
+class KitMembershipContext:
+    """The context kit-in-aggregator ``group``/``ungroup`` operate within -- the
+    kit-level persisting SIBLING of :class:`ContainmentContext`.
+
+    Substrate: the ``kits/*.kit.json`` registry under ``project_root``. ``group``
+    registers a kit (writes its registry file); ``ungroup`` deregisters it (removes
+    the file, capturing its bytes so the move round-trips byte-identically). Identity
+    is the kit NAME (no tool entity). C3 refuses ungrouping an ``always_active`` kit.
+    """
+
+    def __init__(self, project_root, kits=None, *, boundary_fqcn=None):
+        self.project_root = project_root
+        self.kits = list(kits or [])          # the membership snapshot (for callers)
+        self.boundary_fqcn = boundary_fqcn    # the aggregator's identity (for receipts)
+        self._captured = {}                   # name -> registry bytes (round-trip restore)
+        self._applied_entity = None
+        self._tc = TransitionContext(
+            _DEFAULT_REGISTRY, "membership",
+            detect=self._current_boundary,
+            write=self._write_membership,
+            check=self._check_move,
+            invert=self._invert_move,
+            identity_of=_kit_identity,
+        )
+
+    def _registry_path(self, name):
+        return os.path.join(self.project_root, "kits", f"{name}.kit.json")
+
+    def is_registered(self, kit):
+        return os.path.exists(self._registry_path(_kit_identity(kit)))
+
+    # -- the membership-specific hooks the generic executor calls --------------
+    def _current_boundary(self, kit):
+        """The aggregator this kit is registered in (its boundary fqcn), or None."""
+        return self.boundary_fqcn if self.is_registered(kit) else None
+
+    def _check_move(self, kit, target, verb, prev):
+        """C3: a constitutional / ``always_active`` kit may be grouped but never
+        ungrouped (removed) out of the aggregator."""
+        if verb == "ungroup" and getattr(kit, "always_active", False):
+            raise CriticalityBoundaryError(
+                f"{_kit_identity(kit)} is constitutional (always_active) -- it may be "
+                f"grouped but never ungrouped/removed (C3). Disable it or clear "
+                f"always_active first."
+            )
+
+    def _write_membership(self, kit, target, prev):
+        """``target is None`` = ungroup (capture + remove the registry file); else
+        group (restore from the captured bytes, or the kit's ``registry_bytes`` hook).
+        Both idempotent. Fresh registration (no captured/supplied bytes) is ``dz kit
+        add``'s job, not this verb's."""
+        name = _kit_identity(kit)
+        path = self._registry_path(name)
+        if target is None:                       # ungroup = deregister
+            if os.path.exists(path):
+                with open(path, "rb") as f:
+                    self._captured[name] = f.read()
+                os.remove(path)
+        else:                                    # group = register
+            data = self._captured.get(name)
+            if data is None:
+                data = getattr(kit, "registry_bytes", None)
+            if data is None:
+                raise CriticalityBoundaryError(
+                    f"cannot group {name}: no captured registry entry and the kit "
+                    f"carries no registry_bytes (fresh registration is `dz kit add`)."
+                )
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "wb") as f:
+                f.write(data)
+        return None
+
+    def _invert_move(self, receipt):
+        """The inverse move for undo: re-group what was ungrouped, and vice versa."""
+        if receipt.verb == "group":
+            return (None, "ungroup")
+        return (self.boundary_fqcn, "group")
+
+    # -- the operation (runs on the generic executor) --------------------------
+    def apply(self, kit, target, *, verb):
+        r = self._tc.apply(kit, target, verb=verb)
+        self._applied_entity = kit
+        new = self.boundary_fqcn if verb == "group" else None
+        return KitMembershipReceipt(
+            entity_identity=r.entity_identity,
+            sub_kind="membership",
+            previous_state=r.previous_state,
+            new_state=new,
+            invariant=KitMembershipInvariant(
+                conserved_quantity_name=r.conserved, conserved_value=r.entity_identity),
+            reversible=r.reversible,
+            verb=verb,
+        )
+
+    def undo(self, receipt):
+        """Invert a prior membership move: re-group what was ungrouped, ungroup what
+        was grouped (restores the registry from the captured bytes)."""
+        kit = self._applied_entity
+        if kit is None:
+            raise RebindError(
+                "KitMembershipContext.undo() requires a prior apply() on this context."
+            )
+        if receipt.verb == "group":
+            return self.apply(kit, None, verb="ungroup")
+        return self.apply(kit, self.boundary_fqcn, verb="group")
+
+
 # Public API surface -- frozen until 1.0 (Gate I). See the lib README.
 __all__ = [
     # errors
@@ -983,8 +1140,12 @@ __all__ = [
     "ActivationInvariant",
     "ActivationReceipt",
     "ActivationContext",
-    # containment (group/ungroup)
+    # containment (group/ungroup) -- tool-in-kit, in-memory
     "ContainmentInvariant",
     "ContainmentReceipt",
     "ContainmentContext",
+    # kit membership (group/ungroup) -- kit-in-aggregator, persisting sibling
+    "KitMembershipInvariant",
+    "KitMembershipReceipt",
+    "KitMembershipContext",
 ]

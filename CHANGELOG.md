@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.50] - 2026-06-19
+
+### Added
+
+- **`KitMembershipContext` + the `membership` axis -- kit-lifecycle slice 2 (the gold-standard build).** Kit-in-aggregator membership is now a declared state axis: `build_default_registry()` registers `membership` with REVERSIBLE `group`/`ungroup` edges (conserved `kit_registration`), DISTINCT from the tool-in-kit `containment` axis (which keeps `local_incorporability`). `KitMembershipContext` (`contexts.py`) is the persisting SIBLING of `ContainmentContext` -- NOT a subclass: it runs the same Groupable group/ungroup verbs on the generic `TransitionContext`, but its substrate is the `kits/*.kit.json` registry FILES and it persists to disk (`group` registers a kit; `ungroup` deregisters it, capturing the bytes so the move round-trips byte-identically). C3 refuses ungrouping an `always_active` kit. This is the seam `remove` (slice 3) and `detach` (slice 4) compose onto.
+
+### Notes
+
+- Byte-transparent (no CLI surface consumes it yet): byte-gate identical at the parked-WIP baseline; suite 1534 -> 1538 (+ membership-edge / round-trip / C3 / sibling-not-subclass tests). No `dazzle-lib` change (consumer-side only). Build spec: the gold-standard DWP `2026-06-18__04-49-12` (its Reference Pattern + slices). Refs #80/#86; #52.
+
+### Versions
+
+- dazzlecmd 0.9.49 -> 0.9.50 (PATCH); dazzlecmd-lib 0.8.49 -> 0.8.50 (PATCH -- `membership` axis + `KitMembershipContext`); dazzle-dz -> 0.9.50. dazzle-lib unchanged (consumer-side only).
+
 ## [0.9.49] - 2026-06-19
 
 ### Added
@@ -3396,7 +3410,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.49...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.50...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

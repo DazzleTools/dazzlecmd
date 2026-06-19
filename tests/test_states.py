@@ -20,7 +20,9 @@ so the byte-gate is unaffected; these tests are the additive coverage.
 """
 
 import os
+import json
 import tempfile
+import types
 
 import pytest
 
@@ -31,6 +33,7 @@ from dazzlecmd_lib.contexts import (
     AliasRebindContext,
     CriticalityBoundaryError,
     KIT_PRESENCE_SPACE,
+    KitMembershipContext,
     VISIBILITY_PRESENCE_SPACE,
 )
 from dazzlecmd_lib.testing import make_tool
@@ -192,7 +195,7 @@ class TestDefaultRegistry:
         reg = build_default_registry()
         names = {a.name for a in reg.axes()}
         assert names == {"kind", "mode", "visibility", "activation", "routing",
-                         "containment", "projection"}
+                         "containment", "membership", "projection"}
         assert reg.axis("kind").read_only is True
         assert reg.axis("routing").values is None  # open-valued
         # PROJECTION carries the {group=overlay, ungroup=virtual-kit} naming
@@ -610,6 +613,69 @@ class TestStateAxisContinuum:
             for fv in t.from_values:
                 assert fv in levels, (verb, fv)
             assert t.to_value in levels
+
+    def test_membership_transitions_declared(self):
+        # Slice 2: kit-in-aggregator group/ungroup are DECLARED on the `membership`
+        # axis (distinct from the tool-in-kit `containment` axis), both REVERSIBLE.
+        reg = build_default_registry()
+        assert reg.axis("membership") is not None
+        for verb in ("group", "ungroup"):
+            edges = [t for t in reg.for_verb(verb) if t.axis == "membership"]
+            assert edges, verb
+            assert edges[0].reversible
+            assert edges[0].conserved == "kit_registration"
+        # the containment (tool-in-kit) edges keep their OWN distinct invariant.
+        cont = [t for t in reg.for_verb("ungroup") if t.axis == "containment"][0]
+        assert cont.conserved == "local_incorporability"
+
+
+class TestKitMembershipContext:
+    """Slice 2: kit-in-aggregator group/ungroup over the kits/*.kit.json registry --
+    the persisting SIBLING of ContainmentContext."""
+
+    def _kit(self, name, always_active=False):
+        return types.SimpleNamespace(
+            name=name, kit_name=name, always_active=always_active)
+
+    def test_ungroup_then_group_round_trips_byte_identical(self, tmp_path):
+        kits_dir = tmp_path / "kits"
+        kits_dir.mkdir()
+        reg_file = kits_dir / "sandbox.kit.json"
+        original = json.dumps(
+            {"name": "sandbox", "always_active": False, "source": "https://x/y"},
+            indent=2).encode("utf-8")
+        reg_file.write_bytes(original)
+
+        kit = self._kit("sandbox")
+        ctx = KitMembershipContext(str(tmp_path), [kit], boundary_fqcn="dz")
+        assert ctx.is_registered(kit)
+
+        r_out = ctx.apply(kit, None, verb="ungroup")
+        assert r_out.verb == "ungroup" and r_out.new_state is None
+        assert r_out.previous_state == "dz" and r_out.reversible
+        assert not reg_file.exists() and not ctx.is_registered(kit)
+
+        r_in = ctx.apply(kit, "dz", verb="group")
+        assert r_in.verb == "group" and r_in.new_state == "dz"
+        assert reg_file.exists()
+        assert reg_file.read_bytes() == original   # the gold-standard AC: byte-identical
+
+    def test_ungroup_constitutional_refused_C3(self, tmp_path):
+        kits_dir = tmp_path / "kits"
+        kits_dir.mkdir()
+        (kits_dir / "core.kit.json").write_bytes(
+            b'{"name": "core", "always_active": true}')
+        kit = self._kit("core", always_active=True)
+        ctx = KitMembershipContext(str(tmp_path), [kit], boundary_fqcn="dz")
+        with pytest.raises(CriticalityBoundaryError, match="always_active"):
+            ctx.apply(kit, None, verb="ungroup")
+        assert (kits_dir / "core.kit.json").exists()   # refused -> registry untouched
+
+    def test_sibling_not_subclass_of_containment(self):
+        # The re-review correction, pinned: KitMembershipContext does NOT extend
+        # ContainmentContext's in-memory .tools model.
+        from dazzlecmd_lib.contexts import ContainmentContext
+        assert not issubclass(KitMembershipContext, ContainmentContext)
 
 
 class TestEntityStateAsPoint:

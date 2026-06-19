@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.50] - 2026-06-19
+
+Ships with dazzlecmd v0.9.50 -- kit-lifecycle slice 2 (the gold-standard build). Adds the `membership` state axis (`states` -- REVERSIBLE `group`/`ungroup`, conserved `kit_registration`, distinct from the tool-in-kit `containment` axis) and **`KitMembershipContext`** (`contexts`): the persisting SIBLING of `ContainmentContext` (NOT a subclass -- substrate is the `kits/*.kit.json` registry files, persists to disk; `group` registers, `ungroup` deregisters with byte-identical round-trip; C3 refuses `always_active`). The seam `remove` (slice 3) and `detach` (slice 4) compose onto.
+
 ## [0.8.49] - 2026-06-19
 
 Ships with dazzlecmd v0.9.49 -- the activation verbs join the transition machinery. Adds `ActivationContext` (`contexts`), the activation analog of `VisibilityContext`: it runs `dz kit enable`/`disable` on the generic `TransitionContext` over the `active_kits`/`disabled_kits` substrate, so `reversible`/`conserved`/`kind` come from the declared edges (returns an `ActivationReceipt` with `Transition.kind == "lateral"`). `build_default_registry()` now declares the `enable`/`disable` activation transitions (REVERSIBLE -- the B4 activation-as-Groupable seam; no longer "absent"). Byte-transparent for `dz kit enable`/`disable` (same config writes + output).

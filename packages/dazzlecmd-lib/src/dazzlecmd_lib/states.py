@@ -219,6 +219,28 @@ def build_default_registry() -> TransitionRegistry:
         note="disincorporate an entity from a boundary (in-tree; the inverse of group)",
     ))
 
+    # -- MEMBERSHIP: kit-in-aggregator group/ungroup (the kits/*.kit.json registry) --
+    # DISTINCT from CONTAINMENT (tool-in-kit, in-memory): membership is
+    # kit-in-aggregator, its substrate is the kits/ registry FILES, and it PERSISTS
+    # (a deregistered kit's entry is gone from disk -- there is no in-memory rebuild).
+    # The KitMembershipContext binds it (a sibling of ContainmentContext, not a
+    # subclass). group = register a kit; ungroup = deregister it -- the strong-remove's
+    # deregister half (safedel + deactivate layer onto the ungroup verb in a later slice).
+    reg.register_axis(StateAxis(
+        name="membership", values=None,   # open-valued: which aggregator registers it
+        substrate="kits/*.kit.json registry (kit-in-aggregator); persists to disk",
+    ))
+    reg.declare(Transition(
+        axis="membership", from_values=(OPEN,), to_value=OPEN, verb="group",
+        reversibility=Reversibility.REVERSIBLE, conserved="kit_registration",
+        note="register a kit in the aggregator (write its kits/<name>.kit.json); reversible via ungroup",
+    ))
+    reg.declare(Transition(
+        axis="membership", from_values=(OPEN,), to_value=OPEN, verb="ungroup",
+        reversibility=Reversibility.REVERSIBLE, conserved="kit_registration",
+        note="deregister a kit (remove its registry entry); reversible by re-group / dz kit add",
+    ))
+
     # -- GRADUATION: the generative multi-axis ungroup (declared as DATA) ------
     # Local tool -> its own git repo (-> kit/aggregator). The KIND leg CREATES
     # the remote the MODE leg conserves, so the composite is GENERATIVE even
