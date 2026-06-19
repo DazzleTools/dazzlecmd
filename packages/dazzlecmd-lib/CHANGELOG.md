@@ -8,6 +8,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 The library ships co-located with dazzlecmd today (in the `packages/dazzlecmd-lib/` subdirectory of the dazzlecmd repository). Future repo extraction is tracked as item X-1 in the dazzlecmd master closeout plan; once extracted, this CHANGELOG continues unchanged in its own repo.
 
+## [0.8.52] - 2026-06-19
+
+Ships with dazzlecmd v0.9.54 -- kit-lifecycle slice 4 step 1 (the LOADING-axis pole). A kit with a `pointer` block on its registry is LISTED but its tools are not loaded: `engine._discover_aggregator` skips a `pointer`-bearing kit from the load set (keeps it in `self.kits`), and `loader.discover_kits` carries the `pointer` block across the in-repo-manifest merge. Default off -- no kit is a pointer unless detached -- so discovery is byte-identical. The seam for `detach`/`attach` (#86) + #80 pointer-fetch.
+
 ## [0.8.51] - 2026-06-19
 
 Ships with dazzlecmd v0.9.53 -- fixes a path-depth bug in `mode`: `cmd_status` and `_find_undiscovered_tool` flat-scanned `projects/<ns>/<name>` and bucketed each `<name>` as a tool, so a nested aggregator-as-kit (`projects/<agg>/` with its own `kits/`) surfaced its structure dirs (`src`, `kits`, `tests`, ...) as phantom `<agg>:<subdir>` tools and could mis-resolve a `mode switch` target. Both scans now skip a directory that is itself an aggregator (`os.path.isdir(ns_dir/"kits")`).

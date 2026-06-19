@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.54] - 2026-06-19
+
+### Added
+
+- **Pointer-kit discovery skip -- kit-lifecycle slice 4, step 1 (the LOADING-axis pole).** A kit whose `kits/<name>.kit.json` carries a `pointer` block (written by the forthcoming `dz kit detach`, or a #80 not-yet-fetched pointer) is now DISCOVERED + LISTED (`dz kit list`/`tree`) but its tools are NOT loaded into the index (`engine._discover_aggregator` skips it from the load set). `discover_kits` carries the `pointer` block across the in-repo-manifest merge so it survives for kits with their own `.kit.json`. Default OFF -- no kit is a pointer unless detached -- so discovery + the byte-gate are unaffected. This is the substrate the `detach`/`attach` verbs (next steps) and #80 build on.
+
+### Notes
+
+- The removal/letting-go continuum design (slice-4 DWP `2026-06-19__18-38-07`): `disable < detach < remove` is ONE presence gradient; the cascade default is a PER-SPACE / per-coupling property (the removal continuum's `loading->activation` is a dependent pivot -> `detach` implicitly disables; `loading->materialization` is free -> de-materialize is separate). Byte-gate identical; suite +2 (pointer-skip + control). dazzle-lib unchanged.
+
+### Versions
+
+- dazzlecmd 0.9.53 -> 0.9.54 (PATCH); dazzlecmd-lib 0.8.51 -> 0.8.52 (PATCH -- the pointer discovery-skip + merge-carry); dazzle-dz -> 0.9.54. dazzle-lib unchanged.
+
 ## [0.9.53] - 2026-06-19
 
 ### Fixed
@@ -3448,7 +3462,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.53...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.54...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

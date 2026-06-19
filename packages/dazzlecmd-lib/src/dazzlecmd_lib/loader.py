@@ -63,6 +63,12 @@ def discover_kits(kits_dir, projects_dir=None):
                 kit["always_active"] = registry["always_active"]
             if "source" in registry:
                 kit["source"] = registry["source"]
+            if "pointer" in registry:
+                # `dz kit detach` (#86) writes the pointer block on the REGISTRY
+                # pointer; carry it across the in-repo merge so the discovery
+                # LOADING-skip (engine partition) sees it even when the kit has its
+                # own in-repo manifest.
+                kit["pointer"] = registry["pointer"]
             # Parent-level overrides (used when a nested aggregator's
             # in-repo manifest is missing tools_dir/manifest declarations)
             for override_key in ("_override_tools_dir", "_override_manifest"):

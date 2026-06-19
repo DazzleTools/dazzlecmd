@@ -191,6 +191,52 @@ class TestFlatDiscovery:
         assert note is None or note.notification is None
 
 
+class TestPointerKitDiscoverySkip:
+    """Slice 4 step 1: a kit with a `pointer` block (written by `dz kit detach`)
+    LISTS but its tools are NOT loaded -- the LOADING-axis pole. Default off, so
+    normal kits are unaffected (the byte-gate stays green)."""
+
+    def _build(self, root, pointer=None):
+        # a normal kit (core) + an `extra` kit (optionally a pointer), each with an
+        # in-repo manifest -- which exercises discover_kits CARRYING `pointer` across
+        # the merge (the registry pointer block must survive an in-repo manifest).
+        _write_json(os.path.join(root, "kits", "core.kit.json"),
+                    {"name": "core", "always_active": True})
+        _write_json(os.path.join(root, "projects", "core", ".kit.json"),
+                    {"name": "core", "tools_dir": ".", "manifest": ".dazzlecmd.json",
+                     "tools": ["core:toolA"]})
+        _write_tool(os.path.join(root, "projects", "core", "toolA"), "toolA")
+        extra_reg = {"name": "extra", "always_active": False}
+        if pointer is not None:
+            extra_reg["pointer"] = pointer
+        _write_json(os.path.join(root, "kits", "extra.kit.json"), extra_reg)
+        _write_json(os.path.join(root, "projects", "extra", ".kit.json"),
+                    {"name": "extra", "tools_dir": ".", "manifest": ".dazzlecmd.json",
+                     "tools": ["extra:ptool"]})
+        _write_tool(os.path.join(root, "projects", "extra", "ptool"), "ptool")
+
+    def _discover(self, root):
+        engine = AggregatorEngine(
+            tools_dir="projects", kits_dir="kits", manifest=".dazzlecmd.json")
+        engine.discover(project_root=str(root))
+        return engine
+
+    def test_pointer_kit_lists_but_loads_no_tools(self, tmp_path):
+        self._build(str(tmp_path), pointer={"materialized": True})
+        engine = self._discover(str(tmp_path))
+        kit_names = {k.kit_name or k.name for k in engine.kits}
+        assert "extra" in kit_names                      # the pointer kit LISTS
+        short = {p.short_name for p in engine.projects}
+        assert "ptool" not in short                      # ... but loads NO tools
+        assert "toolA" in short                          # the normal kit still loads
+
+    def test_non_pointer_kit_loads_normally(self, tmp_path):
+        self._build(str(tmp_path), pointer=None)         # control: no pointer block
+        engine = self._discover(str(tmp_path))
+        short = {p.short_name for p in engine.projects}
+        assert "ptool" in short                          # without pointer -> loads
+
+
 class TestRecursiveDiscovery:
     """Nested aggregator: parent imports child with FQCN remapping."""
 

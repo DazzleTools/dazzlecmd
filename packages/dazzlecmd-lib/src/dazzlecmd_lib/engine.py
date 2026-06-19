@@ -993,6 +993,14 @@ class AggregatorEngine:
             if kit.virtual is True:
                 local_virtual_kits.append(kit)
                 continue
+            # POINTER kits (a `pointer` block in the registry -- written by
+            # `dz kit detach`, or a #80 not-yet-fetched pointer) are LISTED (they
+            # remain in self.kits above) but their tools are NOT loaded: skip them
+            # from the load set. This is the kit-lifecycle LOADING-axis pole. Default
+            # OFF -- no kit carries a `pointer` block unless detached, so discovery +
+            # the byte-gate are unaffected. (slice 4; #80/#86)
+            if getattr(kit, "pointer", None):
+                continue
             kit_name = kit.kit_name or kit.name
             candidate_root = os.path.join(tools_path, kit_name)
             if os.path.isdir(os.path.join(candidate_root, "kits")):
