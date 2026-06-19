@@ -1534,22 +1534,18 @@ def _kit_exists(kits, name):
 
 
 def _cmd_kit_enable(args, engine):
-    """Add a kit to active_kits and remove it from disabled_kits."""
+    """Enable a kit: add to active_kits, drop from disabled_kits.
+
+    The activation 'enable' transition -- a lateral (reversible) toggle run through
+    ActivationContext (the activation analog of the visibility hide/expose contexts).
+    """
     name = args.name
     if engine is None:
         print("Error: engine unavailable", file=sys.stderr)
         return 1
 
-    config = engine._get_user_config()
-    active = list(config.get("active_kits") or [])
-    disabled = list(config.get("disabled_kits") or [])
-
-    if name in disabled:
-        disabled.remove(name)
-    if name not in active:
-        active.append(name)
-
-    # Warn if the kit doesn't exist on disk
+    # Warn if the kit doesn't exist on disk (informational -- the toggle still
+    # applies, so it takes effect if the kit becomes available later).
     if engine.kits and not _kit_exists(engine.kits, name):
         print(
             f"Warning: kit '{name}' not found among discovered kits. "
@@ -1557,29 +1553,22 @@ def _cmd_kit_enable(args, engine):
             file=sys.stderr,
         )
 
-    engine._write_user_config({
-        "active_kits": active,
-        "disabled_kits": disabled,
-    })
+    from dazzlecmd_lib.contexts import ActivationContext
+    ActivationContext(engine).enable(name)
     print(f"Enabled kit: {name}")
     return 0
 
 
 def _cmd_kit_disable(args, engine):
-    """Add a kit to disabled_kits and remove it from active_kits."""
+    """Disable a kit: add to disabled_kits, drop from active_kits.
+
+    The activation 'disable' transition -- the lateral inverse of enable, run
+    through ActivationContext.
+    """
     name = args.name
     if engine is None:
         print("Error: engine unavailable", file=sys.stderr)
         return 1
-
-    config = engine._get_user_config()
-    active = list(config.get("active_kits") or [])
-    disabled = list(config.get("disabled_kits") or [])
-
-    if name in active:
-        active.remove(name)
-    if name not in disabled:
-        disabled.append(name)
 
     if engine.kits and not _kit_exists(engine.kits, name):
         print(
@@ -1587,10 +1576,8 @@ def _cmd_kit_disable(args, engine):
             file=sys.stderr,
         )
 
-    engine._write_user_config({
-        "active_kits": active,
-        "disabled_kits": disabled,
-    })
+    from dazzlecmd_lib.contexts import ActivationContext
+    ActivationContext(engine).disable(name)
     print(f"Disabled kit: {name}")
     return 0
 

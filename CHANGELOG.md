@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.49] - 2026-06-19
+
+### Added
+
+- **`ActivationContext` (`dazzlecmd_lib.contexts`) -- `dz kit enable`/`disable` run on the generic transition executor.** The enable/disable verbs now route through `ActivationContext` (the activation analog of `VisibilityContext`): it runs on the lifted `TransitionContext`, so `reversible`/`conserved`/`kind` come from the DECLARED activation edges instead of hardcoded literals. The substrate is unchanged (`active_kits`/`disabled_kits`); the config writes + stdout are byte-identical; the move is recorded as an `ActivationReceipt` carrying `Transition.kind == "lateral"` (enable<->disable round-trips). `build_default_registry()` now declares the `enable`/`disable` activation transitions (REVERSIBLE) -- the B4 activation-as-Groupable seam the registry docstring anticipated; they are no longer "absent".
+
+### Notes
+
+- Byte-transparent: enable/disable config mutation + output unchanged (byte-gate identical at the parked-WIP baseline; suite 1531 -> 1534 with the activation round-trip / receipt-kind / registry-edge tests). The "production uses the new dazzle-lib symbols" grep now also hits `.kind` (`ActivationContext` reads the declared edge's `Transition.kind`). No `dazzle-lib` change (consumer-side only). Refs #188/#84; activation substrate for the #80/#86 capstone.
+
+### Versions
+
+- dazzlecmd 0.9.48 -> 0.9.49 (PATCH); dazzlecmd-lib 0.8.48 -> 0.8.49 (PATCH -- `ActivationContext` + declared activation transitions); dazzle-dz -> 0.9.49. dazzle-lib unchanged (consumer-side only).
+
 ## [0.9.48] - 2026-06-19
 
 ### Added
@@ -3382,7 +3396,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.48...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.49...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

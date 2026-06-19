@@ -595,6 +595,22 @@ class TestStateAxisContinuum:
                 assert fv in levels, (t.verb, fv)
             assert t.to_value is OPEN or t.to_value in levels
 
+    def test_activation_transitions_declared_lateral(self):
+        # B4: enable/disable are DECLARED activation edges -- a lateral (reversible)
+        # round-trip whose endpoints are levels of the activation axis (no longer
+        # "absent" per the old registry docstring).
+        reg = build_default_registry()
+        levels = set(ACTIVATION_VALUES)
+        for verb in ("enable", "disable"):
+            edges = [t for t in reg.for_verb(verb) if t.axis == "activation"]
+            assert edges, verb
+            t = edges[0]
+            assert t.kind == "lateral"
+            assert t.reversible
+            for fv in t.from_values:
+                assert fv in levels, (verb, fv)
+            assert t.to_value in levels
+
 
 class TestEntityStateAsPoint:
     """B1: an EntityState is a POINT in a ContinuumSpace (coordinates_in).

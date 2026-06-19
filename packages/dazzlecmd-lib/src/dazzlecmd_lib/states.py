@@ -104,9 +104,9 @@ def build_default_registry() -> TransitionRegistry:
     ladder, the CONTAINMENT and PROJECTION ``group``/``ungroup`` edges, and the
     GENERATIVE ``graduation`` composite. Each edge-set was added BY the commit
     that made its verb a live Groupable method (the intended trigger -- the
-    registry is filled by the verb, never ahead of it). Only the ACTIVATION
-    transitions remain absent: they land when ``dz kit enable``/``disable``
-    become Groupable verbs (B4 of the unification).
+    registry is filled by the verb, never ahead of it). The ACTIVATION
+    enable/disable edges land here too (the B4 activation-as-Groupable seam --
+    the ``ActivationContext`` that drives ``dz kit enable``/``disable``).
     """
     reg = TransitionRegistry()
 
@@ -183,6 +183,24 @@ def build_default_registry() -> TransitionRegistry:
         to_value=OPEN, verb="expose", reversibility=Reversibility.REVERSIBLE,
         conserved="canonical_dispatch",
         note="walk up the ladder (less suppressed); the inverse of hide",
+    ))
+
+    # -- ACTIVATION: enable/disable toggle (config; always reversible) ---------
+    # enable<->disable is a LATERAL round-trip: a kit's config membership is never
+    # destroyed (it can always be re-toggled), so both directions are reversible
+    # (enable o disable = identity). The substrate is active_kits / disabled_kits;
+    # the ActivationContext binds it. The B4 activation-as-Groupable seam.
+    reg.declare(Transition(
+        axis="activation", from_values=("active", "inactive"),
+        to_value="active", verb="enable",
+        reversibility=Reversibility.REVERSIBLE, conserved="kit_activation",
+        note="add to active_kits / drop from disabled_kits; reversible via disable",
+    ))
+    reg.declare(Transition(
+        axis="activation", from_values=("active", "inactive"),
+        to_value="inactive", verb="disable",
+        reversibility=Reversibility.REVERSIBLE, conserved="kit_activation",
+        note="add to disabled_kits / drop from active_kits; reversible via enable",
     ))
 
     # -- CONTAINMENT: group/ungroup membership moves (in-tree; reversible) -----

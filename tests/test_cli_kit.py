@@ -126,6 +126,32 @@ class TestKitEnableDisable:
         # Should only appear once
         assert config["active_kits"].count("wtf") == 1
 
+    def test_enable_disable_enable_round_trips(self, tmp_path, monkeypatch):
+        # The activation axis is a LATERAL round-trip: enable -> disable -> enable
+        # returns to the enabled config state.
+        engine = _engine(tmp_path, monkeypatch)
+        _cmd_kit_enable(_Args(name="wtf"), engine)
+        _cmd_kit_disable(_Args(name="wtf"), engine)
+        mid = _read_config(tmp_path)
+        assert "wtf" in mid["disabled_kits"]
+        assert "wtf" not in (mid.get("active_kits") or [])
+        _cmd_kit_enable(_Args(name="wtf"), engine)
+        end = _read_config(tmp_path)
+        assert "wtf" in end["active_kits"]
+        assert "wtf" not in (end.get("disabled_kits") or [])
+
+    def test_activation_context_reports_lateral_kind(self, tmp_path, monkeypatch):
+        # enable/disable run on the generic TransitionContext; the receipt carries
+        # the DECLARED edge's reversibility class (Transition.kind == "lateral").
+        from dazzlecmd_lib.contexts import ActivationContext
+        engine = _engine(tmp_path, monkeypatch)
+        r = ActivationContext(engine).enable("wtf")
+        assert r.verb == "enable" and r.new_state == "active"
+        assert r.kind == "lateral" and r.reversible is True
+        r2 = ActivationContext(engine).disable("wtf")
+        assert r2.previous_state == "active" and r2.new_state == "inactive"
+        assert r2.kind == "lateral"
+
 
 # ---------------------------------------------------------------------------
 # dz kit focus

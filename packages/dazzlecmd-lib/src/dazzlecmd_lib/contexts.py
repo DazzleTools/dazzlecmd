@@ -661,6 +661,144 @@ class VisibilityContext:
 
 
 # ===========================================================================
+# Activation -- the enable/disable verbs (the kit-loading toggle)
+# ===========================================================================
+#
+# enable/disable toggle whether a KIT contributes its tools, via the user config's
+# active_kits / disabled_kits lists (a kit is INACTIVE iff it sits in
+# disabled_kits). It is the activation axis of the multi-axis kit-presence space --
+# a binary, always-REVERSIBLE (lateral) round-trip: the kit's config membership is
+# never destroyed, so enable o disable = identity. Unlike visibility (which acts on
+# a tool ENTITY's fqcn), activation acts on a kit NAME; the generic executor needs
+# only identity_of -> str, so a lightweight _KitRef carries it.
+
+
+@dataclass(frozen=True)
+class ActivationInvariant:
+    """C2 for activation: a kit's re-activatable config membership survives the toggle.
+
+    Disabling never removes the kit from discovery -- it only moves the kit's name
+    between ``active_kits`` / ``disabled_kits`` -- so every enable/disable round-trips.
+    """
+
+    conserved_quantity_name: str = "kit_activation"
+    conserved_value: Any = None
+    restore_path: str = "re-apply the previous activation level (enable<->disable)"
+
+
+@dataclass(frozen=True)
+class ActivationReceipt:
+    """The record returned by ``ActivationContext.apply`` (enable / disable).
+
+    Mirrors ``VisibilityReceipt``: it carries the level transition plus the declared
+    edge's ``kind`` (``"lateral"`` -- enable/disable round-trip) so the move's
+    reversibility class is DATA from the registry, not an assumption at the surface.
+    """
+
+    entity_identity: str             # the kit name
+    sub_kind: str                    # "activation"
+    previous_state: str              # "active" | "inactive"
+    new_state: str
+    invariant: ActivationInvariant
+    reversible: bool = True
+    kind: str = "lateral"            # Transition.kind of the declared edge
+    verb: str = "enable"             # "enable" | "disable"
+
+
+class _KitRef:
+    """Minimal identity wrapper: activation operates on a kit NAME, not a tool
+    entity. The generic executor needs only ``identity_of`` -- this supplies it."""
+
+    __slots__ = ("name",)
+
+    def __init__(self, name):
+        self.name = name
+
+
+class ActivationContext:
+    """The context ``dz kit enable`` / ``dz kit disable`` operate within -- the
+    activation analog of :class:`VisibilityContext`.
+
+    The substrate is the user config's ``active_kits`` / ``disabled_kits`` lists (a
+    kit is INACTIVE iff it sits in ``disabled_kits``, ACTIVE otherwise). Runs on the
+    generic :class:`~dazzle_lib.transitions.TransitionContext` so ``reversible`` /
+    ``conserved`` come from the DECLARED activation edges, not hardcoded literals.
+    Writes go through ``engine._write_user_config`` (the tested merge path) -- never
+    raw file I/O here.
+    """
+
+    def __init__(self, engine):
+        self.engine = engine
+        self._tc = TransitionContext(
+            _DEFAULT_REGISTRY, "activation",
+            detect=self._current_level,
+            write=self._write_level,
+            identity_of=lambda kit: kit.name,
+        )
+
+    def _read_lists(self):
+        active = list(self.engine._get_config_list("active_kits", default=[]) or [])
+        disabled = list(self.engine._get_config_list("disabled_kits", default=[]) or [])
+        return active, disabled
+
+    def _current_level(self, kit):
+        """A kit is INACTIVE iff it sits in ``disabled_kits``, else ACTIVE."""
+        _active, disabled = self._read_lists()
+        return "inactive" if kit.name in disabled else "active"
+
+    def _write_level(self, kit, target, prev):
+        """Move ``kit.name`` to ``target`` by the SAME active/disabled list mutation
+        the verbs have always done (the merge write preserves other config keys)."""
+        active, disabled = self._read_lists()
+        name = kit.name
+        if target == "active":
+            if name in disabled:
+                disabled.remove(name)
+            if name not in active:
+                active.append(name)
+        else:  # inactive
+            if name in active:
+                active.remove(name)
+            if name not in disabled:
+                disabled.append(name)
+        self.engine._write_user_config({
+            "active_kits": active,
+            "disabled_kits": disabled,
+        })
+        return {"active_kits": active, "disabled_kits": disabled}
+
+    def _edge(self, verb):
+        """The declared activation transition for ``verb`` (for its ``kind``)."""
+        return next(t for t in _DEFAULT_REGISTRY.for_verb(verb)
+                    if t.axis == "activation")
+
+    def apply(self, kit_name, target, *, verb):
+        """Toggle ``kit_name`` to ``target`` (``"active"`` / ``"inactive"``) via the
+        generic executor; return an :class:`ActivationReceipt` (carrying the declared
+        edge's ``kind``, so the move's reversibility class is registry data)."""
+        r = self._tc.apply(_KitRef(kit_name), target, verb=verb)
+        return ActivationReceipt(
+            entity_identity=r.entity_identity,
+            sub_kind="activation",
+            previous_state=r.previous_state,
+            new_state=r.new_state,
+            invariant=ActivationInvariant(
+                conserved_quantity_name=r.conserved, conserved_value=r.entity_identity),
+            reversible=r.reversible,
+            kind=self._edge(verb).kind,
+            verb=verb,
+        )
+
+    def enable(self, kit_name):
+        """Enable ``kit_name`` (-> active): add to active_kits, drop from disabled."""
+        return self.apply(kit_name, "active", verb="enable")
+
+    def disable(self, kit_name):
+        """Disable ``kit_name`` (-> inactive): add to disabled_kits, drop from active."""
+        return self.apply(kit_name, "inactive", verb="disable")
+
+
+# ===========================================================================
 # Containment -- the group/ungroup verbs (the {P, -P} boundary primitive)
 # ===========================================================================
 #
@@ -841,6 +979,10 @@ __all__ = [
     "VisibilityInvariant",
     "VisibilityReceipt",
     "VisibilityContext",
+    # activation (enable/disable)
+    "ActivationInvariant",
+    "ActivationReceipt",
+    "ActivationContext",
     # containment (group/ungroup)
     "ContainmentInvariant",
     "ContainmentReceipt",
