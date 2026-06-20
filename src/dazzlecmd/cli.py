@@ -13,6 +13,12 @@ import re
 import sys
 
 from dazzlecmd._version import DISPLAY_VERSION, __version__
+from dazzlecmd.kit_verbs import (
+    add_flat_verb,
+    build_lifecycle_axis_groups,
+    render_axis_summary,
+    render_kit_help_epilog,
+)
 from dazzlecmd.loader import (
     discover_kits,
     discover_projects,
@@ -223,8 +229,13 @@ def _register_meta_commands(subparsers):
     )
     info_parser.set_defaults(_meta="info")
 
-    # dz kit
-    kit_parser = subparsers.add_parser("kit", help="Manage {kits, aggregators, virtual kits, ...}")
+    # dz kit -- the flat subcommand list still renders; the registry-driven epilog
+    # (kit_verbs.py) adds the by-axis / inverse-pair grouping the flat list lacks.
+    kit_parser = subparsers.add_parser(
+        "kit", help="Manage {kits, aggregators, virtual kits, ...}",
+        epilog=render_kit_help_epilog(),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     kit_sub = kit_parser.add_subparsers(dest="kit_command")
 
     kit_list = kit_sub.add_parser(
@@ -238,17 +249,11 @@ def _register_meta_commands(subparsers):
     kit_status = kit_sub.add_parser("status", help="Show active kits")
     kit_status.set_defaults(_meta="kit_status")
 
-    kit_enable = kit_sub.add_parser(
-        "enable", help="Enable a kit (include its tools in dispatch)"
-    )
-    kit_enable.add_argument("name", help="Kit name to enable")
-    kit_enable.set_defaults(_meta="kit_enable")
-
-    kit_disable = kit_sub.add_parser(
-        "disable", help="Disable a kit (exclude its tools from dispatch)"
-    )
-    kit_disable.add_argument("name", help="Kit name to disable")
-    kit_disable.set_defaults(_meta="kit_disable")
+    # Flat lifecycle verbs (kept as aliases). Their arg-setup is shared with the
+    # nested per-axis groups below via kit_verbs.VERB_SPEC -- one source, so
+    # `dz kit enable` and `dz kit activation enable` are byte-identical.
+    add_flat_verb(kit_sub, "enable")
+    add_flat_verb(kit_sub, "disable")
 
     kit_focus = kit_sub.add_parser(
         "focus",
@@ -363,46 +368,16 @@ def _register_meta_commands(subparsers):
 
     kit_visibility.set_defaults(_meta="kit_visibility")
 
-    kit_add = kit_sub.add_parser(
-        "add", help="Add a kit from a git URL via submodule"
-    )
-    kit_add.add_argument("url", help="Git URL of the kit repo")
-    kit_add.add_argument("--name", help="Override kit name (default: derive from URL)")
-    kit_add.add_argument("--branch", help="Branch to check out (default: repo default)")
-    kit_add.add_argument("--shallow", action="store_true", help="Shallow clone")
-    kit_add.set_defaults(_meta="kit_add")
+    add_flat_verb(kit_sub, "add")
+    add_flat_verb(kit_sub, "remove")
+    add_flat_verb(kit_sub, "detach")
+    add_flat_verb(kit_sub, "attach")
 
-    kit_remove = kit_sub.add_parser(
-        "remove",
-        help="Remove a kit -- deregister + safedel its files (recoverable)",
-    )
-    kit_remove.add_argument("name", help="Kit name to remove")
-    kit_remove.add_argument("--dry-run", action="store_true",
-                            help="Print the plan; change nothing")
-    kit_remove.add_argument("--yes", action="store_true",
-                            help="Skip the confirmation prompt")
-    kit_remove.add_argument("--force", action="store_true",
-                            help="Proceed despite a dirty submodule worktree")
-    kit_remove.set_defaults(_meta="kit_remove")
-
-    kit_detach = kit_sub.add_parser(
-        "detach",
-        help="Detach a kit -- make it a pointer (listed, not loaded) + disable; "
-             "files kept",
-    )
-    kit_detach.add_argument("name", help="Kit name to detach")
-    kit_detach.add_argument("--dry-run", action="store_true",
-                            help="Print the plan; change nothing")
-    kit_detach.set_defaults(_meta="kit_detach")
-
-    kit_attach = kit_sub.add_parser(
-        "attach",
-        help="Attach a kit -- the inverse of detach: load its tools again + enable",
-    )
-    kit_attach.add_argument("name", help="Kit name to attach")
-    kit_attach.add_argument("--dry-run", action="store_true",
-                            help="Print the plan; change nothing")
-    kit_attach.set_defaults(_meta="kit_attach")
+    # The nested per-axis groups -- the SAME shape as `dz kit visibility`:
+    # `dz kit activation {enable,disable}`, `dz kit loading {attach,detach}`,
+    # `dz kit membership {add,remove}` (registry-driven; verbs share the handler
+    # with the flat aliases above).
+    build_lifecycle_axis_groups(kit_sub)
 
     kit_parser.set_defaults(_meta="kit")
 
@@ -645,6 +620,10 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
         return _cmd_kit_detach(args, project_root, engine)
     elif meta == "kit_attach":
         return _cmd_kit_attach(args, project_root, engine)
+    elif meta and meta.startswith("kit_axis_"):
+        # `dz kit <axis>` with no verb -> a short summary of that axis's pair.
+        print(render_axis_summary(meta[len("kit_axis_"):]))
+        return 0
     elif meta == "tree":
         return _cmd_tree(args, engine)
     elif meta == "setup":

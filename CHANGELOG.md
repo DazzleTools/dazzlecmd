@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.57] - 2026-06-20
+
+### Added
+
+- **Kit inverse-verb registry + nested per-axis groups -- the groupable/continuum CLI proof-of-concept.** `src/dazzlecmd/kit_verbs.py` declares the kit `{P, not-P}` verb-pairs (`KitVerbPair`: warm/cold/axis/coldward-rank/cascade-coupling), and `dz kit` gains nested per-axis groups mirroring `dz kit visibility`: `dz kit activation {enable,disable}`, `dz kit loading {attach,detach}`, `dz kit membership {add,remove}` (registry-driven via `build_lifecycle_axis_groups`). The flat verbs (`dz kit enable`/`attach`/`add`/...) are kept as aliases; both forms share one arg-spec (`VERB_SPEC`) and route to the same handler, so `dz kit activation enable` == `dz kit enable`. `dz kit <axis>` with no verb prints a short summary. This is the first cut showing the lifecycle continuum (activation < loading < membership, the coldward gradient with the implicit detach->disable cascade) driving the `dz kit *` surface.
+
+### Notes
+
+- **The `dz kit -h` help in this version is deliberately over-verbose** (the verbs appear in the usage line, the argparse positional list, AND the grouped epilog) -- committed AS-IS as the comparison baseline before the help is refined to the hierarchical by-axis view (next). The de-duplicated, generalized help rendering + the broader CLI/help/object homogenization are tracked for the 0.10.x/0.11.x line (DWP `2026-06-20__12-12-35`; epic issue drafted). Verification: suite 1571 -> 1577; byte-gate 4 OK / 6 FAIL (parked-WIP baseline; `dz kit -h` doesn't touch `dz info`). dazzlecmd-lib UNCHANGED (registry is in `src/dazzlecmd`). Refs #80, #86, #188, #84, #59.
+
+### Versions
+
+- dazzlecmd 0.9.56 -> 0.9.57 (PATCH); dazzle-dz -> 0.9.57. dazzlecmd-lib UNCHANGED (0.8.53). dazzle-lib unchanged.
+
 ## [0.9.56] - 2026-06-19
 
 ### Added
@@ -3491,7 +3505,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.56...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.57...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
