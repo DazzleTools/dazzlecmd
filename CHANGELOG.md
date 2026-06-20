@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.56] - 2026-06-19
+
+### Added
+
+- **`dz kit attach <name>` -- kit-lifecycle slice 4, step 3 (the inverse of `detach`).** A detached (pointer) kit is loaded again AND enabled: `clear_pointer` (pointer -> loaded -- discovery loads its tools) composed with the activation `enable`. Attaching a kit that isn't a pointer is a friendly no-op (it does NOT enable a merely-disabled kit -- that's `dz kit enable`'s job). A `materialized:false` pointer (the #80 not-yet-fetched case) needs a fetch first -> routed to the deferred `_materialize_pointer` stub, which refuses cleanly until #80 lands. `--dry-run` prints the plan. The full `detach` -> `attach` round-trip restores the registry byte-identically and returns the kit to active.
+
+### Notes
+
+- The cascade is ASYMMETRIC (the per-coupling Gauss-Jordan structure made concrete): `detach`'s `loading -> inactive` is FORCED (you cannot dispatch what isn't loaded -- a pointer kit must be inactive), but `attach`'s `loading -> active` is a FREE choice -- defaulted to enable per the corrected detach-saga meaning ("upon attach -> enable"). A future `dz kit attach --no-enable` (land at loaded-but-disabled) is coherent but deferred (build-to-need), matching `detach`'s no-flag shape. End-to-end test pins the `detach -> attach` reload round-trip. Byte-gate identical (4 OK / 6 FAIL parked-WIP baseline); suite 1558 -> 1565. dazzlecmd-lib UNCHANGED (attach reuses the slice-2 `clear_pointer` + existing `ActivationContext.enable` -- the new code is all in `dz`'s `cli.py`). Refs #80/#86.
+
+### Versions
+
+- dazzlecmd 0.9.55 -> 0.9.56 (PATCH); dazzle-dz -> 0.9.56. dazzlecmd-lib UNCHANGED (0.8.53 -- no lib code changed). dazzle-lib unchanged.
+
 ## [0.9.55] - 2026-06-19
 
 ### Added
@@ -3477,7 +3491,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.55...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.56...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

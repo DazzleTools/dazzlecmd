@@ -395,6 +395,15 @@ def _register_meta_commands(subparsers):
                             help="Print the plan; change nothing")
     kit_detach.set_defaults(_meta="kit_detach")
 
+    kit_attach = kit_sub.add_parser(
+        "attach",
+        help="Attach a kit -- the inverse of detach: load its tools again + enable",
+    )
+    kit_attach.add_argument("name", help="Kit name to attach")
+    kit_attach.add_argument("--dry-run", action="store_true",
+                            help="Print the plan; change nothing")
+    kit_attach.set_defaults(_meta="kit_attach")
+
     kit_parser.set_defaults(_meta="kit")
 
     # dz tree
@@ -634,6 +643,8 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
         return _cmd_kit_remove(args, project_root, engine)
     elif meta == "kit_detach":
         return _cmd_kit_detach(args, project_root, engine)
+    elif meta == "kit_attach":
+        return _cmd_kit_attach(args, project_root, engine)
     elif meta == "tree":
         return _cmd_tree(args, engine)
     elif meta == "setup":
@@ -2499,6 +2510,98 @@ def _cmd_kit_detach(args, project_root, engine):
     print(f"Detached kit: {name}")
     print("  Now a pointer (listed, not loaded); files kept on disk.")
     print(f"  Re-attach with: dz kit attach {name}")
+    return 0
+
+
+def _materialize_pointer(project_root, name, source):
+    """STUB (#80): fetch a not-yet-materialized pointer kit's content into
+    ``projects/<name>/``. This is the deferred fetch tail of the pointer-kit
+    lifecycle -- a ``materialized:false`` pointer is "declared but absent" and
+    cannot be loaded until its content is fetched. Returns ``(ok, message)``;
+    today it always defers (fetch is not yet implemented)."""
+    return (False,
+            f"'{name}' is an unfetched pointer (materialized:false) -- fetching "
+            f"its content (#80) is not yet implemented. "
+            + (f"Source: {source}." if source else "No source recorded."))
+
+
+def _cmd_kit_attach(args, project_root, engine):
+    """Attach a kit -- the inverse of ``dz kit detach`` (slice 4 step 3).
+
+    A pointer kit (LOADING=pointer) is loaded again AND enabled: ``clear_pointer``
+    (pointer -> loaded -- discovery loads its tools) composed with the activation
+    ``enable``. Note the cascade ASYMMETRY: detach's ``loading->inactive`` is FORCED
+    (you cannot dispatch what isn't loaded), but attach's ``loading->active`` is a
+    FREE choice -- we default to enable (the corrected detach-saga meaning: "upon
+    attach -> enable"). A ``materialized:false`` pointer (the #80 not-fetched case)
+    needs a fetch first -> the deferred ``_materialize_pointer`` stub. Attaching a
+    kit that isn't a pointer is a friendly no-op (use ``dz kit enable`` for that).
+    """
+    name = args.name
+    if engine is None:
+        print("Error: engine unavailable", file=sys.stderr)
+        return 1
+
+    kit = None
+    for k in (getattr(engine, "kits", []) or []):
+        if (getattr(k, "kit_name", None) or getattr(k, "name", None)) == name:
+            kit = k
+            break
+
+    registry_path = os.path.join(project_root, "kits", f"{name}.kit.json")
+    if not os.path.exists(registry_path):
+        print(f"Error: no registered kit '{name}' found (kits/{name}.kit.json does "
+              f"not exist).", file=sys.stderr)
+        return 1
+
+    import types as _types
+    from dazzlecmd_lib.contexts import KitMembershipContext, ActivationContext
+    ref = kit if kit is not None else _types.SimpleNamespace(
+        name=name, kit_name=name, always_active=False)
+    membership = KitMembershipContext(
+        project_root, getattr(engine, "kits", []),
+        boundary_fqcn=getattr(engine, "command", "dz"),
+    )
+
+    pointer = membership.pointer_of(ref)
+    if pointer is None:
+        # Not a pointer -> nothing to attach (loading is already on).
+        print(f"'{name}' is not detached (already loaded); nothing to attach. "
+              f"Use `dz kit enable {name}` to activate it.")
+        return 0
+    materialized = (bool(pointer.get("materialized", True))
+                    if isinstance(pointer, dict) else True)
+
+    if getattr(args, "dry_run", False):
+        print(f"Dry run -- `dz kit attach {name}` would:")
+        if not materialized:
+            print(f"  - fetch '{name}' content first (#80 -- not yet implemented)")
+        print(f"  - clear the pointer block on kits/{name}.kit.json "
+              f"(pointer -> loaded; tools load again)")
+        print(f"  - enable '{name}' (attach defaults to active)")
+        return 0
+
+    # A not-yet-materialized (#80) pointer needs its content fetched before it can
+    # load -- that is the deferred stub; refuse cleanly until it lands.
+    if not materialized:
+        source = None
+        try:
+            with open(registry_path, encoding="utf-8") as f:
+                source = (json.load(f) or {}).get("source")
+        except Exception:  # noqa: BLE001
+            source = None
+        ok, msg = _materialize_pointer(project_root, name, source)
+        if not ok:
+            print(f"Cannot attach: {msg}", file=sys.stderr)
+            return 1
+
+    # 1. LOADING -> loaded: drop the pointer block so discovery loads its tools.
+    membership.clear_pointer(ref)
+    # 2. ACTIVATION -> active: attach defaults to enable (the free-choice pole).
+    ActivationContext(engine).enable(name)
+
+    print(f"Attached kit: {name}")
+    print("  Loaded again and enabled.")
     return 0
 
 

@@ -256,6 +256,22 @@ class TestPointerKitDiscoverySkip:
         assert "ptool" not in {p.short_name for p in engine2.projects}   # ... not loaded
         assert "toolA" in {p.short_name for p in engine2.projects}       # neighbor intact
 
+    def test_detach_then_attach_round_trip_reloads_the_tools(self, tmp_path, monkeypatch):
+        # Step 3 closes the round trip: detach unloads, attach loads again.
+        import types
+        from dazzlecmd.cli import _cmd_kit_detach, _cmd_kit_attach
+        monkeypatch.setenv("DAZZLECMD_CONFIG", str(tmp_path / "config.json"))
+        self._build(str(tmp_path), pointer=None)
+        engine = self._discover(str(tmp_path))
+        assert _cmd_kit_detach(
+            types.SimpleNamespace(name="extra", dry_run=False), str(tmp_path), engine) == 0
+        assert "ptool" not in {p.short_name for p in self._discover(str(tmp_path)).projects}
+
+        assert _cmd_kit_attach(
+            types.SimpleNamespace(name="extra", dry_run=False), str(tmp_path), engine) == 0
+        reloaded = self._discover(str(tmp_path))
+        assert "ptool" in {p.short_name for p in reloaded.projects}      # loaded again
+
 
 class TestRecursiveDiscovery:
     """Nested aggregator: parent imports child with FQCN remapping."""

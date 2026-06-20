@@ -22,6 +22,7 @@ from dazzlecmd.cli import (
     _cmd_kit_disable,
     _cmd_kit_remove,
     _cmd_kit_detach,
+    _cmd_kit_attach,
     _kit_is_submodule,
     _cmd_kit_focus,
     _cmd_kit_reset,
@@ -371,6 +372,114 @@ class TestKitDetach:
         assert self._pointer_of(reg) == {"materialized": True}
         cfg = _read_config(tmp_path)
         assert (cfg.get("disabled_kits") or []).count("sandbox") == 1   # no dup
+
+
+# ---------------------------------------------------------------------------
+# dz kit attach -- slice 4 step 3 (the inverse of detach)
+# ---------------------------------------------------------------------------
+
+
+class TestKitAttach:
+    """attach = clear_pointer (pointer -> loaded) + enable (the free-choice pole;
+    detach's loading->inactive is FORCED, attach's loading->active is a CHOICE we
+    default to enable). materialized:false -> the deferred #80 fetch stub."""
+
+    def _make_kit_on_disk(self, tmp_path, name, pointer=None,
+                          source="https://x/y.git"):
+        proj = tmp_path / "projects" / name
+        proj.mkdir(parents=True)
+        (proj / "tool.py").write_text("print('hi')\n", encoding="utf-8")
+        kits = tmp_path / "kits"
+        kits.mkdir(exist_ok=True)
+        reg = kits / f"{name}.kit.json"
+        body = {"name": name, "always_active": False, "source": source}
+        if pointer is not None:
+            body["pointer"] = pointer
+        reg.write_text(json.dumps(body, indent=4) + "\n", encoding="utf-8")
+        return proj, reg
+
+    def _pointer_of(self, reg):
+        return json.loads(reg.read_text(encoding="utf-8")).get("pointer")
+
+    def test_attach_clears_pointer_and_enables(self, tmp_path, monkeypatch):
+        proj, reg = self._make_kit_on_disk(
+            tmp_path, "sandbox", pointer={"materialized": True})
+        engine = _engine(tmp_path, monkeypatch)
+        (tmp_path / "config.json").write_text(
+            json.dumps({"active_kits": [], "disabled_kits": ["sandbox"]}),
+            encoding="utf-8")
+
+        rc = _cmd_kit_attach(
+            _Args(name="sandbox", dry_run=False), str(tmp_path), engine)
+        assert rc == 0
+        assert self._pointer_of(reg) is None              # pointer -> loaded
+        cfg = _read_config(tmp_path)
+        assert "sandbox" in (cfg.get("active_kits") or [])      # enabled
+        assert "sandbox" not in (cfg.get("disabled_kits") or [])
+
+    def test_detach_then_attach_round_trips_registry(self, tmp_path, monkeypatch):
+        # The gold-standard AC: attach restores the registry (loading) -- detach
+        # adds the trailing pointer key, attach removes it -> byte-identical.
+        proj, reg = self._make_kit_on_disk(tmp_path, "sandbox")
+        original = reg.read_text(encoding="utf-8")
+        engine = _engine(tmp_path, monkeypatch)
+        (tmp_path / "config.json").write_text(
+            json.dumps({"active_kits": ["sandbox"], "disabled_kits": []}),
+            encoding="utf-8")
+
+        assert _cmd_kit_detach(
+            _Args(name="sandbox", dry_run=False), str(tmp_path), engine) == 0
+        assert self._pointer_of(reg) == {"materialized": True}    # detached
+        assert _cmd_kit_attach(
+            _Args(name="sandbox", dry_run=False), str(tmp_path), engine) == 0
+        assert reg.read_text(encoding="utf-8") == original        # round-trips
+        cfg = _read_config(tmp_path)
+        assert "sandbox" in (cfg.get("active_kits") or [])        # back to active
+
+    def test_attach_non_pointer_is_noop(self, tmp_path, monkeypatch):
+        # Not detached -> nothing to attach; and it must NOT enable a disabled kit
+        # (that's `dz kit enable`'s job, not attach's).
+        proj, reg = self._make_kit_on_disk(tmp_path, "sandbox", pointer=None)
+        engine = _engine(tmp_path, monkeypatch)
+        (tmp_path / "config.json").write_text(
+            json.dumps({"active_kits": [], "disabled_kits": ["sandbox"]}),
+            encoding="utf-8")
+        rc = _cmd_kit_attach(
+            _Args(name="sandbox", dry_run=False), str(tmp_path), engine)
+        assert rc == 0
+        cfg = _read_config(tmp_path)
+        assert "sandbox" in (cfg.get("disabled_kits") or [])   # left disabled
+
+    def test_attach_unfetched_pointer_defers_to_80(self, tmp_path, monkeypatch):
+        # materialized:false = declared-but-absent (#80); attach can't load what
+        # isn't on disk -> the deferred fetch stub refuses cleanly.
+        proj, reg = self._make_kit_on_disk(
+            tmp_path, "sandbox", pointer={"materialized": False})
+        engine = _engine(tmp_path, monkeypatch)
+        rc = _cmd_kit_attach(
+            _Args(name="sandbox", dry_run=False), str(tmp_path), engine)
+        assert rc == 1
+        assert self._pointer_of(reg) == {"materialized": False}  # unchanged
+
+    def test_attach_dry_run_changes_nothing(self, tmp_path, monkeypatch):
+        proj, reg = self._make_kit_on_disk(
+            tmp_path, "sandbox", pointer={"materialized": True})
+        engine = _engine(tmp_path, monkeypatch)
+        (tmp_path / "config.json").write_text(
+            json.dumps({"active_kits": [], "disabled_kits": ["sandbox"]}),
+            encoding="utf-8")
+        rc = _cmd_kit_attach(
+            _Args(name="sandbox", dry_run=True), str(tmp_path), engine)
+        assert rc == 0
+        assert self._pointer_of(reg) == {"materialized": True}   # still a pointer
+        cfg = _read_config(tmp_path)
+        assert "sandbox" in (cfg.get("disabled_kits") or [])     # still disabled
+
+    def test_attach_not_registered_errors(self, tmp_path, monkeypatch):
+        engine = _engine(tmp_path, monkeypatch)
+        rc = _cmd_kit_attach(
+            _Args(name="ghost", dry_run=False), str(tmp_path), engine)
+        assert rc == 1
 
 
 # ---------------------------------------------------------------------------
