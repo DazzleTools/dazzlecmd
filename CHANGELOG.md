@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.58] - 2026-06-20
+
+### Changed
+
+- **`dz kit -h` is now a de-duplicated, by-axis hierarchy** (replacing the v0.9.57 over-verbose help, where verbs appeared in the usage line, the argparse positional list, AND the grouped epilog). `kit_parser.format_help` is overridden (after all subcommands register) to render: the usage line, a one-line orientation, then `inspect:` / `management:` (membership/loading/activation, each axis with its verbs nested) / `visibility:` (its verbs pulled up from the `dz kit visibility` sub-group) / `favorite:` / `options:`. Each verb appears exactly once; argparse's positional restatement is gone. The render is **registry-driven for structure** but reads each verb's **description from the actual sub-parsers** (`_kit_help_sources`) -- single source of truth, no duplicated help strings. This is the generalized-enough render that ships now; the cross-aggregator help *toolset* (help_lib adoption, the CLI-surface capability) remains the 0.10.x/0.11.x homogenization.
+
+### Notes
+
+- The flat verbs + the nested `dz kit <axis> <verb>` groups (v0.9.57) are unchanged; only the `-h` rendering changed. Verification: suite 1577 (the test_kit_verbs help tests re-pointed at the hierarchy); byte-gate identical (4 OK / 6 FAIL parked-WIP baseline; `dz kit -h` doesn't touch `dz info`). dazzlecmd-lib UNCHANGED. Refs #59, #57, #80, #86.
+
+### Versions
+
+- dazzlecmd 0.9.57 -> 0.9.58 (PATCH); dazzle-dz -> 0.9.58. dazzlecmd-lib UNCHANGED (0.8.53). dazzle-lib unchanged.
+
 ## [0.9.57] - 2026-06-20
 
 ### Added
@@ -3505,7 +3519,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.57...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.58...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

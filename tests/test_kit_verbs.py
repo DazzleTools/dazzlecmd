@@ -16,9 +16,16 @@ from dazzlecmd.kit_verbs import (
     ALL_PAIRS,
     COUPLING_ALIGNED,
     COUPLING_INDEPENDENT,
-    render_kit_help_epilog,
+    render_kit_help,
     render_axis_summary,
 )
+
+
+def _kit_parser(parser):
+    """The `dz kit` subparser from a built top-level parser."""
+    sub = next(a for a in parser._actions
+               if isinstance(a, argparse._SubParsersAction))
+    return sub.choices["kit"]
 
 
 def _subparser_choices(parser, *path):
@@ -53,14 +60,14 @@ class TestKitVerbRegistry:
         for p in ALL_PAIRS:
             assert p.warm and p.cold and p.warm != p.cold
 
-    def test_epilog_renders_groups_and_each_lifecycle_pair(self):
-        out = render_kit_help_epilog()
-        assert "inspect:" in out
-        assert "lifecycle" in out
-        assert "other:" in out
-        for p in LIFECYCLE_PAIRS:
-            assert f"{p.warm} <-> {p.cold}" in out          # e.g. enable <-> disable
-        assert "dz kit visibility -h" in out                # pointer to the sub-group
+    def test_kit_help_is_hierarchical_by_axis(self):
+        out = render_kit_help(_kit_parser(build_parser([])))
+        for header in ("inspect:", "management:", "visibility:", "favorite:"):
+            assert header in out
+        for p in LIFECYCLE_PAIRS:                            # axis + its verbs nested
+            assert p.axis in out and p.warm in out and p.cold in out
+        assert "silence" in out and "unshadow" in out       # visibility pulled up
+        assert "dz kit visibility -h" in out
 
     def test_registry_verbs_are_real_subcommands(self):
         # AC4: the declared registry is consistent with the actual CLI grammar.
@@ -76,14 +83,13 @@ class TestKitVerbRegistry:
             assert p.warm in vis_cmds and p.cold in vis_cmds, \
                 f"visibility pair {p.warm}/{p.cold} not under `dz kit visibility`"
 
-    def test_epilog_is_wired_into_kit_parser(self):
-        # The grouped epilog actually reaches `dz kit -h` (not just renderable).
-        parser = build_parser([])
-        sub = next(a for a in parser._actions
-                   if isinstance(a, argparse._SubParsersAction))
-        kit_help = sub.choices["kit"].format_help()
+    def test_kit_help_is_wired_and_dedups_the_positional_restatement(self):
+        # `dz kit -h` reaches the custom render AND argparse's default positional
+        # restatement is gone (the duplication the user flagged).
+        kit_help = _kit_parser(build_parser([])).format_help()
         assert "kit verbs by presence axis:" in kit_help
-        assert "enable <-> disable" in kit_help
+        assert "positional arguments" not in kit_help        # no restatement
+        assert "enable" in kit_help and "attach" in kit_help  # verbs still listed once
 
 
 class TestKitAxisGroups:

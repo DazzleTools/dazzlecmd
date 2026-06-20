@@ -17,7 +17,7 @@ from dazzlecmd.kit_verbs import (
     add_flat_verb,
     build_lifecycle_axis_groups,
     render_axis_summary,
-    render_kit_help_epilog,
+    render_kit_help,
 )
 from dazzlecmd.loader import (
     discover_kits,
@@ -229,13 +229,11 @@ def _register_meta_commands(subparsers):
     )
     info_parser.set_defaults(_meta="info")
 
-    # dz kit -- the flat subcommand list still renders; the registry-driven epilog
-    # (kit_verbs.py) adds the by-axis / inverse-pair grouping the flat list lacks.
+    # dz kit -- `kit -h` is rendered as a de-duped by-axis hierarchy (the
+    # format_help override below, set after all subcommands are registered so it
+    # reads their real help) instead of argparse's default positional restatement.
     kit_parser = subparsers.add_parser(
-        "kit", help="Manage {kits, aggregators, virtual kits, ...}",
-        epilog=render_kit_help_epilog(),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
+        "kit", help="Manage {kits, aggregators, virtual kits, ...}")
     kit_sub = kit_parser.add_subparsers(dest="kit_command")
 
     kit_list = kit_sub.add_parser(
@@ -378,6 +376,11 @@ def _register_meta_commands(subparsers):
     # `dz kit membership {add,remove}` (registry-driven; verbs share the handler
     # with the flat aliases above).
     build_lifecycle_axis_groups(kit_sub)
+
+    # Render `dz kit -h` as the de-duped by-axis hierarchy. Set AFTER all
+    # subcommands (incl. visibility + the axis groups) are registered, so the
+    # render reads their real help. Overriding the instance method is intentional.
+    kit_parser.format_help = lambda: render_kit_help(kit_parser)
 
     kit_parser.set_defaults(_meta="kit")
 

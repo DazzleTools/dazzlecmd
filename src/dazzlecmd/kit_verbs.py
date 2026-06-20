@@ -195,43 +195,87 @@ def render_axis_summary(axis: str) -> str:
     )
 
 _ARROW = "<->"
-_AXIS_COL = 13   # the axis-name column
-_PAIR_COL = 20   # the verb-pair column (glosses align here when the pair fits)
+_HELP_COL = 17   # the column a verb's description starts at
+
+# Visibility verbs in presence order, pulled UP into `dz kit -h` from the nested
+# `dz kit visibility` sub-group (status first -- the generic inspect verb).
+_VISIBILITY_ORDER = (
+    "status", "silence", "unsilence", "hide", "unhide", "shadow", "unshadow",
+)
 
 
-def _axis_row(axis: str, pair: str, gloss: str) -> str:
-    """One ``    <axis>  <pair>  <gloss>`` row with a GUARANTEED >=2-space gap
-    after the pair (so a pair wider than the column doesn't abut its gloss)."""
-    gap = max(2, _PAIR_COL - len(pair))
-    return f"    {axis:<{_AXIS_COL}}{pair}{' ' * gap}{gloss}"
+def _hrow(indent: int, name: str, text: str) -> str:
+    """One ``<indent><name>  <text>`` row, the description aligned at ``_HELP_COL``
+    (with a >=2-space gap if the name overruns the column)."""
+    prefix = " " * indent + name
+    if not text:
+        return prefix
+    gap = max(2, _HELP_COL - len(prefix))
+    return prefix + " " * gap + text
 
 
-def render_kit_help_epilog() -> str:
-    """The grouped ``dz kit -h`` epilog, derived entirely from the registry above:
-    the generic inspect verbs, the kit-lifecycle gradient (warm <-> cold, ordered
-    coldward), the favorite pair, and a pointer to the visibility sub-group. The
-    flat argparse subcommand list still renders above this -- nothing is hidden;
-    this adds the axis/pairing structure that list lacks."""
-    lines = ["kit verbs by presence axis:", ""]
+def _kit_help_sources(parser):
+    """``(top, vis)`` name->help maps -- ``top`` from the kit subcommands, ``vis``
+    from the nested ``dz kit visibility`` sub-group. Read from the ACTUAL parsers
+    (single source of truth -- no help strings are duplicated in this module)."""
+    import argparse
 
-    lines.append("  inspect:")
+    top, vis = {}, {}
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            top = {ca.dest: (ca.help or "") for ca in action._choices_actions}
+            visp = action.choices.get("visibility")
+            if visp is not None:
+                for va in visp._actions:
+                    if isinstance(va, argparse._SubParsersAction):
+                        vis = {ca.dest: (ca.help or "")
+                               for ca in va._choices_actions}
+            break
+    return top, vis
+
+
+def render_kit_help(parser) -> str:
+    """The de-duplicated, by-axis ``dz kit -h`` body -- replaces argparse's default
+    positional restatement so each verb appears ONCE. The structure (sections,
+    axes, pairings) is registry-driven; the per-verb descriptions are read from the
+    real sub-parsers via :func:`_kit_help_sources`, so they never drift. The full
+    hierarchical help *toolset* (the cross-aggregator homogenization) is the 0.11
+    line; this is the generalized-enough render that ships now."""
+    top, vis = _kit_help_sources(parser)
+    out = [parser.format_usage().rstrip("\n"), ""]
+    out.append("Each presence axis is also a group (`dz kit <axis> -h`); warm<->cold,")
+    out.append("a colder move subsumes the warmer (e.g. detach also disables).")
+    out.append("")
+    out.append("kit verbs by presence axis:")
+    out.append("")
+
+    out.append("  inspect:")
     for name, gloss in GENERIC_VERBS:
-        lines.append(f"    {name:<13}{gloss}")
-    lines.append("")
+        out.append(_hrow(4, name, gloss))
+    out.append("")
 
-    lines.append("  lifecycle  (each axis is also a group -- `dz kit activation -h`;")
-    lines.append("              warm<->cold, a colder move subsumes the warmer -- "
-                 "detach also disables):")
-    for p in LIFECYCLE_PAIRS:
-        lines.append(_axis_row(p.axis, f"{p.warm} {_ARROW} {p.cold}", p.gloss))
-    lines.append("")
+    out.append(_hrow(2, "management:", "each verb takes a <kitname>"))
+    for pair in reversed(LIFECYCLE_PAIRS):   # coldest-first: membership, loading, activation
+        out.append(_hrow(4, pair.axis, f"{pair.warm}{_ARROW}{pair.cold}  ({pair.gloss})"))
+        for verb in (pair.warm, pair.cold):
+            out.append(_hrow(6, verb, top.get(verb, "")))
+        out.append("")
 
-    lines.append("  other:")
+    out.append(_hrow(2, "visibility:",
+                     "silence/hide/shadow + inverses -- see `dz kit visibility -h`"))
+    for name in _VISIBILITY_ORDER:
+        if name in vis:
+            out.append(_hrow(4, name, vis[name]))
+    out.append("")
+
     fp = FAVORITE_PAIR
-    lines.append(_axis_row(fp.axis, f"{fp.warm} {_ARROW} {fp.cold}", fp.gloss))
-    lines.append(_axis_row("visibility", "silence/hide/shadow",
-                           "+ inverses -- see `dz kit visibility -h`"))
-    lines.append("")
+    out.append(_hrow(2, "favorite:", f"{fp.warm} {_ARROW} {fp.cold}  {fp.gloss}"))
+    for verb in (fp.warm, fp.cold):
+        out.append(_hrow(4, verb, top.get(verb, "")))
+    out.append("")
 
-    lines.append("Run 'dz kit <verb> --help' for a specific verb.")
-    return "\n".join(lines)
+    out.append("options:")
+    out.append(_hrow(2, "-h, --help", "show this help message and exit"))
+    out.append("")
+    out.append("Run 'dz kit <verb> --help' for a specific verb.")
+    return "\n".join(out) + "\n"
