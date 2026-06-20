@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.59] - 2026-06-20
+
+### Added
+
+- **`dz kit management [<kit>]` -- the lifecycle STATE view (state-on-invoke, like `dz kit visibility`).** `management` is the COMPOSED lifecycle axis (`{KitOff..KitOn}`) that fuses the activation/loading/membership sub-axes (a kit must be a member to load, loaded to activate). `dz kit management` shows each kit's POSITION on that unified continuum -- `active` / `disabled (loaded, inactive)` / `detached (pointer; not loaded)`, with `[always-active]` flagged; `dz kit management <kit>` filters to one. The per-axis groups now also show their slice with no verb: `dz kit activation` (active vs disabled), `dz kit loading` (loaded vs pointer), `dz kit membership` (members) -- replacing the v0.9.57 static summary. One shared handler (`_cmd_kit_management`); state read from the engine config (`disabled_kits`) + the registry pointer blocks (`KitMembershipContext.pointer_of`).
+
+### Notes
+
+- Completes the PoC's state-on-invoke parity with `dz kit visibility`. The unused `render_axis_summary` was removed. Verification: suite 1577; byte-gate identical (4 OK / 6 FAIL parked-WIP baseline). dazzlecmd-lib UNCHANGED. Refs #80, #86, #188.
+
+### Versions
+
+- dazzlecmd 0.9.58 -> 0.9.59 (PATCH); dazzle-dz -> 0.9.59. dazzlecmd-lib UNCHANGED (0.8.53). dazzle-lib unchanged.
+
 ## [0.9.58] - 2026-06-20
 
 ### Changed
@@ -3519,7 +3533,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.58...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.59...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

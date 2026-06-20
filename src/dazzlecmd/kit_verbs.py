@@ -183,17 +183,6 @@ def build_lifecycle_axis_groups(kit_sub):
         group.set_defaults(_meta=f"kit_axis_{pair.axis}")
 
 
-def render_axis_summary(axis: str) -> str:
-    """`dz kit <axis>` (no verb): the axis's pair + how to drive it."""
-    pair = next(p for p in LIFECYCLE_PAIRS if p.axis == axis)
-    return (
-        f"{_AXIS_HELP[axis]}\n"
-        f"  {pair.warm} {_ARROW} {pair.cold}   ({pair.gloss})\n"
-        f"  run `dz kit {axis} {pair.warm} <name>` (or the flat alias "
-        f"`dz kit {pair.warm} <name>`).\n"
-        f"  `dz kit {axis} -h` for all options."
-    )
-
 _ARROW = "<->"
 _HELP_COL = 17   # the column a verb's description starts at
 
@@ -254,7 +243,8 @@ def render_kit_help(parser) -> str:
         out.append(_hrow(4, name, gloss))
     out.append("")
 
-    out.append(_hrow(2, "management:", "each verb takes a <kitname>"))
+    out.append(_hrow(2, "management:",
+                     "`dz kit management [<kit>]` -- lifecycle state; verbs take a <kit>"))
     for pair in reversed(LIFECYCLE_PAIRS):   # coldest-first: membership, loading, activation
         out.append(_hrow(4, pair.axis, f"{pair.warm}{_ARROW}{pair.cold}  ({pair.gloss})"))
         for verb in (pair.warm, pair.cold):

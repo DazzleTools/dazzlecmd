@@ -17,7 +17,6 @@ from dazzlecmd.kit_verbs import (
     COUPLING_ALIGNED,
     COUPLING_INDEPENDENT,
     render_kit_help,
-    render_axis_summary,
 )
 
 
@@ -123,12 +122,14 @@ class TestKitAxisGroups:
         assert a._meta == "kit_remove"
         assert a.name == "foo" and a.dry_run and a.yes and a.force
 
-    def test_axis_with_no_verb_routes_to_summary(self):
+    def test_axis_with_no_verb_routes_to_state_view(self):
         parser = build_parser([])
         a = parser.parse_args(["kit", "loading"])
-        assert a._meta == "kit_axis_loading"
+        assert a._meta == "kit_axis_loading"   # dispatch -> _cmd_kit_management(axis="loading")
 
-    def test_render_axis_summary_mentions_the_pair_and_flat_alias(self):
-        out = render_axis_summary("activation")
-        assert "enable <-> disable" in out
-        assert "dz kit enable" in out          # the flat-alias hint
+    def test_management_is_a_real_command_with_optional_kit(self):
+        parser = build_parser([])
+        assert "management" in _subparser_choices(parser, "kit")
+        assert parser.parse_args(["kit", "management"])._meta == "kit_management"
+        one = parser.parse_args(["kit", "management", "core"])
+        assert one._meta == "kit_management" and one.name == "core"

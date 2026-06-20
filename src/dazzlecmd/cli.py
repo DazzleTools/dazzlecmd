@@ -14,9 +14,9 @@ import sys
 
 from dazzlecmd._version import DISPLAY_VERSION, __version__
 from dazzlecmd.kit_verbs import (
+    LIFECYCLE_PAIRS,
     add_flat_verb,
     build_lifecycle_axis_groups,
-    render_axis_summary,
     render_kit_help,
 )
 from dazzlecmd.loader import (
@@ -371,6 +371,17 @@ def _register_meta_commands(subparsers):
     add_flat_verb(kit_sub, "detach")
     add_flat_verb(kit_sub, "attach")
 
+    # `dz kit management [<kit>]` -- the lifecycle STATE view (like `dz kit
+    # visibility`): activation + loading per kit. Each axis group also shows its
+    # own slice with no verb (dispatch below).
+    kit_management = kit_sub.add_parser(
+        "management",
+        help="Show kit lifecycle state (activation/loading) for all kits or one",
+    )
+    kit_management.add_argument("name", nargs="?", default=None,
+                                help="Show just this kit")
+    kit_management.set_defaults(_meta="kit_management")
+
     # The nested per-axis groups -- the SAME shape as `dz kit visibility`:
     # `dz kit activation {enable,disable}`, `dz kit loading {attach,detach}`,
     # `dz kit membership {add,remove}` (registry-driven; verbs share the handler
@@ -623,10 +634,12 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
         return _cmd_kit_detach(args, project_root, engine)
     elif meta == "kit_attach":
         return _cmd_kit_attach(args, project_root, engine)
+    elif meta == "kit_management":
+        return _cmd_kit_management(args, project_root, engine, axis=None)
     elif meta and meta.startswith("kit_axis_"):
-        # `dz kit <axis>` with no verb -> a short summary of that axis's pair.
-        print(render_axis_summary(meta[len("kit_axis_"):]))
-        return 0
+        # `dz kit <axis>` with no verb -> that sub-axis's state (state-on-invoke).
+        return _cmd_kit_management(args, project_root, engine,
+                                   axis=meta[len("kit_axis_"):])
     elif meta == "tree":
         return _cmd_tree(args, engine)
     elif meta == "setup":
@@ -2584,6 +2597,89 @@ def _cmd_kit_attach(args, project_root, engine):
 
     print(f"Attached kit: {name}")
     print("  Loaded again and enabled.")
+    return 0
+
+
+def _print_axis_hint(axis):
+    pair = next((p for p in LIFECYCLE_PAIRS if p.axis == axis), None)
+    if pair:
+        print(f"\nChange with `dz kit {axis} {pair.warm}|{pair.cold} <kit>` "
+              f"(or the flat alias `dz kit {pair.warm}|{pair.cold} <kit>`).")
+
+
+def _cmd_kit_management(args, project_root, engine, axis=None):
+    """Show kit lifecycle STATE -- the state-on-invoke view (like ``dz kit
+    visibility``). ``management`` is the COMPOSED lifecycle axis ({KitOff..KitOn})
+    that fuses the activation/loading/membership sub-axes (a kit must be a member to
+    load, loaded to activate). ``axis=None`` (``dz kit management [<kit>]``) shows
+    each kit's POSITION on that unified continuum; ``axis=<sub-axis>``
+    (``dz kit activation|loading|membership``) shows that one sub-axis."""
+    if engine is None:
+        print("Error: engine unavailable", file=sys.stderr)
+        return 1
+    import types as _types
+    from dazzlecmd_lib.contexts import KitMembershipContext
+    membership = KitMembershipContext(
+        project_root, getattr(engine, "kits", []),
+        boundary_fqcn=getattr(engine, "command", "dz"))
+    disabled = set((engine._get_user_config() or {}).get("disabled_kits") or [])
+    want = getattr(args, "name", None)
+
+    rows = []
+    for k in (getattr(engine, "kits", []) or []):
+        kname = getattr(k, "kit_name", None) or getattr(k, "name", None)
+        if want and kname != want:
+            continue
+        always = bool(getattr(k, "always_active", False))
+        ref = _types.SimpleNamespace(name=kname, kit_name=kname, always_active=always)
+        rows.append({
+            "name": kname,
+            "always": always,
+            "pointer": membership.pointer_of(ref) is not None,
+            "disabled": (not always) and (kname in disabled),
+        })
+    if not rows:
+        if want:
+            print(f"No kit '{want}' found.", file=sys.stderr)
+            return 1
+        print("No kits.")
+        return 0
+
+    w = max(len(r["name"]) for r in rows)
+    if axis is None:
+        print("Kit management state -- position on the lifecycle continuum")
+        print("(member > loaded > active; colder = more let go):\n")
+        for r in rows:
+            if r["pointer"]:
+                pos = "detached (pointer; not loaded)"
+            elif r["disabled"]:
+                pos = "disabled (loaded, inactive)"
+            else:
+                pos = "active"
+            tag = "  [always-active]" if r["always"] else ""
+            print(f"  {r['name']:<{w}}  {pos}{tag}")
+        print("\nMove with `dz kit enable|disable|attach|detach|add|remove <kit>`;")
+        print("inspect a sub-axis with `dz kit activation|loading|membership`.")
+    elif axis == "activation":
+        print("Activation sub-axis (active vs disabled):\n")
+        for r in rows:
+            st = "disabled" if r["disabled"] else "active"
+            tag = "  [always-active]" if r["always"] else ""
+            print(f"  {r['name']:<{w}}  {st}{tag}")
+        _print_axis_hint("activation")
+    elif axis == "loading":
+        print("Loading sub-axis (loaded vs pointer):\n")
+        for r in rows:
+            print(f"  {r['name']:<{w}}  {'pointer' if r['pointer'] else 'loaded'}")
+        _print_axis_hint("loading")
+    elif axis == "membership":
+        print("Membership sub-axis (registered members):\n")
+        for r in rows:
+            print(f"  {r['name']}")
+        _print_axis_hint("membership")
+    else:
+        print(f"Unknown lifecycle axis: {axis}", file=sys.stderr)
+        return 1
     return 0
 
 
