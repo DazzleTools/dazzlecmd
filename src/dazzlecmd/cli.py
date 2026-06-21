@@ -410,6 +410,8 @@ def _register_meta_commands(subparsers):
                              help="Include disabled kits in the output")
     tree_parser.add_argument("--show-hidden", action="store_true",
                              help="Include tools hidden via 'hidden_tools' config (still dispatchable)")
+    tree_parser.add_argument("--show-empty", action="store_true",
+                             help="Include enabled kits that have no tools (childless branches)")
     tree_parser.set_defaults(_meta="tree")
 
     # dz setup <tool>

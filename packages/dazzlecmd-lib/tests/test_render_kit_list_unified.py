@@ -90,6 +90,48 @@ class TestEngineFullView:
         assert "not found" in capsys.readouterr().out
 
 
+class TestPointerMarker:
+    """slice-4 step 4: a detached kit (a ``pointer`` block on the registry,
+    written by ``dz kit detach``) shows a ``[pointer]`` marker in the summary
+    and is flagged in the drill-in header. Kits without a pointer block render
+    byte-identically to before (the marker is conditional)."""
+
+    def test_summary_marks_pointer_kit(self, capsys):
+        kits = [
+            make_kit(name="alpha", description="Alpha kit", tools=["alpha:t1"]),
+            make_kit(name="det", description="Detached kit",
+                     pointer={"materialized": True}),
+        ]
+        projects = [make_tool(name="t1", namespace="alpha", _fqcn="alpha:t1")]
+        eng = _engine(config={"disabled_kits": ["det"]})
+        assert render_kit_list(_args(), kits, projects, engine=eng) == 0
+        out = capsys.readouterr().out
+        # det carries a pointer block -> a row marker + the footer legend.
+        assert out.count("[pointer]") == 2
+        # "not loaded" (the LOADING axis), NOT "not materialized" -- a detached
+        # kit's files ARE on disk (materialized:true); only its tools aren't loaded.
+        assert "tools not loaded" in out
+        assert "not materialized" not in out
+
+    def test_summary_no_pointer_no_legend(self, capsys):
+        kits, projects = _fixture()
+        assert render_kit_list(_args(), kits, projects, engine=_engine()) == 0
+        out = capsys.readouterr().out
+        # No detached kit -> no marker and no legend (byte-identical to before).
+        assert "[pointer]" not in out
+
+    def test_drill_in_flags_pointer(self, capsys):
+        kits = [make_kit(name="det", description="Detached kit",
+                         pointer={"materialized": True})]
+        eng = _engine(config={"disabled_kits": ["det"]})
+        assert render_kit_list(_args("det"), kits, [], engine=eng) == 0
+        out = capsys.readouterr().out
+        assert "pointer]" in out                 # "[disabled, pointer]" header
+        assert "tools not loaded" in out
+        assert "not materialized" not in out
+        assert "dz kit attach det" in out
+
+
 class TestConfigBomTolerance:
     """A UTF-8 BOM in the config file (PowerShell `Out-File -Encoding utf8`
     writes one) must read cleanly -- no warning, values honored."""

@@ -1387,6 +1387,56 @@ class TestRenderTree:
         err = capsys.readouterr().err
         assert "not found" in err.lower()
 
+    # --- slice-4 step-4: pointer (detached) kit branches in render_tree ---
+
+    def test_pointer_kit_branch_renders(self, capsys):
+        """A detached kit (a ``pointer`` block, loads no tools) surfaces as its
+        own leaf branch with a [pointer] marker -- it never enters by_kit."""
+        projects = [_project("alpha", kit="core", fqcn="core:alpha")]
+        engine = _engine_with(projects)
+        engine._get_user_config = lambda: {}
+        engine.kits.append(make_kit(
+            name="det", _kit_name="det", pointer={"materialized": True},
+        ))
+        rc = dmc.render_tree(_args(), engine, projects, [], None)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "core" in out                      # canonical tool-bearing kit
+        assert "det [pointer]" in out             # detached kit branch
+        assert "1 detached pointer kit(s)" in out
+
+    def test_no_pointer_kit_no_marker(self, capsys):
+        """Regression guard: no detached kit -> no [pointer] marker and the
+        footer omits the pointer-kit count."""
+        projects = [_project("alpha", kit="core", fqcn="core:alpha")]
+        engine = _engine_with(projects)
+        engine._get_user_config = lambda: {}
+        rc = dmc.render_tree(_args(), engine, projects, [], None)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "[pointer]" not in out
+        assert "detached pointer" not in out
+
+    def test_show_empty_reveals_empty_enabled_kit(self, capsys):
+        """An enabled kit with no tools is hidden by default (tool-centric tree)
+        but shown as a childless branch with --show-empty. This is the
+        detach->attach symmetry: a re-attached empty kit reappears."""
+        projects = [_project("alpha", kit="core", fqcn="core:alpha")]
+        engine = _engine_with(projects)
+        engine._get_user_config = lambda: {}
+        engine.kits.append(make_kit(name="empty1", _kit_name="empty1", tools=[]))
+
+        # default: the empty enabled kit is hidden (no tools -> no branch)
+        rc = dmc.render_tree(_args(), engine, projects, [], None)
+        assert rc == 0
+        assert "empty1" not in capsys.readouterr().out
+
+        # --show-empty: shown as a childless branch
+        rc = dmc.render_tree(_args(show_empty=True), engine, projects, [], None)
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "empty1" in out
+
 
 # ---------------------------------------------------------------------------
 # setup

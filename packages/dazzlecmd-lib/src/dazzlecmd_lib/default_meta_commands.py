@@ -1388,9 +1388,17 @@ def _render_kit_list_full(args, kits, projects, engine) -> int:
         status = _kit_status(kit)
         is_virtual = kit.virtual is True
         label = "virtual, " + status if is_virtual else status
+        # A detached kit carries a `pointer` block (the LOADING axis): declared
+        # but not materialized, so it loads no tools. Flag it in the header.
+        is_pointer = bool(getattr(kit, "pointer", None))
+        if is_pointer:
+            label += ", pointer"
         print(f"Kit: {name} [{label}]")
         if kit.description:
             print(f"  {kit.description}")
+        if is_pointer:
+            print(f"  (detached -- a pointer; tools not loaded; "
+                  f"`dz kit attach {name}` to reconnect)")
         print()
 
         # Virtual-kit drill-in: show alias FQCN + canonical target +
@@ -1460,6 +1468,7 @@ def _render_kit_list_full(args, kits, projects, engine) -> int:
         return 0
 
     # No name given — list all kits with status
+    any_pointer = False
     for i, kit in enumerate(kits):
         if i > 0:
             print()  # blank line separator for readability
@@ -1473,13 +1482,28 @@ def _render_kit_list_full(args, kits, projects, engine) -> int:
             _colors.colorize(f"{name:<{KIT_NAME_COL}}", _colors.BOLD)
             if _use_color else f"{name:<{KIT_NAME_COL}}"
         )
-        print(f"  {name_styled} {tool_count} tool(s)  [{status}]")
+        # [pointer] marks a DETACHED kit (a `pointer` block on the registry,
+        # written by `dz kit detach`): declared but not materialized, so it
+        # loads no tools (the LOADING axis, orthogonal to the activation
+        # [status]). YELLOW = caution, not error. Conditional, so kits without
+        # a pointer block render byte-identically to before.
+        if getattr(kit, "pointer", None):
+            any_pointer = True
+            ptr = (_colors.colorize(" [pointer]", _colors.YELLOW)
+                   if _use_color else " [pointer]")
+        else:
+            ptr = ""
+        print(f"  {name_styled} {tool_count} tool(s)  [{status}]{ptr}")
         if kit.description:
             # Word-wrap to terminal width with a hanging indent (the
             # render_list formatting discipline).
             avail = max(MIN_DESC_WIDTH, _term_width() - SUMMARY_INDENT)
             for line in _wrap_description(kit.description, avail):
                 print(f"    {line}")
+    if any_pointer:
+        print()
+        print("  [pointer] = detached (a pointer; tools not loaded); "
+              "`dz kit attach <name>` to reconnect")
     return 0
 
 
@@ -1758,6 +1782,10 @@ def tree_parser_factory(subparsers):
         "--show-hidden", action="store_true",
         help="Include tools hidden via the 'hidden_tools' config (still dispatchable).",
     )
+    p.add_argument(
+        "--show-empty", action="store_true",
+        help="Include enabled kits that have no tools (shown as childless branches).",
+    )
     p.set_defaults(_meta="tree")
 
 
@@ -1785,6 +1813,7 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
     depth_limit = getattr(args, "depth", None)
     kit_filter = getattr(args, "kit", None)
     show_disabled = getattr(args, "show_disabled", False)
+    show_empty = getattr(args, "show_empty", False)
 
     # Build the hierarchical view from the appropriate project list.
     # --show-disabled uses all_projects (includes disabled kits' tools);
@@ -1842,6 +1871,18 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
         if info.get("always_active"):
             return "enabled (always_active)"
         return "enabled"
+
+    # --show-empty: include enabled kits with NO discovered tools as childless
+    # branches (consistent with `dz kit list`, which always lists them). Default
+    # off -- the tree stays tool-centric. Virtual + pointer kits have their own
+    # branches below, so skip them here. A detached kit round-trips symmetrically:
+    # detach -> [pointer] branch (--show-disabled); attach -> childless branch
+    # (--show-empty) when it has no tools.
+    if show_empty:
+        for _k in getattr(engine, "kits", []):
+            _kn = _k.kit_name or _k.name
+            if _kn and not _k.virtual and not getattr(_k, "pointer", None):
+                by_kit.setdefault(_kn, [])
 
     kit_names = sorted(by_kit.keys())
     if kit_filter:
@@ -1925,9 +1966,29 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
             if (k.kit_name or k.name) == kit_filter
         ]
 
+    # Pointer (detached) kits: declared-but-not-materialized -- they carry a
+    # `pointer` block (written by `dz kit detach`) and load NO tools (the engine
+    # LOADING-skip partition), so they never appear in `by_kit`. Surface them as
+    # their own leaf branches (like virtual kits) so `dz tree` shows what's
+    # detached. Detach implies disable, so by default they're hidden unless
+    # --show-disabled (consistent with how disabled kits are filtered).
+    pointer_kits = [
+        k for k in getattr(engine, "kits", [])
+        if getattr(k, "pointer", None) and not k.virtual and (
+            show_disabled or
+            _kit_state(k.kit_name or k.name)
+            not in ("disabled", "disabled (not in active_kits)")
+        )
+    ]
+    if kit_filter:
+        pointer_kits = [
+            k for k in pointer_kits
+            if (k.kit_name or k.name) == kit_filter
+        ]
+
     total_tools = 0
     total_aliases = 0
-    all_branches = len(kit_names) + len(virtual_kits)
+    all_branches = len(kit_names) + len(virtual_kits) + len(pointer_kits)
     branch_idx = 0
 
     reserved = getattr(engine, "reserved_commands", frozenset())
@@ -2024,14 +2085,31 @@ def render_tree(args, engine, projects, kits, project_root) -> int:
             arrow = _dim("->") if _use_color else "->"
             print(f"{branch_indent}{tool_prefix}{alias_fqcn} {arrow} {canonical_fqcn}")
 
-    print()
-    if total_aliases:
-        print(
-            f"{total_tools} tools across {len(kit_names)} kit(s), "
-            f"{total_aliases} alias(es) in {len(virtual_kits)} virtual kit(s)"
+    # Pointer (detached) kit branches -- leaf nodes (no tools to render). The
+    # [pointer] marker is YELLOW (caution); a trailing dim [disabled] notes the
+    # cascade (detach implies disable).
+    for pkit in pointer_kits:
+        branch_idx += 1
+        is_last_branch = (branch_idx == all_branches)
+        kit_prefix = "\\-- " if is_last_branch else "+-- "
+        pk_name = pkit.kit_name or pkit.name
+        state = _kit_state(pk_name)
+        ptr_marker = (
+            _colors.colorize("[pointer]", _colors.YELLOW)
+            if _use_color else "[pointer]"
         )
-    else:
-        print(f"{total_tools} tools across {len(kit_names)} kit(s)")
+        dis = _dim(" [disabled]") if "disabled" in state else ""
+        print(f"{kit_prefix}{_bold(pk_name)} {ptr_marker}{dis}")
+
+    print()
+    summary = f"{total_tools} tools across {len(kit_names)} kit(s)"
+    if total_aliases:
+        summary += (
+            f", {total_aliases} alias(es) in {len(virtual_kits)} virtual kit(s)"
+        )
+    if pointer_kits:
+        summary += f", {len(pointer_kits)} detached pointer kit(s)"
+    print(summary)
     return 0
 
 

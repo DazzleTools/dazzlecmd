@@ -4,6 +4,21 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.9.60] - 2026-06-21
+
+### Added
+
+- **`[pointer]` marker for detached kits in `dz kit list` and `dz tree` (kit-lifecycle slice-4 step 4).** A detached kit carries a `pointer` block on its registry (written by `dz kit detach`): it is marked a pointer, so it loads no tools (the LOADING axis, orthogonal to the activation `[status]`). `dz kit list` now flags such a kit with a YELLOW `[pointer]` marker beside its status, a footer legend, and -- on drill-in (`dz kit list <kit>`) -- a `[..., pointer]` header tag plus a one-line "a pointer; tools not loaded; `dz kit attach <name>` to reconnect" note. `dz tree` surfaces detached kits as their own leaf branches (they never enter `by_kit` because they load no tools), mirroring how virtual kits render, with the count in the footer (`N detached pointer kit(s)`). The markers are conditional, so kits without a pointer block render byte-identically to before. Wording: "tools not loaded" (the LOADING axis), NOT "not materialized" -- a detached kit's files stay on disk (`materialized: true`); only its tools are unloaded. `materialized: false` (a not-yet-fetched remote pointer) is the #80 surface.
+- **`dz tree --show-empty`** -- a reveal flag (sibling of `--show-disabled` / `--show-hidden`) that includes enabled kits with no tools as childless branches. Default off (the tree stays tool-centric, byte-identical to before). Restores detach->attach symmetry: a re-attached empty kit reappears under `--show-empty`, just as the detached one shows under `--show-disabled` with `[pointer]`.
+
+### Notes
+
+- Completes the slice-4 lifecycle surface (detach/attach + the visible pointer state). Refs #80 (pointer kits / materialization), #86. Verification: suite 1583 (+6: 3 kit-list + 3 tree); byte-gate identical (4 OK / 6 FAIL parked-WIP baseline; `dz info` is untouched). Full tree-branch repoint display (source-target arrows) stays with the #52/#80 repoint surface (0.10.x).
+
+### Versions
+
+- dazzlecmd 0.9.59 -> 0.9.60 (PATCH); dazzle-dz -> 0.9.60; dazzlecmd-lib 0.8.53 -> 0.8.54 (the renderer lives in the lib). dazzle-lib unchanged (0.6.7).
+
 ## [0.9.59] - 2026-06-20
 
 ### Added
@@ -3533,7 +3548,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.59...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.60...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
