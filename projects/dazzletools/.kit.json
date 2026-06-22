@@ -18,7 +18,10 @@
         "dazzletools:claude-sesslog-datefix",
         "dazzletools:claude-lost-sessions",
         "dazzletools:md-rm-img",
-        "dazzletools:md-unwrap"
+        "dazzletools:md-unwrap",
+        "dazzletools:safe-icacls",
+        "dazzletools:redact-msinfo",
+        "dazzletools:fixuser"
     ],
     "source": "https://github.com/DazzleTools/dazzletools-kit",
     "notes": "The DazzleTools utility collection. Currently embedded in the dazzlecmd repo but intended to migrate to its own GitHub repo (DazzleTools/dazzletools-kit). This manifest travels with the kit -- when extracted to its own repo, the only change in dazzlecmd is replacing projects/dazzletools/ with a git submodule. The registry pointer in kits/dazzletools.kit.json controls activation only."

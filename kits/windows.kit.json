@@ -1,0 +1,16 @@
+{
+    "_schema_version": 1,
+    "name": "windows",
+    "virtual": true,
+    "always_active": true,
+    "description": "Virtual kit: Windows sysadmin tools grouped under a shared prefix. Alias FQCNs like 'dazzletools:windows:sicacls' resolve to canonical dazzletools tools without moving files. Gives Windows-focused utilities (ACL/permission fixers, diagnostics export redaction) a clear home separate from the general cross-platform dazzletools utilities (redact-msinfo itself is cross-platform -- the input is a Windows artifact). 'safe-icacls' is also reachable by its short alias 'sicacls'; 'fixuser' (alias 'fixusr') diagnoses and repairs broken or temporary user profiles.",
+    "tools": [
+        "dazzletools:safe-icacls",
+        "dazzletools:redact-msinfo",
+        "dazzletools:fixuser"
+    ],
+    "name_rewrite": {
+        "dazzletools:safe-icacls": "sicacls",
+        "dazzletools:fixuser": "fixusr"
+    }
+}

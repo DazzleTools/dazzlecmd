@@ -1,0 +1,22 @@
+{
+    "name": "fixuser",
+    "version": "0.1.0",
+    "description": "Diagnose and repair a broken Windows user profile: detects temporary-profile / ProfileList '.bak' state and stripped profile ACLs (the takeown/icacls aftermath), then restores the ProfileList entry and re-grants the user FullControl loop-safely via safe-icacls",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "windows",
+    "platforms": ["windows"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "fixuser.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "system-tools",
+        "tags": ["windows", "profile", "user-profile", "registry", "profilelist", "acl", "temp-profile", "takeown", "repair", "admin"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

@@ -4,6 +4,24 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.10.2] - 2026-06-22
+
+### Added
+
+- **`safe-icacls` + `redact-msinfo` + `fixuser` -- Windows sysadmin tools + the `windows` virtual kit.**
+  - **`safe-icacls`** (alias `sicacls`, Windows-only) -- a loop-safe passthrough wrapper around `icacls`. With no `/T` it runs `icacls` verbatim; with `/T` it walks the tree itself and **prunes reparse points** (junctions/symlinks), because `icacls <profile> /T` otherwise loops forever on the self-referential `AppData\Local\Application Data` junction. Wrapper-only flags `--safe-dry-run` / `--safe-verbose` / `--safe-dirs-only` / `--safe-skip-reparse` / `--safe-progress N` / `--unsafe` (the `--safe-` prefix never collides with `icacls`'s `/`-style args). stdlib + `icacls.exe`.
+  - **`redact-msinfo`** (cross-platform) -- redacts a Windows `msinfo32` text export for safe sharing: section selection (default-keeps System Summary / Display / Problem Devices; `--include` / `--exclude` / `--list-sections`) plus PII scrubbing (hostname, user, owner/org, product ID/key, UUID, serials, MACs, IP/subnet/gateway -> `[REDACTED-*]` tokens) with a self-verify pass (`--no-verify`, `--hostname`). stdlib-only; runs anywhere (the input is just a text file).
+  - **`fixuser`** (alias `fixusr`, Windows-only) -- diagnoses and repairs a broken Windows user profile (the "signed in with a temporary profile" / `C:\Users\TEMP` state from a stripped profile ACL). Names + handles 6 shapes (`HEALTHY` / `BAK-ONLY` / `TEMP-ACTIVE+BAK` / `TEMP-ACTIVE-no-BAK` / `STATE-FLAGGED` / `MISSING`); repairs ACLs first (via `safe-icacls`, loop-safe) then the `ProfileList` registry. Read-only by default; `--repair` (elevated) backs up `ProfileList` + ACLs first; `--acls-only` / `--registry-only` / `--harden` / `--backup-dir` / `--yes`. stdlib (`winreg`/`ctypes`) + `icacls`/`reg`.
+  - **`windows` virtual kit** (`kits/windows.kit.json`): `windows:sicacls` -> `safe-icacls`, `windows:fixusr` -> `fixuser`, `windows:redact-msinfo` -> `redact-msinfo`.
+
+### Notes
+
+- All three are pure stdlib (no `pywin32`). `safe-icacls` generalizes a loop-safe one-off; `redact-msinfo` pre-existed and was grouped into the `windows` kit; `fixuser` was built alongside (and depends on `safe-icacls`). Ships with three human test checklists; the tool tests run without elevation (they mock the OS-touching `icacls`/registry calls). The third 0.10.x new-tools release, ahead of the #58 packaging move. dazzlecmd-lib unchanged.
+
+### Versions
+
+- dazzlecmd 0.10.1 -> 0.10.2 (PATCH); dazzle-dz -> 0.10.2. dazzlecmd-lib unchanged (0.8.54); dazzle-lib unchanged (0.6.7).
+
 ## [0.10.1] - 2026-06-22
 
 ### Added
@@ -3583,7 +3601,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.2...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

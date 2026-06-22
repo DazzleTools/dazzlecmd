@@ -1,0 +1,22 @@
+{
+    "name": "safe-icacls",
+    "version": "0.1.0",
+    "description": "Loop-safe passthrough wrapper around Windows icacls: forwards any icacls args, but on /T walks the tree itself and prunes reparse points so self-referential junctions can't cause an infinite recursion",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "windows",
+    "platforms": ["windows"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "safe_icacls.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "system-tools",
+        "tags": ["windows", "icacls", "permissions", "acl", "ntfs", "junction", "reparse", "symlink", "takeown", "admin"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

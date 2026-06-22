@@ -1,0 +1,22 @@
+{
+    "name": "redact-msinfo",
+    "version": "0.1.0",
+    "description": "Redact a Windows msinfo32 text export (PII scrubbing + section stripping) for safe sharing; pick sections with --include/--exclude",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "redact_msinfo.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "file-tools",
+        "tags": ["windows", "msinfo32", "diagnostics", "redaction", "pii", "privacy", "disclosure"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}
