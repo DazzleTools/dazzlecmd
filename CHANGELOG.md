@@ -4,6 +4,29 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.10.3] - 2026-06-22
+
+### Added
+
+- **`claude-session-metadata` + `claude-recover-sesslogs` + `claude-sesslog-datefix` + `claudeview` -- Claude Code session tools.** Four tools for cataloguing, recovering, and viewing Claude Code session transcripts, grouped under the existing `claude` virtual kit.
+  - **`claude-session-metadata`** (cross-platform) -- catalogs Claude Code sessions (lost or live): cross-references session artifacts, discovers the on-disk docs a session referenced, and lays down navigable symlinks. Supersedes the retired `claude-lost-sessions` (it handles both lost and live sessions).
+  - **`claude-recover-sesslogs`** (cross-platform) -- salvages the surviving logger channels (`.sesslog` / `.shell` / `.convo`) of sessions that ran in a now-missing working directory: it ranks session logs by folder-affinity and copies the survivors out. The original transcript is usually already gone, so these channels are the surviving record of the conversation. Kept as a standalone tool (not folded into `claude-session-metadata`). (Refs #90.)
+  - **`claude-sesslog-datefix`** (Windows) -- repairs the timestamps on Claude Code session-log directories after a git operation corrupts them. `pywin32` is optional: `mtime` fixing works without it; only `ctime` (creation time) needs it.
+  - **`claudeview`** (cross-platform) -- opens a Claude Code session in the history viewer from the command line. Depends on `claude-session-backup` (`csb`) plus the claude-code-history-viewer (installed or built from source).
+  - **`claude` virtual kit** (`kits/claude.kit.json`): gains `claude:recover-sesslogs`, alongside the existing `claude:cleanup` / `claude:session-metadata` / `claude:sesslog-datefix` / `claude:view`. Committing the four tool dirs also resolves three `claude.kit.json` aliases that were previously dangling (their tool dirs had never been committed).
+
+### Removed
+
+- **`claude-lost-sessions`** -- retired; its lost-session cataloguing is subsumed by `claude-session-metadata`, which handles both lost and live sessions. The dazzletools kit drops the registration and the tool's files are removed.
+
+### Notes
+
+- The fourth 0.10.x new-tools release, ahead of the #58 packaging move. These tools ship without formal pytest suites (validated via local one-off scripts kept out of the public tree). dazzlecmd-lib unchanged.
+
+### Versions
+
+- dazzlecmd 0.10.2 -> 0.10.3 (PATCH); dazzle-dz -> 0.10.3. dazzlecmd-lib unchanged (0.8.54); dazzle-lib unchanged (0.6.7).
+
 ## [0.10.2] - 2026-06-22
 
 ### Added
@@ -3601,7 +3624,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.2...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.3...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

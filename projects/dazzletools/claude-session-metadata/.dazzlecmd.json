@@ -1,0 +1,22 @@
+{
+    "name": "claude-session-metadata",
+    "version": "0.2.0",
+    "description": "Catalog Claude Code sessions (lost or live) with artifact cross-referencing, known-docs discovery, and navigable symlinks",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "claude_session_metadata.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "dev-tools",
+        "tags": ["claude", "sesslog", "metadata", "transcript", "recovery", "known-docs", "sessions"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

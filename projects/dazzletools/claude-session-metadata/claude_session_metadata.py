@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
 """
-claude-lost-sessions - Catalog lost Claude Code session transcripts.
+claude-session-metadata - Catalog Claude Code sessions with artifact cross-referencing.
 
-Scans ~/.claude/sesslogs/ for broken transcript.jsonl symlinks, extracts
-metadata from session log files (timestamps, commands, tools used), and
-creates a structured ~/claude/lost-sessions/ directory with per-session
-summaries and an INDEX.md master table.
+Scans ~/.claude/sesslogs/ for session directories, extracts metadata from
+session log files (timestamps, commands, tools used), and creates a
+structured catalog with per-session summaries, known authored docs,
+working directories, and an INDEX.md master table.
 
-For each lost session, cross-references project private/claude/ docs,
-~/claude/ general docs, and git commits within the session timeframe to
-find surviving artifacts.
+Supports three modes:
+  --lost (default): Catalog sessions with broken/missing transcripts
+  --live:           Catalog sessions with intact transcripts
+  --all:            Catalog all sessions regardless of transcript status
 
 Usage via dz:
-    dz claude-lost-sessions                         # dry-run preview
-    dz claude-lost-sessions --apply                 # create lost-sessions catalog
-    dz claude-lost-sessions --apply --verbose       # with per-session detail
-    dz claude-lost-sessions --sesslogs-path DIR     # custom sesslogs path
-    dz claude-lost-sessions --output-path DIR       # custom output directory
+    dz claude-session-metadata                      # dry-run, lost sessions
+    dz claude-session-metadata --apply              # create catalog (lost only)
+    dz claude-session-metadata --all --apply        # catalog all sessions
+    dz claude-session-metadata --live --apply       # live sessions only
+    dz claude-session-metadata --apply --verbose    # with per-session detail
 """
 
 import argparse
@@ -165,7 +166,9 @@ SOURCE_FILE_PRIORITY = [
 
 # Default paths
 DEFAULT_SESSLOGS = Path.home() / ".claude" / "sesslogs"
-DEFAULT_OUTPUT = Path.home() / "claude" / "lost-sessions"
+DEFAULT_OUTPUT_LOST = Path.home() / "claude" / "lost-sessions"
+DEFAULT_OUTPUT_LIVE = Path.home() / "claude" / "live-sessions"
+DEFAULT_OUTPUT_ALL = Path.home() / "claude" / "sessions"
 DEFAULT_CLAUDE_DOCS = Path.home() / "claude"
 
 
@@ -628,7 +631,8 @@ def find_timeframe_docs(docs_dir, start_time, end_time):
     """Find markdown docs in a directory created within the session timeframe.
 
     Uses filename date prefixes (YYYY-MM-DD__HH-MM) rather than filesystem
-    timestamps (which may have been clobbered).
+    timestamps (which may have been clobbered). Uses exact sesslog start/end
+    times with no buffer -- the sesslog timestamps are authoritative.
     """
     if not docs_dir or not Path(docs_dir).is_dir():
         return []
@@ -644,16 +648,26 @@ def find_timeframe_docs(docs_dir, start_time, end_time):
                     f"{match.group(1)} {match.group(2)}:{match.group(3)}",
                     "%Y-%m-%d %H:%M",
                 )
-                # Allow 1-day buffer on each side for related docs
                 if start_time and end_time:
-                    buffer_start = start_time - timedelta(days=1)
-                    buffer_end = end_time + timedelta(days=1)
-                    if buffer_start <= file_date <= buffer_end:
+                    if start_time <= file_date <= end_time:
                         found.append(f)
             except ValueError:
                 pass
 
     return found
+
+
+def _is_within_timeframe(filepath, start_time, end_time):
+    """Check if a file's date prefix falls within a time window.
+
+    Returns True if within bounds, False if outside, None if no date prefix.
+    """
+    fn_dt = _extract_filename_datetime(Path(filepath).name)
+    if fn_dt is None:
+        return None
+    if start_time and end_time:
+        return start_time <= fn_dt <= end_time
+    return None
 
 
 def find_git_commits(project_path, start_time, end_time):
@@ -687,12 +701,15 @@ def find_git_commits(project_path, start_time, end_time):
 
 def generate_summary_md(session_name, uuid, username, target_path, project_path,
                         meta, project_docs, general_docs, git_commits,
-                        top_dirs=None, markdown_refs=None):
-    """Generate summary.md content for a lost session."""
+                        top_dirs=None, markdown_refs=None, session_type="lost"):
+    """Generate summary.md content for a session."""
+    type_label = {"lost": "Lost Session", "live": "Session", "all": "Session"}
+    heading = type_label.get(session_type, "Session")
     lines = [
-        f"# Lost Session: {session_name}",
+        f"# {heading}: {session_name}",
         "",
         f"**UUID:** `{uuid}`",
+        f"**Transcript:** {'available' if session_type == 'live' else 'lost'}",
         f"**Start:** {meta['start_time'].strftime('%Y-%m-%d %H:%M:%S') if meta['start_time'] else 'unknown'}",
         f"**End:** {meta['end_time'].strftime('%Y-%m-%d %H:%M:%S') if meta['end_time'] else 'unknown'}",
         f"**Duration:** {meta['duration'] or 'unknown'}",
@@ -797,15 +814,30 @@ def generate_summary_md(session_name, uuid, username, target_path, project_path,
     return "\n".join(lines)
 
 
-def generate_index_md(sessions):
+def generate_index_md(sessions, mode="lost"):
     """Generate INDEX.md master table."""
+    title_map = {"lost": "Lost Session Index", "live": "Session Index", "all": "Session Index"}
+    title = title_map.get(mode, "Session Index")
+
+    lost_count = sum(1 for s in sessions if s.get("session_type") == "lost")
+    live_count = sum(1 for s in sessions if s.get("session_type") == "live")
+    if mode == "all":
+        subtitle = f"{len(sessions)} sessions ({live_count} live, {lost_count} lost). Sorted by date."
+    elif mode == "live":
+        subtitle = f"{len(sessions)} sessions with intact transcripts. Sorted by date."
+    else:
+        subtitle = f"{len(sessions)} sessions with missing transcripts. Sorted by date."
+
+    type_col = "| Type " if mode == "all" else ""
+    type_sep = "|------" if mode == "all" else ""
+
     lines = [
-        "# Lost Session Index",
+        f"# {title}",
         "",
-        f"{len(sessions)} sessions with missing transcripts. Sorted by date.",
+        subtitle,
         "",
-        "| Date | Session Name | Project | Duration | Cmds | Artifacts |",
-        "|------|-------------|---------|----------|------|-----------|",
+        f"| Date | Session Name | Project {type_col}| Duration | Cmds | Artifacts |",
+        f"|------|-------------|---------|{type_sep}----------|------|-----------|",
     ]
 
     for s in sessions:
@@ -828,8 +860,9 @@ def generate_index_md(sessions):
         if len(project) > 25:
             project = project[:22] + "..."
 
+        type_cell = f"| {s.get('session_type', 'lost')} " if mode == "all" else ""
         lines.append(
-            f"| {date_str} | {name} | {project} | {s['duration'] or '--'} | {s['command_count']} | {artifact_str} |"
+            f"| {date_str} | {name} | {project} {type_cell}| {s['duration'] or '--'} | {s['command_count']} | {artifact_str} |"
         )
 
     lines.append("")
@@ -845,9 +878,14 @@ def generate_index_md(sessions):
     lines.extend([
         "## Summary",
         "",
-        f"- **Total lost sessions:** {len(sessions)}",
+        f"- **Total sessions:** {len(sessions)}",
+        *(
+            [f"- **Live (transcript intact):** {live_count}",
+             f"- **Lost (transcript missing):** {lost_count}"]
+            if mode == "all" else []
+        ),
         f"- **Total commands across all sessions:** {total_cmds}",
-        f"- **Sessions with surviving artifacts:** {with_artifacts}",
+        f"- **Sessions with artifacts:** {with_artifacts}",
         f"- **Named sessions (not generic c__):** {named}",
         f"- **High-value sessions (>50 cmds or has artifacts):** {high_value}",
         "",
@@ -861,27 +899,44 @@ def generate_index_md(sessions):
 # ---------------------------------------------------------------------------
 
 def main(argv=None):
-    """Entry point for dz claude-lost-sessions."""
+    """Entry point for dz claude-session-metadata (formerly claude-lost-sessions)."""
     if argv is None:
         argv = sys.argv[1:]
 
     parser = argparse.ArgumentParser(
-        prog="dz claude-lost-sessions",
-        description="Catalog lost Claude Code session transcripts by scanning "
-                    "broken sesslog symlinks and cross-referencing artifacts.",
+        prog="dz claude-session-metadata",
+        description="Catalog Claude Code sessions with artifact cross-referencing. "
+                    "Extracts metadata from sesslog command logs, discovers authored "
+                    "docs, and builds a structured catalog with navigable symlinks.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 examples:
-  dz claude-lost-sessions                         Preview (dry-run)
-  dz claude-lost-sessions --apply                 Create lost-sessions catalog
-  dz claude-lost-sessions --apply --verbose       With per-session detail
-  dz claude-lost-sessions --sesslogs-path DIR     Custom sesslogs directory
-  dz claude-lost-sessions --output-path DIR       Custom output directory
+  dz claude-session-metadata                      Preview lost sessions (dry-run)
+  dz claude-session-metadata --apply              Create catalog (lost sessions)
+  dz claude-session-metadata --all --apply        Catalog all sessions
+  dz claude-session-metadata --live --apply       Catalog live sessions only
+  dz claude-session-metadata --apply --verbose    With per-session detail
 """,
     )
+
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        "--lost", action="store_const", const="lost", dest="mode",
+        help="Catalog sessions with broken/missing transcripts (default)",
+    )
+    mode_group.add_argument(
+        "--live", action="store_const", const="live", dest="mode",
+        help="Catalog sessions with intact transcripts",
+    )
+    mode_group.add_argument(
+        "--all", action="store_const", const="all", dest="mode",
+        help="Catalog all sessions regardless of transcript status",
+    )
+    parser.set_defaults(mode="lost")
+
     parser.add_argument(
         "--apply", action="store_true",
-        help="Create the lost-sessions catalog (default is dry-run preview)",
+        help="Create the catalog (default is dry-run preview)",
     )
     parser.add_argument(
         "--verbose", "-v", action="store_true",
@@ -893,7 +948,7 @@ examples:
     )
     parser.add_argument(
         "--output-path", type=str, default=None,
-        help=f"Path to output directory (default: {DEFAULT_OUTPUT})",
+        help="Path to output directory (auto-selected by mode if not specified)",
     )
     parser.add_argument(
         "--skip-git", action="store_true",
@@ -903,15 +958,24 @@ examples:
     args = parser.parse_args(argv)
 
     sesslogs_path = Path(args.sesslogs_path) if args.sesslogs_path else DEFAULT_SESSLOGS
-    output_path = Path(args.output_path) if args.output_path else DEFAULT_OUTPUT
+    if args.output_path:
+        output_path = Path(args.output_path)
+    else:
+        output_path = {
+            "lost": DEFAULT_OUTPUT_LOST,
+            "live": DEFAULT_OUTPUT_LIVE,
+            "all": DEFAULT_OUTPUT_ALL,
+        }[args.mode]
 
     if not sesslogs_path.is_dir():
         print(f"Error: sesslogs directory not found: {sesslogs_path}")
         return 1
 
-    # Scan for broken symlinks
-    print(f"Scanning {sesslogs_path} for broken transcript links...")
-    broken_sessions = []
+    # Scan sesslogs directory
+    mode_label = {"lost": "broken transcript links", "live": "sessions with transcripts", "all": "all sessions"}
+    print(f"Scanning {sesslogs_path} for {mode_label[args.mode]}...")
+    target_sessions = []
+    broken_count = 0
     valid_count = 0
     skip_count = 0
 
@@ -920,31 +984,38 @@ examples:
             continue
 
         if is_broken_symlink(entry):
-            broken_sessions.append(entry)
+            broken_count += 1
+            if args.mode in ("lost", "all"):
+                target_sessions.append((entry, "lost"))
         else:
             transcript = entry / "transcript.jsonl"
             if transcript.exists():
                 valid_count += 1
+                if args.mode in ("live", "all"):
+                    target_sessions.append((entry, "live"))
             else:
                 skip_count += 1
 
-    print(f"  Found: {len(broken_sessions)} broken, {valid_count} valid, {skip_count} no transcript")
+    print(f"  Found: {broken_count} broken, {valid_count} valid, {skip_count} no transcript")
+    if args.mode != "all":
+        print(f"  Mode: {args.mode} ({len(target_sessions)} to catalog)")
     print()
 
-    if not broken_sessions:
-        print("No broken transcript links found. Nothing to catalog.")
+    if not target_sessions:
+        print(f"No sessions matched mode '{args.mode}'. Nothing to catalog.")
         return 0
 
-    # Process each broken session
+    # Process each session
     sessions_data = []
 
-    for i, sesslog_dir in enumerate(broken_sessions, 1):
+    for i, (sesslog_dir, session_type) in enumerate(target_sessions, 1):
         folder_name = sesslog_dir.name
         session_name, uuid, username = parse_folder_name(folder_name)
 
         if args.verbose or not args.apply:
-            progress = f"[{i}/{len(broken_sessions)}]"
-            print(f"  {progress} {session_name} ({uuid or 'no-uuid'})")
+            progress = f"[{i}/{len(target_sessions)}]"
+            type_tag = f" [{session_type}]" if args.mode == "all" else ""
+            print(f"  {progress} {session_name} ({uuid or 'no-uuid'}){type_tag}")
 
         # Get symlink target and decode project path
         target_path = get_symlink_target(sesslog_dir)
@@ -973,7 +1044,6 @@ examples:
         project_docs = []
         general_docs = []
         git_commits = []
-        all_known_docs = []  # All .md files found across all sources
 
         # First priority: files we WROTE during the session (from sesslog)
         written_docs = []
@@ -990,33 +1060,37 @@ examples:
                 edited_docs.append(p)
 
         if meta["start_time"] and meta["end_time"]:
-            # Search private/claude/ in decoded project path
+            # Search private/claude/ in ALL top-level directories the session touched.
+            # This catches docs in spacehaven/private/claude/, repokit/private/claude/, etc.
+            searched_privs = set()
+
+            # Start with the decoded project path
             if project_path:
                 priv_claude = Path(project_path) / "private" / "claude"
-                project_docs = find_timeframe_docs(priv_claude, meta["start_time"], meta["end_time"])
+                if priv_claude.is_dir():
+                    project_docs.extend(find_timeframe_docs(
+                        priv_claude, meta["start_time"], meta["end_time"]))
+                    searched_privs.add(str(priv_claude).lower())
 
-            # Search private/claude/ in all working directories
-            searched_privs = set()
-            if project_path:
-                searched_privs.add(str(Path(project_path) / "private" / "claude"))
-
+            # Then all working directories' private/claude/ folders
             for d in top_dirs:
                 priv = Path(d) / "private" / "claude"
-                if priv.is_dir() and str(priv) not in searched_privs:
-                    extra = find_timeframe_docs(priv, meta["start_time"], meta["end_time"])
-                    project_docs.extend(extra)
-                    searched_privs.add(str(priv))
+                if priv.is_dir() and str(priv).lower() not in searched_privs:
+                    project_docs.extend(find_timeframe_docs(
+                        priv, meta["start_time"], meta["end_time"]))
+                    searched_privs.add(str(priv).lower())
 
             # Search directories where we WROTE .md files (from sesslog Write commands)
             for write_dir in markdown_refs.get("write_dirs", []):
                 wd = Path(write_dir)
-                if wd.is_dir() and str(wd) not in searched_privs:
-                    extra = find_timeframe_docs(wd, meta["start_time"], meta["end_time"])
-                    project_docs.extend(extra)
-                    searched_privs.add(str(wd))
+                if wd.is_dir() and str(wd).lower() not in searched_privs:
+                    project_docs.extend(find_timeframe_docs(
+                        wd, meta["start_time"], meta["end_time"]))
+                    searched_privs.add(str(wd).lower())
 
             # Search ~/claude/ general docs
-            general_docs = find_timeframe_docs(DEFAULT_CLAUDE_DOCS, meta["start_time"], meta["end_time"])
+            general_docs = find_timeframe_docs(
+                DEFAULT_CLAUDE_DOCS, meta["start_time"], meta["end_time"])
 
             # Search git commits in all top directories
             if not args.skip_git:
@@ -1043,26 +1117,55 @@ examples:
         all_known_docs.extend(project_docs)
         all_known_docs.extend(general_docs)
 
-        # Deduplicate by resolving to canonical absolute paths
-        seen_paths = set()
-        unique_docs = []
-        for d in all_known_docs:
-            p = Path(d)
-            # Use resolve() for existing files (canonical), normalize for missing
-            if p.exists():
-                norm = str(p.resolve()).lower()
-            else:
-                norm = str(p).replace("/", "\\").lower()
-            if norm not in seen_paths:
-                seen_paths.add(norm)
-                unique_docs.append(d)
-        all_known_docs = unique_docs
+        # Deduplicate known docs by resolving to canonical absolute paths
+        def _dedup_paths(doc_list):
+            seen = set()
+            result = []
+            for d in doc_list:
+                p = Path(d)
+                norm = str(p.resolve()).lower() if p.exists() else str(p).replace("/", "\\").lower()
+                if norm not in seen:
+                    seen.add(norm)
+                    result.append(d)
+            return result, seen
+
+        all_known_docs, seen_paths = _dedup_paths(all_known_docs)
+
+        # Build outside-time-bounds: Tier 2 -- docs we have PROOF we
+        # wrote/edited (sesslog Write/Edit) but whose filename dates fall
+        # outside the sesslog time window. Only private/ and ~/claude/ paths.
+        outside_docs = []
+        if meta["start_time"] and meta["end_time"]:
+            proven_paths = []
+            for md_path in markdown_refs.get("written", []):
+                proven_paths.append(md_path)
+            for md_path in markdown_refs.get("edited", []):
+                proven_paths.append(md_path)
+
+            claude_docs_lower = str(DEFAULT_CLAUDE_DOCS).lower()
+            for md_path in proven_paths:
+                p = Path(md_path)
+                if not p.exists():
+                    continue
+                path_lower = str(p).replace("/", "\\").lower()
+                is_private = "\\private\\" in path_lower or "/private/" in str(p)
+                is_claude_docs = path_lower.startswith(claude_docs_lower)
+                if not (is_private or is_claude_docs):
+                    continue
+                # Check if this file's date is outside the sesslog window
+                in_bounds = _is_within_timeframe(p, meta["start_time"], meta["end_time"])
+                if in_bounds is False:  # explicitly outside (not None)
+                    norm = str(p.resolve()).lower()
+                    if norm not in seen_paths:
+                        seen_paths.add(norm)
+                        outside_docs.append(p)
 
         has_artifacts = bool(all_known_docs or git_commits)
 
         session_data = {
             "folder_name": folder_name,
             "session_name": session_name,
+            "session_type": session_type,
             "uuid": uuid,
             "username": username,
             "target_path": target_path,
@@ -1080,6 +1183,7 @@ examples:
             "project_docs": project_docs,
             "general_docs": general_docs,
             "all_known_docs": all_known_docs,
+            "outside_docs": outside_docs,
             "git_commits": git_commits,
             "has_artifacts": has_artifacts,
         }
@@ -1102,7 +1206,13 @@ examples:
     with_artifacts = sum(1 for s in sessions_data if s["has_artifacts"])
     with_logs = sum(1 for s in sessions_data if s["command_count"] > 0)
     named = sum(1 for s in sessions_data if not s["session_name"].startswith("c__") and not s["session_name"].startswith("c--"))
-    print(f"  Lost sessions:       {len(sessions_data)}")
+    lost_in_set = sum(1 for s in sessions_data if s["session_type"] == "lost")
+    live_in_set = sum(1 for s in sessions_data if s["session_type"] == "live")
+    print(f"  Sessions:            {len(sessions_data)}", end="")
+    if args.mode == "all":
+        print(f" ({live_in_set} live, {lost_in_set} lost)")
+    else:
+        print()
     print(f"  With log data:       {with_logs}")
     print(f"  Named sessions:      {named}")
     print(f"  Total commands:      {total_cmds}")
@@ -1110,7 +1220,7 @@ examples:
 
     if not args.apply:
         print()
-        print("Dry run complete. Use --apply to create the lost-sessions catalog.")
+        print("Dry run complete. Use --apply to create the catalog.")
         return 0
 
     # Create output directory structure
@@ -1142,6 +1252,7 @@ examples:
             s["target_path"], s["project_path"],
             s["meta"], s["project_docs"], s["general_docs"], s["git_commits"],
             top_dirs=s.get("top_dirs"), markdown_refs=s.get("markdown_refs"),
+            session_type=s["session_type"],
         )
         (session_dir / "summary.md").write_text(summary_content, encoding="utf-8")
 
@@ -1156,9 +1267,22 @@ examples:
                     str(sesslog_source), encoding="utf-8"
                 )
 
-        # Create reverse link: sesslog folder -> lost-session folder
+        # For live sessions, create symlink to transcript.jsonl
+        if s["session_type"] == "live":
+            transcript_source = sesslog_source / "transcript.jsonl"
+            if transcript_source.exists():
+                transcript_link = session_dir / "transcript.jsonl"
+                if not transcript_link.exists():
+                    try:
+                        # Resolve the sesslog's transcript symlink to the actual file
+                        real_transcript = transcript_source.resolve()
+                        transcript_link.symlink_to(real_transcript)
+                    except OSError:
+                        pass
+
+        # Create reverse link: sesslog folder -> session catalog folder
         # Use a junction on Windows so it appears as a real folder in Explorer
-        reverse_link = sesslog_source / "lost-session"
+        reverse_link = sesslog_source / "session-metadata"
         if sesslog_source.is_dir() and not reverse_link.exists():
             target_resolved = str(session_dir.resolve())
             created = False
@@ -1180,7 +1304,7 @@ examples:
                                             target_is_directory=True)
                 except OSError:
                     try:
-                        (sesslog_source / "lost-session_path.txt").write_text(
+                        (sesslog_source / "session-metadata_path.txt").write_text(
                             target_resolved, encoding="utf-8"
                         )
                     except OSError:
@@ -1229,6 +1353,44 @@ examples:
                             f"-> {doc_path.resolve()}", encoding="utf-8"
                         )
 
+        # Create known-docs/outside-time-bounds/ for docs in working dirs
+        # whose date prefixes fall outside the sesslog start/end window.
+        # These may have been touched by the session but can't be confirmed
+        # from sesslog timestamps alone.
+        outside = s.get("outside_docs", [])
+        if outside:
+            otb_dir = session_dir / "known-docs" / "outside-time-bounds"
+            otb_dir.mkdir(parents=True, exist_ok=True)
+            for doc in outside:
+                doc_path = Path(doc)
+                if doc_path.exists():
+                    link_name = doc_path.name
+                    link_target = otb_dir / link_name
+                    counter = 1
+                    while link_target.exists():
+                        stem = doc_path.stem
+                        link_target = otb_dir / f"{stem}_{counter}{doc_path.suffix}"
+                        counter += 1
+                    try:
+                        link_target.symlink_to(doc_path.resolve())
+                        target_stat = doc_path.stat()
+                        sym_ctime = target_stat.st_ctime
+                        fn_dt = _extract_filename_datetime(doc_path.name)
+                        if fn_dt is not None:
+                            fn_ts = fn_dt.timestamp()
+                            if fn_ts < sym_ctime:
+                                sym_ctime = fn_ts
+                        _set_symlink_timestamps(
+                            link_target,
+                            mtime=target_stat.st_mtime,
+                            atime=target_stat.st_atime,
+                            ctime=sym_ctime,
+                        )
+                    except OSError:
+                        link_target.with_suffix(".txt").write_text(
+                            f"-> {doc_path.resolve()}", encoding="utf-8"
+                        )
+
         # Create folders-worked-on/ with junction links to top directories
         top_dirs = s.get("top_dirs", [])
         if top_dirs:
@@ -1260,7 +1422,7 @@ examples:
             print(f"  Created: {folder_name}/{extra_str}")
 
     # Generate INDEX.md
-    index_content = generate_index_md(sessions_data)
+    index_content = generate_index_md(sessions_data, mode=args.mode)
     (output_path / "INDEX.md").write_text(index_content, encoding="utf-8")
     print(f"  Created: INDEX.md")
 

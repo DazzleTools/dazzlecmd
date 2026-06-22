@@ -1,7 +1,7 @@
 {
-    "name": "claude-lost-sessions",
+    "name": "claude-recover-sesslogs",
     "version": "0.1.0",
-    "description": "Catalog lost Claude Code session transcripts by scanning broken sesslog symlinks, extracting metadata from log files, and cross-referencing project artifacts",
+    "description": "Salvage the logger channels of sessions that worked in a now-missing path -- rank sesslogs by folder-affinity and recover them",
     "namespace": "dazzletools",
     "language": "python",
     "platform": "cross-platform",
@@ -9,12 +9,12 @@
     "runtime": {
         "type": "python",
         "entry_point": "main",
-        "script_path": "claude_lost_sessions.py"
+        "script_path": "claude_recover_sesslogs.py"
     },
     "pass_through": false,
     "taxonomy": {
         "category": "dev-tools",
-        "tags": ["claude", "sesslog", "recovery", "transcript", "backup", "lost-sessions"]
+        "tags": ["claude", "sesslog", "recovery", "transcript", "salvage", "sessions", "forensics"]
     },
     "lifecycle": {
         "status": "active"

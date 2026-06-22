@@ -7,12 +7,14 @@
     "tools": [
         "dazzletools:claude-cleanup",
         "dazzletools:claude-session-metadata",
+        "dazzletools:claude-recover-sesslogs",
         "dazzletools:claude-sesslog-datefix",
         "dazzletools:claudeview"
     ],
     "name_rewrite": {
         "dazzletools:claude-cleanup": "cleanup",
         "dazzletools:claude-session-metadata": "session-metadata",
+        "dazzletools:claude-recover-sesslogs": "recover-sesslogs",
         "dazzletools:claude-sesslog-datefix": "sesslog-datefix",
         "dazzletools:claudeview": "view"
     }

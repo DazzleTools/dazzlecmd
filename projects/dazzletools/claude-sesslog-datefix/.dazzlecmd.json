@@ -1,0 +1,26 @@
+{
+    "name": "claude-sesslog-datefix",
+    "version": "0.1.0",
+    "description": "Fix timestamps on Claude Code session log directories after git operations corrupt them",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "windows",
+    "platforms": ["windows"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "claude_sesslog_datefix.py"
+    },
+    "pass_through": false,
+    "dependencies": {
+        "python": ["pywin32"],
+        "note": "pywin32 is optional -- without it, ctime (creation time) cannot be set. mtime fixing works without it."
+    },
+    "taxonomy": {
+        "category": "dev-tools",
+        "tags": ["claude", "sesslog", "timestamp", "fix", "recovery"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

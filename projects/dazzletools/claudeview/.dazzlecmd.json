@@ -1,0 +1,26 @@
+{
+    "name": "claudeview",
+    "version": "0.1.0",
+    "description": "Open Claude Code sessions in the history viewer from the command line",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "claudeview.py"
+    },
+    "pass_through": false,
+    "dependencies": {
+        "python": ["claude-session-backup"],
+        "system": ["claude-code-history-viewer (installed or built from source)"]
+    },
+    "taxonomy": {
+        "category": "dev-tools",
+        "tags": ["claude", "session", "viewer", "history", "transcript"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}
