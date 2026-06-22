@@ -1,0 +1,26 @@
+{
+    "name": "f-cp",
+    "version": "0.1.0",
+    "description": "Safe copy with full metadata preservation (mtime/atime/ctime, ACLs, attributes) and clobber protection. Wraps preservelib.",
+    "namespace": "core",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "f_cp.py"
+    },
+    "pass_through": false,
+    "dependencies": {
+        "python_required": ["dazzle-preserve"],
+        "python_optional": ["pywin32"]
+    },
+    "taxonomy": {
+        "category": "file-tools",
+        "tags": ["copy", "safe", "metadata", "ctime", "mtime", "atime", "acl", "preserve", "clobber-protection"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

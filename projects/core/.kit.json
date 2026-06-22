@@ -11,7 +11,9 @@
         "core:links",
         "core:fixpath",
         "core:find",
-        "core:safedel"
+        "core:safedel",
+        "core:f-mv",
+        "core:f-cp"
     ],
     "notes": "Core tools are the 'coreutils' of dazzlecmd. Fundamental, universally useful tools that every user benefits from. When this kit migrates to its own repo, this manifest travels with it and becomes the source of truth. The registry pointer in kits/core.kit.json controls activation only."
 }

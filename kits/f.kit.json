@@ -1,0 +1,19 @@
+{
+    "_schema_version": 1,
+    "name": "f",
+    "virtual": true,
+    "always_active": true,
+    "description": "Virtual kit: verb-grouped UX overlay for file operations. Aliases f:mv, f:cp, f:ls, f:rm resolve to canonical core tools. Requires user config 'list_view: all' to display both canonicals (listall, safedel) AND their f:* aliases side-by-side; otherwise the engine's default alias-preferred mode hides the canonicals behind the aliases.",
+    "tools": [
+        "core:f-mv",
+        "core:f-cp",
+        "core:listall",
+        "core:safedel"
+    ],
+    "name_rewrite": {
+        "core:f-mv": "mv",
+        "core:f-cp": "cp",
+        "core:listall": "ls",
+        "core:safedel": "rm"
+    }
+}

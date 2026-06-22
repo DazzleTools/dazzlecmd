@@ -4,6 +4,24 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] - 2026-06-21
+
+> Opens the **0.10.x line** -- new-functionality releases landing the parked tool batch (each as its own release), ahead of the #58 packaging move and the eventual PyPI baseline.
+
+### Added
+
+- **`f-cp` / `f-mv` -- safe copy/move with full metadata preservation + the `f` virtual kit.** Two core tools that copy/move files while preserving `mtime`/`atime`/`ctime`, ACLs, and attributes, with clobber protection -- built as thin argparse shims over a shared adapter (`projects/core/_f_common/safe_ops.py`) that wraps [`preservelib`](https://github.com/dazzletools). `f-cp` exposes `--no-verify` (legitimate for copy -- no source-deletion invariant); **`f-mv` always verifies** -- the post-copy hash check is the gate for deleting the source and cannot be disabled, and in rename mode the copy step is slipped between verify and delete so the source survives any failure. If `preservelib` is absent, both tools **hard-fail with an install hint** -- no silent degradation. Includes POSIX rename-style detection, tempdir-staged same-directory conflict avoidance, and `ctime`-honesty derivation (the result only claims `ctime_restored` when preservelib's log confirms it). Registered in the core kit (`core:f-cp`, `core:f-mv`).
+- **`f` virtual kit** -- a verb-grouped UX overlay for file operations: `f:cp`/`f:mv` resolve to the new tools, with additive convenience aliases `f:ls` -> `core:listall` and `f:rm` -> `core:safedel` (the canonicals are untouched).
+
+### Notes
+
+- Dependencies: `dazzle-preserve` (`preservelib`, required) + `pywin32` (optional, for Windows `ctime`/ACL preservation). 41 tool-local tests in `projects/core/_f_common/tests/test_safe_ops.py`. Provenance: built fresh 2026-05-16/17 as a `preservelib` adapter (git-snapshot `20260517-050312`); landed now as a standalone release ahead of the #58 packaging move. Deferred follow-ups: POSIX-rename integration tests, a human test checklist, a streaming-hash I/O optimization (current 5x read/write -> 3x), and publishing `dazzle-preserve` to PyPI.
+- Verification: full suite green; byte-gate at the parked-WIP baseline (`dz info` unaffected); the 41 `_f_common` tests pass with `preservelib` installed. dazzlecmd-lib unchanged.
+
+### Versions
+
+- dazzlecmd 0.9.60 -> 0.10.0 (MINOR -- opens the 0.10.x new-tools line); dazzle-dz -> 0.10.0. dazzlecmd-lib unchanged (0.8.54); dazzle-lib unchanged (0.6.7).
+
 ## [0.9.60] - 2026-06-21
 
 ### Added
@@ -3548,7 +3566,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.9.60...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.0...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
