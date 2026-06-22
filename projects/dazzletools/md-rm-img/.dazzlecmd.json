@@ -1,0 +1,22 @@
+{
+    "name": "md-rm-img",
+    "version": "0.1.0",
+    "description": "Strip inline base64 image data from markdown files; relink references to on-disk source via local search + dz fixpath",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "md_rm_img.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "file-tools",
+        "tags": ["markdown", "image", "base64", "claude-code", "transcript", "shrink"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

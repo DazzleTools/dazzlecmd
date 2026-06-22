@@ -4,6 +4,23 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.10.1] - 2026-06-22
+
+### Added
+
+- **`md-rm-img` + `md-unwrap` -- markdown tools + the `md` virtual kit.**
+  - **`md-rm-img`** strips inline base64 `data:` image blobs from markdown (preserving alt text). By default writes a `<stem>.no-graphics` sidecar (original untouched); `-D` overwrites in place. Relinks references to on-disk sources via a local sibling-directory walk plus a `dz fixpath --search-on local` fallback (`--no-relink` / `--no-fixpath` opt out; `--fence` opts into fence protection). stdlib-only; `dz fixpath` is an optional subprocess that degrades gracefully when `dz` isn't on PATH. 54 tests.
+  - **`md-unwrap`** collapses hard-wrapped markdown paragraphs back to one line per paragraph (render-identical in any CommonMark/GFM viewer), preserving fenced code, HTML blocks, HTML comments, tables, recursive blockquotes, list items, headings, YAML frontmatter, hard-break trailing spaces, AND link reference definitions (`[label]: url` -- the fix that keeps CHANGELOG compare-links intact). stdin->stdout by default; `-i` rewrites in place, `-b` keeps a `.bak-pre-unwrap`, `--check` exits 1 if changes are needed. stdlib-only. 24 tests. (`dz md-unwrap -i <file>` is the un-wrapper referenced in the project's markdown conventions.)
+  - **`md` virtual kit** (`kits/md.kit.json`): `md:unwrap` -> `dazzletools:md-unwrap`, `md:rm-img` -> `dazzletools:md-rm-img`. Both tools registered in the dazzletools kit.
+
+### Notes
+
+- `md-unwrap` graduated from amdead's `tests/one-offs/unwrap_markdown.py` (amdead `bfadf01` / `6a37f2d`), with the dazzlecmd-only LINK_REF_DEF pass-through added. `md-rm-img` was built in-repo (DWP 2026-04-26). Both landed now as the second 0.10.x new-tools release, ahead of the #58 packaging move. Verification: full suite green; the 54 + 24 tool-local tests pass; byte-gate dz-info goldens unaffected (clean checkout passes). dazzlecmd-lib unchanged.
+
+### Versions
+
+- dazzlecmd 0.10.0 -> 0.10.1 (PATCH); dazzle-dz -> 0.10.1. dazzlecmd-lib unchanged (0.8.54); dazzle-lib unchanged (0.6.7).
+
 ## [0.10.0] - 2026-06-21
 
 > Opens the **0.10.x line** -- new-functionality releases landing the parked tool batch (each as its own release), ahead of the #58 packaging move and the eventual PyPI baseline.
@@ -3566,7 +3583,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

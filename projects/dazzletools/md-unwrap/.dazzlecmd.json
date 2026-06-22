@@ -1,0 +1,22 @@
+{
+    "name": "md-unwrap",
+    "version": "0.1.0",
+    "description": "Unwrap hard-wrapped markdown paragraphs to one line per paragraph; preserves code/tables/lists/quotes/frontmatter. Content-preserving, render-identical",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "md_unwrap.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "file-tools",
+        "tags": ["markdown", "text", "reflow", "unwrap", "rewrap", "formatting"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

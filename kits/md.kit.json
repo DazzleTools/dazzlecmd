@@ -1,0 +1,15 @@
+{
+    "_schema_version": 1,
+    "name": "md",
+    "virtual": true,
+    "always_active": true,
+    "description": "Virtual kit: markdown tools grouped under a shared prefix. Alias FQCNs like 'md:unwrap' resolve to the canonical dazzletools md-* tools without moving files. Commands: 'dz md:unwrap' (collapse hard-wrapped paragraphs), 'dz md:rm-img' (strip inline base64 image data).",
+    "tools": [
+        "dazzletools:md-unwrap",
+        "dazzletools:md-rm-img"
+    ],
+    "name_rewrite": {
+        "dazzletools:md-unwrap": "unwrap",
+        "dazzletools:md-rm-img": "rm-img"
+    }
+}
