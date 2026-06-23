@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.10.5] - 2026-06-23
+
+### Added
+
+- **`extract-all` -- recursive archive extractor + file locator.** `dz extract-all <source> <pattern>...` stages a source archive (exe / zip / cab / msi / 7z / ...) under `%USERPROFILE%/extract-all/<sha12>/`, recursively unpacks every nested archive into sibling `.extracted/` dirs (showing the archive lineage live as it descends -- `L0 -> L1 Setup.exe -> L2 Setup.exe::$PLUGINSDIR/x.exe`), then searches the resulting tree for the given patterns (auto-classified as glob or regex) and reports matches grouped by pattern. Disk-saving modes: `--print-locate` (extract, print the archive-lineage path of each match, then delete the staging tree -- for "where does X live?" queries) and `--extract-matches` (keep only files matching a pattern and prune the rest). Also `--first` (shallowest match per pattern), `--max-depth` (bound recursion), `--re-extract`, sha12-keyed cache management (`--list-cache` / `--clear-cache`), and `--staging-root`. 7-Zip is auto-discovered (PATH, a bundled `7zz`, Program Files, or the `DZ_SEVEN_ZIP` env / `--seven-zip-path`). Registered in the dazzletools kit.
+
+### Notes
+
+- v0.1.0 "full eager extraction": correct, but peak disk equals the full extracted tree -- a `ROADMAP.md` ships alongside the tool documenting the deferred layer-by-layer / list-then-descend disk optimizations. Built fresh in-repo from a design doc (Apr 2026, while inspecting a driver installer). The sixth 0.10.x new-tools release; no formal pytest suite. dazzlecmd-lib unchanged.
+
+### Versions
+
+- dazzlecmd 0.10.4 -> 0.10.5 (PATCH); dazzle-dz -> 0.10.5. dazzlecmd-lib unchanged (0.8.54); dazzle-lib unchanged (0.6.7).
+
 ## [0.10.4] - 2026-06-22
 
 ### Added
@@ -3640,7 +3654,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.4...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.5...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

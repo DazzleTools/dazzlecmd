@@ -21,6 +21,7 @@
         "dazzletools:claudeview",
         "dazzletools:md-rm-img",
         "dazzletools:md-unwrap",
+        "dazzletools:extract-all",
         "dazzletools:safe-icacls",
         "dazzletools:redact-msinfo",
         "dazzletools:fixuser"

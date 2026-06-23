@@ -1,0 +1,25 @@
+{
+    "name": "extract-all",
+    "version": "0.1.0",
+    "description": "Recursively extract archives (exe, zip, msi, 7z, etc.) and locate files within by glob or regex pattern",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "extract_all.py"
+    },
+    "pass_through": false,
+    "dependencies": {
+        "external": ["7-Zip (https://www.7-zip.org/)"]
+    },
+    "taxonomy": {
+        "category": "file-tools",
+        "tags": ["archive", "extraction", "7zip", "recursive", "search", "exe", "msi", "installer"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}
