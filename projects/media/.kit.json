@@ -1,0 +1,19 @@
+{
+    "name": "media",
+    "version": "0.1.0",
+    "description": "Media/ffmpeg toolkit - video, audio, image, gif, and metadata tasks",
+    "author": "DazzleTools",
+    "tools_dir": ".",
+    "manifest": ".dazzlecmd.json",
+    "tools": [
+        "media:vid2gif",
+        "media:vidresize",
+        "media:img2vid",
+        "media:crossfade",
+        "media:song-to-vid",
+        "media:vid-preview-maker",
+        "media:mp3me"
+    ],
+    "source": "https://github.com/DazzleTools/media-kit",
+    "notes": "ffmpeg-style media tooling collected into one kit. Phase 1 ships vid2gif (native, new) and vidresize (ported from comfyui_experiment/output/resize-vid.py). Later phases migrate the Z:/omnitools media scripts (vid-preview-maker, vid2img, img2vid, song-to-vid, whatmp3, exiftool). Provenance of each tool is tracked via a 'provenance:<source>' tag in its .dazzlecmd.json taxonomy. Flat kit by design; can graduate to a nested aggregator later without renaming tools. Registry pointer in kits/media.kit.json controls activation only."
+}

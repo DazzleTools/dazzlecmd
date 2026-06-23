@@ -1,0 +1,22 @@
+{
+    "name": "vid-preview-maker",
+    "version": "0.1.0",
+    "description": "Build a preview clip with a banner overlay and audio fade-out",
+    "namespace": "media",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "vid-preview-maker.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "media",
+        "tags": ["video", "preview", "banner", "ffmpeg", "provenance:omnitools"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

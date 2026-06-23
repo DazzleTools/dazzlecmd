@@ -4,6 +4,27 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.10.6] - 2026-06-23
+
+### Added
+
+- **The `media` kit -- seven ffmpeg-based media tools.** A new kit (`kits/media.kit.json`, opt-in: `dz kit enable media`) collecting video / audio / image / gif tasks. All cross-platform, all built on `ffmpeg` (plus `gifsicle` for `vid2gif`); registered under the `media:` namespace.
+  - **`vid2gif`** -- high-quality video-to-GIF via an ffmpeg two-pass palette + `gifsicle` optimization.
+  - **`vidresize`** -- aspect-ratio-preserving video resize, with metadata strip + optional audio injection.
+  - **`img2vid`** -- build a video from N images plus an audio track, with sequential fade transitions (the general image-to-video tool).
+  - **`crossfade`** -- build a video from exactly two images with a crossfade and an audio track (the simple 2-image shortcut). Named `crossfade` rather than the original `vid2img`, which read backwards (it is image-to-video, not video-to-image).
+  - **`song-to-vid`** -- make a video per audio file from its embedded album art.
+  - **`vid-preview-maker`** -- build a preview clip with a banner overlay and an audio fade-out.
+  - **`mp3me`** -- batch FLAC -> MP3 / V0 / V2 / Ogg / AAC / ALAC transcoder with tag copy.
+
+### Notes
+
+- The seventh 0.10.x new-tools release. `vid2gif` is new in-repo; `vidresize` was ported from `comfyui_experiment`; the other five were migrated from the `omnitools` media-script collection (each tool records its origin via a `provenance:<source>` tag). Flat kit by design -- it can graduate to a nested aggregator (and an eventual `DazzleTools/media-kit` extraction, like `dazzletools`) later without renaming tools. Ships with a human test checklist; no formal pytest suite (these shell out to `ffmpeg`). `ffmpeg` / `gifsicle` must be on PATH. dazzlecmd-lib unchanged.
+
+### Versions
+
+- dazzlecmd 0.10.5 -> 0.10.6 (PATCH); dazzle-dz -> 0.10.6. dazzlecmd-lib unchanged (0.8.54); dazzle-lib unchanged (0.6.7).
+
 ## [0.10.5] - 2026-06-23
 
 ### Added
@@ -3654,7 +3675,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.5...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.6...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

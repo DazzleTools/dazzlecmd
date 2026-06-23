@@ -1,0 +1,22 @@
+{
+    "name": "mp3me",
+    "version": "0.1.0",
+    "description": "Batch FLAC -> MP3/V0/V2/Ogg/AAC/ALAC transcoder with tag copy (whatmp3)",
+    "namespace": "media",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "mp3me.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "media",
+        "tags": ["audio", "transcode", "flac", "mp3", "lame", "provenance:omnitools"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

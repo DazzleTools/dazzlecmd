@@ -1,0 +1,22 @@
+{
+    "name": "crossfade",
+    "version": "0.1.0",
+    "description": "Build a video from 2 images with a crossfade and an audio track",
+    "namespace": "media",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "crossfade.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "media",
+        "tags": ["image", "video", "crossfade", "ffmpeg", "provenance:omnitools"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

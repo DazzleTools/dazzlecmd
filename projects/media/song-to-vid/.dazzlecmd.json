@@ -1,0 +1,22 @@
+{
+    "name": "song-to-vid",
+    "version": "0.1.0",
+    "description": "Make a video per audio file from its embedded album art",
+    "namespace": "media",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "song-to-vid.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "media",
+        "tags": ["audio", "video", "album-art", "ffmpeg", "provenance:omnitools"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

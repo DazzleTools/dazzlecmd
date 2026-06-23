@@ -1,0 +1,22 @@
+{
+    "name": "img2vid",
+    "version": "0.1.0",
+    "description": "Build a video from N images plus audio with sequential transitions",
+    "namespace": "media",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "img2vid.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "media",
+        "tags": ["image", "video", "slideshow", "transitions", "ffmpeg", "provenance:omnitools"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}
