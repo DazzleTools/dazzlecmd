@@ -4,6 +4,21 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.10.8] - 2026-06-23
+
+### Changed
+
+- **Documentation refresh for the 0.10.x tool batch.** A new tool reference under `docs/tools/` -- a top-level [index](docs/tools/README.md) (canonical kits + the virtual-kit alias overlays), a new `media/` kit reference, and updated `core/` (now incl. `f-cp` / `f-mv` / `safedel`) and `dazzletools/` (5 -> 19 tools, grouped by area) references.
+- **Slimmed the README.** "Included Tools" is now a compact kits-overview that points at the tool reference (instead of two inline tables that had drifted stale); "Project Structure" updated to the real namespaces (incl. the `media` namespace and `docs/tools/`); added a short "argparse for a whole toolbox" framing of the aggregator pattern.
+
+### Fixed
+
+- **`.gitignore`:** nested per-directory `.vscode/` folders (auto-generated editor cruft) are now ignored at any depth, while the shared root `.vscode/` config stays tracked (the un-ignore is anchored to root). Previously the scattered `.vscode/settings.json` files showed as untracked noise.
+
+### Versions
+
+- dazzlecmd 0.10.7 -> 0.10.8 (PATCH); dazzle-dz -> 0.10.8. dazzlecmd-lib unchanged (0.8.54); dazzle-lib unchanged (0.6.7).
+
 ## [0.10.7] - 2026-06-23
 
 ### Added
@@ -3691,7 +3706,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.7...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.8...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

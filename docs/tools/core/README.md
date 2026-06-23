@@ -6,11 +6,16 @@ The core kit ships with every dazzlecmd installation. These are fundamental, uni
 
 | Tool | Description | Platform |
 |------|-------------|----------|
-| [find](find.md) | Cross-platform file search powered by fd | Cross-platform |
+| `f-cp` | Safe copy with full metadata preservation (mtime/atime/ctime, ACLs, attributes) and clobber protection | Cross-platform |
+| `f-mv` | Safe move with full metadata preservation; always verifies the copy before deleting the source | Cross-platform |
+| [find](find.md) | Cross-platform file search powered by fd (with `--` fd passthrough and `-0`/`--print0`) | Cross-platform |
 | [fixpath](fixpath.md) | Fix mangled paths, search for files, open/copy/browse | Cross-platform |
 | [links](links.md) | Detect and display all filesystem link types | Cross-platform |
 | [listall](listall.md) | Flexible directory structure listing with sorting and output formatting | Cross-platform |
 | [rn](rn.md) | Rename files using regular expressions | Cross-platform |
+| `safedel` | Safe, link-aware, recoverable deletion -- stages files to a trash store instead of destroying them | Cross-platform |
+
+`f-cp` / `f-mv` need [`preservelib`](https://github.com/dazzletools) (and `pywin32` on Windows for `ctime`/ACLs); the rest are stdlib (`find` shells out to `fd`). Tools without a linked page above are documented via `dz info <tool>` and `dz <tool> --help`.
 
 ## Design Principles
 
