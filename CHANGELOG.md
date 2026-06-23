@@ -4,6 +4,22 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.10.7] - 2026-06-23
+
+### Added
+
+- **`dz find` -- fd escape hatches: `--` passthrough and `-0` / `--print0`.** Two ways for power users to reach `fd`'s full surface without dazzlecmd re-exposing every flag.
+  - **`--`** -- everything after a literal `--` is appended verbatim to the `fd` command (after dazzlecmd's generated flags and pattern). Use it for flags `dz find` doesn't surface (`--strip-cwd-prefix`, `--owner`, `--prune`, ...); the passthrough can also carry its own positional pattern when `dz find`'s is empty. dazzlecmd does not validate passthrough args -- `fd` does.
+  - **`-0` / `--print0`** -- emit NUL-delimited results (mirrors `fd --print0`), for safe piping into `xargs -0` (then `rg` / `sed` / ...) even with paths containing spaces.
+
+### Notes
+
+- 13 new tests in `tests/test_find_passthrough.py` (the command-build + split logic is pure and tested without invoking `fd`); ships with a human checklist for the real-`fd` / real-pipe behavior. dazzlecmd-lib unchanged.
+
+### Versions
+
+- dazzlecmd 0.10.6 -> 0.10.7 (PATCH); dazzle-dz -> 0.10.7. dazzlecmd-lib unchanged (0.8.54); dazzle-lib unchanged (0.6.7).
+
 ## [0.10.6] - 2026-06-23
 
 ### Added
@@ -3675,7 +3691,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.6...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.7...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

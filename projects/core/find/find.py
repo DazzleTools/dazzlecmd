@@ -5,6 +5,16 @@ Wraps fd (sharkdp/fd) with dazzlecmd-style actions: open files,
 browse in file manager, or copy paths to clipboard. Provides a
 consistent interface across Windows, Linux, macOS, and BSD.
 
+Two escape hatches let power users reach fd's full surface without
+us re-exposing every flag:
+
+  --              Everything after `--` is appended raw to the fd
+                  command. Useful for flags we don't surface
+                  (e.g. --strip-cwd-prefix, --owner, --prune).
+
+  -0 / --print0   Output paths NUL-delimited. Pipe to `xargs -0`
+                  (then rg, sed, whatever).
+
 Requires fd to be installed:
   Windows:  winget install sharkdp.fd
   macOS:    brew install fd
@@ -32,6 +42,20 @@ def find_fd():
         if path:
             return path
     return None
+
+
+def split_passthrough(argv):
+    """Split argv on the first `--`: tail goes raw to fd.
+
+    Returns (main_argv, fd_passthrough). If no `--` is present,
+    fd_passthrough is empty. Argparse never sees the `--` or anything
+    past it, so the user can pass fd flags we don't surface (or that
+    conflict with our argparse setup) without us validating them.
+    """
+    if "--" in argv:
+        idx = argv.index("--")
+        return list(argv[:idx]), list(argv[idx + 1:])
+    return list(argv), []
 
 
 def print_install_instructions():
@@ -135,8 +159,15 @@ def action_copy(path):
 
 # -- fd invocation --
 
-def build_fd_command(fd_path, pattern, paths, args):
-    """Build the fd command line from our arguments."""
+def build_fd_command(fd_path, pattern, paths, args, passthrough=None):
+    """Build the fd command line from our arguments.
+
+    `passthrough` is the list of args following `--` on the dz find
+    command line. They are appended verbatim to the fd command after
+    our generated flags and our pattern, so user passthrough can
+    layer onto (or override) what we generated, and can carry its
+    own positional pattern when args.pattern is empty.
+    """
     cmd = [fd_path]
 
     # Search mode: glob by default (more intuitive), regex with --regex
@@ -186,12 +217,22 @@ def build_fd_command(fd_path, pattern, paths, args):
     for exc in (args.exclude or []):
         cmd.extend(["--exclude", exc])
 
+    # NUL-delimited output (-0 / --print0). Mirrors fd's own flag.
+    if args.print0:
+        cmd.append("--print0")
+
     # Absolute paths (needed for actions to work correctly)
     cmd.append("--absolute-path")
 
     # Pattern (if provided and non-empty)
     if pattern:
         cmd.append(pattern)
+
+    # Passthrough -- comes after our pattern so user flags can override
+    # our defaults, and can carry their own positional pattern when we
+    # have none. Documented caveat: don't put a pattern in both places.
+    if passthrough:
+        cmd.extend(passthrough)
 
     # Search paths -- use --search-path to avoid ambiguity with pattern
     if paths:
@@ -201,18 +242,27 @@ def build_fd_command(fd_path, pattern, paths, args):
     return cmd
 
 
-def run_fd(cmd):
-    """Run fd and return the list of result paths."""
+def run_fd(cmd, print0=False):
+    """Run fd and return the list of result paths.
+
+    When `print0` is True we capture stdout as bytes and split on NUL,
+    matching fd's --print0 contract. Otherwise we split on newlines as
+    before.
+    """
+    encoding = sys.getfilesystemencoding()
     try:
-        result = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=300
-        )
+        result = subprocess.run(cmd, capture_output=True, timeout=300)
         if result.returncode not in (0, 1):
             # fd returns 1 when no results found, that's not an error
-            if result.stderr.strip():
-                print(f"fd error: {result.stderr.strip()}", file=sys.stderr)
-        lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-        return lines
+            stderr = result.stderr.decode(encoding, errors="replace").strip()
+            if stderr:
+                print(f"fd error: {stderr}", file=sys.stderr)
+        if print0:
+            parts = result.stdout.split(b"\x00")
+            return [p.decode(encoding, errors="surrogateescape")
+                    for p in parts if p]
+        text = result.stdout.decode(encoding, errors="surrogateescape")
+        return [line.strip() for line in text.splitlines() if line.strip()]
     except subprocess.TimeoutExpired:
         print("Error: Search timed out after 5 minutes.", file=sys.stderr)
         return []
@@ -282,6 +332,10 @@ examples:
   dz find "*.md" -c                     Find and copy path to clipboard
   dz find "*.md" --dir ~/code -l        Find and browse in file manager
   dz find -e py -E node_modules         Exclude a directory
+  dz find -e py -0 | xargs -0 rg "TODO" Pipe NUL-delimited paths to rg
+  dz find -- --strip-cwd-prefix --owner +me
+                                        Pass raw fd flags we don't surface
+  dz find --regex -- -t d ".*opus.*"    Pure-passthrough with our --regex mode
   dz find --check                       Verify fd is installed
 
 requires fd: https://github.com/sharkdp/fd""",
@@ -374,6 +428,10 @@ requires fd: https://github.com/sharkdp/fd""",
         help="Print count of matches only",
     )
     output.add_argument(
+        "-0", "--print0", action="store_true",
+        help="Output paths NUL-delimited (pipe to xargs -0)",
+    )
+    output.add_argument(
         "--check", action="store_true",
         help="Check if fd is installed and show version",
     )
@@ -386,8 +444,12 @@ def main(argv=None):
     if argv is None:
         argv = sys.argv[1:]
 
+    # Split off fd passthrough BEFORE argparse so flags we don't define
+    # (or that argparse would reject) reach fd untouched.
+    main_argv, fd_passthrough = split_passthrough(argv)
+
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(main_argv)
 
     # --check: verify fd installation
     if args.check:
@@ -400,8 +462,9 @@ def main(argv=None):
         return 1
 
     # Build and run fd command
-    cmd = build_fd_command(fd_path, args.pattern, args.paths, args)
-    results = run_fd(cmd)
+    cmd = build_fd_command(fd_path, args.pattern, args.paths, args,
+                           passthrough=fd_passthrough)
+    results = run_fd(cmd, print0=args.print0)
 
     if not results:
         if args.pattern:
@@ -425,9 +488,22 @@ def main(argv=None):
     if not selected:
         return 0
 
-    # Print results (always, even with actions)
-    for path in selected:
-        print(path)
+    # Print results (always, even with actions). In --print0 mode we
+    # emit NUL-delimited bytes with a trailing NUL, matching fd's
+    # contract so `rg --files0-from -` and `xargs -0` work as expected.
+    if args.print0:
+        encoding = sys.getfilesystemencoding()
+        sys.stdout.buffer.write(
+            b"\x00".join(
+                p.encode(encoding, errors="surrogateescape")
+                for p in selected
+            )
+        )
+        sys.stdout.buffer.write(b"\x00")
+        sys.stdout.buffer.flush()
+    else:
+        for path in selected:
+            print(path)
 
     # Execute actions
     exit_code = 0
