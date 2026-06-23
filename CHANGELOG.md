@@ -4,6 +4,22 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.10.4] - 2026-06-22
+
+### Added
+
+- **`git` + `private-init` -- repo-workflow tools.** Two DazzleTools utilities for working with git repositories, landing together as the fifth 0.10.x new-tools release.
+  - **`git`** (`dz git`, cross-platform) -- a read-only git repo-state inspector that answers composition/layout/form questions with quick subcommands instead of verbose git invocations. Bare `dz git` prints a summary (branch, composition counts, form); `dz git composition` tables submodules / subtrees / worktrees; `dz git workspace` covers worktrees, sparse checkout, stashes, detached HEAD; `dz git form` classifies the repo (bare / shallow / mirror / partial clone / fork). stdlib + `git`. (`dazzletools:git` is a deliberate, conflict-checked name -- it is not in dazzlecmd's reserved meta-command set, and `dz git` dispatches to this tool, not the system binary.)
+  - **`private-init`** (`dz private-init`, cross-platform) -- initializes (or converts) a project's `private/` directory into its own standalone git repository, invisible to the parent repo. This replaces the older 4-layer private-content protection (gitignore + `.git/info/exclude` + pre-commit hooks + content stripping) with simple architectural separation: `private/` is literally a different repo. `--remote <url>` (backup remote), `--adopt` (convert existing content), `--status` (check). stdlib + `git`.
+
+### Notes
+
+- Both were built fresh in-repo (Apr 2026) and are registered in the dazzletools kit; committing their files resolves two `dazzletools/.kit.json` registrations that were previously dangling (the entries existed but the tool dirs had never been committed). They ship without formal pytest suites. dazzlecmd-lib unchanged.
+
+### Versions
+
+- dazzlecmd 0.10.3 -> 0.10.4 (PATCH); dazzle-dz -> 0.10.4. dazzlecmd-lib unchanged (0.8.54); dazzle-lib unchanged (0.6.7).
+
 ## [0.10.3] - 2026-06-22
 
 ### Added
@@ -3624,7 +3640,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.3...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.4...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

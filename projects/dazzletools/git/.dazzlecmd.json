@@ -1,0 +1,25 @@
+{
+    "name": "git",
+    "version": "0.1.0",
+    "description": "Git repo state inspector -- composition, workspace, and form at a glance",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "git.py"
+    },
+    "pass_through": false,
+    "dependencies": {
+        "system": ["git"]
+    },
+    "taxonomy": {
+        "category": "dev-tools",
+        "tags": ["git", "repo", "submodules", "worktrees", "composition", "inspect"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

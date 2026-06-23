@@ -1,0 +1,21 @@
+{
+    "name": "private-init",
+    "version": "0.1.0",
+    "description": "Initialize private/ as a standalone versioned git repo inside any project",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "private_init.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "repo-tools",
+        "tags": ["git", "private", "repokit", "init", "versioning"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

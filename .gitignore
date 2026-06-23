@@ -20,6 +20,10 @@ desktop.ini
 
 # RepoKit standard private directories
 /private/
+# Any nested private/ dir (a tool's own design-doc repo, generated scaffolds,
+# etc.) -- private content never ships, regardless of depth. /private/ above is
+# only root-anchored; this catches private/ folders anywhere in the tree.
+**/private/
 /convos/
 /logs/
 /credentials/
@@ -156,6 +160,8 @@ mode_local.json
 # RepoKit Private Content Protection (DO NOT REMOVE)
 .env.private
 **/private_*
+# Exception: the private-init tool's own source is a tracked tool file, not private content
+!/projects/dazzletools/private-init/private_init.py
 CLAUDE.md
 private/claude/
 private/temp/
