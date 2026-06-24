@@ -55,11 +55,41 @@ STATE_MISSING = "missing"        # Path doesn't exist
 STATE_LOCAL_ONLY = "local-only"  # Symlink with no submodule registered
 
 
+def _find_gitmodules(project_root):
+    """Locate the ``.gitmodules`` governing ``project_root``.
+
+    ``.gitmodules`` always lives at the git repo's top level, which may be an
+    ANCESTOR of the aggregator's ``project_root``: post-#58 the dazzlecmd
+    aggregator sits at ``<repo>/src/dazzlecmd`` while ``.gitmodules`` stays at
+    ``<repo>``. Walk up from ``project_root`` to the first directory that holds
+    a ``.gitmodules``. Returns ``(repo_root, gitmodules_path)``, or
+    ``(None, None)`` when there is no governing ``.gitmodules`` (an installed
+    package -- which has neither a repo nor submodules -- or a repo with no
+    submodules).
+    """
+    cur = os.path.abspath(project_root)
+    while True:
+        gm = os.path.join(cur, ".gitmodules")
+        if os.path.isfile(gm):
+            return cur, gm
+        # A ``.git`` here with no ``.gitmodules`` is the repo top of a repo that
+        # simply has no submodules -- stop, don't climb out of the repo.
+        if os.path.exists(os.path.join(cur, ".git")):
+            return None, None
+        parent = os.path.dirname(cur)
+        if parent == cur:  # filesystem root
+            return None, None
+        cur = parent
+
+
 def parse_gitmodules(project_root, *, tools_dir):
     """Parse .gitmodules to discover submodule mappings for ``tools_dir``.
 
     Returns dict mapping submodule path (e.g. ``<tools_dir>/<ns>/<tool>``)
     to ``{"url": ..., "path": ..., "namespace": ..., "tool_name": ...}``.
+    The keys (and the ``path`` field) are relative to the AGGREGATOR root, to
+    match the lookup keys ``detect_tool_state`` builds via
+    ``_tool_dir_to_submodule_path``.
 
     Only 3-part paths of the form ``<tools_dir>/<namespace>/<tool>`` are
     captured -- 2-part kit-level submodule paths (an entire kit registered
@@ -67,14 +97,20 @@ def parse_gitmodules(project_root, *, tools_dir):
     aggregator engine's discover_kits logic. This is the v0.7.47 BLOCKER
     F2 fix: ``tools_dir`` is no longer hardcoded to ``"projects"``.
 
+    ``.gitmodules`` is located at the git repo root, which may sit ABOVE
+    ``project_root`` when the aggregator lives in a repo subdirectory (the #58
+    layout). Submodule paths in ``.gitmodules`` are repo-root-relative and are
+    re-based to aggregator-relative here so they line up with the rest of the
+    mode subsystem.
+
     Args:
         project_root: Absolute path to the aggregator's project root.
         tools_dir: Relative directory name where tools live (e.g.,
             ``"projects"`` for dazzlecmd, ``"tools"`` for wtf-windows /
             amdead). From ``AggregatorConfig.tools_dir``.
     """
-    gitmodules_path = os.path.join(project_root, ".gitmodules")
-    if not os.path.isfile(gitmodules_path):
+    repo_root, gitmodules_path = _find_gitmodules(project_root)
+    if gitmodules_path is None:
         return {}
 
     config = configparser.ConfigParser()
@@ -86,24 +122,38 @@ def parse_gitmodules(project_root, *, tools_dir):
         if not section.startswith('submodule "'):
             continue
 
-        path = config[section].get("path", "")
+        raw_path = config[section].get("path", "")  # repo-root-relative
         url = config[section].get("url", "")
+        if not raw_path:
+            continue
 
-        if not path.startswith(prefix):
+        # Re-base the repo-relative submodule path onto the aggregator root so
+        # the key matches ``_tool_dir_to_submodule_path`` (which relativizes a
+        # tool dir against ``project_root``). When the aggregator IS the repo
+        # root (the pre-#58 layout) this relpath is the identity, so the
+        # behaviour is unchanged there.
+        try:
+            rel = os.path.relpath(
+                os.path.join(repo_root, raw_path), project_root
+            ).replace("\\", "/")
+        except ValueError:
+            # Different drives on Windows -- cannot relativize.
+            continue
+
+        if not rel.startswith(prefix):
             continue
 
         # Parse <tools_dir>/<namespace>/<tool_name>
-        relative = path[len(prefix):]
+        relative = rel[len(prefix):]
         parts = relative.split("/")
         if len(parts) != 2:
             continue
 
-        namespace = parts[0]
-        tool_name = parts[1]
+        namespace, tool_name = parts
 
-        mappings[path] = {
+        mappings[rel] = {
             "url": url,
-            "path": path,
+            "path": rel,
             "namespace": namespace,
             "tool_name": tool_name,
         }

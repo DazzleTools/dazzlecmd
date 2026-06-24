@@ -4,6 +4,27 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.10.12] - 2026-06-24
+
+### Added
+
+- **`core:listall` is now a registered tool.** The `listall` file/directory lister (backed by the `DazzleTools/listall` submodule) gained a tool manifest, so `dz listall` -- and the `f` kit's `f:ls` alias -- resolve and dispatch. The submodule's files now ship in the built wheel via a submodule-aware checkout.
+- **A build-time privacy guard for the published artifacts.** `scripts/check_dist_no_leak.py` scans the built sdist and wheel for any `private/` design-doc path or the local-only `wtf` tree and fails the publish workflow before upload, so internal content cannot reach PyPI even from an accidental dev-tree build. The exclusion is depth-proof -- it matches path components, not globs.
+
+### Fixed
+
+- **`dz mode` mislabeled submodule-backed tools as `EMBEDDED`** when the aggregator lives in a repository subdirectory (the layout from #58, where the tool tree moved under `src/dazzlecmd/`). Submodule detection looked for `.gitmodules` relative to the aggregator root rather than the git repo root, and did not re-base the repo-relative submodule paths -- so it found no submodules and fell through to `EMBEDDED`. `dz mode` now correctly reports such tools as `PUBLISH (submodule)`, and the dev<->publish mode toggle works for them again. Development tree only -- an installed package has no `.gitmodules`, so its tools are correctly all-embedded. (dazzlecmd-lib)
+- **#58 (sdist): the source distribution shipped no tools**, so a `pip install` that built from the sdist produced a `dz` with zero tools. `MANIFEST.in` excluded the per-tool `private/` directories with a `recursive-exclude` whose trailing pattern was a bare `*` -- which matches *every* file, wiping the grafted tool tree out of the sdist. (The earlier #58 wheel check missed it because it built the wheel directly, bypassing the sdist.) The exclude patterns are now path-anchored, so the sdist carries the full tool tree (manifests, kits, `aggregator.json`) while still omitting `private/` and the local-only `wtf` aggregator.
+
+### Changed
+
+- The CI and publish workflows now check out git submodules recursively, so submodule-backed tools (e.g. `core:listall`) materialize during test and build runs.
+- **Raised the `dazzlecmd-lib` dependency floor to `>=0.8.55`** (from `>=0.8.34`) so a fresh install pulls the library version with the submodule mode-detection fix this release relies on.
+
+### Versions
+
+- dazzlecmd 0.10.11 -> 0.10.12 (PATCH); dazzle-dz -> 0.10.12; dazzlecmd-lib 0.8.54 -> 0.8.55 (submodule mode-detection fix). dazzle-lib unchanged (0.6.7).
+
 ## [0.10.11] - 2026-06-23
 
 ### Fixed
@@ -3740,7 +3761,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.11...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.12...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -139,6 +139,66 @@ class TestParseGitmodulesParameterization:
         assert mappings == {}
 
 
+class TestSubdirectoryAggregatorLayout:
+    """#58 regression: the aggregator lives in a SUBDIRECTORY of the git repo
+    (``<repo>/src/dazzlecmd``), so ``.gitmodules`` sits ABOVE ``project_root``
+    and its submodule paths are repo-root-relative. ``parse_gitmodules`` must
+    still find it (walking up to the repo top) and re-base the keys to
+    aggregator-relative, or ``detect_tool_state`` misses the submodule and
+    reports EMBEDDED -- the bug the #58 move introduced for ``core:listall``.
+    """
+
+    def _make_subdir_repo(self, tmp_path, *, tools_dir="projects",
+                          agg_subpath="src/dazzlecmd", tool="core/listall"):
+        repo_root = tmp_path / "repo"
+        repo_root.mkdir()
+        (repo_root / ".git").mkdir()  # repo top marker
+        agg_root = repo_root / agg_subpath
+        agg_root.mkdir(parents=True)
+        sub_repo_rel = f"{agg_subpath}/{tools_dir}/{tool}"  # repo-root-relative
+        (repo_root / sub_repo_rel).mkdir(parents=True)
+        (repo_root / sub_repo_rel / ".git").write_text(
+            f"gitdir: ../../../.git/modules/{sub_repo_rel}\n", encoding="utf-8"
+        )
+        ns, name = tool.split("/")
+        # .gitmodules at the REPO ROOT, path is repo-root-relative
+        (repo_root / ".gitmodules").write_text(
+            f'[submodule "{tools_dir}/{ns}/{name}"]\n'
+            f"\tpath = {sub_repo_rel}\n"
+            f"\turl = https://github.com/DazzleTools/{name}.git\n",
+            encoding="utf-8",
+        )
+        return repo_root, agg_root
+
+    def test_parse_finds_submodule_from_subdir_aggregator(self, tmp_path):
+        _, agg_root = self._make_subdir_repo(tmp_path)
+        mappings = parse_gitmodules(str(agg_root), tools_dir="projects")
+        # key re-based to aggregator-relative, NOT the repo-relative form
+        assert "projects/core/listall" in mappings
+        assert "src/dazzlecmd/projects/core/listall" not in mappings
+        assert mappings["projects/core/listall"]["namespace"] == "core"
+        assert mappings["projects/core/listall"]["tool_name"] == "listall"
+
+    def test_detect_state_submodule_from_subdir_aggregator(self, tmp_path):
+        _, agg_root = self._make_subdir_repo(tmp_path)
+        gitmodules = parse_gitmodules(str(agg_root), tools_dir="projects")
+        tool_dir = str(agg_root / "projects" / "core" / "listall")
+        state = detect_tool_state(
+            tool_dir, gitmodules, str(agg_root), tools_dir="projects"
+        )
+        assert state == STATE_SUBMODULE  # was EMBEDDED before the #58 fix
+
+    def test_repo_with_git_but_no_submodules_returns_empty(self, tmp_path):
+        """A subdir aggregator in a repo that has no .gitmodules at all -- the
+        walk-up must stop at the repo's ``.git`` and not climb out into a
+        parent repo's submodule config."""
+        repo_root = tmp_path / "repo"
+        (repo_root / "src" / "dazzlecmd" / "projects").mkdir(parents=True)
+        (repo_root / ".git").mkdir()
+        agg_root = repo_root / "src" / "dazzlecmd"
+        assert parse_gitmodules(str(agg_root), tools_dir="projects") == {}
+
+
 class TestToolDirToSubmodulePathParameterization:
     """F8: _tool_dir_to_submodule_path uses relpath instead of substring search."""
 

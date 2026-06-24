@@ -8,7 +8,7 @@ import subprocess
 import sys
 import tempfile
 
-BASE = r"C:\code\dazzlecmd\github\tests\one-offs\baselines_v0.7.54"
+BASE = r"C:\code\dazzlecmd\github\tests\one-offs\baselines_v0.10.11"
 
 CMDS = [
     ("dz_list", "dz list"),

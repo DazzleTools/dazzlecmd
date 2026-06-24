@@ -1,0 +1,15 @@
+Name:        listall
+FQCN:        core:listall
+Absolute:    dazzlecmd:core:listall
+Kit:         core
+Namespace:   core
+Version:     0.0.2.2
+Description: List filenames, directories, or specific files with customizable
+             sorting, collection, and output options
+Platform:    cross-platform
+Language:    python
+Runtime:     python
+Script:      listall.py
+Category:    file-tools
+Tags:        list, ls, files, directories, sort, collect, tree, clipboard
+Python deps: pyperclip

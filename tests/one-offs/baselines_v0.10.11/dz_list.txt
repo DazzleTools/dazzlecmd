@@ -1,0 +1,95 @@
+core:
+  find         Cross-platform file search powered by fd
+  fixpath      Fix mangled paths and optionally open, copy, or browse files
+  links [lib]  Detect and display filesystem links (symlinks, junctions,
+               hardlinks, dazzlelinks)
+  rn           Rename files using regular expressions
+
+core:f:  (virtual kit 'f')
+  cp  Safe copy with full metadata preservation (mtime/atime/ctime, ACLs,
+      attributes) and clobber protection. Wraps preservelib.
+  ls  List filenames, directories, or specific files with customizable sorting,
+      collection, and output options
+  mv  Safe move with full metadata preservation (mtime/atime/ctime, ACLs,
+      attributes) and clobber protection. Wraps preservelib.
+  rm  Safe file/directory deletion with link-aware classification, metadata
+      preservation, and recoverable trash store
+
+dazzletools:
+  delete-nul    Delete Windows NUL device files that get accidentally created
+  dos2unix      Pure-Python cross-platform line ending converter
+                (dos2unix/unix2dos)
+  extract-all   Recursively extract archives (exe, zip, msi, 7z, etc.) and
+                locate files within by glob or regex pattern
+  git           Git repo state inspector -- composition, workspace, and form at
+                a glance
+  git-snapshot  Lightweight named checkpoints for git working state (save,
+                diff, apply, restore)
+  github        Open GitHub project pages, issues, PRs, and releases from any
+                git repo
+  private-init  Initialize private/ as a standalone versioned git repo inside
+                any project
+  split         Split text by separator with optional token filtering
+  srch-path     Search the system PATH for executables and commands
+
+dazzletools:claude:  (virtual kit 'claude')
+  cleanup           Stage and commit Claude Code state files -- noise
+                    (transient) or user (configs, skills, session logs)
+  recover-sesslogs  Salvage the logger channels of sessions that worked in a
+                    now-missing path -- rank sesslogs by folder-affinity and
+                    recover them
+  session-metadata  Catalog Claude Code sessions (lost or live) with artifact
+                    cross-referencing, known-docs discovery, and navigable
+                    symlinks
+  sesslog-datefix   Fix timestamps on Claude Code session log directories after
+                    git operations corrupt them
+  view              Open Claude Code sessions in the history viewer from the
+                    command line
+
+dazzletools:md:  (virtual kit 'md')
+  rm-img  Strip inline base64 image data from markdown files; relink references
+          to on-disk source via local search + dz fixpath
+  unwrap  Unwrap hard-wrapped markdown paragraphs to one line per paragraph;
+          preserves code/tables/lists/quotes/frontmatter. Content-preserving,
+          render-identical
+
+dazzletools:windows:  (virtual kit 'windows')
+  fixusr         Diagnose and repair a broken Windows user profile: detects
+                 temporary-profile / ProfileList '.bak' state and stripped
+                 profile ACLs (the takeown/icacls aftermath), then restores the
+                 ProfileList entry and re-grants the user FullControl
+                 loop-safely via safe-icacls
+  redact-msinfo  Redact a Windows msinfo32 text export (PII scrubbing + section
+                 stripping) for safe sharing; pick sections with
+                 --include/--exclude
+  sicacls        Loop-safe passthrough wrapper around Windows icacls: forwards
+                 any icacls args, but on /T walks the tree itself and prunes
+                 reparse points so self-referential junctions can't cause an
+                 infinite recursion
+
+media:
+  crossfade          Build a video from 2 images with a crossfade and an audio
+                     track
+  img2vid            Build a video from N images plus audio with sequential
+                     transitions
+  mp3me              Batch FLAC -> MP3/V0/V2/Ogg/AAC/ALAC transcoder with tag
+                     copy (whatmp3)
+  song-to-vid        Make a video per audio file from its embedded album art
+  vid-preview-maker  Build a preview clip with a banner overlay and audio
+                     fade-out
+  vid2gif            High-quality video to GIF via ffmpeg two-pass palette +
+                     gifsicle
+  vidresize          AR-preserving video resize with metadata strip + audio
+                     injection
+
+wtf:core:
+  locked     Why did my Windows PC lock? Diagnoses lock causes, identifies who
+             logged in.
+  restarted  Why did my Windows PC restart? One command, instant answers.
+
+  [lib] constitutional primitive (engine in dazzlecmd_lib); absolute FQCN
+        'dazzlecmd_lib:core:<name>'. Names show prefixless -- the absolute
+        prepends this aggregator (e.g. 'dazzlecmd:core:<name>'); both resolve.
+        'dz info <name>' shows it.
+
+  36 tool(s) (22 canonical + 14 virtual-kit alias(es)). Use --show all to see both; --show canonical for legacy view.

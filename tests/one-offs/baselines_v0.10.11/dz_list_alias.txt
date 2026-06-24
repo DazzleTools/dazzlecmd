@@ -1,0 +1,46 @@
+core:f:  (virtual kit 'f')
+  cp  Safe copy with full metadata preservation (mtime/atime/ctime, ACLs,
+      attributes) and clobber protection. Wraps preservelib.
+  ls  List filenames, directories, or specific files with customizable sorting,
+      collection, and output options
+  mv  Safe move with full metadata preservation (mtime/atime/ctime, ACLs,
+      attributes) and clobber protection. Wraps preservelib.
+  rm  Safe file/directory deletion with link-aware classification, metadata
+      preservation, and recoverable trash store
+
+dazzletools:claude:  (virtual kit 'claude')
+  cleanup           Stage and commit Claude Code state files -- noise
+                    (transient) or user (configs, skills, session logs)
+  recover-sesslogs  Salvage the logger channels of sessions that worked in a
+                    now-missing path -- rank sesslogs by folder-affinity and
+                    recover them
+  session-metadata  Catalog Claude Code sessions (lost or live) with artifact
+                    cross-referencing, known-docs discovery, and navigable
+                    symlinks
+  sesslog-datefix   Fix timestamps on Claude Code session log directories after
+                    git operations corrupt them
+  view              Open Claude Code sessions in the history viewer from the
+                    command line
+
+dazzletools:md:  (virtual kit 'md')
+  rm-img  Strip inline base64 image data from markdown files; relink references
+          to on-disk source via local search + dz fixpath
+  unwrap  Unwrap hard-wrapped markdown paragraphs to one line per paragraph;
+          preserves code/tables/lists/quotes/frontmatter. Content-preserving,
+          render-identical
+
+dazzletools:windows:  (virtual kit 'windows')
+  fixusr         Diagnose and repair a broken Windows user profile: detects
+                 temporary-profile / ProfileList '.bak' state and stripped
+                 profile ACLs (the takeown/icacls aftermath), then restores the
+                 ProfileList entry and re-grants the user FullControl
+                 loop-safely via safe-icacls
+  redact-msinfo  Redact a Windows msinfo32 text export (PII scrubbing + section
+                 stripping) for safe sharing; pick sections with
+                 --include/--exclude
+  sicacls        Loop-safe passthrough wrapper around Windows icacls: forwards
+                 any icacls args, but on /T walks the tree itself and prunes
+                 reparse points so self-referential junctions can't cause an
+                 infinite recursion
+
+  14 alias(es) found

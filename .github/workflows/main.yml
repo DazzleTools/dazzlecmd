@@ -19,6 +19,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v6
+      with:
+        submodules: recursive  # materialize submodule tools (e.g. core/listall) for discovery/smoke tests
 
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v6
@@ -71,6 +73,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v6
+      with:
+        submodules: recursive  # materialize submodule tools (e.g. core/listall) so the built package ships them
 
     - name: Set up Python 3.12
       uses: actions/setup-python@v6

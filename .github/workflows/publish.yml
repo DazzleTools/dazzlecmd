@@ -20,6 +20,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v6
+      with:
+        submodules: recursive  # materialize submodule tools (e.g. core/listall) so package-data ships them
 
     - name: Set up Python
       uses: actions/setup-python@v6
@@ -36,6 +38,11 @@ jobs:
 
     - name: Build alias package (dazzle-dz)
       run: python -m build packages/dazzle-dz-alias/ --outdir dist/alias/
+
+    - name: Verify no private/ or wtf content leaked into the artifacts
+      run: |
+        python scripts/check_dist_no_leak.py dist/main/
+        python scripts/check_dist_no_leak.py dist/alias/
 
     - name: Check packages
       run: |

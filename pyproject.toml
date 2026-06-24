@@ -15,7 +15,7 @@ authors = [
 keywords = ["cli", "tools", "utility", "dazzletools", "dazzle", "command-line", "aggregator"]
 
 dependencies = [
-    "dazzlecmd-lib>=0.8.34",
+    "dazzlecmd-lib>=0.8.55",
 ]
 
 [project.optional-dependencies]
