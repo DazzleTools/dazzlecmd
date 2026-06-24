@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.10.13] - 2026-06-24
+
+### Changed
+
+- **safedel now depends on the published `dazzle-filekit` and `unctools` releases instead of bundling copies.** The tool previously vendored these under `safedel/_lib/` and prepended that directory to `sys.path`; they are now declared as real dependencies (`dazzle-filekit>=0.3.2`, and `unctools>=0.2.2` on Windows, where it is used for UNC->local path conversion) and the local copies are removed, so installs resolve them from PyPI. First step of de-vendoring the `safedel/_lib` bundle.
+
+### Versions
+
+- dazzlecmd 0.10.12 -> 0.10.13 (PATCH); dazzle-dz -> 0.10.13. New direct deps: `dazzle-filekit>=0.3.2`, `unctools>=0.2.2` (win32). dazzlecmd-lib unchanged (0.8.55); dazzle-lib unchanged (0.6.7).
+
 ## [0.10.12] - 2026-06-24
 
 ### Added
@@ -3761,7 +3771,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.12...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.13...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
