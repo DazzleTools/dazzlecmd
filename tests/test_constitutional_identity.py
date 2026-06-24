@@ -5,6 +5,7 @@ constitutional: its canonical "home" is `dazzlecmd_lib:core:<name>` (bones),
 of which `core:<name>` is the consumer projection (skin) shown in `dz list`.
 `dz list` marks such tools `[lib]`; `dz info` shows the canonical FQCN.
 """
+import os
 import re
 import subprocess
 import sys
@@ -15,6 +16,11 @@ from dazzlecmd_lib.core import (
     constitutional_names,
 )
 from dazzlecmd_lib.default_meta_commands import _constitutional_entry
+
+# The dazzlecmd aggregator now lives under src/dazzlecmd/ (the #58 packaging
+# move). Anchor real-discovery engines there explicitly rather than relying on
+# the CWD, which is no longer the aggregator root.
+_PKG_ROOT = os.path.join(os.path.dirname(os.path.dirname(__file__)), "src", "dazzlecmd")
 
 
 def _dz(*args):
@@ -56,7 +62,7 @@ def test_absolute_fqcn_derivation():
     """engine.absolute_fqcn is a real, always-derivable core concept."""
     import types
     from dazzlecmd_lib import AggregatorEngine
-    eng = AggregatorEngine(name="dazzlecmd")
+    eng = AggregatorEngine(name="dazzlecmd", project_root=_PKG_ROOT)
     native = types.SimpleNamespace(name="f-cp", namespace="core", fqcn="core:f-cp")
     assert eng.absolute_fqcn(native) == "dazzlecmd:core:f-cp"
     consti = types.SimpleNamespace(name="safedel", namespace="core", fqcn="core:safedel")
@@ -84,7 +90,7 @@ def test_dz_info_shows_absolute_for_ordinary():
 
 def test_absolute_to_local_normalization():
     from dazzlecmd_lib import AggregatorEngine
-    eng = AggregatorEngine(name="dazzlecmd")
+    eng = AggregatorEngine(name="dazzlecmd", project_root=_PKG_ROOT)
     assert eng._absolute_to_local("dazzlecmd:core:f-cp") == "core:f-cp"
     assert eng._absolute_to_local("dazzlecmd:f-cp") == "f-cp"
     assert eng._absolute_to_local("core:f-cp") == "core:f-cp"   # already local
@@ -149,7 +155,7 @@ def test_overlay_alias_is_a_real_index_entry():
     alias -- a real, dispatchable grouping artifact, not a `_absolute_to_local`
     string rewrite."""
     from dazzlecmd_lib import AggregatorEngine
-    eng = AggregatorEngine(name="dazzlecmd")
+    eng = AggregatorEngine(name="dazzlecmd", project_root=_PKG_ROOT)
     eng.discover()
     idx = eng.fqcn_index
     # The home FQCN points at the surfaced canonical...

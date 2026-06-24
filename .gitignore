@@ -163,6 +163,7 @@ mode_local.json
 **/private_*
 # Exception: the private-init tool's own source is a tracked tool file, not private content
 !/projects/dazzletools/private-init/private_init.py
+!/src/dazzlecmd/projects/dazzletools/private-init/private_init.py
 CLAUDE.md
 private/claude/
 private/temp/
@@ -172,6 +173,9 @@ private/docs/
 # Local-only kit/aggregator hookups (not shipped publicly).
 # wtf-windows is wired in locally as the recursion proof (aggregator
 # embedding aggregator); it returns to public tracking when wtf-windows
-# reaches its public milestone.
+# reaches its public milestone. (Relocated under src/dazzlecmd/ by the #58
+# packaging move; the old repo-root paths are kept for safety.)
+/src/dazzlecmd/projects/wtf/
+/src/dazzlecmd/kits/wtf.kit.json
 /projects/wtf/
 /kits/wtf.kit.json

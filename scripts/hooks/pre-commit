@@ -56,6 +56,7 @@ for file in $(git diff --cached --name-only); do
     # for the same file -- the `private_*` guard collides with private-init).
     case "$file" in
         projects/dazzletools/private-init/private_init.py) continue ;;
+        src/dazzlecmd/projects/dazzletools/private-init/private_init.py) continue ;;
     esac
     # Check against private content patterns
     if echo "$file" | grep -q -E "^.*/__private__.*|^.*/private_.*|^.*~$|\.backup$|\.bak$|\.log$|\.tmp$|^\.env.*|^\.env\.local$|^\.env\.private$|^convos/|^credentials/|^logs/|^nul$|^private/|^revisions/|^secrets/|^test-runs/|^test_runs/"; then

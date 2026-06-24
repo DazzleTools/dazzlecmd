@@ -54,12 +54,29 @@ private-patterns = [
 [tool.setuptools.dynamic]
 version = {attr = "dazzlecmd._version.PIP_VERSION"}
 
+[tool.setuptools]
+# Ship the moved tool tree (src/dazzlecmd/{projects,kits,aggregator.json}) as
+# package data via MANIFEST.in (#58). Build releases from a clean checkout/CI.
+include-package-data = true
+
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["dazzlecmd*"]
+# The tool dirs under projects/ are DATA, not importable subpackages -- some
+# carry __init__.py (e.g. _f_common, safedel/_lib), so exclude them from the
+# package list while MANIFEST.in still ships their files as package data.
+exclude = ["dazzlecmd.projects*", "dazzlecmd.kits*"]
 
 [tool.setuptools.package-data]
-"dazzlecmd" = ["templates/*"]
+# setuptools' `*` skips dotfiles, so the `.dazzlecmd.json` tool manifests need
+# an explicit pattern -- without them dz discovers nothing (#58).
+"dazzlecmd" = [
+    "templates/*",
+    "aggregator.json",
+    "projects/**",
+    "projects/**/.dazzlecmd.json",
+    "kits/*.kit.json",
+]
 
 [tool.pytest.ini_options]
 # tests/one-offs/ is a scratchpad (per the one-offs-vs-regression-tests

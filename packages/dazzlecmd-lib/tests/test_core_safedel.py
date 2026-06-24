@@ -91,7 +91,7 @@ def test_list_parser_count_and_all():
     spec = importlib.util.spec_from_file_location(
         "_safedel_tool",
         os.path.join(os.path.dirname(__file__), "..", "..", "..",
-                     "projects", "core", "safedel", "safedel.py"),
+                     "src", "dazzlecmd", "projects", "core", "safedel", "safedel.py"),
     )
     tool = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(tool)

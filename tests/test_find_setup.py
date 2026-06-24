@@ -23,7 +23,7 @@ from dazzlecmd_lib.platform_detect import PlatformInfo
 # select_installer() directly with synthetic PlatformInfo values.
 _HERE = os.path.dirname(__file__)
 _REPO_ROOT = os.path.dirname(_HERE)
-_FIND_SETUP = os.path.join(_REPO_ROOT, "projects", "core", "find", "dz_setup.py")
+_FIND_SETUP = os.path.join(_REPO_ROOT, "src", "dazzlecmd", "projects", "core", "find", "dz_setup.py")
 
 
 @pytest.fixture(scope="module")

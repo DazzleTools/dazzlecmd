@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.10.11] - 2026-06-23
+
+### Fixed
+
+- **#58: the PyPI wheel now ships the tools (`pip install dazzlecmd` gives a working `dz`).** Relocated the tracked tool tree -- `projects/`, `kits/`, and `aggregator.json` -- from the repo root into `src/dazzlecmd/`, so it is inside the installable package. Added a `MANIFEST.in` + `package-data` globs (including the `.dazzlecmd.json` dotfile pattern that setuptools' `*` skips) to ship the tool files, and excluded the tool dirs from `packages.find` (they are data, not importable packages). A built wheel now contains `aggregator.json` + the kit manifests + the tracked `projects/**` tools, and excludes the local-only `wtf` recursion-proof aggregator and the per-tool `private/` design-doc repos (release builds must come from a clean checkout / CI). The editable dev `dz` is unchanged (110 tools) -- the runtime was already `aggregator.json`-anchored, so discovery follows the tree to its new location with no code change.
+
+### Notes
+
+- Live-repo tests that hardcoded the old `projects/...` root path were repointed to `src/dazzlecmd/projects/...`; full suite green (1590 passed). The byte-gate `dz info` goldens are stale (they predate the 0.10.x tool batch) and surface a pre-existing `listall` discovery gap (no `.dazzlecmd.json`, not registered in the core kit) -- re-baselining the goldens and the `listall` fix are tracked as a follow-up, as are the remaining #58 acceptance items (a `dazzlecmd-lib` publish job + a pip-install-and-dispatch wheel test). dazzlecmd-lib unchanged.
+
+### Versions
+
+- dazzlecmd 0.10.10 -> 0.10.11 (PATCH); dazzle-dz -> 0.10.11. dazzlecmd-lib unchanged (0.8.54); dazzle-lib unchanged (0.6.7).
+
 ## [0.10.10] - 2026-06-23
 
 ### Changed
@@ -3726,7 +3740,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.10...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.11...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

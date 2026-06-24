@@ -1,0 +1,23 @@
+# #58 packaging: ship the moved tool tree (projects/ + kits/ + aggregator.json,
+# now under src/dazzlecmd/) as package data so the PyPI wheel gives a working dz.
+# RELEASE BUILDS MUST COME FROM A CLEAN CHECKOUT / CI -- the untracked wtf repo
+# and per-tool private/ design-doc repos are gitignored and thus absent from a
+# clean tree; the prune/exclude rules below are defense-in-depth for dev builds.
+graft src/dazzlecmd/templates
+graft src/dazzlecmd/projects
+graft src/dazzlecmd/kits
+include src/dazzlecmd/aggregator.json
+
+# Never ship the local-only wtf recursion-proof aggregator or any per-tool
+# private/ design-doc repo, even if a dev build runs against the working tree.
+prune src/dazzlecmd/projects/wtf
+prune src/dazzlecmd/kits/wtf.kit.json
+recursive-exclude src/dazzlecmd/projects */private *
+recursive-exclude src/dazzlecmd/projects private *
+
+# Build cruft.
+global-exclude __pycache__/*
+global-exclude *.py[cod]
+global-exclude .vscode/*
+global-exclude .git/*
+global-exclude *.code-workspace

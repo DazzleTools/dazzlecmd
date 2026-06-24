@@ -17,7 +17,7 @@ import pytest
 
 _HERE = os.path.dirname(__file__)
 _REPO_ROOT = os.path.dirname(_HERE)
-_FIND = os.path.join(_REPO_ROOT, "projects", "core", "find", "find.py")
+_FIND = os.path.join(_REPO_ROOT, "src", "dazzlecmd", "projects", "core", "find", "find.py")
 
 
 @pytest.fixture(scope="module")
