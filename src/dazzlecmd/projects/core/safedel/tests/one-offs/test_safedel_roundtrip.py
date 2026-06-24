@@ -11,7 +11,7 @@ import tempfile
 
 _safedel_dir = os.path.join(os.path.dirname(__file__), "..", "..")
 sys.path.insert(0, _safedel_dir)
-# _lib for preservelib, links dir for detect_link
+# _lib for log_lib, links dir for detect_link
 sys.path.insert(0, os.path.join(_safedel_dir, "_lib"))
 sys.path.insert(0, os.path.join(_safedel_dir, "..", "links"))
 

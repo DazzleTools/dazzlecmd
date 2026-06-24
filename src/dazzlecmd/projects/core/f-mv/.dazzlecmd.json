@@ -1,7 +1,7 @@
 {
     "name": "f-mv",
     "version": "0.1.0",
-    "description": "Safe move with full metadata preservation (mtime/atime/ctime, ACLs, attributes) and clobber protection. Wraps preservelib.",
+    "description": "Safe move with full metadata preservation (mtime/atime/ctime, ACLs, attributes) and clobber protection.",
     "namespace": "core",
     "language": "python",
     "platform": "cross-platform",
@@ -13,7 +13,7 @@
     },
     "pass_through": false,
     "dependencies": {
-        "python_required": ["dazzle-preserve"],
+        "python_required": ["dazzle-preservelib"],
         "python_optional": ["pywin32"]
     },
     "taxonomy": {

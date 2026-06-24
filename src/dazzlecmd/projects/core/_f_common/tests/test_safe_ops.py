@@ -1,10 +1,10 @@
 """Unit tests for _f_common.safe_ops.
 
-These tests exercise the adapter in isolation: preservelib's
+These tests exercise the adapter in isolation: dazzle_preservelib's
 copy_operation and move_operation are mocked so we can assert on the
 options dict we pass to them and the OpResult we translate back. The
 goal is to catch regressions in the translation layer specifically --
-integration tests with real preservelib live in projects/core/tests/.
+integration tests with real dazzle_preservelib live in projects/core/tests/.
 """
 
 from __future__ import annotations
@@ -45,16 +45,16 @@ from _f_common.safe_ops import (  # noqa: E402
 # ---------------------------------------------------------------- enum tests
 
 class TestConflictPolicy:
-    """The enum values must match preservelib's on_conflict strings exactly.
+    """The enum values must match dazzle_preservelib's on_conflict strings exactly.
 
     Any drift here means dz callers think they're skipping/overwriting
-    but preservelib sees an unknown policy and falls back to its
+    but dazzle_preservelib sees an unknown policy and falls back to its
     default. This is precisely the sort of silent breakage the adapter
     layer exists to catch.
     """
 
-    def test_values_match_preservelib_on_conflict_vocabulary(self):
-        # See preservelib/operations.py:891 "on_conflict": "Conflict resolution strategy
+    def test_values_match_dazzle_preservelib_on_conflict_vocabulary(self):
+        # See dazzle_preservelib/operations.py:891 "on_conflict": "Conflict resolution strategy
         # (skip, overwrite, newer, larger, rename, fail)"
         expected = {"skip", "overwrite", "newer", "larger", "rename", "fail"}
         actual = {p.value for p in ConflictPolicy}
@@ -64,7 +64,7 @@ class TestConflictPolicy:
 # ----------------------------------------------------------- translation tests
 
 class TestOptionsFor:
-    """The options dict handed to preservelib must reflect dz-facing args."""
+    """The options dict handed to dazzle_preservelib must reflect dz-facing args."""
 
     def test_on_conflict_string_from_enum(self):
         opts = _options_for(
@@ -75,7 +75,7 @@ class TestOptionsFor:
         assert opts["on_conflict"] == "skip"
 
     def test_overwrite_boolean_aligns_with_policy(self):
-        # Legacy preservelib codepaths may still consult the 'overwrite'
+        # Legacy dazzle_preservelib codepaths may still consult the 'overwrite'
         # bool. We set it only when the policy is OVERWRITE; never
         # otherwise.
         for policy, expected in [
@@ -115,7 +115,7 @@ class TestOptionsFor:
 
 
 class TestTranslateResult:
-    """preservelib's OperationResult -> dz OpResult mapping."""
+    """dazzle_preservelib's OperationResult -> dz OpResult mapping."""
 
     def _make_plib(
         self, succeeded=0, failed=0, skipped=0,
@@ -186,10 +186,10 @@ class TestTranslateResult:
         assert result.files_processed == 3
 
 
-# ------------------------------------------------------ refuse-without-preservelib
+# ------------------------------------------------------ refuse-without-dazzle_preservelib
 
 class TestRefuseWithoutPreservelib:
-    """When preservelib is missing, ops refuse rather than silently degrade."""
+    """When dazzle_preservelib is missing, ops refuse rather than silently degrade."""
 
     def test_safe_cp_refuses_with_install_instruction(self):
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", False):
@@ -209,7 +209,7 @@ class TestRefuseWithoutPreservelib:
 # ------------------------------------------------------------------ safe_mv invariant
 
 class TestSafeMvAlwaysVerifies:
-    """safe_mv must NEVER pass verify=False through to preservelib.
+    """safe_mv must NEVER pass verify=False through to dazzle_preservelib.
 
     The verify gate is the safety invariant for source deletion. The
     function signature does not even expose a verify parameter --
@@ -218,7 +218,7 @@ class TestSafeMvAlwaysVerifies:
     mode uses copy_operation and is tested separately.
     """
 
-    @pytest.mark.skipif(not PRESERVELIB_AVAILABLE, reason="preservelib not installed")
+    @pytest.mark.skipif(not PRESERVELIB_AVAILABLE, reason="dazzle_preservelib not installed")
     def test_safe_mv_does_not_accept_verify_kwarg(self):
         # The signature explicitly omits verify. Passing it should
         # raise TypeError. (This guards against a future maintainer
@@ -229,7 +229,7 @@ class TestSafeMvAlwaysVerifies:
 
     def test_safe_mv_options_always_have_verify_true(self):
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.move_operation") as mock_move:
+             patch("dazzle_preservelib.operations.move_operation") as mock_move:
             mock_result = MagicMock()
             mock_result.succeeded = []
             mock_result.failed = []
@@ -248,11 +248,11 @@ class TestSafeMvAlwaysVerifies:
             assert options["verify"] is True
 
     def test_safe_mv_options_force_is_false(self):
-        # force=True would let preservelib delete the source even on
+        # force=True would let dazzle_preservelib delete the source even on
         # verify failure. We explicitly set force=False so the safety
         # invariant holds.
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.move_operation") as mock_move:
+             patch("dazzle_preservelib.operations.move_operation") as mock_move:
             mock_result = MagicMock()
             mock_result.succeeded = []
             mock_result.failed = []
@@ -275,7 +275,7 @@ class TestDryRunExitCode:
 
     def test_dry_run_clean_exits_zero(self):
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.copy_operation") as mock_copy:
+             patch("dazzle_preservelib.operations.copy_operation") as mock_copy:
             mock_result = MagicMock()
             mock_result.succeeded = [("s", "d")]
             mock_result.failed = []
@@ -291,13 +291,13 @@ class TestDryRunExitCode:
 
     def test_dry_run_with_problems_uses_exit_64(self):
         # Directory-style dest so this hits the non-rename code path
-        # where preservelib's failure result is what determines the
+        # where dazzle_preservelib's failure result is what determines the
         # exit code. (Rename-mode dry-run short-circuits with a plan
         # report; the exit-64-on-problems case for rename mode would
         # be triggered by a conflict policy failing pre-stage, not by
-        # preservelib returning a failed result.)
+        # dazzle_preservelib returning a failed result.)
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.copy_operation") as mock_copy:
+             patch("dazzle_preservelib.operations.copy_operation") as mock_copy:
             mock_result = MagicMock()
             mock_result.succeeded = []
             mock_result.failed = [("s", "d")]
@@ -316,11 +316,11 @@ class TestDryRunExitCode:
 # ------------------------------------------------------- exception-path coverage
 
 class TestExceptionFromPreservelib:
-    """Unhandled exceptions from preservelib get translated, not propagated."""
+    """Unhandled exceptions from dazzle_preservelib get translated, not propagated."""
 
     def test_safe_cp_translates_exception_to_OpResult(self):
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.copy_operation",
+             patch("dazzle_preservelib.operations.copy_operation",
                    side_effect=RuntimeError("disk full")):
             result = safe_cp(["s.txt"], "d.txt")
             assert result.ok is False
@@ -333,7 +333,7 @@ class TestExceptionFromPreservelib:
         # slash is what routes through move_operation (rename mode
         # routes through copy_operation instead).
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.move_operation",
+             patch("dazzle_preservelib.operations.move_operation",
                    side_effect=OSError("permission denied")):
             result = safe_mv(["s.txt"], "dst/")
             assert result.ok is False
@@ -342,23 +342,23 @@ class TestExceptionFromPreservelib:
             assert any("permission denied" in e for e in result.errors)
 
 
-# ------------------------------------------------------ warning capture from preservelib
+# ------------------------------------------------------ warning capture from dazzle_preservelib
 
 class TestPreservelibWarningCapture:
-    """preservelib emits non-fatal failures (e.g. ACL preservation) via
+    """dazzle_preservelib emits non-fatal failures (e.g. ACL preservation) via
     logger.error/.warning rather than populating OperationResult. The
     adapter must capture those records into OpResult.warnings so the
     CLI shim and JSON output can report them honestly.
     """
 
-    def test_warnings_from_preservelib_logger_are_captured(self):
+    def test_warnings_from_dazzle_preservelib_logger_are_captured(self):
         import logging
 
         def fake_copy(*args, **kwargs):
-            # Simulate preservelib logging a non-fatal ACL failure
+            # Simulate dazzle_preservelib logging a non-fatal ACL failure
             # mid-operation, then returning a "successful" result.
-            preservelib_log = logging.getLogger("preservelib.metadata")
-            preservelib_log.error(
+            dazzle_preservelib_log = logging.getLogger("dazzle_preservelib.metadata")
+            dazzle_preservelib_log.error(
                 "Error applying security information to foo.txt: "
                 "Access is denied."
             )
@@ -372,7 +372,7 @@ class TestPreservelibWarningCapture:
             return r
 
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.copy_operation",
+             patch("dazzle_preservelib.operations.copy_operation",
                    side_effect=fake_copy):
             result = safe_cp(["foo.txt"], "dst/")
 
@@ -383,12 +383,12 @@ class TestPreservelibWarningCapture:
         assert len(result.warnings) >= 1
         captured_msg = " ".join(result.warnings)
         assert "Access is denied" in captured_msg
-        assert "preservelib" in captured_msg.lower()
+        assert "dazzle_preservelib" in captured_msg.lower()
 
     def test_no_warnings_means_clean_warnings_list(self):
-        # When preservelib emits nothing at WARN+, warnings stays empty.
+        # When dazzle_preservelib emits nothing at WARN+, warnings stays empty.
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.copy_operation") as mock_copy:
+             patch("dazzle_preservelib.operations.copy_operation") as mock_copy:
             r = MagicMock()
             r.succeeded = [("a", "b")]
             r.failed = []
@@ -406,7 +406,7 @@ class TestPreservelibWarningCapture:
 class TestCtimeRestoredHonesty:
     """ctime_restored must reflect reality, not always be True.
 
-    preservelib's metadata layer logs SetFileTime / pywin32 failures
+    dazzle_preservelib's metadata layer logs SetFileTime / pywin32 failures
     via logger.error/.warning rather than populating
     OperationResult. The adapter captures those records into
     result.warnings AND inspects them to flip ctime_restored to False
@@ -418,8 +418,8 @@ class TestCtimeRestoredHonesty:
         import logging
 
         def fake_copy(*args, **kwargs):
-            preservelib_log = logging.getLogger("preservelib.metadata")
-            preservelib_log.error(
+            dazzle_preservelib_log = logging.getLogger("dazzle_preservelib.metadata")
+            dazzle_preservelib_log.error(
                 "Error in SetFileTime for foo.txt: Access is denied"
             )
             r = MagicMock()
@@ -432,7 +432,7 @@ class TestCtimeRestoredHonesty:
             return r
 
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.copy_operation",
+             patch("dazzle_preservelib.operations.copy_operation",
                    side_effect=fake_copy):
             result = safe_cp(["foo.txt"], "dst/")
 
@@ -446,8 +446,8 @@ class TestCtimeRestoredHonesty:
         import logging
 
         def fake_copy(*args, **kwargs):
-            preservelib_log = logging.getLogger("preservelib.metadata")
-            preservelib_log.warning(
+            dazzle_preservelib_log = logging.getLogger("dazzle_preservelib.metadata")
+            dazzle_preservelib_log.warning(
                 "pywin32 not available; skipping ctime restoration"
             )
             r = MagicMock()
@@ -460,7 +460,7 @@ class TestCtimeRestoredHonesty:
             return r
 
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.copy_operation",
+             patch("dazzle_preservelib.operations.copy_operation",
                    side_effect=fake_copy):
             result = safe_cp(["foo.txt"], "dst/")
 
@@ -470,7 +470,7 @@ class TestCtimeRestoredHonesty:
         # Clean op (no warnings about ctime / SetFileTime / pywin32):
         # ctime_restored stays at its default True.
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.copy_operation") as mock_copy:
+             patch("dazzle_preservelib.operations.copy_operation") as mock_copy:
             r = MagicMock()
             r.succeeded = [("a", "b")]
             r.failed = []
@@ -488,8 +488,8 @@ class TestCtimeRestoredHonesty:
         import logging
 
         def fake_copy(*args, **kwargs):
-            preservelib_log = logging.getLogger("preservelib.metadata")
-            preservelib_log.error(
+            dazzle_preservelib_log = logging.getLogger("dazzle_preservelib.metadata")
+            dazzle_preservelib_log.error(
                 "Error applying security information to foo.txt: "
                 "Access is denied"
             )
@@ -503,7 +503,7 @@ class TestCtimeRestoredHonesty:
             return r
 
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.copy_operation",
+             patch("dazzle_preservelib.operations.copy_operation",
                    side_effect=fake_copy):
             result = safe_cp(["foo.txt"], "dst/")
 
@@ -570,7 +570,7 @@ class TestResolveRenameTarget:
 
     def test_same_basenames_no_rename_needed(self, tmp_path):
         # Source and dest have the same basename -> no rename step
-        # required; preservelib will place at the right name itself.
+        # required; dazzle_preservelib will place at the right name itself.
         src = str(tmp_path / "subdir" / "file.txt")
         dst = str(tmp_path / "other" / "file.txt")
         target = _resolve_rename_target(src, dst)
@@ -595,7 +595,7 @@ class TestSafeCpRenameMode:
             captured_calls["source_files"] = source_files
             captured_calls["dest_base"] = dest_base
             captured_calls["options"] = options
-            # Simulate preservelib placing the file under its source
+            # Simulate dazzle_preservelib placing the file under its source
             # basename inside whatever dest_base it was given.
             placed = Path(dest_base) / "a.txt"
             placed.write_text("hello")
@@ -609,11 +609,11 @@ class TestSafeCpRenameMode:
             return r
 
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.copy_operation",
+             patch("dazzle_preservelib.operations.copy_operation",
                    side_effect=fake_copy):
             result = safe_cp([str(src)], str(dst))
 
-        # preservelib received a tempdir INSIDE parent_dir, not the
+        # dazzle_preservelib received a tempdir INSIDE parent_dir, not the
         # parent_dir itself (avoids the self-conflict when source and
         # dest share a directory).
         parent_abs = os.path.abspath(str(tmp_path))
@@ -629,7 +629,7 @@ class TestSafeCpRenameMode:
         assert result.ok is True
 
     def test_directory_mode_passes_dest_as_is(self, tmp_path):
-        # Trailing / on dest -> directory mode; preservelib gets the
+        # Trailing / on dest -> directory mode; dazzle_preservelib gets the
         # exact dest the caller provided.
         src = tmp_path / "a.txt"
         src.write_text("hello")
@@ -650,7 +650,7 @@ class TestSafeCpRenameMode:
             return r
 
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.copy_operation",
+             patch("dazzle_preservelib.operations.copy_operation",
                    side_effect=fake_copy):
             safe_cp([str(src)], str(dst))
 
@@ -681,15 +681,15 @@ class TestSafeMvRenameMode:
 
     def test_rename_mode_uses_copy_operation_not_move(self, tmp_path):
         # Critical: rename mode for mv uses copy_operation so the
-        # source isn't deleted by preservelib before our rename runs.
+        # source isn't deleted by dazzle_preservelib before our rename runs.
         # We then delete the source manually as the final step.
         src = tmp_path / "a.txt"
         src.write_text("hello")
         dst = tmp_path / "renamed.txt"
 
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.move_operation") as mock_move, \
-             patch("preservelib.operations.copy_operation") as mock_copy:
+             patch("dazzle_preservelib.operations.move_operation") as mock_move, \
+             patch("dazzle_preservelib.operations.copy_operation") as mock_copy:
             r = MagicMock()
             r.succeeded = [(str(src), "placed")]
             r.failed = []
@@ -713,7 +713,7 @@ class TestSafeMvRenameMode:
 
     def test_rename_mode_source_deleted_after_success(self, tmp_path):
         # End-to-end-ish: after copy succeeds and rename succeeds,
-        # source is removed. We mock preservelib's copy to actually
+        # source is removed. We mock dazzle_preservelib's copy to actually
         # produce a placed file so the rename + delete steps run.
         src = tmp_path / "a.txt"
         src.write_text("hello")
@@ -732,7 +732,7 @@ class TestSafeMvRenameMode:
             return r
 
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.copy_operation",
+             patch("dazzle_preservelib.operations.copy_operation",
                    side_effect=fake_copy):
             result = safe_mv([str(src)], str(dst))
 
@@ -762,7 +762,7 @@ class TestSafeMvRenameMode:
             return r
 
         with patch("_f_common.safe_ops.PRESERVELIB_AVAILABLE", True), \
-             patch("preservelib.operations.copy_operation",
+             patch("dazzle_preservelib.operations.copy_operation",
                    side_effect=fake_copy):
             result = safe_mv([str(src)], str(dst))
 

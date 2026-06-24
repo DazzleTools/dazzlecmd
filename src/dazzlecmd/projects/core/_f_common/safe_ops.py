@@ -1,8 +1,8 @@
 """Safe copy/move operations with metadata preservation.
 
-Wraps preservelib.operations behind a stable dz-facing API. The adapter
-exists so dz can evolve independently of preservelib's option/result
-shape: if preservelib renames or restructures fields, only the
+Wraps dazzle_preservelib.operations behind a stable dz-facing API. The adapter
+exists so dz can evolve independently of dazzle_preservelib's option/result
+shape: if dazzle_preservelib renames or restructures fields, only the
 translation helpers in this module change -- the public surface
 (safe_cp, safe_mv, OpResult, ConflictPolicy) stays the same.
 
@@ -16,10 +16,10 @@ Design intent (see private/claude/2026-05-16__18-41-42__dev-workflow-process_dz-
 - OpResult surfaces every safety-relevant signal (ctime_restored,
   cross_device, verify_failed, preflight_failed) so callers can render
   honest user-facing output and pick exit codes deterministically.
-- PRESERVELIB_AVAILABLE is the hard-fail sentinel. If preservelib is
+- PRESERVELIB_AVAILABLE is the hard-fail sentinel. If dazzle_preservelib is
   not installed, both operations refuse to run rather than silently
   fall back to shutil.copy2 -- the caller asked for SAFE ops, and we
-  cannot deliver safe semantics without preservelib's metadata work.
+  cannot deliver safe semantics without dazzle_preservelib's metadata work.
 """
 
 from __future__ import annotations
@@ -34,11 +34,11 @@ from enum import Enum
 from pathlib import Path
 from typing import List, Optional
 
-# Hard-fail sentinel. If preservelib cannot import, safe_cp/safe_mv
+# Hard-fail sentinel. If dazzle_preservelib cannot import, safe_cp/safe_mv
 # return an OpResult with ok=False and a clear install instruction
 # rather than degrading to lossy shutil-based ops.
 try:
-    from preservelib.operations import copy_operation, move_operation  # noqa: F401
+    from dazzle_preservelib.operations import copy_operation, move_operation  # noqa: F401
     PRESERVELIB_AVAILABLE = True
 except ImportError:
     PRESERVELIB_AVAILABLE = False
@@ -47,7 +47,7 @@ except ImportError:
 class ConflictPolicy(Enum):
     """How to handle a destination that already exists.
 
-    Maps 1:1 to preservelib's ``on_conflict`` option values, which is
+    Maps 1:1 to dazzle_preservelib's ``on_conflict`` option values, which is
     why the .value strings match exactly. The enum exists so dz
     callers get type-checked policy selection instead of stringly-typed
     arguments.
@@ -92,7 +92,7 @@ class OpResult:
     # (ctime is not settable; restoration is a no-op semantically).
     ctime_restored: bool = True
     # True if any operation crossed a device boundary (EXDEV). For mv
-    # this triggers copy-then-delete semantics in preservelib; we
+    # this triggers copy-then-delete semantics in dazzle_preservelib; we
     # surface it so the CLI can warn callers that the op was not
     # filesystem-level atomic.
     cross_device: bool = False
@@ -118,16 +118,16 @@ def _options_for(
     check_space: bool,
     check_permissions: bool,
 ) -> dict:
-    """Translate dz-facing args into preservelib's options dict.
+    """Translate dz-facing args into dazzle_preservelib's options dict.
 
-    See preservelib.operations.copy_operation default_options for the
+    See dazzle_preservelib.operations.copy_operation default_options for the
     full surface this maps to.
     """
     return {
         "on_conflict": policy.value,
         # overwrite is the legacy boolean; on_conflict supersedes it
-        # for preservelib >= 0.7.x. Setting both keeps older codepaths
-        # in preservelib doing the right thing if any still consult
+        # for dazzle_preservelib >= 0.7.x. Setting both keeps older codepaths
+        # in dazzle_preservelib doing the right thing if any still consult
         # overwrite directly.
         "overwrite": policy == ConflictPolicy.OVERWRITE,
         "verify": verify,
@@ -148,10 +148,10 @@ def _options_for(
 
 
 @contextmanager
-def _capture_preservelib_warnings():
-    """Attach a logging.Handler that captures WARN+ records from preservelib.
+def _capture_dazzle_preservelib_warnings():
+    """Attach a logging.Handler that captures WARN+ records from dazzle_preservelib.
 
-    preservelib's metadata layer uses ``logger.error()`` / ``.warning()``
+    dazzle_preservelib's metadata layer uses ``logger.error()`` / ``.warning()``
     for non-fatal failures (e.g. SetFileSecurity Access Denied on
     Windows ACL preservation) and continues without populating
     OperationResult.error_messages. The user-visible symptom is bare
@@ -159,7 +159,7 @@ def _capture_preservelib_warnings():
     actually lost.
 
     This context manager attaches a handler that collects WARN+ records
-    from the 'preservelib' logger and its children. The records are
+    from the 'dazzle_preservelib' logger and its children. The records are
     returned in a list shared with the caller, who can then merge them
     into OpResult.warnings.
 
@@ -177,9 +177,9 @@ def _capture_preservelib_warnings():
                 pass
 
     handler = _CapturingHandler(level=logging.WARNING)
-    target_logger = logging.getLogger("preservelib")
+    target_logger = logging.getLogger("dazzle_preservelib")
     target_logger.addHandler(handler)
-    # Ensure preservelib's logger isn't filtered at a higher level.
+    # Ensure dazzle_preservelib's logger isn't filtered at a higher level.
     prior_level = target_logger.level
     if prior_level == logging.NOTSET or prior_level > logging.WARNING:
         target_logger.setLevel(logging.WARNING)
@@ -205,9 +205,9 @@ def _warnings_from_records(records: List[logging.LogRecord]) -> List[str]:
 
 
 # Patterns that indicate ctime / creation-time restoration failed in
-# preservelib's metadata layer. Heuristic matching against warning
-# strings rather than re-importing preservelib internals (which would
-# couple this adapter to preservelib's exception types).
+# dazzle_preservelib's metadata layer. Heuristic matching against warning
+# strings rather than re-importing dazzle_preservelib internals (which would
+# couple this adapter to dazzle_preservelib's exception types).
 _CTIME_FAILURE_PATTERNS = (
     "setfiletime",        # win32file.SetFileTime error
     "creation time",      # generic "failed to set creation time"
@@ -239,7 +239,7 @@ def _finalize_op_result(result: OpResult) -> OpResult:
 
     Called as the last step before any safe_cp/safe_mv return so the
     flags reflect ALL warnings accumulated during the operation
-    (including ones added after the initial preservelib log capture,
+    (including ones added after the initial dazzle_preservelib log capture,
     e.g. source-deletion warnings in mv).
 
     Today this only updates ``ctime_restored``. Future derived flags
@@ -262,15 +262,15 @@ def _is_rename_style(sources: List[str], dest: str) -> bool:
     - ``cp src.txt existing_dir`` (dest exists as dir) -> directory-style.
     - ``cp s1 s2 dst`` (multiple sources) -> MUST be directory-style.
 
-    preservelib's ``path_style="flat"`` always treats dest as a
+    dazzle_preservelib's ``path_style="flat"`` always treats dest as a
     directory and places files inside by basename. That breaks the
     rename case, which is the common ``cp old new`` pattern. This
     helper identifies the rename case so the adapter can route around
-    preservelib's directory-only assumption (copy to dest's parent,
+    dazzle_preservelib's directory-only assumption (copy to dest's parent,
     then rename the placed file).
 
     Returns True if the operation should be interpreted as a rename;
-    False for directory-style (current preservelib behavior).
+    False for directory-style (current dazzle_preservelib behavior).
     """
     if len(sources) != 1:
         return False
@@ -294,7 +294,7 @@ class _RenameTarget:
 
     Captures the three derived paths the rename path needs:
 
-    - ``parent_dir``: where preservelib will place the file (absolute).
+    - ``parent_dir``: where dazzle_preservelib will place the file (absolute).
     - ``placed_path``: where the file lands BEFORE we rename it
       (parent_dir + source basename).
     - ``final_path``: where the file should be AFTER our rename
@@ -340,8 +340,8 @@ def _resolve_rename_conflict(
 ) -> str:
     """Apply conflict policy at the rename-mode layer.
 
-    Rename mode stages files in a tempdir, so preservelib never sees
-    the final destination -- which means preservelib's conflict check
+    Rename mode stages files in a tempdir, so dazzle_preservelib never sees
+    the final destination -- which means dazzle_preservelib's conflict check
     is no help. We re-implement the policy here for the final-path
     conflict.
 
@@ -401,11 +401,11 @@ def _stage_and_finalize(
     additional warning records and finalizes the dry_run / exit_code
     handling.
     """
-    from preservelib.operations import copy_operation
+    from dazzle_preservelib.operations import copy_operation
 
     # Create the tempdir AS a child of parent_dir so os.rename to
     # final_path is same-volume. tempfile.mkdtemp returns a unique
-    # name, so preservelib never sees a conflict in its dest dir.
+    # name, so dazzle_preservelib never sees a conflict in its dest dir.
     try:
         tmpdir = tempfile.mkdtemp(prefix=".dz-f-stage-", dir=parent_dir)
     except OSError as exc:
@@ -421,7 +421,7 @@ def _stage_and_finalize(
 
     try:
         try:
-            with _capture_preservelib_warnings() as captured:
+            with _capture_dazzle_preservelib_warnings() as captured:
                 plib_result = copy_operation(
                     source_files=[source],
                     dest_base=tmpdir,
@@ -448,11 +448,11 @@ def _stage_and_finalize(
 
         placed_path = os.path.join(tmpdir, os.path.basename(source))
         if not os.path.exists(placed_path):
-            # preservelib reported success but the placed file isn't
+            # dazzle_preservelib reported success but the placed file isn't
             # where we expect. Defensive: surface as error.
             result.ok = False
             result.errors.append(
-                f"preservelib reported success but no file at staging "
+                f"dazzle_preservelib reported success but no file at staging "
                 f"path '{placed_path}'"
             )
             result.exit_code = EXIT_SYSTEM_ERROR
@@ -487,9 +487,9 @@ def _translate_result(
     plib_result,
     operation: str,
 ) -> OpResult:
-    """Convert a preservelib OperationResult into a dz OpResult.
+    """Convert a dazzle_preservelib OperationResult into a dz OpResult.
 
-    preservelib's result object has fields like succeeded[], failed[],
+    dazzle_preservelib's result object has fields like succeeded[], failed[],
     skipped[], verified[], unverified[], incorporated[], plus an
     error_messages dict. We collapse these into the granular flags
     callers care about and compute the dz exit code from them.
@@ -522,11 +522,11 @@ def _translate_result(
         files_processed=files_processed,
         files_skipped=skipped,
         files_failed=failed,
-        # ctime_restored: preservelib does not currently surface this
+        # ctime_restored: dazzle_preservelib does not currently surface this
         # per-file. v1 assumes True unless pywin32 import failed at
         # adapter load; the CLI shim can downgrade this if needed.
         ctime_restored=True,
-        cross_device=False,  # preservelib doesn't surface this either
+        cross_device=False,  # dazzle_preservelib doesn't surface this either
         verify_failed=verify_failed,
         preflight_failed=False,  # set elsewhere if preflight raised
         errors=errors,
@@ -534,8 +534,8 @@ def _translate_result(
     )
 
 
-def _refuse_without_preservelib() -> OpResult:
-    """Return a failure OpResult when preservelib cannot be imported.
+def _refuse_without_dazzle_preservelib() -> OpResult:
+    """Return a failure OpResult when dazzle_preservelib cannot be imported.
 
     No silent fallback: the caller asked for safe ops, and shutil.copy2
     cannot deliver ctime/ACL preservation. The error message includes
@@ -549,8 +549,8 @@ def _refuse_without_preservelib() -> OpResult:
         verify_failed=False,
         preflight_failed=True,
         errors=[
-            "preservelib (dazzle-preserve) is not installed. "
-            "Install via: pip install -e C:\\code\\preserve[windows]"
+            "dazzle-preservelib is not installed. "
+            "Install via: pip install dazzle-preservelib"
         ],
         exit_code=EXIT_SYSTEM_ERROR,
     )
@@ -597,7 +597,7 @@ def safe_cp(
     """Copy files to dest with full metadata preservation and clobber protection.
 
     Detects POSIX rename-style (single source + non-existent file dest
-    without trailing /) and routes around preservelib's directory-only
+    without trailing /) and routes around dazzle_preservelib's directory-only
     flat-mode by copying to dest's parent and renaming the placed file.
 
     Args:
@@ -623,7 +623,7 @@ def safe_cp(
         OpResult with granular safety flags and dz-convention exit code.
     """
     if not PRESERVELIB_AVAILABLE:
-        return _refuse_without_preservelib()
+        return _refuse_without_dazzle_preservelib()
 
     err_result = _validate_multi_source_dest(sources, dest)
     if err_result is not None:
@@ -645,7 +645,7 @@ def safe_cp(
             mkdir_p=mkdir_p,
         ))
 
-    # Directory-mode: preservelib places sources by basename under dest.
+    # Directory-mode: dazzle_preservelib places sources by basename under dest.
     if mkdir_p and not dry_run:
         mkdir_err = _ensure_mkdir_p(dest)
         if mkdir_err:
@@ -656,7 +656,7 @@ def safe_cp(
                 dry_run=dry_run,
             )
 
-    from preservelib.operations import copy_operation
+    from dazzle_preservelib.operations import copy_operation
 
     options = _options_for(
         policy, verify, dry_run, preserve_attrs,
@@ -664,7 +664,7 @@ def safe_cp(
     )
 
     try:
-        with _capture_preservelib_warnings() as captured:
+        with _capture_dazzle_preservelib_warnings() as captured:
             plib_result = copy_operation(
                 source_files=sources,
                 dest_base=dest,
@@ -710,12 +710,12 @@ def _safe_cp_rename_mode(
     Stages the copy in a tempdir under the destination's parent
     directory so:
 
-    - preservelib never sees the same-directory self-conflict that
+    - dazzle_preservelib never sees the same-directory self-conflict that
       arises when the source lives in the destination dir (the
       copy-to-parent approach was naive about this).
     - The final ``os.rename`` from tempdir to final_path is a
       same-volume atomic operation -- preserves all metadata.
-    - Conflict policy applies at THIS layer (preservelib sees only
+    - Conflict policy applies at THIS layer (dazzle_preservelib sees only
       an empty tempdir, so its conflict check is no help on
       final_path).
     """
@@ -732,7 +732,7 @@ def _safe_cp_rename_mode(
             )
 
     # Apply conflict policy on final_path. We must do this BEFORE
-    # calling preservelib because preservelib's conflict check looks
+    # calling dazzle_preservelib because dazzle_preservelib's conflict check looks
     # at its dest_base (the tempdir), not at our final destination.
     decision = _resolve_rename_conflict(source, target.final_path, policy)
     if decision == "fail":
@@ -803,7 +803,7 @@ def safe_mv(
     Detects POSIX rename-style (single source + non-existent file dest
     without trailing /). In rename mode the implementation uses
     copy_operation (not move_operation) so that the source is NOT
-    deleted by preservelib before our rename step runs. We then rename
+    deleted by dazzle_preservelib before our rename step runs. We then rename
     the placed file to its final name and delete the source ourselves.
     This preserves the safety invariant: source is removed only after
     copy + verify + rename ALL succeed.
@@ -824,7 +824,7 @@ def safe_mv(
         OpResult with granular safety flags and dz-convention exit code.
     """
     if not PRESERVELIB_AVAILABLE:
-        return _refuse_without_preservelib()
+        return _refuse_without_dazzle_preservelib()
 
     err_result = _validate_multi_source_dest(sources, dest)
     if err_result is not None:
@@ -845,7 +845,7 @@ def safe_mv(
             mkdir_p=mkdir_p,
         ))
 
-    # Directory-style: preservelib's move_operation handles atomically.
+    # Directory-style: dazzle_preservelib's move_operation handles atomically.
     if mkdir_p and not dry_run:
         mkdir_err = _ensure_mkdir_p(dest)
         if mkdir_err:
@@ -856,7 +856,7 @@ def safe_mv(
                 dry_run=dry_run,
             )
 
-    from preservelib.operations import move_operation
+    from dazzle_preservelib.operations import move_operation
 
     options = _options_for(
         policy, verify=True, dry_run=dry_run,
@@ -865,12 +865,12 @@ def safe_mv(
         check_space=check_space,
         check_permissions=check_permissions,
     )
-    # Move-specific: force=False ensures preservelib refuses to delete
+    # Move-specific: force=False ensures dazzle_preservelib refuses to delete
     # source on verify failure. This is the safety invariant.
     options["force"] = False
 
     try:
-        with _capture_preservelib_warnings() as captured:
+        with _capture_dazzle_preservelib_warnings() as captured:
             plib_result = move_operation(
                 source_files=sources,
                 dest_base=dest,
@@ -909,7 +909,7 @@ def _safe_mv_rename_mode(
 ) -> OpResult:
     """Rename-style move: stage + rename + delete source, in that order.
 
-    Decomposes preservelib's atomic copy+verify+delete into three
+    Decomposes dazzle_preservelib's atomic copy+verify+delete into three
     explicit steps so we can slip the rename between verify and
     delete. Uses the same tempdir staging helper as
     _safe_cp_rename_mode to avoid the same-directory self-conflict.

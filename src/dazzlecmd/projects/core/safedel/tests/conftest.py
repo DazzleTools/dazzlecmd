@@ -10,7 +10,7 @@ import sys
 _safedel_dir = os.path.join(os.path.dirname(__file__), "..")
 sys.path.insert(0, _safedel_dir)
 
-# Add _lib for preservelib, log_lib, etc.
+# Add _lib for log_lib, help_lib, etc.
 sys.path.insert(0, os.path.join(_safedel_dir, "_lib"))
 
 # Add sibling links tool for detect_link imports

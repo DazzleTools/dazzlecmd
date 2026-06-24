@@ -22,6 +22,9 @@ dependencies = [
     # only ever in guarded/lazy try/except imports.
     "dazzle-filekit>=0.3.2",
     "unctools>=0.2.2; sys_platform == 'win32'",
+    # safe copy/move with metadata preservation, behind the _f_common/safe_ops
+    # adapter (the f-cp / f-mv tools). De-vendored from safedel/_lib/preservelib.
+    "dazzle-preservelib>=0.8.1",
 ]
 
 [project.optional-dependencies]

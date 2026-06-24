@@ -8,11 +8,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ### Changed
 
-- **safedel now depends on the published `dazzle-filekit` and `unctools` releases instead of bundling copies.** The tool previously vendored these under `safedel/_lib/` and prepended that directory to `sys.path`; they are now declared as real dependencies (`dazzle-filekit>=0.3.2`, and `unctools>=0.2.2` on Windows, where it is used for UNC->local path conversion) and the local copies are removed, so installs resolve them from PyPI. First step of de-vendoring the `safedel/_lib` bundle.
+- **safedel no longer bundles copies of published libraries; it depends on their PyPI releases.** The tool previously vendored several libraries under `safedel/_lib/` and prepended that directory to `sys.path`, so its imports shadowed any installed version. De-vendored to real dependencies: `dazzle-filekit>=0.3.2`, `unctools>=0.2.2` (Windows-only, for UNC->local path conversion), and `dazzle-preservelib>=0.8.1` (the metadata-preservation backend for the `f-cp`/`f-mv` tools, migrated from the vendored `preservelib` import to `dazzle_preservelib`). The orphaned internal `core_lib` bundle (no remaining importers) was removed. The internal `log_lib`/`help_lib` (slated to become standalone `dazzle-loglib`/`dazzle-helplib`) and the `ps1` PowerShell helpers stay bundled for now, so the `sys.path` shim remains until those publish.
+- **Fixed a hard-coded local install path in `f-cp`/`f-mv`'s "backend not installed" error.** The message pointed at a developer-specific editable path; it now reads `pip install dazzle-preservelib`. Also repointed the adapter's ACL/metadata warning capture to the new `dazzle_preservelib` logger tree (the old `preservelib` logger name would otherwise silently drop those warnings).
 
 ### Versions
 
-- dazzlecmd 0.10.12 -> 0.10.13 (PATCH); dazzle-dz -> 0.10.13. New direct deps: `dazzle-filekit>=0.3.2`, `unctools>=0.2.2` (win32). dazzlecmd-lib unchanged (0.8.55); dazzle-lib unchanged (0.6.7).
+- dazzlecmd 0.10.12 -> 0.10.13 (PATCH); dazzle-dz -> 0.10.13. New direct deps: `dazzle-filekit>=0.3.2`, `unctools>=0.2.2` (win32), `dazzle-preservelib>=0.8.1`. dazzlecmd-lib unchanged (0.8.55); dazzle-lib unchanged (0.6.7).
 
 ## [0.10.12] - 2026-06-24
 

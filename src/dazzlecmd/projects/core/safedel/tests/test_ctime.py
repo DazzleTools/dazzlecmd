@@ -51,14 +51,14 @@ def workdir(tmp_path):
 @pytestmark_pywin32
 def test_is_win32_available():
     """Verify pywin32 is detected."""
-    from preservelib.metadata import is_win32_available
+    from dazzle_preservelib.metadata import is_win32_available
     assert is_win32_available() is True
 
 
 @pytestmark_pywin32
 def test_restore_creation_time_file(workdir):
     """Directly test restore_windows_creation_time on a file."""
-    from preservelib.metadata import restore_windows_creation_time
+    from dazzle_preservelib.metadata import restore_windows_creation_time
 
     f = workdir / "ctime_test.txt"
     f.write_text("hello")
@@ -76,7 +76,7 @@ def test_restore_creation_time_file(workdir):
 @pytestmark_pywin32
 def test_restore_creation_time_directory(workdir):
     """restore_windows_creation_time should work on directories too."""
-    from preservelib.metadata import restore_windows_creation_time
+    from dazzle_preservelib.metadata import restore_windows_creation_time
 
     d = workdir / "ctime_dir"
     d.mkdir()
@@ -92,7 +92,7 @@ def test_restore_creation_time_directory(workdir):
 @pytestmark_pywin32
 def test_ctime_preserved_through_roundtrip(store, workdir):
     """End-to-end: create file with past ctime, delete, recover, verify ctime."""
-    from preservelib.metadata import restore_windows_creation_time
+    from dazzle_preservelib.metadata import restore_windows_creation_time
 
     f = workdir / "roundtrip.txt"
     f.write_text("original content")
@@ -124,7 +124,7 @@ def test_ctime_preserved_through_roundtrip(store, workdir):
 @pytestmark_pywin32
 def test_ctime_metadata_only_recovery(store, workdir):
     """Metadata-only recovery should apply ctime to an existing file."""
-    from preservelib.metadata import restore_windows_creation_time
+    from dazzle_preservelib.metadata import restore_windows_creation_time
 
     f = workdir / "meta_ctime.txt"
     f.write_text("original")
@@ -151,7 +151,7 @@ def test_ctime_metadata_only_recovery(store, workdir):
 
 def test_restore_on_non_windows_returns_false(monkeypatch):
     """On non-Windows, restore_windows_creation_time should return False."""
-    from preservelib.metadata import restore_windows_creation_time
+    from dazzle_preservelib.metadata import restore_windows_creation_time
     import platform as pf
 
     monkeypatch.setattr(pf, "system", lambda: "Linux")

@@ -41,7 +41,7 @@ def xattr_workdir(tmp_path):
 class TestCollectXattrs:
     def test_plain_file_no_xattrs(self, xattr_workdir):
         """A file with no xattrs should return empty dict."""
-        from preservelib.metadata import _collect_unix_xattrs
+        from dazzle_preservelib.metadata import _collect_unix_xattrs
         from pathlib import Path
         f = xattr_workdir / "plain.txt"
         f.write_text("content")
@@ -49,7 +49,7 @@ class TestCollectXattrs:
 
     def test_file_with_user_xattr(self, xattr_workdir):
         """A file with a user.* xattr should be captured."""
-        from preservelib.metadata import _collect_unix_xattrs
+        from dazzle_preservelib.metadata import _collect_unix_xattrs
         from pathlib import Path
         f = xattr_workdir / "with_xattr.txt"
         f.write_text("content")
@@ -65,7 +65,7 @@ class TestCollectXattrs:
 class TestApplyXattrs:
     def test_apply_restores_xattrs(self, xattr_workdir):
         """Applying xattrs from a dict should restore them."""
-        from preservelib.metadata import _apply_unix_xattrs
+        from dazzle_preservelib.metadata import _apply_unix_xattrs
         from pathlib import Path
         f = xattr_workdir / "restore.txt"
         f.write_text("content")
@@ -83,7 +83,7 @@ class TestApplyXattrs:
 
     def test_apply_skips_quarantine(self, xattr_workdir):
         """com.apple.quarantine should NOT be restored."""
-        from preservelib.metadata import _apply_unix_xattrs
+        from dazzle_preservelib.metadata import _apply_unix_xattrs
         from pathlib import Path
         f = xattr_workdir / "quarantine.txt"
         f.write_text("content")
