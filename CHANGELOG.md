@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.10.10] - 2026-06-23
+
+### Changed
+
+- **Housekeeping (tooling/test artifacts; no functional change).** Committed straggler test/one-off files that belonged with earlier work but were never staged: the #58 move/revert tooling, the kit-lifecycle detach/attach demo, the v0.9.49 multiaxis-activation tester result, and `claude-session-metadata`'s symlink-timestamp research one-off (scrubbed of a hardcoded private path and made self-contained). Also stopped tracking the auto-generated `scripts/.vscode/settings.json` editor noise (`scripts/.gitignore`).
+
+### Versions
+
+- dazzlecmd 0.10.9 -> 0.10.10 (PATCH); dazzle-dz -> 0.10.10. dazzlecmd-lib unchanged (0.8.54); dazzle-lib unchanged (0.6.7).
+
 ## [0.10.9] - 2026-06-23
 
 ### Fixed
@@ -3716,7 +3726,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.9...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.10...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

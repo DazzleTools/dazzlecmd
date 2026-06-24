@@ -94,7 +94,9 @@ htmlcov/
 
 # Visual Studio Code
 .vscode/*
-!.vscode/settings.json
+# settings.json here is auto-generated watcherExclude noise -- keep it ignored
+# (was: !.vscode/settings.json). tasks/launch/extensions stay trackable so a
+# shared debugging config can still be committed if wanted.
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
