@@ -47,8 +47,8 @@
             "properties": {
                 "type": {
                     "type": "string",
-                    "description": "Runtime type",
-                    "enum": ["python", "binary", "script", "shell", "managed"]
+                    "description": "Runtime type (built-in runner factories; kits may register more via runtime_extensions)",
+                    "enum": ["python", "binary", "script", "shell", "node", "docker"]
                 },
                 "entry_point": {
                     "type": "string",

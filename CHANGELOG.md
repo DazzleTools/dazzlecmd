@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.10.9] - 2026-06-23
+
+### Fixed
+
+- **Manifest schema `runtime.type` enum was out of sync with the runner registry.** Added `node` and `docker` -- both have been implemented and shipped (since v0.7.17 / v0.7.21) but were never added to the schema, so a `node`/`docker` tool could fail strict manifest validation. Removed `managed` -- it was in the schema from v0.1.0-alpha but never had a runner factory, so a tool declaring it would warn-and-fail at dispatch. The enum now matches the registered factories: `python`, `binary`, `script`, `shell`, `node`, `docker`. The `managed` ambition (delegate dispatch to a package-manager-installed binary) is tracked in #92.
+
+### Versions
+
+- dazzlecmd 0.10.8 -> 0.10.9 (PATCH); dazzle-dz -> 0.10.9. dazzlecmd-lib unchanged (0.8.54); dazzle-lib unchanged (0.6.7).
+
 ## [0.10.8] - 2026-06-23
 
 ### Changed
@@ -3706,7 +3716,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.8...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.9...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
