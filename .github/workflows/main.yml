@@ -60,11 +60,14 @@ jobs:
     - name: Lint with flake8 (syntax errors only)
       run: |
         pip install flake8
-        flake8 src/dazzlecmd/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        # Exclude vendored bundled deps under */_lib/ (e.g. safedel's preservelib
+        # and unctools) -- they are third-party code, not first-party dazzlecmd
+        # source, and the #58 move relocated them under src/dazzlecmd/.
+        flake8 src/dazzlecmd/ --count --select=E9,F63,F7,F82 --show-source --statistics --extend-exclude=_lib
 
     - name: Lint with flake8 (advisory)
       run: |
-        flake8 src/dazzlecmd/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        flake8 src/dazzlecmd/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics --extend-exclude=_lib
       continue-on-error: true
 
   build:
