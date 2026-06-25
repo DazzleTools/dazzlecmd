@@ -38,7 +38,9 @@ jobs:
     - name: Install package
       run: |
         python -m pip install --upgrade pip
-        pip install -e packages/dazzlecmd-lib/
+        # dazzlecmd-lib is a published PyPI dependency -- its source lives in its
+        # own repo (DazzleLib/dazzlecmd-lib), not vendored here -- so the editable
+        # install below pulls it from the index.
         pip install -e ".[dev]"
 
     - name: Smoke test - import
