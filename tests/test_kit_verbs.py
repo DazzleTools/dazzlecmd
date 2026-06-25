@@ -205,3 +205,45 @@ class TestLibVerbAxisConsistency:
         # the projection axis = the favorite pair (favorite/unfavorite)
         assert lib["projection"] == (
             FAVORITE_PAIR.warm, FAVORITE_PAIR.cold, FAVORITE_PAIR.coupling)
+
+
+class TestKitStatusDetail:
+    """`dz kit status <kit>` -- the registry-driven per-axis state (SD-3, B3 /
+    AC3-1/AC3-4). Iterates the lib VERB_AXES; a new lifecycle axis appears for
+    free; axes with no per-kit rung (favorite) are omitted."""
+
+    def test_status_takes_optional_kit_name(self):
+        parser = build_parser([])
+        assert getattr(parser.parse_args(["kit", "status"]), "name", "X") is None
+        assert parser.parse_args(["kit", "status", "foo"]).name == "foo"
+
+    def _engine(self, disabled=None, always=False):
+        import types
+        kit = types.SimpleNamespace(
+            kit_name="demo", name="demo", always_active=always)
+        cfg = {"disabled_kits": list(disabled or [])}
+        return types.SimpleNamespace(
+            kits=[kit], command="dz", _get_user_config=lambda: cfg)
+
+    def test_detail_renders_the_registry_axes(self, tmp_path, capsys):
+        from dazzlecmd.cli import render_kit_status_detail
+        rc = render_kit_status_detail("demo", self._engine(), str(tmp_path))
+        assert rc == 0
+        out = capsys.readouterr().out
+        for axis in ("activation", "loading", "membership"):
+            assert axis in out, axis
+        assert "active" in out and "loaded" in out and "member" in out
+        # projection/favorite carries no per-kit rung -> omitted
+        assert "favorite" not in out and "projection" not in out
+
+    def test_detail_shows_disabled_when_disabled(self, tmp_path, capsys):
+        from dazzlecmd.cli import render_kit_status_detail
+        render_kit_status_detail("demo", self._engine(disabled=["demo"]), str(tmp_path))
+        assert "disabled" in capsys.readouterr().out
+
+    def test_detail_unknown_kit_returns_1(self, tmp_path, capsys):
+        import types
+        from dazzlecmd.cli import render_kit_status_detail
+        engine = types.SimpleNamespace(
+            kits=[], command="dz", _get_user_config=lambda: {})
+        assert render_kit_status_detail("nope", engine, str(tmp_path)) == 1

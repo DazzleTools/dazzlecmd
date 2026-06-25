@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.1] - 2026-06-25
+
+### Added
+
+- **`dz kit status <kit>` shows a per-axis state card.** With no name, `dz kit status` keeps its active-kits summary; given a kit name it now renders that kit's state on each lifecycle axis -- activation (active/disabled), loading (loaded/pointer), and membership -- read from the shared verb-axis registry rather than a hand-written field list. A new lifecycle axis added to the registry appears here automatically; axes with no per-kit rung are omitted. This is the first `dz <verb> <target>` cross-level state view of the 0.11.x "verb x level" line.
+
+### Versions
+
+- dazzlecmd 0.11.0 -> 0.11.1 (PATCH); dazzle-dz -> 0.11.1. dazzlecmd-lib floor raised to `>=0.9.0` (the per-axis card imports the library's verb-axis registry). dazzle-lib unchanged (0.6.7).
+
 ## [0.11.0] - 2026-06-25
 
 ### Added
@@ -3797,7 +3807,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -244,7 +244,11 @@ def _register_meta_commands(subparsers):
     )
     kit_list.set_defaults(_meta="kit_list")
 
-    kit_status = kit_sub.add_parser("status", help="Show active kits")
+    kit_status = kit_sub.add_parser(
+        "status", help="Show active kits (or `status <kit>` for one kit's axis-state)")
+    kit_status.add_argument(
+        "name", nargs="?",
+        help="A kit to show its per-axis state for (omit for the active-kits summary)")
     kit_status.set_defaults(_meta="kit_status")
 
     # Flat lifecycle verbs (kept as aliases). Their arg-setup is shared with the
@@ -600,7 +604,8 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
         from dazzlecmd_lib.default_meta_commands import kit_list_handler
         return kit_list_handler(args, engine, projects, kits, project_root)
     elif meta == "kit_status":
-        return _cmd_kit_status(kits, engine=engine)
+        return _cmd_kit_status(
+            kits, engine=engine, args=args, project_root=project_root)
     elif meta == "kit":
         # bare "dz kit" with no subcommand behaves like "dz kit list"
         # (routed to the same unified lib renderer; the v0.9.26 unification
@@ -707,8 +712,59 @@ def _cmd_info(args, projects, engine):
 
 
 
-def _cmd_kit_status(kits, engine=None):
-    """Show active kits summary.
+def render_kit_status_detail(kit_name, engine, project_root):
+    """One kit's dynamic per-axis state -- the registry-driven `dz kit status <kit>`
+    (SD-3: status = the read-side of the verb registry). Iterates the dazzlecmd-lib
+    VERB_AXES whose ``applies_at`` includes the kit level and prints the kit's current
+    rung on each, so a new lifecycle axis appears here for free (AC3-1). Axes with no
+    per-kit rung (the favorite/projection binding) are omitted. Distinct from `dz kit
+    management <kit>` (the COMPOSED position); this is the per-axis breakdown."""
+    import types as _types
+    from dazzlecmd_lib.contexts import KitMembershipContext
+    from dazzlecmd_lib.verb_axis import VERB_AXES, KIT
+
+    kit_list = getattr(engine, "kits", []) or []
+    match = next(
+        (k for k in kit_list
+         if (getattr(k, "kit_name", None) or getattr(k, "name", None)) == kit_name),
+        None)
+    if match is None:
+        print(f"No kit '{kit_name}' found.", file=sys.stderr)
+        return 1
+    always = bool(getattr(match, "always_active", False))
+    membership = KitMembershipContext(
+        project_root, kit_list, boundary_fqcn=getattr(engine, "command", "dz"))
+    ref = _types.SimpleNamespace(
+        name=kit_name, kit_name=kit_name, always_active=always)
+    pointer = membership.pointer_of(ref) is not None
+    disabled = (not always) and (
+        kit_name in set((engine._get_user_config() or {}).get("disabled_kits") or []))
+
+    def _rung(axis):
+        # The kit's current pole on `axis`, or None if the axis carries no kit rung.
+        if axis == "activation":
+            return "disabled" if disabled else "active"
+        if axis == "loading":
+            return "pointer (detached)" if pointer else "loaded (attached)"
+        if axis == "membership":
+            return "member"
+        return None
+
+    tag = "  [always-active]" if always else ""
+    print(f"Kit '{kit_name}' -- per-axis state{tag}:\n")
+    for va in VERB_AXES:
+        if KIT not in va.applies_at:
+            continue
+        cur = _rung(va.axis)
+        if cur is None:
+            continue
+        print(f"  {va.axis:<12} {cur:<20} ({va.warm} <-> {va.cold})")
+    print("\nMove with `dz kit <axis> on|off <kit>` (or the special verb).")
+    return 0
+
+
+def _cmd_kit_status(kits, engine=None, args=None, project_root=None):
+    """Show active kits summary -- or, with ``args.name``, one kit's per-axis state.
 
     Virtual kits report 'alias(es)' instead of 'tool(s)' to reflect
     the distinct nature of the count — and avoid the double-counting
@@ -721,6 +777,8 @@ def _cmd_kit_status(kits, engine=None):
     so the summary matches ``dz kit list`` — without the engine's config,
     ``get_active_kits`` falls back to its legacy all-active default.
     """
+    if args is not None and getattr(args, "name", None):
+        return render_kit_status_detail(args.name, engine, project_root)
     user_config = (
         engine._get_user_config()
         if engine is not None and hasattr(engine, "_get_user_config")
