@@ -77,7 +77,8 @@ VISIBILITY_PAIRS = (
 # Generic inspect verbs (not toggles -- no inverse).
 GENERIC_VERBS = (
     ("list", "list kits, or the tools in a kit"),
-    ("status", "show active kits"),
+    ("status", "show active kits, or a kit's per-axis state"),
+    ("info", "show a kit's static identity card"),
     ("focus", "enable only the named kit(s)"),
     ("reset", "clear kit config to defaults"),
 )

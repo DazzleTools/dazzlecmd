@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.2] - 2026-06-25
+
+### Added
+
+- **`dz kit info <kit>` shows a kit's static identity card.** A new inspect verb alongside `list`/`status`: where `status <kit>` shows the kit's *dynamic* per-axis state, `info <kit>` shows its *static* identity -- name, kind (kit vs virtual kit), description, version, tool/alias count, import name, directory, and the `.kit.json` source path. Absent fields render `(none)` rather than being dropped, so the card's shape is stable across kits. `--json` emits the same card as a JSON object (absent fields are `null`). This is the `info` side of the 0.11.x verb x level status/info split (the static card vs the dynamic axes).
+
+### Versions
+
+- dazzlecmd 0.11.1 -> 0.11.2 (PATCH); dazzle-dz -> 0.11.2. dazzlecmd-lib floor unchanged (>=0.9.0 -- the identity card reads only engine state, no new library import). dazzle-lib unchanged (0.6.7).
+
 ## [0.11.1] - 2026-06-25
 
 ### Added
@@ -3807,7 +3817,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.2...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

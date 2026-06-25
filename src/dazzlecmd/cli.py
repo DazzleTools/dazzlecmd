@@ -251,6 +251,15 @@ def _register_meta_commands(subparsers):
         help="A kit to show its per-axis state for (omit for the active-kits summary)")
     kit_status.set_defaults(_meta="kit_status")
 
+    # dz kit info <kit> -- the STATIC identity card (vs `status`'s dynamic axes).
+    kit_info = kit_sub.add_parser(
+        "info", help="Show a kit's static identity card (`info <kit>`)")
+    kit_info.add_argument("name", help="Kit to show the identity card for")
+    kit_info.add_argument(
+        "--json", action="store_true", dest="as_json",
+        help="Emit the card as JSON instead of the aligned text card.")
+    kit_info.set_defaults(_meta="kit_info")
+
     # Flat lifecycle verbs (kept as aliases). Their arg-setup is shared with the
     # nested per-axis groups below via kit_verbs.VERB_SPEC -- one source, so
     # `dz kit enable` and `dz kit activation enable` are byte-identical.
@@ -606,6 +615,9 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
     elif meta == "kit_status":
         return _cmd_kit_status(
             kits, engine=engine, args=args, project_root=project_root)
+    elif meta == "kit_info":
+        return render_kit_info(
+            args.name, engine, as_json=getattr(args, "as_json", False))
     elif meta == "kit":
         # bare "dz kit" with no subcommand behaves like "dz kit list"
         # (routed to the same unified lib renderer; the v0.9.26 unification
@@ -761,6 +773,66 @@ def render_kit_status_detail(kit_name, engine, project_root):
         print(f"  {va.axis:<12} {cur:<20} ({va.warm} <-> {va.cold})")
     print("\nMove with `dz kit <axis> on|off <kit>` (or the special verb).")
     return 0
+
+
+def _print_entity_card(title, fields):
+    """Walk a per-level field-set -- a list of ``(label, value)`` -- and print an
+    aligned identity card (SD-3: the R-table render_info). Absent values render as
+    ``(none)`` rather than being silently dropped (AC3-2), so the card's shape is
+    the same for every entity at a level. One walker serves every level's table;
+    a new level is a new field-set, not a new renderer (AC3-6)."""
+    print(title)
+    print()
+    width = max((len(label) for label, _ in fields), default=0)
+    for label, value in fields:
+        shown = value if (value is not None and value != "") else "(none)"
+        print(f"  {label + ':':<{width + 1}} {shown}")
+    return 0
+
+
+def render_kit_info(kit_name, engine, as_json=False):
+    """A kit's STATIC identity/provenance card -- the registry-agnostic counterpart
+    to ``render_kit_status_detail`` (SD-3: info = the static card, status = the
+    dynamic axes). Fields are a hard-coded field-set today (Phase-1, behind the
+    #77 kind seam); ``--json`` mirrors the human card (AC3-5). Distinct from
+    ``dz kit list <kit>`` (which lists the kit's *tools*); this is the kit itself."""
+    import json as _json
+
+    kit_list = getattr(engine, "kits", []) or []
+    match = next(
+        (k for k in kit_list
+         if (getattr(k, "kit_name", None) or getattr(k, "name", None)) == kit_name),
+        None)
+    if match is None:
+        print(f"No kit '{kit_name}' found.", file=sys.stderr)
+        return 1
+
+    virtual = bool(getattr(match, "virtual", False))
+    tools = getattr(match, "tools", None) or []
+    count_label = "alias(es)" if virtual else "tool(s)"
+    version = getattr(match, "version", None)
+    if version in (None, "", "0.0.0"):       # the entity default -> "unset"
+        version = None
+
+    fields = [
+        ("Name", getattr(match, "kit_name", None) or getattr(match, "name", None)),
+        ("Kind", "virtual kit" if virtual else "kit"),
+        ("Description", getattr(match, "description", None)),
+        ("Version", version),
+        ("Tools", f"{len(tools)} {count_label}"),
+        ("Import name", getattr(match, "kit_import_name", None)),
+        ("Directory", getattr(match, "directory", None)),
+        ("Source", getattr(match, "kit_source", None)),
+        ("Always-active", "yes" if getattr(match, "always_active", False) else "no"),
+    ]
+
+    if as_json:
+        payload = {
+            label.lower().replace(" ", "_").replace("-", "_"): value
+            for label, value in fields}
+        print(_json.dumps(payload, indent=2))
+        return 0
+    return _print_entity_card(f"Kit '{kit_name}' -- identity card:", fields)
 
 
 def _cmd_kit_status(kits, engine=None, args=None, project_root=None):

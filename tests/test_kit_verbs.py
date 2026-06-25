@@ -247,3 +247,71 @@ class TestKitStatusDetail:
         engine = types.SimpleNamespace(
             kits=[], command="dz", _get_user_config=lambda: {})
         assert render_kit_status_detail("nope", engine, str(tmp_path)) == 1
+
+
+class TestKitInfoDetail:
+    """`dz kit info <kit>` -- the STATIC identity card (SD-3, B3 / AC3-2/AC3-5/AC3-6).
+    The counterpart to `kit status <kit>`: status = dynamic axes, info = the
+    identity/provenance field-set. Absent fields render `(none)` (never dropped);
+    `--json` mirrors the human card."""
+
+    def test_info_requires_a_kit_name(self):
+        parser = build_parser([])
+        assert parser.parse_args(["kit", "info", "foo"]).name == "foo"
+        assert parser.parse_args(["kit", "info", "foo"])._meta == "kit_info"
+
+    def test_info_is_an_inspect_verb_in_help(self):
+        # info joins list/status under the `inspect:` group (GENERIC_VERBS).
+        assert "info" in {name for name, _ in GENERIC_VERBS}
+        out = render_kit_help(_kit_parser(build_parser([])))
+        assert "info" in out
+
+    def _engine(self, **kw):
+        import types
+        defaults = dict(
+            kit_name="demo", name="demo", virtual=False, tools=[1, 2, 3],
+            version="1.2.3", description="A demo kit.", kit_import_name=None,
+            directory=None, kit_source="/x/demo.kit.json", always_active=False)
+        defaults.update(kw)
+        kit = types.SimpleNamespace(**defaults)
+        return types.SimpleNamespace(kits=[kit], command="dz")
+
+    def test_card_renders_identity_fields(self, capsys):
+        from dazzlecmd.cli import render_kit_info
+        assert render_kit_info("demo", self._engine()) == 0
+        out = capsys.readouterr().out
+        for label in ("Name:", "Kind:", "Description:", "Version:", "Tools:",
+                      "Source:", "Always-active:"):
+            assert label in out, label
+        assert "kit" in out and "3 tool(s)" in out and "1.2.3" in out
+
+    def test_virtual_kit_says_virtual_and_aliases(self, capsys):
+        from dazzlecmd.cli import render_kit_info
+        render_kit_info("demo", self._engine(virtual=True, tools=[1, 2]))
+        out = capsys.readouterr().out
+        assert "virtual kit" in out and "2 alias(es)" in out
+
+    def test_absent_fields_show_none_not_dropped(self, capsys):
+        # AC3-2: directory/import-name unset -> "(none)", and the default
+        # entity version "0.0.0" is treated as unset.
+        from dazzlecmd.cli import render_kit_info
+        render_kit_info("demo", self._engine(version="0.0.0", directory=None))
+        out = capsys.readouterr().out
+        assert "(none)" in out
+        assert "Directory:     (none)" in out or "Directory:    (none)" in out
+
+    def test_json_mirrors_the_card(self, capsys):
+        import json
+        from dazzlecmd.cli import render_kit_info
+        render_kit_info("demo", self._engine(), as_json=True)
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["name"] == "demo"
+        assert payload["kind"] == "kit"
+        assert payload["tools"] == "3 tool(s)"
+        assert payload["directory"] is None       # absent -> null, not "(none)"
+
+    def test_info_unknown_kit_returns_1(self, capsys):
+        import types
+        from dazzlecmd.cli import render_kit_info
+        engine = types.SimpleNamespace(kits=[], command="dz")
+        assert render_kit_info("nope", engine) == 1
