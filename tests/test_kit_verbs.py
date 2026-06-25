@@ -133,3 +133,75 @@ class TestKitAxisGroups:
         assert parser.parse_args(["kit", "management"])._meta == "kit_management"
         one = parser.parse_args(["kit", "management", "core"])
         assert one._meta == "kit_management" and one.name == "core"
+
+
+class TestKitAxisOnOffPoles:
+    """The universal ``on``/``off`` poles under each lifecycle axis (SD-0 slice 2).
+
+    ``on`` -> the WARM verb, ``off`` -> the COLD verb -- same args + ``_meta`` +
+    handler (three-forms-one-handler, AC0-2/AC0-3). ``on``/``off`` are GROUPED
+    synonyms (need the axis noun); they are NOT flat ``dz kit`` subcommands."""
+
+    def test_on_off_exist_under_each_axis(self):
+        parser = build_parser([])
+        for pair in LIFECYCLE_PAIRS:
+            verbs = _subparser_choices(parser, "kit", pair.axis)
+            assert "on" in verbs and "off" in verbs, pair.axis
+
+    def test_on_routes_to_warm_off_to_cold(self):
+        # For every lifecycle axis: `dz kit <axis> on` == `<axis> <warm>`,
+        # `<axis> off` == `<axis> <cold>` (same canonical _meta).
+        parser = build_parser([])
+        arg = {"membership": "https://x/y.git"}   # add takes a url, not a name
+        for pair in LIFECYCLE_PAIRS:
+            a = arg.get(pair.axis, "foo")
+            on = parser.parse_args(["kit", pair.axis, "on", a])
+            warm = parser.parse_args(["kit", pair.axis, pair.warm, a])
+            off = parser.parse_args(["kit", pair.axis, "off", "foo"])
+            cold = parser.parse_args(["kit", pair.axis, pair.cold, "foo"])
+            assert on._meta == warm._meta, pair.axis
+            assert off._meta == cold._meta, pair.axis
+
+    def test_on_off_carry_the_specials_flags(self):
+        # The shared arg-adder gives on/off every flag the special has.
+        parser = build_parser([])
+        a = parser.parse_args(
+            ["kit", "membership", "off", "foo", "--dry-run", "--yes", "--force"])
+        assert a._meta == "kit_remove"
+        assert a.name == "foo" and a.dry_run and a.yes and a.force
+
+    def test_three_forms_collapse_to_one_handler(self):
+        # `dz kit loading on foo` == `dz kit loading attach foo` (parser-level
+        # collapse; the hoisted `dz attach` form is wired later by SD-1).
+        parser = build_parser([])
+        on = parser.parse_args(["kit", "loading", "on", "foo"])
+        special = parser.parse_args(["kit", "loading", "attach", "foo"])
+        assert on._meta == special._meta == "kit_attach"
+        assert on.name == special.name == "foo"
+
+    def test_on_off_are_grouped_only_not_flat_kit_subcommands(self):
+        # on/off need an axis context -- they are NOT bare `dz kit` verbs.
+        kit_cmds = _subparser_choices(build_parser([]), "kit")
+        assert "on" not in kit_cmds and "off" not in kit_cmds
+
+
+class TestLibVerbAxisConsistency:
+    """No-drift guard: the dazzlecmd-lib ``VERB_AXES`` registry (the future single
+    source of truth, SD-0) must agree with this repo's kit verb pairs until B5
+    folds them into one. If they drift, fix it here -- don't let two sources
+    silently disagree."""
+
+    def test_lib_registry_matches_github_kit_pairs(self):
+        import pytest
+        # verb_axis ships in dazzlecmd-lib >= 0.9.0; skip cleanly on an older lib
+        # (the runtime floor stays 0.8.55 until a later slice wires it in).
+        va_mod = pytest.importorskip("dazzlecmd_lib.verb_axis")
+        VERB_AXES = va_mod.VERB_AXES
+        lib = {va.axis: (va.warm, va.cold, va.coupling) for va in VERB_AXES}
+        # the 3 lifecycle axes
+        for pair in LIFECYCLE_PAIRS:
+            assert lib[pair.axis] == (pair.warm, pair.cold, pair.coupling), \
+                f"lib VERB_AXES[{pair.axis}] drifted from kit_verbs LIFECYCLE_PAIRS"
+        # the projection axis = the favorite pair (favorite/unfavorite)
+        assert lib["projection"] == (
+            FAVORITE_PAIR.warm, FAVORITE_PAIR.cold, FAVORITE_PAIR.coupling)

@@ -173,13 +173,24 @@ def build_lifecycle_axis_groups(kit_sub):
     """Register the nested per-axis groups `dz kit {activation,loading,membership}`
     -- the same shape as `dz kit visibility`, driven by LIFECYCLE_PAIRS. Each
     group's warm/cold verbs share VERB_SPEC (and thus the handler) with the flat
-    forms. A group with no verb routes to ``_meta='kit_axis_<axis>'`` (a summary)."""
+    forms. A group with no verb routes to ``_meta='kit_axis_<axis>'`` (a summary).
+
+    Each axis also gets the universal ``on``/``off`` poles (SD-0): ``on`` reuses
+    the WARM verb's spec, ``off`` the COLD verb's -- the SAME arg-adder, so the
+    SAME args + ``_meta`` + handler. Thus ``dz kit loading on`` == ``dz kit loading
+    attach`` (three-forms-one-handler, AC0-2/AC0-3). ``on``/``off`` are grouped
+    synonyms (they need the axis noun); the hoistable flat form is the special
+    name (``dz attach``), wired later by the resolver (SD-1)."""
     for pair in LIFECYCLE_PAIRS:
         group = kit_sub.add_parser(pair.axis, help=_AXIS_HELP[pair.axis])
         axis_sub = group.add_subparsers(dest=f"{pair.axis}_command")
         for verb in (pair.warm, pair.cold):     # warm-first (enable before disable)
             help_text, adder = VERB_SPEC[verb]
             adder(axis_sub.add_parser(verb, help=help_text))
+        for pole, verb in (("on", pair.warm), ("off", pair.cold)):
+            _help, adder = VERB_SPEC[verb]
+            adder(axis_sub.add_parser(
+                pole, help=f"{verb} (universal {pole}-pole synonym)"))
         group.set_defaults(_meta=f"kit_axis_{pair.axis}")
 
 

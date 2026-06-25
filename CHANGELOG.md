@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] - 2026-06-25
+
+### Added
+
+- **Universal `on`/`off` poles on every kit lifecycle axis.** Each `dz kit <axis>` group now accepts `on`/`off` alongside its special verbs, routing to the same action: `dz kit loading on` == `dz kit loading attach`, `dz kit activation off` == `dz kit activation disable`, `dz kit membership on <url>` == `dz kit membership add <url>`. `on` is the warm (more-present) pole, `off` the cold inverse -- so every binary axis is addressable uniformly without recalling the special name. (`on`/`off` are the grouped form and require the axis noun; the special verb stays the hoistable shorthand.) This opens the 0.11.x "verb x level" CLI homogenization line, where every verb becomes a `{P, not-P}` axis usable across levels.
+
+### Versions
+
+- dazzlecmd 0.10.14 -> 0.11.0 (MINOR -- opens the 0.11.x verb x level line); dazzle-dz -> 0.11.0. dazzlecmd-lib floor unchanged (>=0.8.55); dazzle-lib unchanged (0.6.7).
+
 ## [0.10.14] - 2026-06-24
 
 ### Fixed
@@ -3787,7 +3797,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.14...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.0...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
