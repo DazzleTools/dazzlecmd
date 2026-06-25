@@ -13,6 +13,7 @@ import re
 import sys
 
 from dazzlecmd._version import DISPLAY_VERSION, __version__
+from dazzlecmd._constants import RESERVED_COMMANDS  # noqa: F401  (re-exported)
 from dazzlecmd.kit_verbs import (
     LIFECYCLE_PAIRS,
     add_flat_verb,
@@ -26,13 +27,6 @@ from dazzlecmd.loader import (
     resolve_entry_point,
 )
 from dazzlecmd_lib import colors as _colors
-
-
-# Reserved command names that cannot be used as tool names
-RESERVED_COMMANDS = {
-    "new", "add", "list", "info", "kit", "search",
-    "build", "tree", "version", "enhance", "graduate", "mode",
-}
 
 
 # v0.7.44 (4b-T3 + 4d-3): per-language scaffolding ships. The set of
