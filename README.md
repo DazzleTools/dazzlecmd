@@ -51,6 +51,15 @@ If `argparse` turns one script into a tidy CLI, `dz` does the same for a whole *
 pip install dazzlecmd
 ```
 
+This puts the `dz` command on your PATH. The short alias `dazzle-dz` installs the same tool.
+
+**On externally-managed Python** (PEP 668 -- recent Debian/Ubuntu and similar block a system-wide `pip install`): install into a virtual environment, or use [pipx](https://pipx.pypa.io):
+
+```bash
+pipx install dazzlecmd
+# or: python -m venv .venv && .venv/bin/pip install dazzlecmd
+```
+
 Or install from source:
 
 ```bash

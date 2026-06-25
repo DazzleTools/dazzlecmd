@@ -1,10 +1,10 @@
 core:
   f-cp [+]          Safe copy with full metadata preservation
                     (mtime/atime/ctime, ACLs, attributes) and clobber
-                    protection. Wraps preservelib.
+                    protection.
   f-mv [+]          Safe move with full metadata preservation
                     (mtime/atime/ctime, ACLs, attributes) and clobber
-                    protection. Wraps preservelib.
+                    protection.
   find              Cross-platform file search powered by fd
   fixpath           Fix mangled paths and optionally open, copy, or browse files
   links [lib]       Detect and display filesystem links (symlinks, junctions,
@@ -18,11 +18,11 @@ core:
 
 core:f:  (virtual kit 'f')
   cp  Safe copy with full metadata preservation (mtime/atime/ctime, ACLs,
-      attributes) and clobber protection. Wraps preservelib.
+      attributes) and clobber protection.
   ls  List filenames, directories, or specific files with customizable sorting,
       collection, and output options
   mv  Safe move with full metadata preservation (mtime/atime/ctime, ACLs,
-      attributes) and clobber protection. Wraps preservelib.
+      attributes) and clobber protection.
   rm  Safe file/directory deletion with link-aware classification, metadata
       preservation, and recoverable trash store
 

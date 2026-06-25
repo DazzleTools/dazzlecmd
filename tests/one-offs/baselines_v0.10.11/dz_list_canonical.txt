@@ -1,8 +1,8 @@
 core:
   f-cp           Safe copy with full metadata preservation (mtime/atime/ctime,
-                 ACLs, attributes) and clobber protection. Wraps preservelib.
+                 ACLs, attributes) and clobber protection.
   f-mv           Safe move with full metadata preservation (mtime/atime/ctime,
-                 ACLs, attributes) and clobber protection. Wraps preservelib.
+                 ACLs, attributes) and clobber protection.
   find           Cross-platform file search powered by fd
   fixpath        Fix mangled paths and optionally open, copy, or browse files
   links [lib]    Detect and display filesystem links (symlinks, junctions,

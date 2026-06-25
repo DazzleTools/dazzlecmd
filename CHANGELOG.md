@@ -4,6 +4,21 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.10.14] - 2026-06-24
+
+### Fixed
+
+- **`pipx install dazzle-dz` now exposes the `dz` command directly** (no `--include-deps` needed). The `dazzle-dz` alias package now declares the same `dz`/`dazzlecmd` console scripts as `dazzlecmd` (pointing at its entry point, importable because `dazzlecmd` is a dependency). Isolated installers only surface the *named* package's apps, so previously -- with the scripts living only in the `dazzlecmd` dependency -- `pipx install dazzle-dz` installed nothing runnable.
+
+### Changed
+
+- **README install instructions** now lead with `pip install dazzlecmd`, note the `dazzle-dz` alias, and document the virtualenv / `pipx install dazzlecmd` path for externally-managed Python (PEP 668 -- e.g. recent Debian/Ubuntu, where a system-wide `pip install` is blocked).
+- **Internal:** the monorepo no longer carries an in-tree copy of `dazzlecmd-lib`; CI and development use the published library, whose source lives in its own repo. No packaging change -- the published `dazzlecmd` already resolved the library from PyPI.
+
+### Versions
+
+- dazzlecmd 0.10.13 -> 0.10.14 (PATCH); dazzle-dz -> 0.10.14. dazzlecmd-lib unchanged (0.8.55); dazzle-lib unchanged (0.6.7).
+
 ## [0.10.13] - 2026-06-24
 
 ### Changed
@@ -3772,7 +3787,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.13...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.10.14...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
