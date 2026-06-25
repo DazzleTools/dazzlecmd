@@ -27,6 +27,7 @@ from dazzlecmd.loader import (
     resolve_entry_point,
 )
 from dazzlecmd_lib import colors as _colors
+from dazzlecmd_lib.verb_axis import meta_tag_for, resolve_special
 
 
 # v0.7.44 (4b-T3 + 4d-3): per-language scaffolding ships. The set of
@@ -174,6 +175,75 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
     return 1
 
 
+# ---------------------------------------------------------------------------
+# The generic verb x level dispatcher (B4-dispatch, DWP 2026-06-25__16-01-41).
+# Assembles SD-0's two designed halves -- the lib's tag generator
+# (meta_tag_for / resolve_special) and the CLI's tag->handler table -- so that
+# `dz <verb> <target>` routes with ZERO per-verb / per-level branches. Adding a
+# verb means adding a handler (below), never editing the dispatcher.
+# ---------------------------------------------------------------------------
+
+# The pole-less READ verbs (ordered continua, not {warm,cold} toggles). A subset
+# of kit_verbs.GENERIC_VERBS -- it EXCLUDES focus/reset (those are mutating kit
+# operations, not level-agnostic inspects). Toggle verbs are recognised via
+# resolve_special instead, so they are not listed here.
+INSPECT_VERBS = frozenset({"info", "status", "list", "tree"})
+
+
+def verb_plan(token):
+    """Resolve a bare verb token to ``(applies_at, mutating, tag_fn)`` or ``None``.
+
+    - An INSPECT verb -> ``(None, False, lambda level: f"{level}_{token}")``
+      (applies at every level, non-mutating, keyed as ``<level>_<verb>``).
+    - A TOGGLE special (enable/disable/attach/...) -> via ``resolve_special`` ->
+      ``(va.applies_at, True, lambda level: meta_tag_for(va.axis, pole, level))``.
+    - Anything else -> ``None`` (unknown verb).
+
+    Both verb kinds collapse to one ``<level>_<verb>`` tag -- the inspect/toggle
+    keying tension, resolved (spike GT7). This is the ONLY place that knows how a
+    verb keys; the dispatcher below is verb-agnostic.
+    """
+    if token in INSPECT_VERBS:
+        return (None, False, lambda level: f"{level}_{token}")
+    hit = resolve_special(token)
+    if hit is not None:
+        va, pole = hit
+        return (va.applies_at, True,
+                lambda level: meta_tag_for(va.axis, pole, level))
+    return None
+
+
+def _dispatch_verb_target(token, target, args, projects, kits,
+                          project_root, engine):
+    """Apply ``token`` to ``target`` at whichever level ``target`` resolves to.
+
+    ``verb_plan`` -> ``engine.resolve_target`` (read auto-picks + notifies;
+    mutate fails loud; ``applies_at`` prunes off-level) -> ``<level>_<verb>``
+    tag -> the registered handler. The body has NO ``verb ==`` / ``level ==``
+    branch (AC-D1). Returns the handler's exit code, or ``None`` when the verb
+    is unknown or the target does not resolve -- the caller supplies the
+    fallback (e.g. ``dz info``'s legacy not-found message).
+    """
+    plan = verb_plan(token)
+    if plan is None:
+        return None
+    applies_at, mutating, tag_fn = plan
+    kwargs = {} if applies_at is None else {"applies_at": frozenset(applies_at)}
+    res = engine.resolve_target(
+        target, mutating=mutating,
+        as_level=getattr(args, "as_level", None), **kwargs)
+    if res is None:
+        return None
+    if res.notification:
+        print(res.notification, file=sys.stderr)
+    tag = tag_fn(res.level)
+    handler = _VERB_LEVEL_HANDLERS.get(tag)
+    if handler is None:
+        print(f"No handler registered for '{tag}'.", file=sys.stderr)
+        return 1
+    return handler(res, args, projects, kits, project_root, engine)
+
+
 def _cmd_list(args, projects, engine=None):
     """List available tools (thin wrapper over library render_list).
 
@@ -215,40 +285,49 @@ def render_aggregator_info(engine, projects, kits, project_root, as_json=False):
     return _print_entity_card(f"Aggregator '{name}' -- identity card:", fields)
 
 
-def _cmd_info(args, projects, engine, kits=None, project_root=None):
-    """Show detailed info about a tool, kit, or aggregator (the level-agnostic
-    ``dz info <target>``, SD-1/SD-3).
-
-    Resolves the target's level via ``engine.resolve_target`` (a READ verb:
-    bare ambiguity auto-picks the more-specific level + prints a note; ``--as``
-    pins it), then routes to the level's card:
-
-    - **tool** -> the library ``render_info`` (UNCHANGED -- byte-identical to
-      v0.7.33; the rich provenance/shadow/runtime-dispatch card);
-    - **kit** -> :func:`render_kit_info`;
-    - **aggregator** -> :func:`render_aggregator_info`.
-
-    A name that resolves to nothing falls through to ``render_info`` so the
-    legacy "Tool 'X' not found" message + exit code are preserved exactly.
-    """
+def _info_at_tool(res, args, projects, kits, project_root, engine):
+    """``tool_info`` handler: the library ``render_info`` card -- UNCHANGED,
+    byte-identical to v0.7.33 (the byte-gate's dz_info_* goldens guard it)."""
     from dazzlecmd_lib.default_meta_commands import render_info
+    return render_info(args, projects, engine)
 
-    res = engine.resolve_target(
-        args.tool,
-        as_level=getattr(args, "as_level", None),
-        mutating=False,
-    )
-    if res is None:
-        # Unknown name -- preserve the exact legacy tool-not-found path.
-        return render_info(args, projects, engine)
-    if res.notification:
-        print(res.notification, file=sys.stderr)
-    if res.level == "kit":
-        kit_name = getattr(res.entity, "kit_name", None) or res.entity.name
-        return render_kit_info(kit_name, engine, project_root=project_root)
-    if res.level == "aggregator":
-        return render_aggregator_info(res.entity, projects, kits, project_root)
-    # tool level (the default / FQCN-qualified path) -- unchanged renderer.
+
+def _info_at_kit(res, args, projects, kits, project_root, engine):
+    """``kit_info`` handler: the kit identity + current-state card."""
+    kit_name = getattr(res.entity, "kit_name", None) or res.entity.name
+    return render_kit_info(kit_name, engine, project_root=project_root)
+
+
+def _info_at_aggregator(res, args, projects, kits, project_root, engine):
+    """``aggregator_info`` handler: the aggregator identity card."""
+    return render_aggregator_info(res.entity, projects, kits, project_root)
+
+
+# The <level>_<verb> tag -> handler table -- SD-0's "tag->callable half". Each
+# handler has the uniform signature
+# ``(res, args, projects, kits, project_root, engine) -> int``. Adding a verb at
+# a level = adding an entry here (AC-D2); _dispatch_verb_target never changes.
+# B4-mutate registers enable/disable/attach/detach; B5 the generated views.
+_VERB_LEVEL_HANDLERS = {
+    "tool_info": _info_at_tool,
+    "kit_info": _info_at_kit,
+    "aggregator_info": _info_at_aggregator,
+}
+
+
+def _cmd_info(args, projects, engine, kits=None, project_root=None):
+    """Show detailed info about a tool, kit, or aggregator -- the level-agnostic
+    ``dz info <target>`` (SD-1/SD-3), now routed through the generic verb x level
+    dispatcher (B4-dispatch). ``_dispatch_verb_target`` resolves the target's
+    level and calls the ``<level>_info`` handler; a name that resolves to
+    nothing falls through to ``render_info`` so the legacy "Tool 'X' not found"
+    message + exit code are preserved exactly.
+    """
+    rc = _dispatch_verb_target(
+        "info", args.tool, args, projects, kits, project_root, engine)
+    if rc is not None:
+        return rc
+    from dazzlecmd_lib.default_meta_commands import render_info
     return render_info(args, projects, engine)
 
 

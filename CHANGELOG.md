@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.5] - 2026-06-25
+
+### Changed
+
+- **Internal: `cli.py` split into focused modules, and `dz info` now routes through a generic verb-by-level dispatcher.** The ~3200-line `cli.py` was decomposed (no behavior change) into a `commands/` package (the `kit`, `new`, `add`, `mode`, `setup` handlers), a `parsers.py` for the argument parser, and a leaf `_constants.py`; `cli.py` is now a thin entry point that re-exports the same public surface. `dz info <target>` was rewritten to dispatch through a single generic mechanism -- it resolves the target's level and routes to a `<level>_info` handler from a small table, replacing the hand-written per-level branching. There is no user-visible change: every command behaves identically, and `dz info` output is byte-for-byte the same. This is the substrate the upcoming bare-verb forms (`dz enable <kit>`, `dz detach <kit>`, ...) build on -- each becomes a handler registration rather than new routing code.
+
+### Versions
+
+- dazzlecmd 0.11.4 -> 0.11.5 (PATCH); dazzle-dz -> 0.11.5. dazzlecmd-lib floor unchanged (`>=0.9.4`). dazzle-lib unchanged (0.6.7).
+
 ## [0.11.4] - 2026-06-25
 
 ### Changed
@@ -3833,7 +3843,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.4...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.5...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
