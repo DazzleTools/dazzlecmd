@@ -30,7 +30,7 @@ def _engine(res, *, kits=()):
         resolve_target=lambda name, as_level=None, mutating=False: res,
         command="dz", name="dazzlecmd",
         description="A demo aggregator.", version_info=("1.2.3", "1.2.3-full"),
-        kits=list(kits))
+        kits=list(kits), _get_user_config=lambda: {})
 
 
 class TestParser:
@@ -44,13 +44,15 @@ class TestParser:
 
 
 class TestRouting:
-    def test_kit_level_renders_the_kit_card(self, capsys):
+    def test_kit_level_renders_the_kit_card(self, tmp_path, capsys):
         kit = _kit("demo")
         eng = _engine(TargetResolution(kit, "kit"), kits=[kit])
         args = types.SimpleNamespace(tool="demo", as_level=None)
-        assert _cmd_info(args, [], eng, kits=[kit]) == 0
+        assert _cmd_info(args, [], eng, kits=[kit],
+                         project_root=str(tmp_path)) == 0
         out = capsys.readouterr().out
         assert "Kit 'demo' -- identity card:" in out and "2 tool(s)" in out
+        assert "Current state:" in out          # identity + state, one card
 
     def test_aggregator_level_renders_the_aggregator_card(self, capsys):
         eng = _engine(None)            # patched below to point at itself
@@ -63,12 +65,12 @@ class TestRouting:
         assert "Aggregator 'dazzlecmd' -- identity card:" in out
         assert "3 tool(s)" in out and "Root:" in out and "/root" in out
 
-    def test_read_auto_pick_notification_goes_to_stderr(self, capsys):
+    def test_read_auto_pick_notification_goes_to_stderr(self, tmp_path, capsys):
         kit = _kit("dup")
         note = "dz: 'dup' matches more than one level; using the kit."
         eng = _engine(TargetResolution(kit, "kit", notification=note), kits=[kit])
         args = types.SimpleNamespace(tool="dup", as_level=None)
-        _cmd_info(args, [], eng, kits=[kit])
+        _cmd_info(args, [], eng, kits=[kit], project_root=str(tmp_path))
         captured = capsys.readouterr()
         assert "matches more than one level" in captured.err
         assert "identity card" in captured.out      # still rendered the picked card

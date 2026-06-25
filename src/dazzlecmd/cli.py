@@ -628,7 +628,8 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
             kits, engine=engine, args=args, project_root=project_root)
     elif meta == "kit_info":
         return render_kit_info(
-            args.name, engine, as_json=getattr(args, "as_json", False))
+            args.name, engine, project_root=project_root,
+            as_json=getattr(args, "as_json", False))
     elif meta == "kit":
         # bare "dz kit" with no subcommand behaves like "dz kit list"
         # (routed to the same unified lib renderer; the v0.9.26 unification
@@ -780,7 +781,7 @@ def _cmd_info(args, projects, engine, kits=None, project_root=None):
         print(res.notification, file=sys.stderr)
     if res.level == "kit":
         kit_name = getattr(res.entity, "kit_name", None) or res.entity.name
-        return render_kit_info(kit_name, engine)
+        return render_kit_info(kit_name, engine, project_root=project_root)
     if res.level == "aggregator":
         return render_aggregator_info(res.entity, projects, kits, project_root)
     # tool level (the default / FQCN-qualified path) -- unchanged renderer.
@@ -788,13 +789,15 @@ def _cmd_info(args, projects, engine, kits=None, project_root=None):
 
 
 
-def render_kit_status_detail(kit_name, engine, project_root):
-    """One kit's dynamic per-axis state -- the registry-driven `dz kit status <kit>`
-    (SD-3: status = the read-side of the verb registry). Iterates the dazzlecmd-lib
-    VERB_AXES whose ``applies_at`` includes the kit level and prints the kit's current
-    rung on each, so a new lifecycle axis appears here for free (AC3-1). Axes with no
-    per-kit rung (the favorite/projection binding) are omitted. Distinct from `dz kit
-    management <kit>` (the COMPOSED position); this is the per-axis breakdown."""
+def _kit_axis_state(kit_name, engine, project_root):
+    """The kit's current rung on each lifecycle axis -- the read-side of the verb
+    registry (SD-3). Iterates the dazzlecmd-lib ``VERB_AXES`` whose ``applies_at``
+    includes the kit level; axes with no per-kit rung (the favorite/projection
+    binding) are skipped. Returns ``(rows, always_active)`` where ``rows`` is a
+    list of ``(axis, rung, warm, cold)``, or ``(None, False)`` if the kit is
+    absent. Shared by ``render_kit_status_detail`` (the focused
+    ``dz kit status`` view) and the 'Current state' section of
+    ``render_kit_info`` -- so a new axis surfaces in BOTH for free (AC3-1)."""
     import types as _types
     from dazzlecmd_lib.contexts import KitMembershipContext
     from dazzlecmd_lib.verb_axis import VERB_AXES, KIT
@@ -805,16 +808,16 @@ def render_kit_status_detail(kit_name, engine, project_root):
          if (getattr(k, "kit_name", None) or getattr(k, "name", None)) == kit_name),
         None)
     if match is None:
-        print(f"No kit '{kit_name}' found.", file=sys.stderr)
-        return 1
+        return None, False
     always = bool(getattr(match, "always_active", False))
     membership = KitMembershipContext(
         project_root, kit_list, boundary_fqcn=getattr(engine, "command", "dz"))
     ref = _types.SimpleNamespace(
         name=kit_name, kit_name=kit_name, always_active=always)
     pointer = membership.pointer_of(ref) is not None
+    cfg = engine._get_user_config() if hasattr(engine, "_get_user_config") else {}
     disabled = (not always) and (
-        kit_name in set((engine._get_user_config() or {}).get("disabled_kits") or []))
+        kit_name in set((cfg or {}).get("disabled_kits") or []))
 
     def _rung(axis):
         # The kit's current pole on `axis`, or None if the axis carries no kit rung.
@@ -826,15 +829,35 @@ def render_kit_status_detail(kit_name, engine, project_root):
             return "member"
         return None
 
-    tag = "  [always-active]" if always else ""
-    print(f"Kit '{kit_name}' -- per-axis state{tag}:\n")
+    rows = []
     for va in VERB_AXES:
         if KIT not in va.applies_at:
             continue
         cur = _rung(va.axis)
         if cur is None:
             continue
-        print(f"  {va.axis:<12} {cur:<20} ({va.warm} <-> {va.cold})")
+        rows.append((va.axis, cur, va.warm, va.cold))
+    return rows, always
+
+
+def _print_axis_rows(rows):
+    """Print the ``(axis, rung, warm, cold)`` rows as the aligned state block."""
+    for axis, cur, warm, cold in rows:
+        print(f"  {axis:<12} {cur:<20} ({warm} <-> {cold})")
+
+
+def render_kit_status_detail(kit_name, engine, project_root):
+    """One kit's dynamic per-axis state -- the focused `dz kit status <kit>` view
+    (just the state block). The same rows also appear as the 'Current state'
+    section of `dz info <kit>` / `dz kit info <kit>`. Distinct from `dz kit
+    management <kit>` (the COMPOSED position); this is the per-axis breakdown."""
+    rows, always = _kit_axis_state(kit_name, engine, project_root)
+    if rows is None:
+        print(f"No kit '{kit_name}' found.", file=sys.stderr)
+        return 1
+    tag = "  [always-active]" if always else ""
+    print(f"Kit '{kit_name}' -- per-axis state{tag}:\n")
+    _print_axis_rows(rows)
     print("\nMove with `dz kit <axis> on|off <kit>` (or the special verb).")
     return 0
 
@@ -854,12 +877,14 @@ def _print_entity_card(title, fields):
     return 0
 
 
-def render_kit_info(kit_name, engine, as_json=False):
-    """A kit's STATIC identity/provenance card -- the registry-agnostic counterpart
-    to ``render_kit_status_detail`` (SD-3: info = the static card, status = the
-    dynamic axes). Fields are a hard-coded field-set today (Phase-1, behind the
-    #77 kind seam); ``--json`` mirrors the human card (AC3-5). Distinct from
-    ``dz kit list <kit>`` (which lists the kit's *tools*); this is the kit itself."""
+def render_kit_info(kit_name, engine, project_root=None, as_json=False):
+    """A kit's identity card AND its current state, in one read (the user's
+    'fold state into info' decision -- see the SD-3 addendum). The STATIC
+    field-set (name/kind/version/source/...) is the identity; a 'Current state'
+    section follows it with the kit's rung on each lifecycle axis (the same rows
+    `dz kit status <kit>` shows on its own). ``--json`` mirrors both: the
+    identity fields plus a ``state`` object. Distinct from ``dz kit list <kit>``
+    (which lists the kit's *tools*); this is the kit itself."""
     import json as _json
 
     kit_list = getattr(engine, "kits", []) or []
@@ -889,14 +914,22 @@ def render_kit_info(kit_name, engine, as_json=False):
         ("Source", getattr(match, "kit_source", None)),
         ("Always-active", "yes" if getattr(match, "always_active", False) else "no"),
     ]
+    rows, _always = _kit_axis_state(kit_name, engine, project_root)
 
     if as_json:
         payload = {
             label.lower().replace(" ", "_").replace("-", "_"): value
             for label, value in fields}
+        payload["state"] = {axis: cur for axis, cur, _w, _c in (rows or [])}
         print(_json.dumps(payload, indent=2))
         return 0
-    return _print_entity_card(f"Kit '{kit_name}' -- identity card:", fields)
+
+    _print_entity_card(f"Kit '{kit_name}' -- identity card:", fields)
+    if rows:
+        print()
+        print("Current state:")
+        _print_axis_rows(rows)
+    return 0
 
 
 def _cmd_kit_status(kits, engine=None, args=None, project_root=None):

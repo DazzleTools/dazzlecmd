@@ -4,6 +4,12 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.4] - 2026-06-25
+
+### Changed
+
+- **`dz info <kit>` now shows the kit's current state inline.** The identity card is followed by a `Current state:` section listing the kit's rung on each lifecycle axis (activation/loading/membership) -- the same rows `dz kit status <kit>` shows on its own. So a single read verb gives the whole picture (identity + state), in the shape of `systemctl status`. `dz kit status <kit>` stays as the focused state-only view; `dz kit info --json` gains a `state` object. This replaces the earlier plan for a separate top-level `dz status` verb: identity and state are two sections of one card, not two commands. (Tool and aggregator cards are unchanged -- those levels carry no per-axis state yet.)
+
 ## [0.11.3] - 2026-06-25
 
 ### Added
@@ -3827,7 +3833,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.3...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.4...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
