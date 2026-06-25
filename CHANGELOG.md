@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.3] - 2026-06-25
+
+### Added
+
+- **`dz info <target>` is now level-agnostic.** It resolves the target across tool / kit / aggregator and renders the matching card: a tool shows the existing detailed card (unchanged), a kit shows its identity card (as `dz kit info`), and the aggregator itself (`dz info dz` or `dz info dazzlecmd`) shows a new aggregator card -- name, command, description, version, tool/kit counts, and root. When a bare name matches more than one level the more-specific one wins (tool > kit > aggregator) with a note naming the others; `--as tool|kit|aggregator` forces the level. FQCN-qualified tool names (`dz info core:find`) and unknown names behave exactly as before. This is the first verb to dispatch through the new cross-level resolver -- the `dz <verb> <target>` shape the 0.11.x line generalizes.
+
+### Versions
+
+- dazzlecmd 0.11.2 -> 0.11.3 (PATCH); dazzle-dz -> 0.11.3. dazzlecmd-lib floor raised to `>=0.9.4` (`dz info` now dispatches through the library's `resolve_target`). dazzle-lib unchanged (0.6.7).
+
 ## [0.11.2] - 2026-06-25
 
 ### Added
@@ -3817,7 +3827,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.2...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.3...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

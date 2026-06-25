@@ -227,6 +227,16 @@ def _register_meta_commands(subparsers):
             "Enumerates the prefer array without evaluating preconditions."
         ),
     )
+    info_parser.add_argument(
+        "--as",
+        dest="as_level",
+        choices=["tool", "kit", "aggregator"],
+        help=(
+            "Force the level when the name matches more than one of "
+            "tool/kit/aggregator (otherwise the more-specific level wins, "
+            "with a note)."
+        ),
+    )
     info_parser.set_defaults(_meta="info")
 
     # dz kit -- `kit -h` is rendered as a de-duped by-axis hierarchy (the
@@ -607,7 +617,8 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
     if meta == "list":
         return _cmd_list(args, projects, engine=engine)
     elif meta == "info":
-        return _cmd_info(args, projects, engine=engine)
+        return _cmd_info(
+            args, projects, engine=engine, kits=kits, project_root=project_root)
     elif meta == "kit_list":
         # Unified renderer: the lib handler passes engine (kit-list DWP).
         from dazzlecmd_lib.default_meta_commands import kit_list_handler
@@ -710,16 +721,69 @@ def _cmd_list(args, projects, engine=None):
     return render_list(args, projects, engine=engine)
 
 
-def _cmd_info(args, projects, engine):
-    """Show detailed info about a tool (thin wrapper over library render_info).
+def render_aggregator_info(engine, projects, kits, project_root, as_json=False):
+    """The aggregator's static identity card (SD-3 per-level field-set, the
+    aggregator level). Walks the same ``_print_entity_card`` table as the kit
+    card. ``resolve_target`` returns the engine itself for the aggregator level,
+    so ``engine`` IS the entity here."""
+    import json as _json
 
-    Behavior identical to v0.7.33 -- the library now owns alias provenance
-    (standard + qualified_alias variants), shadow-status block,
-    runtime-dispatch resolution (default/--raw/--platform), pass-through
-    marker, Python deps, setup hint, and "Linked to:" line. Library version
-    reached byte-equivalence with this CLI's prior body across v0.7.32 + v0.7.33.
+    vi = getattr(engine, "version_info", None)
+    version = vi[0] if (isinstance(vi, (tuple, list)) and vi) else None
+    fields = [
+        ("Name", getattr(engine, "name", None)),
+        ("Command", getattr(engine, "command", None)),
+        ("Kind", "aggregator"),
+        ("Description", getattr(engine, "description", None)),
+        ("Version", version),
+        ("Tools", f"{len(projects or [])} tool(s)"),
+        ("Kits", f"{len(kits or [])} kit(s)"),
+        ("Root", project_root),
+    ]
+    if as_json:
+        payload = {
+            label.lower().replace(" ", "_").replace("-", "_"): value
+            for label, value in fields}
+        print(_json.dumps(payload, indent=2))
+        return 0
+    name = getattr(engine, "name", None) or "aggregator"
+    return _print_entity_card(f"Aggregator '{name}' -- identity card:", fields)
+
+
+def _cmd_info(args, projects, engine, kits=None, project_root=None):
+    """Show detailed info about a tool, kit, or aggregator (the level-agnostic
+    ``dz info <target>``, SD-1/SD-3).
+
+    Resolves the target's level via ``engine.resolve_target`` (a READ verb:
+    bare ambiguity auto-picks the more-specific level + prints a note; ``--as``
+    pins it), then routes to the level's card:
+
+    - **tool** -> the library ``render_info`` (UNCHANGED -- byte-identical to
+      v0.7.33; the rich provenance/shadow/runtime-dispatch card);
+    - **kit** -> :func:`render_kit_info`;
+    - **aggregator** -> :func:`render_aggregator_info`.
+
+    A name that resolves to nothing falls through to ``render_info`` so the
+    legacy "Tool 'X' not found" message + exit code are preserved exactly.
     """
     from dazzlecmd_lib.default_meta_commands import render_info
+
+    res = engine.resolve_target(
+        args.tool,
+        as_level=getattr(args, "as_level", None),
+        mutating=False,
+    )
+    if res is None:
+        # Unknown name -- preserve the exact legacy tool-not-found path.
+        return render_info(args, projects, engine)
+    if res.notification:
+        print(res.notification, file=sys.stderr)
+    if res.level == "kit":
+        kit_name = getattr(res.entity, "kit_name", None) or res.entity.name
+        return render_kit_info(kit_name, engine)
+    if res.level == "aggregator":
+        return render_aggregator_info(res.entity, projects, kits, project_root)
+    # tool level (the default / FQCN-qualified path) -- unchanged renderer.
     return render_info(args, projects, engine)
 
 
