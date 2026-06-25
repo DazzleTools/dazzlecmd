@@ -191,8 +191,8 @@ class TestWithComponents:
         """`all` composes best-effort. Hermetic: repokit URLs point at
         nonexistent LOCAL paths so `common` fails fast offline and `template`
         falls through to the bundled fallback (4d-6 OQ-G)."""
-        from dazzlecmd import cli as _cli
-        monkeypatch.setattr(_cli, "_resolve_new_defaults", lambda e: {
+        from dazzlecmd.commands import new as _new
+        monkeypatch.setattr(_new, "_resolve_new_defaults", lambda e: {
             "repokit_common_url": str(tmp_path / "no_such_remote"),
             "repokit_template_url": str(tmp_path / "no_such_template"),
         })
@@ -229,9 +229,9 @@ class TestRepoKitComponents:
 
     def test_with_common_subtree_from_local_remote(self, tmp_path, monkeypatch,
                                                    capsys):
-        from dazzlecmd import cli as _cli
+        from dazzlecmd.commands import new as _new
         remote = self._local_remote(tmp_path)
-        monkeypatch.setattr(_cli, "_resolve_new_defaults", lambda e: {
+        monkeypatch.setattr(_new, "_resolve_new_defaults", lambda e: {
             "repokit_common_url": str(remote)})
         monkeypatch.setenv("GIT_AUTHOR_NAME", "t")
         monkeypatch.setenv("GIT_AUTHOR_EMAIL", "t@t")
@@ -248,12 +248,12 @@ class TestRepoKitComponents:
 
     def test_with_template_local_path_no_clobber(self, tmp_path, monkeypatch,
                                                  capsys):
-        from dazzlecmd import cli as _cli
+        from dazzlecmd.commands import new as _new
         src = tmp_path / "tmpl_src"
         os.makedirs(src)
         (src / "LICENSE.tmpl").write_text("License for {name}\n", encoding="utf-8")
         (src / "README.md").write_text("TEMPLATE README\n", encoding="utf-8")
-        monkeypatch.setattr(_cli, "_resolve_new_defaults", lambda e: {
+        monkeypatch.setattr(_new, "_resolve_new_defaults", lambda e: {
             "repokit_template_path": str(src)})
         monkeypatch.chdir(tmp_path)
         assert _cmd_new_aggregator(_agg_args("WT", with_components="template")) == 0
