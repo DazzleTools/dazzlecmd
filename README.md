@@ -155,18 +155,16 @@ Optional fields not shown above (see [`config/dazzlecmd.schema.json`](config/daz
 
 ## Project Structure
 
-Most of what makes `dz` actually run lives in **`dazzlecmd_lib`** (the engine: discovery, dispatch, the kit/aggregator/state machinery, rendering) -- the `dz` CLI package is a comparatively thin entry point that drives it. `dazzlecmd_lib` is published as its own package (`dazzlecmd-lib`) so other aggregators can build on the same engine.
+Most of what makes `dz` actually run lives in **`dazzlecmd_lib`** (the engine: discovery, dispatch, the kit/aggregator/state machinery, rendering) -- the `dz` CLI package is a comparatively thin entry point that drives it. The engine lives in its own repository, [DazzleLib/dazzlecmd-lib](https://github.com/DazzleLib/dazzlecmd-lib), and is published as its own package (`dazzlecmd-lib`) so other aggregators can build on the same engine. `dz` installs it as a dependency.
 
 ```
 dazzlecmd/
 ├── packages/
-│   ├── dazzlecmd-lib/        # *** the engine *** -- most of the runtime
-│   │   └── src/dazzlecmd_lib/  # engine.py, contexts.py, entity.py, continuum.py,
-│   │       │                   # loader.py, registry.py, default_meta_commands.py, ...
-│   │       └── ...            # discovery, dispatch, kits/aggregators, state model
 │   └── dazzle-dz-alias/      # the `dazzle-dz` alias package (same tool, second name)
 ├── src/dazzlecmd/            # the `dz` CLI package (thin -- drives the engine)
-│   ├── cli.py                # entry point, argparse dispatch
+│   ├── cli.py                # entry point + re-export facade
+│   ├── parsers.py            # the argparse builder
+│   ├── commands/             # per-verb handlers (kit, new, add, mode, setup)
 │   ├── loader.py             # repo-local discovery shim
 │   └── templates/            # scaffolding templates for dz new
 ├── projects/                 # Tool projects by namespace
@@ -204,10 +202,12 @@ Individual tools may have platform-specific requirements -- check `dz info <tool
 - **[Creating Tools](docs/guides/creating-tools.md)** -- build your own dz tool
 - **[Kits Guide](docs/guides/kits.md)** -- how the kit system works, the recursive architecture
 - **[Manifest Reference](docs/guides/manifests.md)** -- `.dazzlecmd.json` schema
+- **[Glossary](docs/glossary.md)** -- the vocabulary `dz` uses: tools, kits, levels, the lifecycle verbs, and how commands are addressed
 - **[Platform Support](docs/platform-support.md)** -- OS compatibility matrix
 
 ## Related Projects
 
+- [dazzlecmd-lib](https://github.com/DazzleLib/dazzlecmd-lib) -- the engine `dz` runs on: discovery, dispatch, the kit/aggregator/state machinery, and rendering. Published separately so other aggregators can build on the same core
 - [wtf-windows](https://github.com/djdarcy/wtf-windows) -- "Many diagnostics, one command": a Windows-diagnostics CLI built on the DazzleCMD pattern (a downstream aggregator)
 - [git-repokit](https://github.com/DazzleTools/git-repokit) -- Standardized Git repository creation tool
 - [preserve](https://github.com/DazzleTools/preserve) -- Cross-platform file preservation with path normalization and verification

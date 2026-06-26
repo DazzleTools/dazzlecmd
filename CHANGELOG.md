@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Public glossary (`docs/glossary.md`) plus a README link to it -- the curated, user-facing subset of the project vocabulary.
+
+### Changed
+
+- `dazzlecmd-lib` dependency floor raised to `>=0.9.6` (the de-collided engine library, in which the entity grouping capability is renamed `GroupingCapable` so the name `Groupable` denotes only the bedrock value). No user-visible change.
+
 ## [0.11.5] - 2026-06-25
 
 ### Changed
