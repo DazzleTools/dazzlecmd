@@ -14,6 +14,7 @@ import sys
 
 from dazzlecmd._version import DISPLAY_VERSION, __version__
 from dazzlecmd._constants import RESERVED_COMMANDS  # noqa: F401  (re-exported)
+from dazzlecmd.engine import AggregatorEngine
 from dazzlecmd.kit_verbs import (
     LIFECYCLE_PAIRS,
     add_flat_verb,
@@ -28,6 +29,17 @@ from dazzlecmd.loader import (
 )
 from dazzlecmd_lib import colors as _colors
 from dazzlecmd_lib.verb_axis import meta_tag_for, resolve_special
+from dazzlecmd_lib.aggregator_config import find_aggregator_root
+# The read surface lives in the lib (SD-A): one interrogation function + one
+# renderer power every level's card. cli.py keeps the public names below as
+# thin delegators (engine wiring + tests import them from dazzlecmd.cli).
+from dazzlecmd_lib.interrogation import (  # noqa: F401
+    axis_state as _kit_axis_state,
+    interrogate as _interrogate,
+    render_interrogation as _render_interrogation,
+    _print_entity_card,
+    _print_axis_rows,
+)
 
 
 # v0.7.44 (4b-T3 + 4d-3): per-language scaffolding ships. The set of
@@ -42,7 +54,6 @@ def find_project_root():
 
     Legacy wrapper -- new code should use AggregatorEngine.find_project_root().
     """
-    from dazzlecmd.engine import AggregatorEngine
     return AggregatorEngine().find_project_root()
 
 
@@ -257,32 +268,13 @@ def _cmd_list(args, projects, engine=None):
 
 
 def render_aggregator_info(engine, projects, kits, project_root, as_json=False):
-    """The aggregator's static identity card (SD-3 per-level field-set, the
-    aggregator level). Walks the same ``_print_entity_card`` table as the kit
-    card. ``resolve_target`` returns the engine itself for the aggregator level,
-    so ``engine`` IS the entity here."""
-    import json as _json
-
-    vi = getattr(engine, "version_info", None)
-    version = vi[0] if (isinstance(vi, (tuple, list)) and vi) else None
-    fields = [
-        ("Name", getattr(engine, "name", None)),
-        ("Command", getattr(engine, "command", None)),
-        ("Kind", "aggregator"),
-        ("Description", getattr(engine, "description", None)),
-        ("Version", version),
-        ("Tools", f"{len(projects or [])} tool(s)"),
-        ("Kits", f"{len(kits or [])} kit(s)"),
-        ("Root", project_root),
-    ]
-    if as_json:
-        payload = {
-            label.lower().replace(" ", "_").replace("-", "_"): value
-            for label, value in fields}
-        print(_json.dumps(payload, indent=2))
-        return 0
-    name = getattr(engine, "name", None) or "aggregator"
-    return _print_entity_card(f"Aggregator '{name}' -- identity card:", fields)
+    """The aggregator's identity card -- delegates to the lib interrogation
+    surface (SD-A). ``resolve_target`` returns the engine itself for the
+    aggregator level, so ``engine`` IS the entity here."""
+    interro = _interrogate(
+        engine, engine, level="aggregator",
+        project_root=project_root, projects=projects, kits=kits)
+    return _render_interrogation(interro, as_json=as_json)
 
 
 def _info_at_tool(res, args, projects, kits, project_root, engine):
@@ -332,61 +324,9 @@ def _cmd_info(args, projects, engine, kits=None, project_root=None):
 
 
 
-def _kit_axis_state(kit_name, engine, project_root):
-    """The kit's current rung on each lifecycle axis -- the read-side of the verb
-    registry (SD-3). Iterates the dazzlecmd-lib ``VERB_AXES`` whose ``applies_at``
-    includes the kit level; axes with no per-kit rung (the favorite/projection
-    binding) are skipped. Returns ``(rows, always_active)`` where ``rows`` is a
-    list of ``(axis, rung, warm, cold)``, or ``(None, False)`` if the kit is
-    absent. Shared by ``render_kit_status_detail`` (the focused
-    ``dz kit status`` view) and the 'Current state' section of
-    ``render_kit_info`` -- so a new axis surfaces in BOTH for free (AC3-1)."""
-    import types as _types
-    from dazzlecmd_lib.contexts import KitMembershipContext
-    from dazzlecmd_lib.verb_axis import VERB_AXES, KIT
-
-    kit_list = getattr(engine, "kits", []) or []
-    match = next(
-        (k for k in kit_list
-         if (getattr(k, "kit_name", None) or getattr(k, "name", None)) == kit_name),
-        None)
-    if match is None:
-        return None, False
-    always = bool(getattr(match, "always_active", False))
-    membership = KitMembershipContext(
-        project_root, kit_list, boundary_fqcn=getattr(engine, "command", "dz"))
-    ref = _types.SimpleNamespace(
-        name=kit_name, kit_name=kit_name, always_active=always)
-    pointer = membership.pointer_of(ref) is not None
-    cfg = engine._get_user_config() if hasattr(engine, "_get_user_config") else {}
-    disabled = (not always) and (
-        kit_name in set((cfg or {}).get("disabled_kits") or []))
-
-    def _rung(axis):
-        # The kit's current pole on `axis`, or None if the axis carries no kit rung.
-        if axis == "activation":
-            return "disabled" if disabled else "active"
-        if axis == "loading":
-            return "pointer (detached)" if pointer else "loaded (attached)"
-        if axis == "membership":
-            return "member"
-        return None
-
-    rows = []
-    for va in VERB_AXES:
-        if KIT not in va.applies_at:
-            continue
-        cur = _rung(va.axis)
-        if cur is None:
-            continue
-        rows.append((va.axis, cur, va.warm, va.cold))
-    return rows, always
-
-
-def _print_axis_rows(rows):
-    """Print the ``(axis, rung, warm, cold)`` rows as the aligned state block."""
-    for axis, cur, warm, cold in rows:
-        print(f"  {axis:<12} {cur:<20} ({warm} <-> {cold})")
+# _kit_axis_state and _print_axis_rows moved to dazzlecmd_lib.interrogation
+# (SD-A) -- re-exported at module top. The state read is the projection of the
+# verb-axis registry, so it belongs in the lib next to VERB_AXES.
 
 
 def render_kit_status_detail(kit_name, engine, project_root):
@@ -405,31 +345,18 @@ def render_kit_status_detail(kit_name, engine, project_root):
     return 0
 
 
-def _print_entity_card(title, fields):
-    """Walk a per-level field-set -- a list of ``(label, value)`` -- and print an
-    aligned identity card (SD-3: the R-table render_info). Absent values render as
-    ``(none)`` rather than being silently dropped (AC3-2), so the card's shape is
-    the same for every entity at a level. One walker serves every level's table;
-    a new level is a new field-set, not a new renderer (AC3-6)."""
-    print(title)
-    print()
-    width = max((len(label) for label, _ in fields), default=0)
-    for label, value in fields:
-        shown = value if (value is not None and value != "") else "(none)"
-        print(f"  {label + ':':<{width + 1}} {shown}")
-    return 0
+# _print_entity_card moved to dazzlecmd_lib.interrogation (SD-A), re-exported
+# at module top. It is the one card walker every level's table renders through.
 
 
 def render_kit_info(kit_name, engine, project_root=None, as_json=False):
     """A kit's identity card AND its current state, in one read (the user's
-    'fold state into info' decision -- see the SD-3 addendum). The STATIC
-    field-set (name/kind/version/source/...) is the identity; a 'Current state'
-    section follows it with the kit's rung on each lifecycle axis (the same rows
-    `dz kit status <kit>` shows on its own). ``--json`` mirrors both: the
-    identity fields plus a ``state`` object. Distinct from ``dz kit list <kit>``
-    (which lists the kit's *tools*); this is the kit itself."""
-    import json as _json
-
+    'fold state into info' decision). Delegates to the lib interrogation surface
+    (SD-A): the identity facet (name/kind/version/source/...) plus the state
+    facet (the kit's rung on each lifecycle axis -- the same rows
+    `dz kit status <kit>` shows on its own). ``--json`` mirrors both. Distinct
+    from ``dz kit list <kit>`` (which lists the kit's *tools*); this is the kit
+    itself. The caller-side 'No kit found' message + exit 1 are preserved."""
     kit_list = getattr(engine, "kits", []) or []
     match = next(
         (k for k in kit_list
@@ -438,41 +365,8 @@ def render_kit_info(kit_name, engine, project_root=None, as_json=False):
     if match is None:
         print(f"No kit '{kit_name}' found.", file=sys.stderr)
         return 1
-
-    virtual = bool(getattr(match, "virtual", False))
-    tools = getattr(match, "tools", None) or []
-    count_label = "alias(es)" if virtual else "tool(s)"
-    version = getattr(match, "version", None)
-    if version in (None, "", "0.0.0"):       # the entity default -> "unset"
-        version = None
-
-    fields = [
-        ("Name", getattr(match, "kit_name", None) or getattr(match, "name", None)),
-        ("Kind", "virtual kit" if virtual else "kit"),
-        ("Description", getattr(match, "description", None)),
-        ("Version", version),
-        ("Tools", f"{len(tools)} {count_label}"),
-        ("Import name", getattr(match, "kit_import_name", None)),
-        ("Directory", getattr(match, "directory", None)),
-        ("Source", getattr(match, "kit_source", None)),
-        ("Always-active", "yes" if getattr(match, "always_active", False) else "no"),
-    ]
-    rows, _always = _kit_axis_state(kit_name, engine, project_root)
-
-    if as_json:
-        payload = {
-            label.lower().replace(" ", "_").replace("-", "_"): value
-            for label, value in fields}
-        payload["state"] = {axis: cur for axis, cur, _w, _c in (rows or [])}
-        print(_json.dumps(payload, indent=2))
-        return 0
-
-    _print_entity_card(f"Kit '{kit_name}' -- identity card:", fields)
-    if rows:
-        print()
-        print("Current state:")
-        _print_axis_rows(rows)
-    return 0
+    interro = _interrogate(match, engine, level="kit", project_root=project_root)
+    return _render_interrogation(interro, as_json=as_json)
 
 
 def _cmd_kit_status(kits, engine=None, args=None, project_root=None):
@@ -699,11 +593,6 @@ def main():
     and ``dz`` would become ``wtf``. The entry point's identity is fixed
     by which package it is (``dazzlecmd``), pinned at install time.
     """
-    import os
-    import sys
-    from dazzlecmd.engine import AggregatorEngine
-    from dazzlecmd_lib.aggregator_config import find_aggregator_root
-
     project_root = find_aggregator_root(os.path.dirname(os.path.abspath(__file__)))
     if project_root is None:
         print(

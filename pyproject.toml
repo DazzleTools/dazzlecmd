@@ -15,7 +15,7 @@ authors = [
 keywords = ["cli", "tools", "utility", "dazzletools", "dazzle", "command-line", "aggregator"]
 
 dependencies = [
-    "dazzlecmd-lib>=0.9.4",
+    "dazzlecmd-lib>=0.9.5",
     # safedel + fixpath import these directly (safedel.py imports dazzle_filekit at
     # module top level), de-vendored from the old safedel/_lib bundle. unctools is
     # win32-only -- it is used solely for UNC->local-drive path conversion, and
