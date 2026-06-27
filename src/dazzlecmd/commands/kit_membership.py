@@ -9,7 +9,7 @@ import json
 import os
 import sys
 
-from dazzlecmd.kit_verbs import LIFECYCLE_PAIRS
+from dazzlecmd_lib.verb_axis import axis_by_name
 
 def _cmd_kit_add(args, project_root, engine):
     """Add a kit from a git URL via submodule."""
@@ -473,10 +473,13 @@ def _cmd_kit_attach(args, project_root, engine):
 
 
 def _print_axis_hint(axis):
-    pair = next((p for p in LIFECYCLE_PAIRS if p.axis == axis), None)
-    if pair:
-        print(f"\nChange with `dz kit {axis} {pair.warm}|{pair.cold} <kit>` "
-              f"(or the flat alias `dz kit {pair.warm}|{pair.cold} <kit>`).")
+    # B5: read the lib VERB_AXES registry directly (the kit lifecycle verb
+    # source), not the dz-local pair tuple. axis_by_name returns None for a
+    # non-registry axis (e.g. visibility), preserving the no-hint behaviour.
+    va = axis_by_name(axis)
+    if va:
+        print(f"\nChange with `dz kit {axis} {va.warm}|{va.cold} <kit>` "
+              f"(or the flat alias `dz kit {va.warm}|{va.cold} <kit>`).")
 
 
 def _cmd_kit_management(args, project_root, engine, axis=None):

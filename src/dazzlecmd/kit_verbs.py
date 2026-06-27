@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from dazzlecmd_lib.verb_axis import KIT as _KIT, VERB_AXES as _VERB_AXES
+
 
 # Cascade coupling -- declared per axis (the slice-4 Gauss-Jordan property):
 #   aligned     = nested axes fused onto one gradient -> a colder move IMPLICITLY
@@ -51,13 +53,23 @@ class KitVerbPair:
 # member. Declared WARM-first (rank -1 -> -3 = innermost/warmest -> outermost/
 # coldest), so the natural display order reads warm -> cold. The coldward cascade
 # is IMPLICIT here (detach already disables -- the dependent pivot).
-LIFECYCLE_PAIRS = (
-    KitVerbPair("enable", "disable", "activation", -1, COUPLING_ALIGNED,
-                "active vs loaded-but-inactive"),
-    KitVerbPair("attach", "detach", "loading", -2, COUPLING_ALIGNED,
-                "loaded vs a pointer (listed, not loaded)"),
-    KitVerbPair("add", "remove", "membership", -3, COUPLING_ALIGNED,
-                "registered vs deregistered + trashed"),
+# B5: LIFECYCLE_PAIRS is now a DERIVED VIEW over the lib ``VERB_AXES`` registry --
+# the single source for the kit lifecycle verbs (the dz-local hand-written tuple
+# was a second declaration of the SAME data). The aligned kit axes
+# (activation/loading/membership, in registry order) become ``KitVerbPair``s; the
+# coldward rank is the negative position along that gradient (activation -1,
+# loading -2, membership -3), reproducing the historical ranks. The generators +
+# ``render_kit_help`` + ``kit_membership`` read this view, so a new aligned
+# ``VerbAxis`` surfaces in ``dz kit`` for free. (``favorite`` is
+# COUPLING_INDEPENDENT -> excluded here, surfaced via ``FAVORITE_PAIR``;
+# ``visibility`` is graded + not yet registered -- the full retire is gated on
+# the graded-axis fold, B5 DWP follow-on.)
+LIFECYCLE_PAIRS = tuple(
+    KitVerbPair(_va.warm, _va.cold, _va.axis, -(_i + 1), _va.coupling, _va.gloss)
+    for _i, _va in enumerate(
+        _ax for _ax in _VERB_AXES
+        if _ax.coupling == COUPLING_ALIGNED and _KIT in _ax.applies_at
+    )
 )
 
 # Independent axes (NOT on the lifecycle gradient; opt-in cascade). favorite is a

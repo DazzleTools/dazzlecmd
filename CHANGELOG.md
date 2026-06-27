@@ -4,6 +4,12 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.8] - 2026-06-27
+
+### Changed
+
+- **Internal (B5): the `dz kit` lifecycle verbs are single-sourced from the `dazzlecmd-lib` verb registry.** `kit_verbs.LIFECYCLE_PAIRS` (the activation/loading/membership `enable`/`disable`/`attach`/`detach`/`add`/`remove` pairs) is now a derived view over the library's `VERB_AXES` rather than a hand-written second declaration of the same data, and `kit_membership` reads the registry directly. A new aligned verb-axis now surfaces in `dz kit` for free. No user-visible change -- `dz kit -h` and every subcommand are byte-identical.
+
 ## [0.11.7] - 2026-06-26
 
 ### Added
@@ -3865,7 +3871,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.7...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.8...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
