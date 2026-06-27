@@ -11,4 +11,7 @@ re-exports ``RESERVED_COMMANDS`` for backward compatibility
 RESERVED_COMMANDS = {
     "new", "add", "list", "info", "kit", "search",
     "build", "tree", "version", "enhance", "graduate", "mode",
+    # B4-mutate: the bare-verb cross-level toggles (`dz enable <kit>` etc.).
+    # Listed here so engine.run treats them as meta-commands, not tool names.
+    "enable", "disable",
 }

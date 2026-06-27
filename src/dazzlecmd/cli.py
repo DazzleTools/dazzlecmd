@@ -95,6 +95,9 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
     elif meta == "info":
         return _cmd_info(
             args, projects, engine=engine, kits=kits, project_root=project_root)
+    elif meta in ("enable", "disable"):
+        return _dispatch_bare_verb(
+            meta, args, projects, kits, project_root, engine)
     elif meta == "kit_list":
         # Unified renderer: the lib handler passes engine (kit-list DWP).
         from dazzlecmd_lib.default_meta_commands import kit_list_handler
@@ -255,6 +258,28 @@ def _dispatch_verb_target(token, target, args, projects, kits,
     return handler(res, args, projects, kits, project_root, engine)
 
 
+def _dispatch_bare_verb(verb, args, projects, kits, project_root, engine):
+    """``dz <verb> <target>`` -- the bare-verb cross-level MUTATING form
+    (B4-mutate). Resolves the target's level through ``_dispatch_verb_target``
+    (``mutating=True`` fails loud on an ambiguous bare name; ``applies_at``
+    prunes the wrong level) and runs the resolved ``<level>_<verb>`` handler.
+    A clear message + non-zero exit replaces both the ambiguity raise and a
+    target that does not resolve."""
+    from dazzlecmd_lib.target_resolution import AmbiguousLevelError
+    target = getattr(args, "target", None)
+    try:
+        rc = _dispatch_verb_target(
+            verb, target, args, projects, kits, project_root, engine)
+    except AmbiguousLevelError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    if rc is None:
+        print(f"'{target}' did not resolve to a kit for '{verb}'.",
+              file=sys.stderr)
+        return 1
+    return rc
+
+
 def _cmd_list(args, projects, engine=None):
     """List available tools (thin wrapper over library render_list).
 
@@ -295,15 +320,44 @@ def _info_at_aggregator(res, args, projects, kits, project_root, engine):
     return render_aggregator_info(res.entity, projects, kits, project_root)
 
 
+# --- MUTATING handlers (B4-mutate) -- the bare-verb cross-level toggles -------
+# Each bridges the generic (res, args, projects, kits, project_root, engine)
+# dispatch signature to the existing kit handler by binding the resolved kit
+# name. resolve_target's mutating=True path already fails loud on an ambiguous
+# bare name, and ``applies_at={'kit'}`` prunes tool/aggregator before we get
+# here -- so these only ever run on a kit that genuinely resolved.
+
+
+def _resolved_kit_name(res):
+    return getattr(res.entity, "kit_name", None) or getattr(res.entity, "name", None)
+
+
+def _enable_at_kit(res, args, projects, kits, project_root, engine):
+    """``enable`` at the kit level -- the activation warm pole."""
+    from dazzlecmd.commands.kit import _cmd_kit_enable
+    args.name = _resolved_kit_name(res)
+    return _cmd_kit_enable(args, engine)
+
+
+def _disable_at_kit(res, args, projects, kits, project_root, engine):
+    """``disable`` at the kit level -- the activation cold pole."""
+    from dazzlecmd.commands.kit import _cmd_kit_disable
+    args.name = _resolved_kit_name(res)
+    return _cmd_kit_disable(args, engine)
+
+
 # The <level>_<verb> tag -> handler table -- SD-0's "tag->callable half". Each
 # handler has the uniform signature
 # ``(res, args, projects, kits, project_root, engine) -> int``. Adding a verb at
 # a level = adding an entry here (AC-D2); _dispatch_verb_target never changes.
-# B4-mutate registers enable/disable/attach/detach; B5 the generated views.
+# B4-mutate registers enable/disable (activation) here; attach/detach (loading)
+# + B5 generated views follow.
 _VERB_LEVEL_HANDLERS = {
     "tool_info": _info_at_tool,
     "kit_info": _info_at_kit,
     "aggregator_info": _info_at_aggregator,
+    "kit_enable": _enable_at_kit,
+    "kit_disable": _disable_at_kit,
 }
 
 

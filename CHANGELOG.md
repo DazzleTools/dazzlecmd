@@ -4,16 +4,17 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.11.6] - 2026-06-26
 
 ### Added
 
+- `dz enable <kit>` / `dz disable <kit>` -- the bare-verb cross-level form of `dz kit enable|disable`. The generic verb-by-level dispatcher resolves the target's level and refuses an ambiguous or wrong-level name (nothing is changed in that case); the explicit `dz kit enable <name>` form still works.
 - Public glossary (`docs/glossary.md`) plus a README link to it -- the curated, user-facing subset of the project vocabulary.
 
 ### Changed
 
 - `dz info <tool>` now shows a `Current state:` section (the tool's mode), matching the kit and aggregator cards -- `info` is the full read (identity + state) at every level. (via dazzlecmd-lib 0.9.8)
-- `dazzlecmd-lib` dependency floor raised to `>=0.9.8` (the de-collided engine library where the entity grouping capability is `GroupingCapable` so `Groupable` denotes only the bedrock value; plus the tool-level read surface and the `info` state section).
+- `dazzlecmd-lib` dependency floor raised to `>=0.9.10` (the de-collided engine library; the tool-level read surface; the `info` state section; the `membership`/`structure` facets; and the reserved `enable`/`disable` verbs).
 
 ## [0.11.5] - 2026-06-25
 
@@ -3854,7 +3855,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.5...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.6...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

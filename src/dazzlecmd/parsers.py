@@ -194,6 +194,20 @@ def _register_meta_commands(subparsers):
     )
     info_parser.set_defaults(_meta="info")
 
+    # dz enable <kit> / dz disable <kit> -- the bare-verb cross-level toggles
+    # (B4-mutate). The activation axis applies_at={'kit'}; the generic verb x
+    # level dispatcher resolves the target's level and fails loud at the wrong
+    # level. `dz kit enable <name>` remains the explicit form.
+    for _verb, _help in (("enable", "Enable a kit (activation warm pole)"),
+                         ("disable", "Disable a kit (activation cold pole)")):
+        _vp = subparsers.add_parser(_verb, help=_help)
+        _vp.add_argument("target", help=f"Kit to {_verb}")
+        _vp.add_argument(
+            "--as", dest="as_level",
+            choices=["tool", "kit", "aggregator"],
+            help="Force the level when the name is ambiguous across levels.")
+        _vp.set_defaults(_meta=_verb)
+
     # dz kit -- `kit -h` is rendered as a de-duped by-axis hierarchy (the
     # format_help override below, set after all subcommands are registered so it
     # reads their real help) instead of argparse's default positional restatement.
