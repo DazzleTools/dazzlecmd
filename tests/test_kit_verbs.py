@@ -285,7 +285,8 @@ class TestKitInfoDetail:
         assert payload["tools"] == "3 tool(s)"
         assert payload["directory"] is None       # absent -> null, not "(none)"
         assert payload["state"]["activation"] == "active"   # the merged state
-        assert set(payload["state"]) == {"activation", "loading", "membership"}
+        assert set(payload["state"]) == {
+            "activation", "loading", "membership", "tracking"}   # + mode fiber
 
     def test_info_unknown_kit_returns_1(self, tmp_path, capsys):
         import types

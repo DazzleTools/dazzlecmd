@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.12] - 2026-06-27
+
+### Added
+
+- `dz info <kit>` now shows a **`tracking`** row in its `Current state:` section -- the kit's mode/tracking kind (`submodule` / `symlink` / `embedded` / `local-only`), the kit analogue of the `Mode:` line on `dz info <tool>`. This is the first cross-level step of "mode is the tracking facet at every level": mode now **reads** at the kit level, not only the tool level. (Detection only -- the kit-level mode *switch* and the materialization model are a later phase.)
+
+### Changed
+
+- `dazzlecmd-lib` dependency floor raised to `>=0.9.16` (the `classify_entity_state` cross-level tracking detector).
+
 ## [0.11.11] - 2026-06-27
 
 ### Added
@@ -3893,7 +3903,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.11...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.12...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
