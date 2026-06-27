@@ -366,8 +366,10 @@ def _detach_at_kit(res, args, projects, kits, project_root, engine):
 # handler has the uniform signature
 # ``(res, args, projects, kits, project_root, engine) -> int``. Adding a verb at
 # a level = adding an entry here (AC-D2); _dispatch_verb_target never changes.
-# B4-mutate registers enable/disable (activation) + attach/detach (loading);
-# B5 generated views follow.
+# B4-mutate registers enable/disable (activation) + attach/detach (loading) --
+# the context-COMPLETE single-target toggles. favorite/unfavorite (projection)
+# are context-BOUND (they need <short> <fqcn>, not just a kit), so they stay the
+# explicit `dz kit favorite <short> <fqcn>` form -- not hoisted. B5 follows.
 _VERB_LEVEL_HANDLERS = {
     "tool_info": _info_at_tool,
     "kit_info": _info_at_kit,
