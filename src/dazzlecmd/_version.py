@@ -27,7 +27,7 @@ PHASE = ""  # Per-MINOR feature set: None, "alpha", "beta", "rc1", etc.
 PROJECT_PHASE = "prealpha"  # Project-wide: "prealpha", "alpha", "beta", "stable"
 
 # Auto-updated by git hooks - do not edit manually
-__version__ = "0.11.7_main_249-20260626-7fa8e2b5"
+__version__ = "0.11.7_main_250-20260626-62df937f"
 __app_name__ = "dazzlecmd"
 
 

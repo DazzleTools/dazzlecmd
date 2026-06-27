@@ -827,7 +827,7 @@ class TestRenderInfoDescriptionWrap:
     def test_long_description_wraps_to_terminal_width(self, capsys, monkeypatch):
         # Narrow terminal forces wrap.
         monkeypatch.setattr(
-            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            "dazzlecmd_lib.rendering._shutil.get_terminal_size",
             lambda fallback=(80, 24): type("S", (), {"columns": 60})(),
         )
         long_desc = (
@@ -861,7 +861,7 @@ class TestRenderInfoDescriptionWrap:
         # Verify the alignment: continuation chars line up directly under
         # the first char of the description value on the header row.
         monkeypatch.setattr(
-            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            "dazzlecmd_lib.rendering._shutil.get_terminal_size",
             lambda fallback=(80, 24): type("S", (), {"columns": 40})(),
         )
         projects = [
@@ -886,7 +886,7 @@ class TestRenderInfoDescriptionWrap:
 
     def test_empty_description_renders_single_line(self, capsys, monkeypatch):
         monkeypatch.setattr(
-            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            "dazzlecmd_lib.rendering._shutil.get_terminal_size",
             lambda fallback=(80, 24): type("S", (), {"columns": 80})(),
         )
         projects = [_project("alpha", description="", fqcn="k:alpha")]
@@ -917,7 +917,7 @@ class TestRenderInfoLongDescription:
     def test_long_description_renders_with_details_header(self, capsys, monkeypatch):
         monkeypatch.setenv("NO_COLOR", "1")  # strip ANSI so assertions are simple
         monkeypatch.setattr(
-            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            "dazzlecmd_lib.rendering._shutil.get_terminal_size",
             lambda fallback=(80, 24): type("S", (), {"columns": 80})(),
         )
         projects = [self._project_with_long_desc(
@@ -932,7 +932,7 @@ class TestRenderInfoLongDescription:
     def test_long_description_absent_no_details_block(self, capsys, monkeypatch):
         monkeypatch.setenv("NO_COLOR", "1")
         monkeypatch.setattr(
-            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            "dazzlecmd_lib.rendering._shutil.get_terminal_size",
             lambda fallback=(80, 24): type("S", (), {"columns": 80})(),
         )
         # Project explicitly has empty long_description.
@@ -946,7 +946,7 @@ class TestRenderInfoLongDescription:
         """Backward-compat: manifests without the field render normally."""
         monkeypatch.setenv("NO_COLOR", "1")
         monkeypatch.setattr(
-            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            "dazzlecmd_lib.rendering._shutil.get_terminal_size",
             lambda fallback=(80, 24): type("S", (), {"columns": 80})(),
         )
         # _project builds a tool without long_description -> the typed field
@@ -963,7 +963,7 @@ class TestRenderInfoLongDescription:
         as absent -- no Details: block."""
         monkeypatch.setenv("NO_COLOR", "1")
         monkeypatch.setattr(
-            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            "dazzlecmd_lib.rendering._shutil.get_terminal_size",
             lambda fallback=(80, 24): type("S", (), {"columns": 80})(),
         )
         projects = [self._project_with_long_desc("   \n  \n   ")]
@@ -975,7 +975,7 @@ class TestRenderInfoLongDescription:
     def test_long_description_wraps_to_terminal_width(self, capsys, monkeypatch):
         monkeypatch.setenv("NO_COLOR", "1")
         monkeypatch.setattr(
-            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            "dazzlecmd_lib.rendering._shutil.get_terminal_size",
             lambda fallback=(80, 24): type("S", (), {"columns": 50})(),
         )
         long_text = (
@@ -1003,7 +1003,7 @@ class TestRenderInfoLongDescription:
         """Paragraph breaks in long_description survive into the output."""
         monkeypatch.setenv("NO_COLOR", "1")
         monkeypatch.setattr(
-            "dazzlecmd_lib.default_meta_commands._shutil.get_terminal_size",
+            "dazzlecmd_lib.rendering._shutil.get_terminal_size",
             lambda fallback=(80, 24): type("S", (), {"columns": 80})(),
         )
         long_text = "First paragraph.\n\nSecond paragraph after a blank line."
