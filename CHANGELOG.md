@@ -4,6 +4,12 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.9] - 2026-06-27
+
+### Added
+
+- `dz info <target> --json` now works at **every** level (tool / kit / aggregator), emitting a structured, facet-shaped card for programmatic consumers. Previously `--json` was only available on the `dz kit info` subcommand; the unified `dz info` accepted `--raw` but not `--json`. The human-readable card is unchanged at every level (the tool card stays byte-identical); `--json` routes through the one interrogation surface so the output shape is uniform across levels.
+
 ## [0.11.8] - 2026-06-27
 
 ### Changed
@@ -3871,7 +3877,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.8...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.9...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

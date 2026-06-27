@@ -303,8 +303,14 @@ def render_aggregator_info(engine, projects, kits, project_root, as_json=False):
 
 
 def _info_at_tool(res, args, projects, kits, project_root, engine):
-    """``tool_info`` handler: the library ``render_info`` card -- UNCHANGED,
-    byte-identical to v0.7.33 (the byte-gate's dz_info_* goldens guard it)."""
+    """``tool_info`` handler: the library ``render_info`` card -- the human card
+    is UNCHANGED, byte-identical to v0.7.33 (the byte-gate's dz_info_* goldens
+    guard it). ``--json`` routes through the interrogation surface for a
+    structured, facet-shaped card -- uniform with the kit/aggregator JSON."""
+    if getattr(args, "as_json", False):
+        interro = _interrogate(res.entity, engine, level="tool",
+                               project_root=project_root)
+        return _render_interrogation(interro, as_json=True)
     from dazzlecmd_lib.default_meta_commands import render_info
     return render_info(args, projects, engine)
 
@@ -312,12 +318,14 @@ def _info_at_tool(res, args, projects, kits, project_root, engine):
 def _info_at_kit(res, args, projects, kits, project_root, engine):
     """``kit_info`` handler: the kit identity + current-state card."""
     kit_name = getattr(res.entity, "kit_name", None) or res.entity.name
-    return render_kit_info(kit_name, engine, project_root=project_root)
+    return render_kit_info(kit_name, engine, project_root=project_root,
+                           as_json=getattr(args, "as_json", False))
 
 
 def _info_at_aggregator(res, args, projects, kits, project_root, engine):
     """``aggregator_info`` handler: the aggregator identity card."""
-    return render_aggregator_info(res.entity, projects, kits, project_root)
+    return render_aggregator_info(res.entity, projects, kits, project_root,
+                                  as_json=getattr(args, "as_json", False))
 
 
 # --- MUTATING handlers (B4-mutate) -- the bare-verb cross-level toggles -------

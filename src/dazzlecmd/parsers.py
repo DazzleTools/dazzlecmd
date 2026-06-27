@@ -192,6 +192,10 @@ def _register_meta_commands(subparsers):
             "with a note)."
         ),
     )
+    info_parser.add_argument(
+        "--json", action="store_true", dest="as_json",
+        help="Emit the card as JSON (structured facets) for programmatic use.",
+    )
     info_parser.set_defaults(_meta="info")
 
     # dz enable <kit> / dz disable <kit> -- the bare-verb cross-level toggles

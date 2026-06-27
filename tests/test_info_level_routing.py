@@ -7,6 +7,7 @@ the `--as` pin through, and surfaces a read auto-pick notification. The tool
 path delegates to the unchanged library `render_info` (byte-gate covers it),
 so it is not re-exercised here.
 """
+import json
 import types
 
 import pytest
@@ -41,6 +42,41 @@ class TestParser:
     def test_info_as_rejects_unknown_level(self):
         with pytest.raises(SystemExit):
             build_parser([]).parse_args(["info", "foo", "--as", "planet"])
+
+    def test_info_json_flag_sets_as_json(self):
+        a = build_parser([]).parse_args(["info", "foo", "--json"])
+        assert a.as_json is True
+
+    def test_info_without_json_defaults_off(self):
+        a = build_parser([]).parse_args(["info", "foo"])
+        assert getattr(a, "as_json", False) is False
+
+
+class TestJson:
+    """`--json` emits a structured, facet-shaped card at every level (the
+    capability the kit/aggregator handlers already supported via
+    `render_interrogation(as_json=...)`, now exposed on the unified `dz info`)."""
+
+    def test_kit_json_emits_structured_card(self, tmp_path, capsys):
+        kit = _kit("demo")
+        eng = _engine(TargetResolution(kit, "kit"), kits=[kit])
+        args = types.SimpleNamespace(tool="demo", as_level=None, as_json=True)
+        assert _cmd_info(args, [], eng, kits=[kit],
+                         project_root=str(tmp_path)) == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["kind"] == "kit"
+        assert "state" in payload
+
+    def test_aggregator_json_emits_structured_card(self, capsys):
+        eng = _engine(None)
+        eng.resolve_target = (
+            lambda name, as_level=None, mutating=False:
+            TargetResolution(eng, "aggregator"))
+        args = types.SimpleNamespace(tool="dz", as_level=None, as_json=True)
+        assert _cmd_info(args, [1, 2, 3], eng, kits=[],
+                         project_root="/root") == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["kind"] == "aggregator"
 
 
 class TestRouting:
