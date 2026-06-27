@@ -4,6 +4,12 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.10] - 2026-06-27
+
+### Removed
+
+- `dz kit status` (both the active-kits summary and the per-kit `status <kit>` axis-state card). For now `dz` is **info-only**: `dz info <kit>` already shows the kit's identity card *and* its current per-axis state in one read, so a separate `status` verb alongside `info` is redundant and risks confusing users before the CLI has a wider audience. The reduction infrastructure is kept on purpose -- `dz info`'s "Current state:" section is the same verb-axis-registry projection a `status` slice would render -- so a simplified `status` view can be re-added cheaply if it proves wanted.
+
 ## [0.11.9] - 2026-06-27
 
 ### Added
@@ -3877,7 +3883,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.9...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.10...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

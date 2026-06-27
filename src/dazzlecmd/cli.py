@@ -24,7 +24,6 @@ from dazzlecmd.kit_verbs import (
 from dazzlecmd.loader import (
     discover_kits,
     discover_projects,
-    get_active_kits,
     resolve_entry_point,
 )
 from dazzlecmd_lib import colors as _colors
@@ -102,9 +101,6 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
         # Unified renderer: the lib handler passes engine (kit-list DWP).
         from dazzlecmd_lib.default_meta_commands import kit_list_handler
         return kit_list_handler(args, engine, projects, kits, project_root)
-    elif meta == "kit_status":
-        return _cmd_kit_status(
-            kits, engine=engine, args=args, project_root=project_root)
     elif meta == "kit_info":
         return render_kit_info(
             args.name, engine, project_root=project_root,
@@ -201,7 +197,13 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
 # of kit_verbs.GENERIC_VERBS -- it EXCLUDES focus/reset (those are mutating kit
 # operations, not level-agnostic inspects). Toggle verbs are recognised via
 # resolve_special instead, so they are not listed here.
-INSPECT_VERBS = frozenset({"info", "status", "list", "tree"})
+INSPECT_VERBS = frozenset({"info", "list", "tree"})
+# `status` (the per-axis state reduction) is intentionally NOT here for now --
+# info-only, to avoid status/info confusion before `dz` has a wider audience.
+# The reduction SHAPE is kept: `_kit_axis_state` + `interrogate(facets={"state"})`
+# still feed `dz info`'s "Current state:" section, so re-adding a `dz <level>
+# status` verb later is a thin slice (a parser + dispatch + a handler over that
+# infra), not a rebuild. See the Gate-E DWP (2026-06-27__10-02-13).
 
 
 def verb_plan(token):
@@ -411,22 +413,6 @@ def _cmd_info(args, projects, engine, kits=None, project_root=None):
 # verb-axis registry, so it belongs in the lib next to VERB_AXES.
 
 
-def render_kit_status_detail(kit_name, engine, project_root):
-    """One kit's dynamic per-axis state -- the focused `dz kit status <kit>` view
-    (just the state block). The same rows also appear as the 'Current state'
-    section of `dz info <kit>` / `dz kit info <kit>`. Distinct from `dz kit
-    management <kit>` (the COMPOSED position); this is the per-axis breakdown."""
-    rows, always = _kit_axis_state(kit_name, engine, project_root)
-    if rows is None:
-        print(f"No kit '{kit_name}' found.", file=sys.stderr)
-        return 1
-    tag = "  [always-active]" if always else ""
-    print(f"Kit '{kit_name}' -- per-axis state{tag}:\n")
-    _print_axis_rows(rows)
-    print("\nMove with `dz kit <axis> on|off <kit>` (or the special verb).")
-    return 0
-
-
 # _print_entity_card moved to dazzlecmd_lib.interrogation (SD-A), re-exported
 # at module top. It is the one card walker every level's table renders through.
 
@@ -449,41 +435,6 @@ def render_kit_info(kit_name, engine, project_root=None, as_json=False):
         return 1
     interro = _interrogate(match, engine, level="kit", project_root=project_root)
     return _render_interrogation(interro, as_json=as_json)
-
-
-def _cmd_kit_status(kits, engine=None, args=None, project_root=None):
-    """Show active kits summary -- or, with ``args.name``, one kit's per-axis state.
-
-    Virtual kits report 'alias(es)' instead of 'tool(s)' to reflect
-    the distinct nature of the count — and avoid the double-counting
-    confusion raised by R3b validation (virtual kit with 4 aliases
-    + canonical kit with 12 tools don't sum to 16 unique tools because
-    the 4 aliases REFER TO 4 of those canonical tools). See the
-    'alias discoverability gap' note in private/claude/notes/cli/.
-
-    The active set honors the user config (``active_kits`` / ``disabled_kits``)
-    so the summary matches ``dz kit list`` — without the engine's config,
-    ``get_active_kits`` falls back to its legacy all-active default.
-    """
-    if args is not None and getattr(args, "name", None):
-        return render_kit_status_detail(args.name, engine, project_root)
-    user_config = (
-        engine._get_user_config()
-        if engine is not None and hasattr(engine, "_get_user_config")
-        else None
-    )
-    active = get_active_kits(kits, user_config=user_config)
-    print(f"Active kits: {len(active)}")
-    for kit in active:
-        # Prefer _kit_name (set from filename in registry pointer) over kit["name"]
-        # (which may reflect an embedded sub-kit's own inner name, e.g. wtf's
-        # own core.kit.json declares name="core" but is imported as "wtf").
-        # See #45.
-        name = kit.kit_name or kit.name
-        tool_count = len(kit.tools or [])
-        label = "alias(es)" if kit.virtual else "tool(s)"
-        print(f"  {name}: {tool_count} {label}")
-    return 0
 
 
 def _cmd_version():

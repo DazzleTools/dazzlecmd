@@ -229,14 +229,9 @@ def _register_meta_commands(subparsers):
     )
     kit_list.set_defaults(_meta="kit_list")
 
-    kit_status = kit_sub.add_parser(
-        "status", help="Show active kits (or `status <kit>` for one kit's axis-state)")
-    kit_status.add_argument(
-        "name", nargs="?",
-        help="A kit to show its per-axis state for (omit for the active-kits summary)")
-    kit_status.set_defaults(_meta="kit_status")
-
-    # dz kit info <kit> -- the STATIC identity card (vs `status`'s dynamic axes).
+    # dz kit info <kit> -- the kit's identity card + current state (the per-kit
+    # inspect surface). The standalone `dz kit status` was removed for now
+    # (info-only) with the reduction infra kept so it can be re-added cheaply.
     kit_info = kit_sub.add_parser(
         "info", help="Show a kit's static identity card (`info <kit>`)")
     kit_info.add_argument("name", help="Kit to show the identity card for")

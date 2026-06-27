@@ -27,7 +27,6 @@ KEY_OPS = [
     ["dz", "tree"],
     ["dz", "mode", "status"],
     ["dz", "kit", "list"],
-    ["dz", "kit", "status"],
     ["dz", "find", "--help"],           # dispatch by short name
     ["dz", "core:safedel", "--help"],   # dispatch by FQCN
 ]

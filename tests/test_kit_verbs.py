@@ -207,53 +207,12 @@ class TestLibVerbAxisConsistency:
             FAVORITE_PAIR.warm, FAVORITE_PAIR.cold, FAVORITE_PAIR.coupling)
 
 
-class TestKitStatusDetail:
-    """`dz kit status <kit>` -- the registry-driven per-axis state (SD-3, B3 /
-    AC3-1/AC3-4). Iterates the lib VERB_AXES; a new lifecycle axis appears for
-    free; axes with no per-kit rung (favorite) are omitted."""
-
-    def test_status_takes_optional_kit_name(self):
-        parser = build_parser([])
-        assert getattr(parser.parse_args(["kit", "status"]), "name", "X") is None
-        assert parser.parse_args(["kit", "status", "foo"]).name == "foo"
-
-    def _engine(self, disabled=None, always=False):
-        import types
-        kit = types.SimpleNamespace(
-            kit_name="demo", name="demo", always_active=always)
-        cfg = {"disabled_kits": list(disabled or [])}
-        return types.SimpleNamespace(
-            kits=[kit], command="dz", _get_user_config=lambda: cfg)
-
-    def test_detail_renders_the_registry_axes(self, tmp_path, capsys):
-        from dazzlecmd.cli import render_kit_status_detail
-        rc = render_kit_status_detail("demo", self._engine(), str(tmp_path))
-        assert rc == 0
-        out = capsys.readouterr().out
-        for axis in ("activation", "loading", "membership"):
-            assert axis in out, axis
-        assert "active" in out and "loaded" in out and "member" in out
-        # projection/favorite carries no per-kit rung -> omitted
-        assert "favorite" not in out and "projection" not in out
-
-    def test_detail_shows_disabled_when_disabled(self, tmp_path, capsys):
-        from dazzlecmd.cli import render_kit_status_detail
-        render_kit_status_detail("demo", self._engine(disabled=["demo"]), str(tmp_path))
-        assert "disabled" in capsys.readouterr().out
-
-    def test_detail_unknown_kit_returns_1(self, tmp_path, capsys):
-        import types
-        from dazzlecmd.cli import render_kit_status_detail
-        engine = types.SimpleNamespace(
-            kits=[], command="dz", _get_user_config=lambda: {})
-        assert render_kit_status_detail("nope", engine, str(tmp_path)) == 1
-
-
 class TestKitInfoDetail:
-    """`dz kit info <kit>` -- the STATIC identity card (SD-3, B3 / AC3-2/AC3-5/AC3-6).
-    The counterpart to `kit status <kit>`: status = dynamic axes, info = the
-    identity/provenance field-set. Absent fields render `(none)` (never dropped);
-    `--json` mirrors the human card."""
+    """`dz kit info <kit>` -- the identity card + current state (SD-3, B3 /
+    AC3-2/AC3-5/AC3-6). `dz info <kit>` folds the dynamic axis state INTO the
+    identity/provenance field-set (the standalone `status` verb was removed --
+    info-only, reduction infra kept). Absent fields render `(none)` (never
+    dropped); `--json` mirrors the human card."""
 
     def test_info_requires_a_kit_name(self):
         parser = build_parser([])
@@ -261,7 +220,7 @@ class TestKitInfoDetail:
         assert parser.parse_args(["kit", "info", "foo"])._meta == "kit_info"
 
     def test_info_is_an_inspect_verb_in_help(self):
-        # info joins list/status under the `inspect:` group (GENERIC_VERBS).
+        # info joins list/focus/reset under the `inspect:` group (GENERIC_VERBS).
         assert "info" in {name for name, _ in GENERIC_VERBS}
         out = render_kit_help(_kit_parser(build_parser([])))
         assert "info" in out
@@ -290,7 +249,7 @@ class TestKitInfoDetail:
 
     def test_card_includes_the_current_state_section(self, tmp_path, capsys):
         # The user's 'fold state into info' decision: the identity card is
-        # followed by the per-axis state (the same rows `dz kit status` shows).
+        # followed by the per-axis state (the verb-axis registry projection).
         from dazzlecmd.cli import render_kit_info
         render_kit_info("demo", self._engine(), str(tmp_path))
         out = capsys.readouterr().out
