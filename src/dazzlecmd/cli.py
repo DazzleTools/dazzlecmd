@@ -95,7 +95,7 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
     elif meta == "info":
         return _cmd_info(
             args, projects, engine=engine, kits=kits, project_root=project_root)
-    elif meta in ("enable", "disable"):
+    elif meta in ("enable", "disable", "attach", "detach"):
         return _dispatch_bare_verb(
             meta, args, projects, kits, project_root, engine)
     elif meta == "kit_list":
@@ -346,18 +346,36 @@ def _disable_at_kit(res, args, projects, kits, project_root, engine):
     return _cmd_kit_disable(args, engine)
 
 
+def _attach_at_kit(res, args, projects, kits, project_root, engine):
+    """``attach`` at the kit level -- the loading warm pole (pointer -> loaded,
+    then enable). Wraps the existing kit handler verbatim."""
+    from dazzlecmd.commands.kit_membership import _cmd_kit_attach
+    args.name = _resolved_kit_name(res)
+    return _cmd_kit_attach(args, project_root, engine)
+
+
+def _detach_at_kit(res, args, projects, kits, project_root, engine):
+    """``detach`` at the kit level -- the loading cold pole (loaded -> pointer,
+    files kept; the implicit loading->activation cascade disables it)."""
+    from dazzlecmd.commands.kit_membership import _cmd_kit_detach
+    args.name = _resolved_kit_name(res)
+    return _cmd_kit_detach(args, project_root, engine)
+
+
 # The <level>_<verb> tag -> handler table -- SD-0's "tag->callable half". Each
 # handler has the uniform signature
 # ``(res, args, projects, kits, project_root, engine) -> int``. Adding a verb at
 # a level = adding an entry here (AC-D2); _dispatch_verb_target never changes.
-# B4-mutate registers enable/disable (activation) here; attach/detach (loading)
-# + B5 generated views follow.
+# B4-mutate registers enable/disable (activation) + attach/detach (loading);
+# B5 generated views follow.
 _VERB_LEVEL_HANDLERS = {
     "tool_info": _info_at_tool,
     "kit_info": _info_at_kit,
     "aggregator_info": _info_at_aggregator,
     "kit_enable": _enable_at_kit,
     "kit_disable": _disable_at_kit,
+    "kit_attach": _attach_at_kit,
+    "kit_detach": _detach_at_kit,
 }
 
 

@@ -199,7 +199,9 @@ def _register_meta_commands(subparsers):
     # level dispatcher resolves the target's level and fails loud at the wrong
     # level. `dz kit enable <name>` remains the explicit form.
     for _verb, _help in (("enable", "Enable a kit (activation warm pole)"),
-                         ("disable", "Disable a kit (activation cold pole)")):
+                         ("disable", "Disable a kit (activation cold pole)"),
+                         ("attach", "Attach a kit (loading warm pole)"),
+                         ("detach", "Detach a kit to a pointer (loading cold pole)")):
         _vp = subparsers.add_parser(_verb, help=_help)
         _vp.add_argument("target", help=f"Kit to {_verb}")
         _vp.add_argument(

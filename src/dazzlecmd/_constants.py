@@ -13,5 +13,5 @@ RESERVED_COMMANDS = {
     "build", "tree", "version", "enhance", "graduate", "mode",
     # B4-mutate: the bare-verb cross-level toggles (`dz enable <kit>` etc.).
     # Listed here so engine.run treats them as meta-commands, not tool names.
-    "enable", "disable",
+    "enable", "disable", "attach", "detach",
 }

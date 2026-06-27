@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.7] - 2026-06-26
+
+### Added
+
+- `dz attach <kit>` / `dz detach <kit>` -- the bare-verb cross-level form of `dz kit attach|detach` (the loading axis; companion to 0.11.6's `enable`/`disable`). Same generic verb-by-level dispatch + fail-loud resolution; the explicit `dz kit attach <name>` form still works.
+
+### Changed
+
+- `dazzlecmd-lib` dependency floor raised to `>=0.9.11` (which reserves `attach`/`detach`).
+
 ## [0.11.6] - 2026-06-26
 
 ### Added
@@ -3855,7 +3865,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.6...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.7...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

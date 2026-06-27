@@ -37,11 +37,21 @@ class TestParser:
         a = build_parser([]).parse_args(["enable", "wtf", "--as", "kit"])
         assert a.as_level == "kit"
 
+    def test_attach_detach_parse(self):
+        a = build_parser([]).parse_args(["attach", "wtf"])
+        assert a._meta == "attach" and a.target == "wtf"
+        b = build_parser([]).parse_args(["detach", "media"])
+        assert b._meta == "detach" and b.target == "media"
+
 
 class TestRegistration:
     def test_kit_enable_disable_handlers_registered(self):
         assert "kit_enable" in _VERB_LEVEL_HANDLERS
         assert "kit_disable" in _VERB_LEVEL_HANDLERS
+
+    def test_kit_attach_detach_handlers_registered(self):
+        assert "kit_attach" in _VERB_LEVEL_HANDLERS
+        assert "kit_detach" in _VERB_LEVEL_HANDLERS
 
 
 class TestDispatch:
@@ -68,6 +78,30 @@ class TestDispatch:
         args = types.SimpleNamespace(target="media", as_level=None)
         rc = _dispatch_bare_verb("disable", args, [], [], None, eng)
         assert rc == 0 and seen == ["media"]
+
+    def test_attach_routes_to_cmd_kit_attach(self, monkeypatch):
+        import dazzlecmd.commands.kit_membership as kmmod
+        seen = []
+        monkeypatch.setattr(
+            kmmod, "_cmd_kit_attach",
+            lambda args, project_root, engine: (seen.append(args.name), 0)[1])
+        res = types.SimpleNamespace(entity=_kit("wtf"), level="kit", notification=None)
+        eng = _engine(lambda name, mutating=False, as_level=None, **kw: res)
+        args = types.SimpleNamespace(target="wtf", as_level=None)
+        rc = _dispatch_bare_verb("attach", args, [], [], "/root", eng)
+        assert rc == 0 and seen == ["wtf"]
+
+    def test_detach_routes_to_cmd_kit_detach(self, monkeypatch):
+        import dazzlecmd.commands.kit_membership as kmmod
+        seen = []
+        monkeypatch.setattr(
+            kmmod, "_cmd_kit_detach",
+            lambda args, project_root, engine: (seen.append(args.name), 0)[1])
+        res = types.SimpleNamespace(entity=_kit("wtf"), level="kit", notification=None)
+        eng = _engine(lambda name, mutating=False, as_level=None, **kw: res)
+        args = types.SimpleNamespace(target="wtf", as_level=None)
+        rc = _dispatch_bare_verb("detach", args, [], [], "/root", eng)
+        assert rc == 0 and seen == ["wtf"]
 
     def test_ambiguous_target_fails_loud(self):
         # mutating=True + an ambiguous bare name -> AmbiguousLevelError -> rc 2.
