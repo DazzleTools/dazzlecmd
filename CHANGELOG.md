@@ -12,7 +12,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ### Changed
 
-- `dazzlecmd-lib` dependency floor raised to `>=0.9.6` (the de-collided engine library, in which the entity grouping capability is renamed `GroupingCapable` so the name `Groupable` denotes only the bedrock value). No user-visible change.
+- `dz info <tool>` now shows a `Current state:` section (the tool's mode), matching the kit and aggregator cards -- `info` is the full read (identity + state) at every level. (via dazzlecmd-lib 0.9.8)
+- `dazzlecmd-lib` dependency floor raised to `>=0.9.8` (the de-collided engine library where the entity grouping capability is `GroupingCapable` so `Groupable` denotes only the bedrock value; plus the tool-level read surface and the `info` state section).
 
 ## [0.11.5] - 2026-06-25
 

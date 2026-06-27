@@ -12,3 +12,7 @@ Runtime:     python
 Script:      git.py
 Category:    dev-tools
 Tags:        git, repo, submodules, worktrees, composition, inspect
+
+Current state:
+
+  Mode: EMBEDDED

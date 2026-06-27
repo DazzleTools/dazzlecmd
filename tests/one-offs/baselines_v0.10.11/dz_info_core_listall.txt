@@ -13,3 +13,7 @@ Script:      listall.py
 Category:    file-tools
 Tags:        list, ls, files, directories, sort, collect, tree, clipboard
 Python deps: pyperclip
+
+Current state:
+
+  Mode: PUBLISH (submodule)

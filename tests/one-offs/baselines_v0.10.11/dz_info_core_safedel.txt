@@ -12,3 +12,7 @@ Runtime:     python
 Script:      safedel.py
 Category:    file-tools
 Tags:        delete, trash, safe, symlink, junction, hardlink, recycle, recovery, metadata
+
+Current state:
+
+  Mode: EMBEDDED
