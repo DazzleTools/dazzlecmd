@@ -28,7 +28,7 @@ def _kit(name="demo"):
 def _engine(res, *, kits=()):
     """A duck-typed engine whose resolve_target returns ``res``."""
     return types.SimpleNamespace(
-        resolve_target=lambda name, as_level=None, mutating=False: res,
+        resolve_target=lambda name, as_level=None, mutating=False, foreground=None: res,
         command="dz", name="dazzlecmd",
         description="A demo aggregator.", version_info=("1.2.3", "1.2.3-full"),
         kits=list(kits), _get_user_config=lambda: {})
@@ -70,7 +70,7 @@ class TestJson:
     def test_aggregator_json_emits_structured_card(self, capsys):
         eng = _engine(None)
         eng.resolve_target = (
-            lambda name, as_level=None, mutating=False:
+            lambda name, as_level=None, mutating=False, foreground=None:
             TargetResolution(eng, "aggregator"))
         args = types.SimpleNamespace(tool="dz", as_level=None, as_json=True)
         assert _cmd_info(args, [1, 2, 3], eng, kits=[],
@@ -93,7 +93,7 @@ class TestRouting:
     def test_aggregator_level_renders_the_aggregator_card(self, capsys):
         eng = _engine(None)            # patched below to point at itself
         eng.resolve_target = (
-            lambda name, as_level=None, mutating=False:
+            lambda name, as_level=None, mutating=False, foreground=None:
             TargetResolution(eng, "aggregator"))
         args = types.SimpleNamespace(tool="dz", as_level=None)
         assert _cmd_info(args, [1, 2, 3], eng, kits=[], project_root="/root") == 0

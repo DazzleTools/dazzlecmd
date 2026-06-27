@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.11] - 2026-06-27
+
+### Added
+
+- `dz meta use <level>` (alias `dz use <level>`) sets a re-choosable **foreground level** (`tool` / `kit` / `aggregator`), persisted in the user config; `dz meta` reports the current foreground, `dz meta reset` returns it to the default (`tool`). The foreground is a gentle resolver **tiebreak**: on a bare *ambiguous* read (a name matching more than one level) it picks the foreground level when that level is a candidate -- but an *unambiguous* name still resolves to its one level, and an ambiguous *mutating* verb still fails loud, so foregrounding never silently acts on the wrong entity. (The first consumer of the user-configuration model, #99.)
+
+### Changed
+
+- `dazzlecmd-lib` dependency floor raised to `>=0.9.15` (`resolve_target` gains the `foreground` tiebreak; `meta`/`use` reserved as meta-commands).
+
 ## [0.11.10] - 2026-06-27
 
 ### Removed
@@ -3883,7 +3893,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.10...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.11...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

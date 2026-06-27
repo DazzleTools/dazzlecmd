@@ -573,3 +573,29 @@ def _register_meta_commands(subparsers):
     # dz version (alternate to --version)
     version_parser = subparsers.add_parser("version", help="Show version info")
     version_parser.set_defaults(_meta="version")
+
+    # dz meta -- the foreground/context namespace (SD-B). `meta use <level>`
+    # sets the re-choosable foreground; the layered config model is epic #99.
+    meta_parser = subparsers.add_parser(
+        "meta", help="Context: `meta use <level>` sets the foreground level")
+    meta_sub = meta_parser.add_subparsers(dest="meta_command")
+    meta_use = meta_sub.add_parser(
+        "use", help="Set the foreground level (omit <level> to show it)")
+    meta_use.add_argument(
+        "level", nargs="?", default=None,
+        choices=["tool", "kit", "aggregator"],
+        help="The level to foreground (omit to report the current one)")
+    meta_use.set_defaults(_meta="meta_use")
+    meta_reset = meta_sub.add_parser(
+        "reset", help="Reset the foreground level back to the default (tool)")
+    meta_reset.set_defaults(_meta="meta_reset")
+    meta_parser.set_defaults(_meta="meta")
+
+    # dz use <level> -- top-level alias of `dz meta use`
+    use_parser = subparsers.add_parser(
+        "use", help="Set the foreground level (alias of `dz meta use`)")
+    use_parser.add_argument(
+        "level", nargs="?", default=None,
+        choices=["tool", "kit", "aggregator"],
+        help="The level to foreground (omit to report the current one)")
+    use_parser.set_defaults(_meta="meta_use")

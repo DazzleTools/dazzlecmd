@@ -97,6 +97,12 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
     elif meta in ("enable", "disable", "attach", "detach"):
         return _dispatch_bare_verb(
             meta, args, projects, kits, project_root, engine)
+    elif meta == "meta":
+        return _cmd_meta(engine)
+    elif meta == "meta_use":
+        return _cmd_meta_use(args, engine)
+    elif meta == "meta_reset":
+        return _cmd_meta_reset(engine)
     elif meta == "kit_list":
         # Unified renderer: the lib handler passes engine (kit-list DWP).
         from dazzlecmd_lib.default_meta_commands import kit_list_handler
@@ -247,7 +253,8 @@ def _dispatch_verb_target(token, target, args, projects, kits,
     kwargs = {} if applies_at is None else {"applies_at": frozenset(applies_at)}
     res = engine.resolve_target(
         target, mutating=mutating,
-        as_level=getattr(args, "as_level", None), **kwargs)
+        as_level=getattr(args, "as_level", None),
+        foreground=foreground_level(engine), **kwargs)
     if res is None:
         return None
     if res.notification:
@@ -453,6 +460,12 @@ from dazzlecmd.commands.mode import (  # noqa: F401,E402
     _cmd_mode_status,
     _cmd_mode_switch,
     _cmd_mode_restore,
+)
+from dazzlecmd.commands.meta import (  # noqa: F401,E402
+    foreground_level,
+    _cmd_meta,
+    _cmd_meta_use,
+    _cmd_meta_reset,
 )
 from dazzlecmd.commands.setup import _cmd_setup  # noqa: F401,E402
 
