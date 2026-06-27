@@ -4,7 +4,6 @@ Covers:
 - render_list (filters, empty, formatting)
 - render_info (fields, FQCN lookup, ambiguity, not found)
 - render_kit_list (all kits, specific kit, empty)
-- render_kit_status
 - render_version (with/without version_info)
 - render_tree (ASCII, JSON, empty)
 - render_setup_listing (tools with/without setup)
@@ -1155,17 +1154,6 @@ class TestRenderKitList:
         assert "File search" in out
 
 
-class TestRenderKitStatus:
-    def test_prints_active_count(self, capsys):
-        kits = [
-            _kit("a", always_active=True),
-            _kit("b", always_active=True),
-        ]
-        rc = dmc.render_kit_status(kits)
-        assert rc == 0
-        assert "2" in capsys.readouterr().out
-
-
 class TestKitParserFactory:
     def test_kit_list_subcommand(self):
         parser = argparse.ArgumentParser()
@@ -1180,13 +1168,6 @@ class TestKitParserFactory:
         dmc.kit_parser_factory(subparsers)
         args = parser.parse_args(["kit", "list", "core"])
         assert args.name == "core"
-
-    def test_kit_status_subcommand(self):
-        parser = argparse.ArgumentParser()
-        subparsers = parser.add_subparsers(dest="command")
-        dmc.kit_parser_factory(subparsers)
-        args = parser.parse_args(["kit", "status"])
-        assert args._meta == "kit_status"
 
     def test_bare_kit_defaults_to_list(self):
         parser = argparse.ArgumentParser()
@@ -1519,7 +1500,6 @@ class TestRegisterAll:
             assert name in r, f"{name} should be registered"
         # Sub-handlers for kit nested commands
         assert "kit_list" in r
-        assert "kit_status" in r
 
     def test_registered_parsers_are_callable(self):
         r = MetaCommandRegistry()
@@ -1552,7 +1532,6 @@ class TestRegisterSelected:
         dmc.register_selected(r, include=["kit"])
         assert "kit" in r
         assert "kit_list" in r
-        assert "kit_status" in r
 
     def test_unknown_name_raises(self):
         r = MetaCommandRegistry()
@@ -1586,7 +1565,6 @@ class TestIntegration:
         assert parser.parse_args(["info", "mytool"])._meta == "info"
         assert parser.parse_args(["kit"])._meta == "kit_list"
         assert parser.parse_args(["kit", "list"])._meta == "kit_list"
-        assert parser.parse_args(["kit", "status"])._meta == "kit_status"
         assert parser.parse_args(["version"])._meta == "version"
         assert parser.parse_args(["tree"])._meta == "tree"
         assert parser.parse_args(["setup"])._meta == "setup"

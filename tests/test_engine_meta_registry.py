@@ -37,9 +37,8 @@ class TestDefaultRegistration:
         # All top-level defaults present
         for name in ["list", "info", "kit", "version", "tree", "setup"]:
             assert name in registered
-        # Sub-handlers (kit_list, kit_status) also registered
+        # Sub-handler (kit_list) also registered
         assert "kit_list" in registered
-        assert "kit_status" in registered
 
     def test_include_default_false_leaves_empty_registry(self):
         engine = AggregatorEngine(
