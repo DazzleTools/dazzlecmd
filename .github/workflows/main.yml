@@ -62,14 +62,15 @@ jobs:
     - name: Lint with flake8 (syntax errors only)
       run: |
         pip install flake8
-        # Exclude vendored bundled deps under */_lib/ (e.g. safedel's preservelib
-        # and unctools) -- they are third-party code, not first-party dazzlecmd
-        # source, and the #58 move relocated them under src/dazzlecmd/.
-        flake8 src/dazzlecmd/ --count --select=E9,F63,F7,F82 --show-source --statistics --extend-exclude=_lib
+        # Exclude vendored code: bundled tool deps under */_lib/ (e.g. safedel's
+        # preservelib/unctools, relocated under src/dazzlecmd/ by #58) AND our
+        # in-development vendored CLI libs under _vendor/ (help_lib, log_lib --
+        # destined for dazzle_helplib / dazzle_loglib). Vendored = not style-gated.
+        flake8 src/dazzlecmd/ --count --select=E9,F63,F7,F82 --show-source --statistics --extend-exclude=_lib,_vendor
 
     - name: Lint with flake8 (advisory)
       run: |
-        flake8 src/dazzlecmd/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics --extend-exclude=_lib
+        flake8 src/dazzlecmd/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics --extend-exclude=_lib,_vendor
       continue-on-error: true
 
   build:
