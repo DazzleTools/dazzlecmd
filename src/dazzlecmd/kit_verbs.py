@@ -209,8 +209,10 @@ def build_lifecycle_axis_groups(kit_sub):
 _ARROW = "<->"
 _HELP_COL = 17   # the column a verb's description starts at
 
-# Visibility verbs in presence order, pulled UP into `dz kit -h` from the nested
-# `dz kit visibility` sub-group (status first -- the generic inspect verb).
+# Visibility verbs in presence order, listed in `dz kit -h` for discovery. They are
+# addressed as `dz kit visibility <verb>` (a nested sub-group), NOT bare `dz kit
+# <verb>` -- the header makes that explicit so `status` doesn't read like the
+# removed `dz kit status`.
 _VISIBILITY_ORDER = (
     "status", "silence", "unsilence", "hide", "unhide", "shadow", "unshadow",
 )
@@ -274,8 +276,13 @@ def render_kit_help(parser) -> str:
             out.append(_hrow(6, verb, top.get(verb, "")))
         out.append("")
 
+    # Visibility verbs are addressed as `dz kit visibility <verb>` (a nested
+    # sub-group), NOT bare `dz kit <verb>` -- the header says so explicitly, so the
+    # listed `status` reads as `dz kit visibility status`, not the removed
+    # `dz kit status`.
     out.append(_hrow(2, "visibility:",
-                     "silence/hide/shadow + inverses -- see `dz kit visibility -h`"))
+                     "a tool's presence axis -- `dz kit <verb>` or "
+                     "`dz kit visibility <verb>`:"))
     for name in _VISIBILITY_ORDER:
         if name in vis:
             out.append(_hrow(4, name, vis[name]))

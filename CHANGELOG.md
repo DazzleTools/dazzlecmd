@@ -4,6 +4,17 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.13] - 2026-06-28
+
+### Added
+
+- The **visibility verbs are now hoisted** to bare `dz kit <verb>`: `dz kit status <fqcn>`, `dz kit silence|unsilence|hide|unhide|shadow|unshadow <fqcn>` -- the same alias mode the lifecycle verbs already have (`dz kit attach`). `dz kit <verb>` and `dz kit visibility <verb>` parse identically (one shared spec -> the same handler), so the `visibility` qualifier is now optional when the verb is unambiguous.
+
+### Changed
+
+- **`dz kit status <fqcn>` reformatted as the per-item transpose of `dz kit visibility`**: it now lists the tool's state on every presence rung (`silenced`/`hidden`/`shadowed`) with the same wording the global view uses, instead of the old "current level + less/more visible" navigator. The default rung reads **`fully visible`**. A constitutional tool shows `shadowed  n/a` (C3-blocked). The relationship is now visible on screen: `visibility` lists tools by rung; `status` lists the rungs for one tool.
+- `dz kit -h` no longer renders the visibility sub-verbs as if they were bare `dz kit` verbs (the header now reads `dz kit <verb>` or `dz kit visibility <verb>`).
+
 ## [0.11.12] - 2026-06-27
 
 ### Added
@@ -3903,7 +3914,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.12...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.13...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

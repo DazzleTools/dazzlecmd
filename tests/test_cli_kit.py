@@ -929,31 +929,36 @@ class TestKitVisibilityList:
 
 
 class TestKitVisibilityStatus:
-    """The KIT_PRESENCE_SPACE navigator: current level + less/more visible moves
-    (read from the typed rungs)."""
+    """`dz kit status <fqcn>`: the per-item TRANSPOSE of the global
+    `dz kit visibility` view -- one tool's state on each presence rung."""
 
     def test_status_visible(self, tmp_path, monkeypatch, capsys):
         engine = _engine(tmp_path, monkeypatch)
         _cmd_kit_visibility_status(_Args(fqcn="x:y:tool"), engine)
         out = capsys.readouterr().out
-        assert "presence: visible" in out
-        assert "less visible -> dz kit visibility silence x:y:tool" in out
-        assert "more visible -> (already fully visible)" in out  # warm pole
+        assert "x:y:tool: fully visible" in out           # the tool's level
+        for rung in ("silenced", "hidden", "shadowed"):   # the same rungs as global
+            assert rung in out
+        assert "off" in out                               # not at any suppressed rung
+        assert "dz kit visibility" in out                 # points to the global view
 
-    def test_status_after_hide_shows_neighbors(self, tmp_path, monkeypatch, capsys):
+    def test_status_after_hide_marks_the_hidden_rung(self, tmp_path, monkeypatch, capsys):
         engine = _engine(tmp_path, monkeypatch)
         _vis(engine, "x:y:tool", "hidden", "suppress")
         capsys.readouterr()
         _cmd_kit_visibility_status(_Args(fqcn="x:y:tool"), engine)
         out = capsys.readouterr().out
-        assert "presence: hidden" in out
-        assert "shadow x:y:tool" in out        # less visible
-        assert "unhide x:y:tool" in out        # more visible
+        assert "x:y:tool: hidden" in out
+        hidden_line = next(ln for ln in out.splitlines()
+                           if ln.strip().startswith("hidden "))
+        assert "ON" in hidden_line                        # the hidden rung is active
+        silenced_line = next(ln for ln in out.splitlines()
+                             if ln.strip().startswith("silenced"))
+        assert "off" in silenced_line                     # the others are not
 
     def test_status_is_c3_aware_for_constitutional(self, tmp_path, monkeypatch, capsys):
-        """The navigator never recommends a move the surface refuses: a
-        constitutional tool at `hidden` annotates that shadow is C3-blocked
-        instead of suggesting `dz kit visibility shadow ...` (which would fail)."""
+        """A constitutional tool can never be shadowed (C3): the shadowed rung
+        reads `n/a`, not a value implying the move could apply."""
         engine = _engine(tmp_path, monkeypatch)
         engine.resolve_command = (
             lambda name: _resolved("core:safedel")
@@ -962,10 +967,11 @@ class TestKitVisibilityStatus:
         capsys.readouterr()
         _cmd_kit_visibility_status(_Args(fqcn="safedel"), engine)
         out = capsys.readouterr().out
-        assert "presence: hidden" in out
-        assert "refused by C3" in out                  # annotated...
-        assert "dz kit visibility shadow" not in out   # ...NOT recommended as a command
-        assert "unhide core:safedel" in out            # more visible still offered
+        assert "core:safedel: hidden" in out
+        shadowed_line = next(ln for ln in out.splitlines()
+                             if ln.strip().startswith("shadowed"))
+        assert "n/a" in shadowed_line                  # the C3-blocked rung
+        assert "dz kit visibility shadow" not in out   # not recommended as a command
 
 
 # ---------------------------------------------------------------------------

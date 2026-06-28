@@ -202,51 +202,52 @@ def _cmd_kit_visibility_list(engine):
 
 
 def _cmd_kit_visibility_status(args, engine):
-    """Show a tool's current presence level + both neighbour moves -- the
-    KIT_PRESENCE_SPACE navigator. Reads the TYPED rungs (no verb tables): the
-    current channels via each rung's ``present``, the moves via the neighbour
-    rungs' ``verb``/``unverb``. Labels are bound to this surface's frame
-    ("visibility" reads warm = visible), so it says less/more visible -- the
-    space's colder/warmer is framing-neutral, the surface names the direction."""
+    """Show one tool's presence across EVERY visibility rung -- the per-item
+    TRANSPOSE of the global `dz kit visibility` view (same rungs, same wording).
+    `status` is the narrow SLICE of the visibility axis: the global view lists
+    tools BY rung; this lists the rungs FOR one tool. Reads the TYPED rungs (each
+    rung's ``present``), C3-aware via ``forbids_constitutional``."""
     if engine is None:
         print("Error: engine unavailable", file=sys.stderr)
         return 1
     from dazzlecmd_lib.contexts import KIT_PRESENCE_SPACE, level_for_channels
 
     # KIT_PRESENCE_SPACE is the multi-axis PRODUCT (visibility x activation); read
-    # its ALIGNED ``axes["visibility"]`` sub-space for the navigator (the product
-    # itself refuses cross-axis nav, so read the sub-space -- scale-safety).
+    # its ALIGNED ``axes["visibility"]`` sub-space (the product refuses cross-axis
+    # nav -- scale-safety).
     vis = KIT_PRESENCE_SPACE.axes["visibility"]
     canonical, project = _resolve_visibility_target(engine, args.fqcn)
     config = engine._get_user_config()
+    constitutional = _is_constitutional_entity(project)
 
-    # Current channels, read THROUGH the typed rungs (no hardcoded config keys).
+    # Rung descriptions mirror the global `dz kit visibility` view (one wording).
+    descriptions = {
+        "silenced": "rerooting hint off",
+        "hidden": "omitted from listings, still dispatchable",
+        "shadowed": "removed from dispatch, short name freed",
+    }
+
     suppressed = set()
+    marks = {}
     for lvl in ("silenced", "hidden", "shadowed"):
         rung = vis.payload_for("visibility", lvl)
         if rung is not None and rung.present(config, canonical):
             suppressed.add(rung.channel)
+            marks[lvl] = "ON "
+        elif rung is not None and rung.forbids_constitutional and constitutional:
+            marks[lvl] = "n/a"  # C3: a constitutional tool can never reach this rung
+        else:
+            marks[lvl] = "off"
     level = level_for_channels(suppressed)  # visible | silenced | hidden | shadowed
 
-    print(f"{canonical}")
-    print(f"  presence: {level}")
-    colder = vis.colder_than("visibility", level)
-    warmer = vis.warmer_than("visibility", level)
-    if colder:
-        reach = vis.payload_for("visibility", colder[1])
-        # C3-aware: don't recommend a move the surface will refuse. A
-        # constitutional tool may be hidden but never shadowed, so at `hidden`
-        # the colder rung is unreachable -- say so instead of suggesting it.
-        if reach.forbids_constitutional and _is_constitutional_entity(project):
-            print(f"  less visible -> (none: {canonical} is constitutional -- "
-                  f"'{reach.verb}' refused by C3; {level} is the max veil)")
-        else:
-            print(f"  less visible -> dz kit visibility {reach.verb} {canonical}")
-    else:
-        print("  less visible -> (already least visible: shadowed)")
-    if warmer:
-        leave = vis.payload_for("visibility", level)
-        print(f"  more visible -> dz kit visibility {leave.unverb} {canonical}")
-    else:
-        print("  more visible -> (already fully visible)")
+    # "visible" is the default/no-suppression rung -- say "fully visible" so it
+    # reads as "nothing is veiled" (silenced/hidden are still *visible*, just with
+    # a layer suppressed; they keep their rung name).
+    shown = "fully visible" if level == "visible" else level
+    print(f"{canonical}: {shown}")
+    for lvl in ("silenced", "hidden", "shadowed"):
+        print(f"  {lvl:<9} {marks[lvl]}  ({descriptions[lvl]})")
+    print()
+    print(f"Across all tools: 'dz kit visibility'. "
+          f"Adjust with 'dz kit silence|hide|shadow {canonical}'.")
     return 0

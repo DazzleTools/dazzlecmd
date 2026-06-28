@@ -65,8 +65,10 @@ class TestKitVerbRegistry:
             assert header in out
         for p in LIFECYCLE_PAIRS:                            # axis + its verbs nested
             assert p.axis in out and p.warm in out and p.cold in out
-        assert "silence" in out and "unshadow" in out       # visibility pulled up
-        assert "dz kit visibility -h" in out
+        # visibility verbs ARE listed (discovery) but addressed as a sub-group
+        # (`dz kit visibility <verb>`), not bare `dz kit <verb>`.
+        assert "silence" in out and "unshadow" in out
+        assert "dz kit visibility" in out
 
     def test_registry_verbs_are_real_subcommands(self):
         # AC4: the declared registry is consistent with the actual CLI grammar.
@@ -81,6 +83,23 @@ class TestKitVerbRegistry:
         for p in VISIBILITY_PAIRS:
             assert p.warm in vis_cmds and p.cold in vis_cmds, \
                 f"visibility pair {p.warm}/{p.cold} not under `dz kit visibility`"
+
+    def test_visibility_verbs_hoist_to_flat_kit_aliases(self):
+        # Vertical-slice contract: `dz kit <verb>` parses IDENTICALLY to
+        # `dz kit visibility <verb>` for every visibility verb -- same _meta +
+        # level/direction, so they route to the SAME handler (the alias mode for
+        # the visibility axis, as the lifecycle axis already has). This is the test
+        # that would have caught `dz kit status media` erroring.
+        parser = build_parser([])
+        for verb in ("status", "silence", "unsilence", "hide", "unhide",
+                     "shadow", "unshadow"):
+            flat = parser.parse_args(["kit", verb, "media"])
+            nested = parser.parse_args(["kit", "visibility", verb, "media"])
+            assert flat._meta == nested._meta, \
+                f"{verb}: flat {flat._meta!r} != nested {nested._meta!r}"
+            assert getattr(flat, "level", None) == getattr(nested, "level", None)
+            assert getattr(flat, "direction", None) == getattr(nested, "direction", None)
+            assert flat.fqcn == nested.fqcn == "media"
 
     def test_kit_help_is_wired_and_dedups_the_positional_restatement(self):
         # `dz kit -h` reaches the custom render AND argparse's default positional

@@ -18,6 +18,49 @@ from dazzlecmd.kit_verbs import (
 )
 from dazzlecmd_lib.default_meta_commands import MIN_DESC_WIDTH, TERM_SIZE_FALLBACK
 
+
+# Visibility verbs: ONE spec drives BOTH the nested `dz kit visibility <verb>` form
+# AND the hoisted flat `dz kit <verb>` alias -- both set the SAME `_meta` (+ level/
+# direction), so they route to the SAME handler and cannot drift. This is the alias
+# mode for the visibility axis (the lifecycle axis already hoists via VERB_SPEC).
+# `status` is the inspect verb (no toggle); the six toggles take `--cascade`.
+# (Deriving (level, direction) from VISIBILITY_CONTINUUM is the #32 graded-axis fold.)
+_VIS_SPEC = {
+    "status":    ("Show a tool's presence level + the less/more visible move",
+                  dict(_meta="kit_visibility_status")),
+    "silence":   ("Suppress the rerooting hint for a tool (presence: silenced)",
+                  dict(_meta="kit_visibility_set", level="silenced", direction="suppress")),
+    "unsilence": ("Restore the rerooting hint",
+                  dict(_meta="kit_visibility_set", level="silenced", direction="restore")),
+    "hide":      ("Omit a tool from listings -- still dispatchable (presence: hidden)",
+                  dict(_meta="kit_visibility_set", level="hidden", direction="suppress")),
+    "unhide":    ("Restore a hidden tool to listings",
+                  dict(_meta="kit_visibility_set", level="hidden", direction="restore")),
+    "shadow":    ("Remove a tool from dispatch + free its short name (presence: shadowed)",
+                  dict(_meta="kit_visibility_set", level="shadowed", direction="suppress")),
+    "unshadow":  ("Restore a shadowed tool to dispatch",
+                  dict(_meta="kit_visibility_set", level="shadowed", direction="restore")),
+}
+_VIS_CASCADE = frozenset(
+    {"silence", "unsilence", "hide", "unhide", "shadow", "unshadow"})
+
+
+def _add_visibility_verb(sub, verb):
+    """Build one visibility verb parser (nested under `dz kit visibility`, OR hoisted
+    flat as `dz kit <verb>`) from the one `_VIS_SPEC`. Both call sites pass the same
+    spec, so `dz kit status <fqcn>` == `dz kit visibility status <fqcn>`."""
+    help_text, defaults = _VIS_SPEC[verb]
+    p = sub.add_parser(verb, help=help_text)
+    p.add_argument("fqcn", help="FQCN (or short name)")
+    p.set_defaults(**defaults)
+    if verb in _VIS_CASCADE:
+        p.add_argument(
+            "--cascade", nargs="?", const="@neutral", default=None, metavar="RANGE",
+            help="also apply adjacent presence rungs (bare=to-neutral; "
+                 "=lo,hi window e.g. =-1,2; =up|down[:N] toward a pole / N steps)")
+    return p
+
+
 def build_parser(projects, engine=None):
     """Build argparse parser with dynamic subparsers for discovered tools."""
     # Build categorized epilog for help display
@@ -302,60 +345,12 @@ def _register_meta_commands(subparsers):
     )
     vis_sub = kit_visibility.add_subparsers(dest="visibility_command")
 
-    # `status` first -- the generic inspect verb (not a domain toggle). The
-    # blank-line separator + the wider generic-first grouping land with the
-    # v0.9.37 kit -h help formatter.
-    vis_status = vis_sub.add_parser(
-        "status",
-        help="Show a tool's presence level + the less/more visible move")
-    vis_status.add_argument("fqcn", help="FQCN to inspect")
-    vis_status.set_defaults(_meta="kit_visibility_status")
-
-    # The six toggles all route to ONE handler (_cmd_kit_visibility_set); each
-    # carries its (level, direction) -- the per-verb knowledge is the typed rung
-    # in KIT_PRESENCE_SPACE, not here.
-    vis_silence = vis_sub.add_parser(
-        "silence", help="Suppress the rerooting hint for a tool (presence: silenced)")
-    vis_silence.add_argument("fqcn", help="FQCN (or short name) to silence")
-    vis_silence.set_defaults(_meta="kit_visibility_set", level="silenced", direction="suppress")
-
-    vis_unsilence = vis_sub.add_parser(
-        "unsilence", help="Restore the rerooting hint")
-    vis_unsilence.add_argument("fqcn", help="FQCN (or short name) to unsilence")
-    vis_unsilence.set_defaults(_meta="kit_visibility_set", level="silenced", direction="restore")
-
-    vis_hide = vis_sub.add_parser(
-        "hide", help="Omit a tool from listings -- still dispatchable (presence: hidden)")
-    vis_hide.add_argument("fqcn", help="FQCN (or short name) to hide")
-    vis_hide.set_defaults(_meta="kit_visibility_set", level="hidden", direction="suppress")
-
-    vis_unhide = vis_sub.add_parser(
-        "unhide", help="Restore a hidden tool to listings")
-    vis_unhide.add_argument("fqcn", help="FQCN (or short name) to unhide")
-    vis_unhide.set_defaults(_meta="kit_visibility_set", level="hidden", direction="restore")
-
-    vis_shadow = vis_sub.add_parser(
-        "shadow",
-        help="Remove a tool from dispatch + free its short name (presence: shadowed)")
-    vis_shadow.add_argument("fqcn", help="FQCN (or short name) to shadow")
-    vis_shadow.set_defaults(_meta="kit_visibility_set", level="shadowed", direction="suppress")
-
-    vis_unshadow = vis_sub.add_parser(
-        "unshadow", help="Restore a shadowed tool to dispatch")
-    vis_unshadow.add_argument("fqcn", help="FQCN (or short name) to unshadow")
-    vis_unshadow.set_defaults(_meta="kit_visibility_set", level="shadowed", direction="restore")
-
-    # `--cascade` (B2c) -- the general ContinuumSpace apply-mode: apply a SLICE of
-    # adjacent presence rungs in one move instead of just this one. Bare = to
-    # neutral (subsume the weaker rungs); `=lo,hi` = a signed offset window
-    # (+ = warmer/more visible, - = colder); `=up|down[:N]` = toward a pole / N
-    # steps. Default OFF = the single-rung write (unchanged). Use the `=` form for
-    # values so a leading `-` isn't read as a flag (e.g. `--cascade=-1,2`).
-    for _vp in (vis_silence, vis_unsilence, vis_hide, vis_unhide, vis_shadow, vis_unshadow):
-        _vp.add_argument(
-            "--cascade", nargs="?", const="@neutral", default=None, metavar="RANGE",
-            help="also apply adjacent presence rungs (bare=to-neutral; "
-                 "=lo,hi window e.g. =-1,2; =up|down[:N] toward a pole / N steps)")
+    # `status` first (the generic inspect verb), then the six toggles -- ALL built
+    # from the one `_VIS_SPEC`, the same spec the hoisted flat aliases use below.
+    # `--cascade` (B2c) on the toggles = the ContinuumSpace apply-mode: apply a
+    # SLICE of adjacent presence rungs in one move instead of just this one.
+    for _verb in _VIS_SPEC:
+        _add_visibility_verb(vis_sub, _verb)
 
     kit_visibility.set_defaults(_meta="kit_visibility")
 
@@ -363,6 +358,12 @@ def _register_meta_commands(subparsers):
     add_flat_verb(kit_sub, "remove")
     add_flat_verb(kit_sub, "detach")
     add_flat_verb(kit_sub, "attach")
+
+    # Hoist the visibility verbs to flat `dz kit <verb>` aliases -- the alias mode
+    # for the visibility axis (as the lifecycle axis already has): `dz kit status
+    # <fqcn>` == `dz kit visibility status <fqcn>`. Same `_VIS_SPEC` -> same handler.
+    for _verb in _VIS_SPEC:
+        _add_visibility_verb(kit_sub, _verb)
 
     # `dz kit management [<kit>]` -- the lifecycle STATE view (like `dz kit
     # visibility`): activation + loading per kit. Each axis group also shows its
