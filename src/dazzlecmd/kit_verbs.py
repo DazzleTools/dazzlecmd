@@ -20,8 +20,10 @@ from dataclasses import dataclass
 
 from dazzlecmd_lib.verb_axis import KIT as _KIT, VERB_AXES as _VERB_AXES
 from dazzlecmd._vendor.cli_lib import (
-    FLAT, NESTED, Section, render_sections,
+    FLAT, NESTED, Section, render_sections, render_tip_footer,
 )
+from dazzlecmd._vendor.help_lib.core import HelpContent
+from dazzlecmd._vendor.help_lib.detail import DETAIL_CONTINUUM
 
 
 # Cascade coupling -- declared per axis (the slice-4 Gauss-Jordan property):
@@ -99,6 +101,25 @@ GENERIC_VERBS = (
 
 # Every pair (for iteration / the generalized facility later).
 ALL_PAIRS = LIFECYCLE_PAIRS + (FAVORITE_PAIR,) + VISIBILITY_PAIRS
+
+
+# Continuum-scoped help tips (D-4) -- rendered as the `dz kit -h` TIP footer via
+# cli_lib.render_tip_footer (cli_lib COMPOSING help_lib). Each tip declares detail
+# `contexts`; `items_for_rank` shows it at-or-above its coldest rung. STANDARD tips
+# show by default; a `full`-only tip waits for a higher detail coordinate (D-4b).
+KIT_TIPS = (
+    HelpContent(
+        id="kit.onoff",
+        command="dz kit loading on",
+        description="every axis takes the universal poles -- `on`==warm, `off`==cold",
+        contexts={"standard"}),
+    HelpContent(
+        id="kit.fqcn",
+        command="dz kit detach core:media",
+        description="qualify a kit by FQCN when a short name spans levels",
+        contexts={"full"}),
+)
+_STANDARD_DETAIL = DETAIL_CONTINUUM.rank("standard")  # 0 -- the help's default rung
 
 
 # ---------------------------------------------------------------------------
@@ -298,4 +319,11 @@ def render_kit_help(parser) -> str:
     out.append(render_sections(sections, label_col=_HELP_COL))
     out.append("")
     out.append("Run 'dz kit <verb> --help' for a specific verb.")
+
+    # D-4: the continuum-scoped TIP footer (cli_lib composing help_lib). At the
+    # default `standard` detail rung, `full`-only tips stay hidden.
+    tips = render_tip_footer(KIT_TIPS, detail_rank=_STANDARD_DETAIL, prog="dz")
+    if tips:
+        out.append("")
+        out.append(tips)
     return "\n".join(out) + "\n"

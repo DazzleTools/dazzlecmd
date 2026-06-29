@@ -11,8 +11,10 @@ from .sections import (
     FLAT, NESTED, Section, aligned_row,
     render_labeled_section, render_nested_section, render_sections,
 )
+from .tips import render_tip_footer
 
 __all__ = [
     "aligned_row", "render_labeled_section", "render_nested_section",
     "render_sections", "Section", "FLAT", "NESTED",
+    "render_tip_footer",
 ]

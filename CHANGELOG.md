@@ -4,6 +4,12 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.16] - 2026-06-29
+
+### Added
+
+- **`dz kit -h` now ends with a contextual `TIP:` footer.** Tips are scoped by detail level — the standard tip (e.g. "every axis takes the universal poles — `on`==warm, `off`==cold") shows by default, while more advanced tips are reserved for a higher detail level. This is the first use of the shared tip system across the CLI-presentation libraries; richer detail-scoped tips (driven by `-v`/`--detail`) follow.
+
 ## [0.11.15] - 2026-06-29
 
 ### Added
@@ -3928,7 +3934,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.15...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.16...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

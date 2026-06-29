@@ -39,3 +39,5 @@ options:
   -h, --help     show this help message and exit
 
 Run 'dz kit <verb> --help' for a specific verb.
+
+TIP: every axis takes the universal poles -- `on`==warm, `off`==cold: dz kit loading on

@@ -12,14 +12,15 @@ This is where the structural display-templates belong (NOT in `help_lib`, which 
 
 ## Current contents (DWP-D)
 
-- `sections.py` -- `render_labeled_section` / `aligned_row`: the group/axis-section primitive (D-1). `dz kit -h`'s visibility section renders through it.
+- `sections.py` -- `aligned_row` / `render_labeled_section` (FLAT) / `render_nested_section` (NESTED) / `Section` + `render_sections`: the section KINDS + the declarative list-driver. The WHOLE `dz kit -h` body renders through it (D-1, D-2).
+- `tips.py` -- `render_tip_footer`: the continuum-scoped `TIP:` footer (D-4). The `cli_lib -> help_lib` composition (uses `help_lib.items_for_rank` + `TipFormatter`).
 
 ## Roadmap (DWP-D slices)
 
 - D-1 (done) -- the section renderer; `dz kit -h` visibility section through it.
-- D-2 -- generate ALL of `dz kit -h` from the registry + `DisplayMeta`; retire `render_kit_help` hand-coding.
-- D-3 -- `-v`/`-q`/`--show channel:level` declarations wired to `log_lib.VERBOSITY_CONTINUUM`.
-- D-4 -- the tip hook (`help_lib.items_for_rank` at a coordinate); continuum-scoped `TIP:`.
+- D-2 (done) -- the whole `dz kit -h` body from a declarative `Section` list; `_hrow` retired.
+- D-3 (done) -- `-v`/`-q`/`--show` wired to `log_lib.VERBOSITY_CONTINUUM` (`dz -vv` real).
+- D-4 (done) -- the continuum-scoped `TIP:` footer (`render_tip_footer`); cli_lib -> help_lib.
 - D-5 -- the `format_help` override + parser/epilog generalization (the reusable CLI builder).
 
 ## Extraction checklist (when ready)

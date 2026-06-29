@@ -347,8 +347,11 @@ def test_kit_help_body_sections_present_and_ordered():
     assert f"\n    {FAVORITE_PAIR.cold}" in body
 
     # the footer
-    assert body.rstrip().endswith(
-        "Run 'dz kit <verb> --help' for a specific verb.")
+    assert "Run 'dz kit <verb> --help' for a specific verb." in body
+    # D-4: the continuum-scoped TIP footer -- the standard tip shows, the
+    # `full`-only tip stays hidden at the help's default standard detail rung.
+    assert "TIP: every axis takes the universal poles" in body
+    assert "FQCN" not in body
 
 
 def test_kit_help_body_matches_golden():
