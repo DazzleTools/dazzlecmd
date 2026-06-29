@@ -19,6 +19,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from dazzlecmd_lib.verb_axis import KIT as _KIT, VERB_AXES as _VERB_AXES
+from dazzlecmd._vendor.cli_lib import (
+    FLAT, NESTED, Section, render_sections,
+)
 
 
 # Cascade coupling -- declared per axis (the slice-4 Gauss-Jordan property):
@@ -218,16 +221,6 @@ _VISIBILITY_ORDER = (
 )
 
 
-def _hrow(indent: int, name: str, text: str) -> str:
-    """One ``<indent><name>  <text>`` row, the description aligned at ``_HELP_COL``
-    (with a >=2-space gap if the name overruns the column)."""
-    prefix = " " * indent + name
-    if not text:
-        return prefix
-    gap = max(2, _HELP_COL - len(prefix))
-    return prefix + " " * gap + text
-
-
 def _kit_help_sources(parser):
     """``(top, vis)`` name->help maps -- ``top`` from the kit subcommands, ``vis``
     from the nested ``dz kit visibility`` sub-group. Read from the ACTUAL parsers
@@ -256,46 +249,53 @@ def render_kit_help(parser) -> str:
     hierarchical help *toolset* (the cross-aggregator homogenization) is the 0.11
     line; this is the generalized-enough render that ships now."""
     top, vis = _kit_help_sources(parser)
+
+    # D-2: the whole axis-section body is now DATA -- a list of `cli_lib.Section`s
+    # driven by `render_sections` (the "higher-level argparse epilog"). `cli_lib`
+    # owns the section KINDS + layout; this module owns the LIST (content), sourced
+    # from the registry where it reaches (management <- LIFECYCLE_PAIRS <- the lib
+    # VERB_AXES) and from the kit-local tuples where it does not yet (inspect /
+    # visibility / favorite -- gated on the graded-axis fold + an inspect registry
+    # kind; see the D-2 DWP). The usage/preamble/footer prose frames the sections.
+    fp = FAVORITE_PAIR
+    sections = [
+        # inspect -- the brief/ungrouped template (no axis exposed; own glosses).
+        Section(FLAT, "inspect:", "", rows=tuple(GENERIC_VERBS)),
+        # management -- the axis-exposed/grouped template: each axis is a runnable
+        # sub-command (`dz kit membership ...`) with its poles nested under it.
+        Section(NESTED, "management:",
+                "`dz kit management [<kit>]` -- lifecycle state; verbs take a <kit>",
+                groups=tuple(
+                    (pair.axis,
+                     f"{pair.warm}{_ARROW}{pair.cold}  ({pair.gloss})",
+                     tuple((verb, top.get(verb, ""))
+                           for verb in (pair.warm, pair.cold)))
+                    # coldest-first: membership, loading, activation
+                    for pair in reversed(LIFECYCLE_PAIRS))),
+        # visibility -- the brief/ungrouped template (`dz kit <verb>`; axis hidden).
+        Section(FLAT, "visibility:",
+                "a tool's presence axis -- `dz kit <verb>` or "
+                "`dz kit visibility <verb>`:",
+                rows=tuple((name, vis[name])
+                           for name in _VISIBILITY_ORDER if name in vis)),
+        # favorite -- the brief template (an independent {P, not-P} config pair).
+        Section(FLAT, "favorite:",
+                f"{fp.warm} {_ARROW} {fp.cold}  {fp.gloss}",
+                rows=tuple((verb, top.get(verb, ""))
+                           for verb in (fp.warm, fp.cold))),
+        # options -- argparse boilerplate (header@0, row@2).
+        Section(FLAT, "options:", "",
+                rows=(("-h, --help", "show this help message and exit"),),
+                header_indent=0, row_indent=2),
+    ]
+
     out = [parser.format_usage().rstrip("\n"), ""]
     out.append("Each presence axis is also a group (`dz kit <axis> -h`); warm<->cold,")
     out.append("a colder move subsumes the warmer (e.g. detach also disables).")
     out.append("")
     out.append("kit verbs by presence axis:")
     out.append("")
-
-    out.append("  inspect:")
-    for name, gloss in GENERIC_VERBS:
-        out.append(_hrow(4, name, gloss))
-    out.append("")
-
-    out.append(_hrow(2, "management:",
-                     "`dz kit management [<kit>]` -- lifecycle state; verbs take a <kit>"))
-    for pair in reversed(LIFECYCLE_PAIRS):   # coldest-first: membership, loading, activation
-        out.append(_hrow(4, pair.axis, f"{pair.warm}{_ARROW}{pair.cold}  ({pair.gloss})"))
-        for verb in (pair.warm, pair.cold):
-            out.append(_hrow(6, verb, top.get(verb, "")))
-        out.append("")
-
-    # Visibility verbs are addressed as `dz kit visibility <verb>` (a nested
-    # sub-group), NOT bare `dz kit <verb>` -- the header says so explicitly, so the
-    # listed `status` reads as `dz kit visibility status`, not the removed
-    # `dz kit status`.
-    out.append(_hrow(2, "visibility:",
-                     "a tool's presence axis -- `dz kit <verb>` or "
-                     "`dz kit visibility <verb>`:"))
-    for name in _VISIBILITY_ORDER:
-        if name in vis:
-            out.append(_hrow(4, name, vis[name]))
-    out.append("")
-
-    fp = FAVORITE_PAIR
-    out.append(_hrow(2, "favorite:", f"{fp.warm} {_ARROW} {fp.cold}  {fp.gloss}"))
-    for verb in (fp.warm, fp.cold):
-        out.append(_hrow(4, verb, top.get(verb, "")))
-    out.append("")
-
-    out.append("options:")
-    out.append(_hrow(2, "-h, --help", "show this help message and exit"))
+    out.append(render_sections(sections, label_col=_HELP_COL))
     out.append("")
     out.append("Run 'dz kit <verb> --help' for a specific verb.")
     return "\n".join(out) + "\n"

@@ -1,0 +1,41 @@
+Each presence axis is also a group (`dz kit <axis> -h`); warm<->cold,
+a colder move subsumes the warmer (e.g. detach also disables).
+
+kit verbs by presence axis:
+
+  inspect:
+    list         list kits, or the tools in a kit
+    info         show a kit's static identity card
+    focus        enable only the named kit(s)
+    reset        clear kit config to defaults
+
+  management:    `dz kit management [<kit>]` -- lifecycle state; verbs take a <kit>
+    membership   add<->remove  (registered vs deregistered + trashed)
+      add        Add a kit from a git URL via submodule
+      remove     Remove a kit -- deregister + safedel its files (recoverable)
+
+    loading      attach<->detach  (loaded vs a pointer (listed, not loaded))
+      attach     Attach a kit -- the inverse of detach: load its tools again + enable
+      detach     Detach a kit -- make it a pointer (listed, not loaded) + disable; files kept
+
+    activation   enable<->disable  (active vs loaded-but-inactive)
+      enable     Enable a kit (include its tools in dispatch)
+      disable    Disable a kit (exclude its tools from dispatch)
+
+  visibility:    a tool's presence axis -- `dz kit <verb>` or `dz kit visibility <verb>`:
+    status       Show a tool's presence level + the less/more visible move
+    silence      Suppress the rerooting hint for a tool (presence: silenced)
+    unsilence    Restore the rerooting hint
+    hide         Omit a tool from listings -- still dispatchable (presence: hidden)
+    unhide       Restore a hidden tool to listings
+    shadow       Remove a tool from dispatch + free its short name (presence: shadowed)
+    unshadow     Restore a shadowed tool to dispatch
+
+  favorite:      favorite <-> unfavorite  a saved shortcut name
+    favorite     Pin a favorite tool to win short-name resolution on collision
+    unfavorite   Remove a favorite binding
+
+options:
+  -h, --help     show this help message and exit
+
+Run 'dz kit <verb> --help' for a specific verb.

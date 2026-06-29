@@ -313,3 +313,56 @@ class TestKitInfoDetail:
         engine = types.SimpleNamespace(
             kits=[], command="dz", _get_user_config=lambda: {})
         assert render_kit_info("nope", engine, str(tmp_path)) == 1
+
+
+def test_kit_help_body_sections_present_and_ordered():
+    """Structural regression guard for the `render_sections`-driven `dz kit -h`
+    body (D-2). The byte-gate does NOT cover `dz kit -h`, so this pins the section
+    skeleton: the five sections present + in order, `management:` genuinely nested
+    (each lifecycle axis row + its two verb rows @6), the flat sections' rows
+    col-aligned, the footer. Byte-identity to the pre-D-2 output is proven
+    separately (capture-diff, the D-2 DWP)."""
+    from dazzlecmd._vendor.cli_lib import aligned_row
+    body = render_kit_help(_kit_parser(build_parser([])))
+
+    # the five sections, in order (options: header sits at column 0)
+    order = ["  inspect:", "  management:", "  visibility:",
+             "  favorite:", "\noptions:"]
+    positions = [body.index(marker) for marker in order]   # raises if absent
+    assert positions == sorted(positions)                  # strictly ordered
+
+    # management = the NESTED/axis-exposed template: each lifecycle axis is a
+    # group-row (@4) with its warm + cold verbs nested under it (@6).
+    for pair in LIFECYCLE_PAIRS:
+        assert f"\n    {pair.axis}" in body                # axis row, indent 4
+        assert f"\n      {pair.warm}" in body              # verb row, indent 6
+        assert f"\n      {pair.cold}" in body
+
+    # the FLAT/brief template: inspect rows render from their own glosses, col-17.
+    for name, gloss in GENERIC_VERBS:
+        assert aligned_row(4, name, gloss) in body
+
+    # favorite is flat with both poles present
+    assert f"\n    {FAVORITE_PAIR.warm}" in body
+    assert f"\n    {FAVORITE_PAIR.cold}" in body
+
+    # the footer
+    assert body.rstrip().endswith(
+        "Run 'dz kit <verb> --help' for a specific verb.")
+
+
+def test_kit_help_body_matches_golden():
+    """Exact byte-snapshot of the `dz kit -h` body (everything `render_kit_help`
+    owns past the argparse usage line). The byte-gate does NOT cover `dz kit -h`,
+    so this is the CI forward-lock against ANY drift -- gloss, spacing, order. On
+    an intentional change, regenerate `tests/goldens/kit_help_body.txt` from the
+    live body. Complements the structural test above (this catches gloss/spacing;
+    that one gives a diagnostic failure on a structural break)."""
+    import os
+    golden = os.path.join(os.path.dirname(__file__), "goldens",
+                          "kit_help_body.txt")
+    with open(golden, "r", newline="", encoding="utf-8") as f:
+        expected = f.read()
+    full = render_kit_help(_kit_parser(build_parser([])))
+    body = full[full.index("Each presence axis"):]
+    assert body == expected
