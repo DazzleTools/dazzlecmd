@@ -24,6 +24,10 @@ Expanded flags (like --iter-* pattern):
 from dataclasses import dataclass, field
 from typing import Dict, Optional, TextIO
 
+from dazzle_lib.continuum import ContinuumSpace
+
+from .verbosity import VERBOSITY_CONTINUUM, rank_of
+
 
 # Channels currently used in the codebase
 KNOWN_CHANNELS = {
@@ -65,6 +69,30 @@ OPT_IN_CHANNELS = {
     'trace',    # Function call tracing — opt-in (verbose debug output)
 }
 
+# DWP-B/B-2: the opt-in channels' cold starting rung, DECLARED via the verbosity
+# Continuum (was a baked-in -1 in init_output). They start at `minimal` (-1) so a
+# level-0 message is suppressed until `--show <chan>` raises the channel.
+OPT_IN_START_RANK = rank_of("minimal")  # -1
+
+
+def default_channel_overrides() -> Dict[str, int]:
+    """The per-channel starting coordinates: opt-in channels begin cold (`minimal`);
+    every other channel defers to the global verbosity (no override)."""
+    return {ch: OPT_IN_START_RANK for ch in OPT_IN_CHANNELS}
+
+
+# DWP-B/B-2: channels x verbosity as a ContinuumSpace -- each KNOWN channel is an
+# axis carrying the SAME verbosity Continuum (continuum.py's "channels are the
+# orthogonal sub-dimension"). A running OutputManager's (global verbosity +
+# channel_overrides) is a COORDINATE in this space; a per-channel `--show` moves
+# one axis. Structural model; the emit gate reads a single channel's rung via
+# `shows()`.
+VERBOSITY_SPACE = ContinuumSpace.compose(
+    "verbosity_space",
+    {ch: VERBOSITY_CONTINUUM for ch in sorted(KNOWN_CHANNELS)},
+    meaning="per-channel verbosity: each output channel's loudness, independently",
+)
+
 
 @dataclass
 class ChannelConfig:
@@ -85,6 +113,16 @@ class ChannelConfig:
     destination: Optional[str] = None    # 'stderr', 'stdout', 'file', 'fdN'
     location: Optional[str] = None       # File path for file dest
     format: Optional[str] = None         # 'text', 'json', 'csv'
+
+
+def _resolve_level(token: str) -> int:
+    """A channel spec's level slot: a raw int (`'2'`) OR a NAMED verbosity rung
+    (`'config'` -> 2) resolved via the verbosity Continuum (DWP-B/B-2). The named
+    form is the continuum reaching the `--show timing:config` surface."""
+    try:
+        return int(token)
+    except ValueError:
+        return rank_of(token)
 
 
 def parse_channel_spec(spec: str) -> ChannelConfig:
@@ -124,7 +162,7 @@ def parse_channel_spec(spec: str) -> ChannelConfig:
     dest = location = fmt = None
 
     if len(parts) > 1 and parts[1]:
-        level = int(parts[1])
+        level = _resolve_level(parts[1])   # int OR named rung ('config')
     if len(parts) > 2 and parts[2]:
         dest = parts[2]
     if len(parts) > 3 and parts[3]:

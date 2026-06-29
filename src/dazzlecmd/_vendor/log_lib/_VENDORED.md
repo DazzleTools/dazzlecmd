@@ -2,6 +2,14 @@
 
 **Origin:** `C:\code\wtf-windows\src\wtf_windows\lib\log_lib` (copied 2026-06-28, verbatim).
 **Status:** VENDORED + IN DEVELOPMENT (a WIP, like `help_lib`).
+
+**Original files (verbatim from wtf-windows):** `__init__.py`, `channels.py`, `hints.py`, `levels.py`, `manager.py`, `trace.py`.
+**dazzlecmd development additions / edits (the continuum redesign, DWP-B -- DONE):**
+- `verbosity.py` (NEW) -- `VERBOSITY_CONTINUUM` (a `dazzle_lib.Continuum`, 8 named rungs, invariant 0) + the `shows()` THAC0 gate + `rank_of()` (B-1).
+- `channels.py` -- named-rank channel specs (`--show timing:config` via `_resolve_level`), the `VERBOSITY_SPACE` ContinuumSpace (channels x verbosity), and `default_channel_overrides()` (the opt-in cold start DECLARED via the Continuum) (B-2).
+- `manager.py` -- the 3 inline gate sites routed through `shows()`; `hint()` routed through `emit()` (one gate path); `init_output` uses `default_channel_overrides()` (B-1/B-2/B-3).
+
+Adds a real **`dazzle_lib`** dependency (the bedrock -- a valid down-only dep the future `dazzle_loglib` will declare). Tests: `tests/test_log_verbosity.py` (22). Behavior preserved (the DWP-B must-preserve contract).
 **Destiny:** extract to a standalone `dazzle_loglib` lib (own repo + PyPI) once clean + feature-complete.
 
 ## What it is

@@ -24,7 +24,9 @@ import sys
 from typing import Any, Dict, Optional, Set, TextIO
 
 from .hints import get_hint
-from .channels import parse_channel_spec, OPT_IN_CHANNELS
+from .channels import (
+    parse_channel_spec, OPT_IN_CHANNELS, default_channel_overrides)
+from .verbosity import shows
 
 
 class OutputManager:
@@ -138,9 +140,7 @@ class OutputManager:
             True if the message was shown, False if gated.
         """
         threshold = self.channel_overrides.get(channel, self.verbosity)
-        if threshold <= -4:
-            return False
-        if level > threshold:
+        if not shows(level, threshold):   # the THAC0 gate (verbosity Continuum)
             return False
 
         # Strict channel validation
@@ -193,24 +193,14 @@ class OutputManager:
         if hint_id in self._shown_hints:
             return
         h = get_hint(hint_id)
-        if h is None:
-            return
-        if context not in h.context:
+        if h is None or context not in h.context:
             return
 
-        # Build the text before checking threshold (needed for dedup tracking)
-        text = h.message.format(**kwargs) if kwargs else h.message
-
-        # Level check via THAC0 threshold
-        threshold = self.channel_overrides.get('hint', self.verbosity)
-        if threshold <= -4:
-            return
-        if h.min_level > threshold:
-            return
-
-        dest = self._resolve_fd('hint')
-        print(text, file=dest)
-        self._shown_hints.add(hint_id)
+        # DWP-B/B-3: route through emit() -- ONE gate + renderer path. The hint
+        # shows at level `h.min_level` on the 'hint' channel, gated by `shows()`
+        # inside emit(); dedup-track it only if it actually emitted.
+        if self.emit(h.min_level, h.message, channel='hint', **kwargs):
+            self._shown_hints.add(hint_id)
 
     def progress(self, count: int, elapsed: float) -> None:
         """Emit a progress update (level 1, progress channel)."""
@@ -243,7 +233,7 @@ class OutputManager:
             True if the message would pass the threshold check
         """
         threshold = self.channel_overrides.get(channel, self.verbosity)
-        return threshold > -4 and level <= threshold
+        return shows(level, threshold)
 
     def channel_active(self, channel: str) -> bool:
         """Check if a channel would display messages at its default level.
@@ -310,8 +300,9 @@ def init_output(verbosity: int = 0, quiet: bool = False,
     if quiet and verbosity >= 0:
         verbosity = -1
 
-    # Apply opt-in channel defaults (off unless explicitly enabled)
-    channel_overrides = {ch: -1 for ch in OPT_IN_CHANNELS}
+    # Apply opt-in channel defaults (off unless explicitly enabled) -- the cold
+    # starting coordinate is DECLARED via the verbosity Continuum (DWP-B/B-2).
+    channel_overrides = default_channel_overrides()
 
     # Parse explicit channel specs (override opt-in defaults)
     if channels:

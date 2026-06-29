@@ -4,7 +4,15 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
-## [0.11.13] - 2026-06-28
+## [0.11.14] - 2026-06-29
+
+### Changed
+
+- **`dz kit -h` is now generated from a declarative section framework** instead of hand-assembled per axis. The help output is byte-for-byte unchanged; this is internal groundwork. A new in-tree CLI-presentation layer (`cli_lib`) turns a list of section descriptors into the `-h` layout: an axis-exposed "grouped" form (the `management:` block, where each axis is itself a runnable sub-command) and a brief "flat" form (the `visibility:`/`inspect:`/`favorite:` blocks). The two forms are the grouped vs ungrouped projection of the same verb data.
+
+### Added
+
+- **Groundwork for tunable output verbosity and help detail.** The logging system's verbosity levels are now modeled as an ordered continuum (quieter `-qqqq` <-> louder `-vvvvv`, with a fixed invariant in the middle), each output channel can carry its own level, and help-detail (`minimal`/`standard`/`full`) is likewise an ordered axis. The command-line flags that expose this (`-v`/`-q`/`--show`) land in a later release; this release wires the model underneath.
 
 ### Added
 
@@ -3914,7 +3922,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.13...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.14...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
