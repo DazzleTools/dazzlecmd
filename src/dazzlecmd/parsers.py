@@ -88,6 +88,20 @@ def build_parser(projects, engine=None):
         action="version",
         version=version_str,
     )
+    # Global THAC0 verbosity (D-3): -v louder, -q quieter, both repeatable and
+    # composing (verbosity = #-v - #-q). `--show CHANNEL:LEVEL` pins one channel's
+    # loudness (e.g. `--show timing:2`, `--show vals`). These move a coordinate on
+    # the log_lib verbosity Continuum; `dispatch_meta` reads them into init_output.
+    parser.add_argument(
+        "-v", "--verbose", action="count", default=0,
+        help="Increase output verbosity (repeatable: -vv, -vvv).")
+    parser.add_argument(
+        "-q", "--quiet", action="count", default=0,
+        help="Decrease output verbosity (repeatable: -qq).")
+    parser.add_argument(
+        "--show", action="append", default=None, dest="show_channels",
+        metavar="CHANNEL[:LEVEL]",
+        help="Raise one output channel (e.g. --show timing:2, --show vals).")
 
     # Suppress default subparser listing — we show our own categorized version
     subparsers = parser.add_subparsers(dest="command", metavar="<command>",

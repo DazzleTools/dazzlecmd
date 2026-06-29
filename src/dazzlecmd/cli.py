@@ -80,6 +80,17 @@ from dazzlecmd_lib.default_meta_commands import (  # noqa: F401
 )
 
 
+def _init_verbosity(args):
+    """D-3: move the log_lib verbosity-Continuum coordinate from the global
+    ``-v``/``-q``/``--show`` flags. ``-v`` louder, ``-q`` quieter (they compose:
+    verbosity = #-v - #-q); ``--show CHANNEL[:LEVEL]`` pins one channel. Safe on any
+    namespace (the flags default to 0 / None). Returns the OutputManager singleton."""
+    from dazzlecmd._vendor.log_lib.manager import init_output
+    verbosity = getattr(args, "verbose", 0) - getattr(args, "quiet", 0)
+    return init_output(verbosity=verbosity,
+                       channels=getattr(args, "show_channels", None))
+
+
 def dispatch_meta(args, projects, kits, project_root, engine=None):
     """Handle built-in meta-commands.
 
@@ -88,6 +99,17 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
     call ``_write_user_config``. Optional for Phase 1/2 backwards compat.
     """
     meta = getattr(args, "_meta", None)
+
+    # D-3: the first live consumer of the log_lib verbosity Continuum. Graded
+    # diagnostics on the (non-opt-in) `general` channel -> stderr, gated by the
+    # THAC0 threshold: -v shows the command, -vv the discovery counts, -vvv the
+    # parsed namespace. At default verbosity all three are gated (byte-gate clean).
+    out = _init_verbosity(args)
+    out.emit(1, "meta-command: {m}", channel="general", m=meta)
+    out.emit(2, "discovered {np} project(s), {nk} kit(s)", channel="general",
+             np=len(projects or []), nk=len(kits or []))
+    out.emit(3, "parsed args: {a}", channel="general",
+             a={k: v for k, v in vars(args).items() if not k.startswith("_")})
 
     if meta == "list":
         return _cmd_list(args, projects, engine=engine)

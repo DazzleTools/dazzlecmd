@@ -4,6 +4,12 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.15] - 2026-06-29
+
+### Added
+
+- **Global verbosity flags: `-v`/`-q`/`--show`.** `-v` makes output louder, `-q` quieter (both repeatable and composing — `-vv`, `-qq`, and `-v -q` cancels), and `--show CHANNEL[:LEVEL]` raises a single output channel (e.g. `--show timing:2`, `--show vals`). The first place this surfaces: meta-commands now print graded diagnostics to stderr — `-v` shows the command, `-vv` adds discovery counts, `-vvv` adds the parsed arguments — while default output is unchanged. (Verbosity on the tool-dispatch path, and gating the rerooting hint with `-q`, follow in a later release.)
+
 ## [0.11.14] - 2026-06-29
 
 ### Changed
@@ -3922,7 +3928,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.14...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.15...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
