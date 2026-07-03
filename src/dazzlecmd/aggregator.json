@@ -6,7 +6,7 @@
     "tools_dir": "projects",
     "kits_dir": "kits",
     "manifest_name": ".dazzlecmd.json",
-    "enabled_meta_commands": ["list", "info", "kit", "tree", "setup", "version", "add", "mode", "new", "enable", "disable", "attach", "detach", "meta", "use", "prop"],
+    "enabled_meta_commands": ["list", "info", "kit", "tree", "setup", "version", "add", "mode", "new", "enable", "disable", "attach", "detach", "meta", "use", "prop", "level"],
     "extra_reserved_commands": [],
     "schema": {
         "remote_url_paths": ["source.url", "lifecycle.remote"],

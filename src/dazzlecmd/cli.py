@@ -708,6 +708,12 @@ def main():
     # (v2 contract AC-6).
     engine.sugar_flags_hook = _sugar_flags_hook
 
+    # The level property's validator joins the shared write path, so the
+    # sugar (`dz .level kit`) and the verbs (`dz level kit`) validate
+    # identically (v2 contract C-7 / R1.7).
+    from dazzlecmd.commands.meta import register_level_property
+    register_level_property(engine)
+
     return engine.run()
 
 

@@ -40,9 +40,17 @@ class TestParser:
         a = build_parser([]).parse_args(["use", "aggregator"])
         assert a._meta == "meta_use" and a.level == "aggregator"
 
-    def test_use_rejects_unknown_level(self):
-        with pytest.raises(SystemExit):
-            build_parser([]).parse_args(["use", "planet"])
+    def test_use_rejects_unknown_level(self, tmp_path, monkeypatch, capsys):
+        # R1.7: validation moved from argparse choices= to the runtime
+        # validator (LEVEL_CONTINUUM rungs at call time) -- exit-2 parity.
+        eng = _engine(tmp_path, monkeypatch)
+        assert _cmd_meta_use(types.SimpleNamespace(level="planet"), eng) == 2
+        assert "invalid level" in capsys.readouterr().err
+
+    def test_level_alias_routes(self):
+        # `dz level <rung>` -- the canonical name of the switcher (R1.7).
+        a = build_parser([]).parse_args(["level", "kit"])
+        assert a._meta == "meta_use" and a.level == "kit"
 
 
 class TestForegroundState:
@@ -53,8 +61,38 @@ class TestForegroundState:
         eng = _engine(tmp_path, monkeypatch)
         assert _cmd_meta_use(types.SimpleNamespace(level="kit"), eng) == 0
         assert foreground_level(eng) == "kit"
-        cfg = json.loads((tmp_path / "config.json").read_text(encoding="utf-8"))
-        assert cfg[FOREGROUND_KEY] == "kit"
+        # R1.7: the foreground IS the <root>.level property now.
+        props = json.loads(
+            (tmp_path / "properties.json").read_text(encoding="utf-8"))
+        assert props["dz.level"] == "kit"
+
+    def test_legacy_key_migrates_on_read(self, tmp_path, monkeypatch):
+        # R1.7 MOVE migration: legacy config value honored, then MOVED.
+        eng = _engine(tmp_path, monkeypatch)
+        eng.config.write({FOREGROUND_KEY: "kit"})
+        assert foreground_level(eng) == "kit"
+        eng.config.invalidate()
+        assert FOREGROUND_KEY not in eng.config.read()  # legacy key gone
+        assert eng.property_store.get("dz.level") == "kit"
+
+    def test_reset_kills_stale_legacy(self, tmp_path, monkeypatch, capsys):
+        # C-8: reset BEFORE any other touch must not resurrect the
+        # legacy value (the move wraps delete too).
+        eng = _engine(tmp_path, monkeypatch)
+        eng.config.write({FOREGROUND_KEY: "kit"})
+        assert _cmd_meta_reset(eng) == 0
+        assert foreground_level(eng) == DEFAULT_FOREGROUND
+
+    def test_sugar_write_validates_like_verb(self, tmp_path, monkeypatch, capsys):
+        # C-7: the registered validator guards the property write path.
+        from dazzlecmd.commands.meta import register_level_property
+        from dazzlecmd_lib.prop_commands import cmd_upsert
+        eng = _engine(tmp_path, monkeypatch)
+        register_level_property(eng)
+        assert cmd_upsert(eng, ".level", "bogus") == 2
+        assert "invalid level" in capsys.readouterr().err
+        assert cmd_upsert(eng, ".level", "kit") == 0
+        assert foreground_level(eng) == "kit"
 
     def test_use_no_level_reports_current(self, tmp_path, monkeypatch, capsys):
         eng = _engine(tmp_path, monkeypatch)

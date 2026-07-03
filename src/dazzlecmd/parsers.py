@@ -634,8 +634,8 @@ def _register_meta_commands(subparsers):
         "use", help="Set the foreground level (omit <level> to show it)")
     meta_use.add_argument(
         "level", nargs="?", default=None,
-        choices=["tool", "kit", "aggregator"],
-        help="The level to foreground (omit to report the current one)")
+        help="The level to foreground (omit to report the current one); "
+             "validated against the level continuum at runtime")
     meta_use.set_defaults(_meta="meta_use")
     meta_reset = meta_sub.add_parser(
         "reset", help="Reset the foreground level back to the default (tool)")
@@ -652,9 +652,19 @@ def _register_meta_commands(subparsers):
         "use", help="Set the foreground level (alias of `dz meta use`)")
     use_parser.add_argument(
         "level", nargs="?", default=None,
-        choices=["tool", "kit", "aggregator"],
-        help="The level to foreground (omit to report the current one)")
+        help="The level to foreground (omit to report the current one); "
+             "validated against the level continuum at runtime")
     use_parser.set_defaults(_meta="meta_use")
+
+    # dz level [<rung>] -- the level-axis surface: the CANONICAL name of
+    # the foreground switcher (`use`/`meta use` are its aliases). The verb
+    # face of the root property `<root>.level` (v2 contract R1.7).
+    level_parser = subparsers.add_parser(
+        "level", help="Report or set the foreground level (the level axis)")
+    level_parser.add_argument(
+        "level", nargs="?", default=None,
+        help="The level to foreground (omit to report the current one)")
+    level_parser.set_defaults(_meta="meta_use")
 
     # dz prop ... -- top-level alias of `dz meta prop ...` (curated
     # admission: `prop` is reserved lib-wide, so no tool can shadow it;
