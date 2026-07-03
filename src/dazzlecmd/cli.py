@@ -702,4 +702,23 @@ def main():
         tool_dispatcher=dispatch_tool,
     )
 
+    # The sugar intercept bypasses argparse, so pre-path global flags
+    # (`dz -v .note`) are handed back through this hook to initialize
+    # log_lib output exactly as dispatch_meta's _init_verbosity does
+    # (v2 contract AC-6).
+    engine.sugar_flags_hook = _sugar_flags_hook
+
     return engine.run()
+
+
+def _sugar_flags_hook(flag_tokens):
+    """Parse the intercept's pre-path flag tokens (-v/-q/--show) and
+    initialize the output manager -- the sugar path's _init_verbosity."""
+    import argparse as _argparse
+    p = _argparse.ArgumentParser(add_help=False)
+    p.add_argument("-v", "--verbose", action="count", default=0)
+    p.add_argument("-q", "--quiet", action="count", default=0)
+    p.add_argument("--show", dest="show_channels", action="append",
+                   default=None)
+    ns, _unknown = p.parse_known_args(flag_tokens)
+    _init_verbosity(ns)

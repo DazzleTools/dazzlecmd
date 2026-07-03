@@ -4,6 +4,10 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.19-alpha] - 2026-07-02
+
+The assignment sugar arrives (dazzlecmd-lib 0.10.6 intercept): `dz .note "hello"` writes, `dz .note` reads, `dz :.kit.channels.verbosity -3` sets a channel verbosity (bare negative numbers just work), `dz :.` lists everything, `dz :core:safedel` invokes by path. Pre-path global flags are honored on the sugar (`dz -v .note`). The explicit `dz prop` / `dz meta prop` forms are what the sugar desugars to -- one implementation.
+
 ## [0.11.18-alpha] - 2026-07-02
 
 `dz prop ...` -- the top-level shortname of `dz meta prop ...` (same shape as the existing `dz use` alias of `dz meta use`). One definition serves both spellings; `prop` is reserved lib-wide (dazzlecmd-lib 0.10.5) so no tool can shadow it. `dz prop add .note "hi"`, `dz prop get :.kit.channels.verbosity`, `dz prop delete .note` -- identical behavior to the `meta prop` forms.
@@ -3942,7 +3946,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.18a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.19a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
