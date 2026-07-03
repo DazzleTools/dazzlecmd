@@ -78,7 +78,15 @@ def _add_prop_subtree(sub):
     (``.note`` / ``:.kit.channels.verbosity``); values are single tokens
     (quote multi-word)."""
     prop_parser = sub.add_parser(
-        "prop", help="Properties: get/set/add/delete/list <path> values")
+        "prop", help="Properties: get/set/add/delete/list <path> values",
+        description=(
+            "Property CRUD over the per-FQCN store [canonical: dz:.meta:prop; "
+            "'dz prop' and 'dz meta prop' are the same command].\n"
+            "Paths are bang-paths: .note (a root property), "
+            ":.kit.channels.verbosity (a fiber node's property).\n"
+            "Sugar: 'dz .note \"hi\"' upserts, 'dz .note' reads, "
+            "'dz :.' lists -- delete has NO sugar (only 'prop delete')."),
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     prop_sub = prop_parser.add_subparsers(dest="prop_command")
     prop_get = prop_sub.add_parser("get", help="Read a property value")
     prop_get.add_argument("path", help="The property bang-path (e.g. .note)")
@@ -189,9 +197,8 @@ def _build_categorized_help(projects):
         ("tree", "Show the aggregator tree"),
         ("setup <tool>", "Run a tool's declared setup script"),
         ("version", "Show version info"),
-        ("meta", "The internals namespace [dz:.meta] -- level, prop, use, reset"),
+        ("meta", "The internals namespace [dz:.meta]: prop, level, use, reset"),
         ("level [<rung>]", "Foreground level [dz:.meta:level] (aliases: use, meta use)"),
-        ("prop <verb>", "Property CRUD [dz:.meta:prop]: get/set/add/delete/list; sugar: dz .note \"hi\""),
     ]
 
     # Group tools by kit import name (the top-level kit a tool belongs to)
