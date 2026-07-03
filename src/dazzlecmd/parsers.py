@@ -61,6 +61,13 @@ def _add_visibility_verb(sub, verb):
     return p
 
 
+def _level_help():
+    """Rung list derived from LEVEL_CONTINUUM at build time -- stays true
+    when the ladder widens (choices= was dropped for runtime validation)."""
+    from dazzlecmd_lib.verb_axis import LEVEL_CONTINUUM
+    return " < ".join(LEVEL_CONTINUUM.levels())
+
+
 def _add_prop_subtree(sub):
     """Register the ``prop`` verb family under ``sub`` (an add_subparsers
     handle). Called TWICE -- under ``meta`` (the canonical home,
@@ -634,8 +641,8 @@ def _register_meta_commands(subparsers):
         "use", help="Set the foreground level (omit <level> to show it)")
     meta_use.add_argument(
         "level", nargs="?", default=None,
-        help="The level to foreground (omit to report the current one); "
-             "validated against the level continuum at runtime")
+        help="One of: " + _level_help() + " (omit to report the "
+             "current one)")
     meta_use.set_defaults(_meta="meta_use")
     meta_reset = meta_sub.add_parser(
         "reset", help="Reset the foreground level back to the default (tool)")
@@ -652,18 +659,20 @@ def _register_meta_commands(subparsers):
         "use", help="Set the foreground level (alias of `dz meta use`)")
     use_parser.add_argument(
         "level", nargs="?", default=None,
-        help="The level to foreground (omit to report the current one); "
-             "validated against the level continuum at runtime")
+        help="One of: " + _level_help() + " (omit to report the "
+             "current one)")
     use_parser.set_defaults(_meta="meta_use")
 
     # dz level [<rung>] -- the level-axis surface: the CANONICAL name of
     # the foreground switcher (`use`/`meta use` are its aliases). The verb
     # face of the root property `<root>.level` (v2 contract R1.7).
     level_parser = subparsers.add_parser(
-        "level", help="Report or set the foreground level (the level axis)")
+        "level", help="Report or set the foreground level -- the gentle default that "
+             "tie-breaks ambiguous bare names (it does not filter listings)")
     level_parser.add_argument(
         "level", nargs="?", default=None,
-        help="The level to foreground (omit to report the current one)")
+        help="One of: " + _level_help() + " (omit to report the "
+             "current one)")
     level_parser.set_defaults(_meta="meta_use")
 
     # dz prop ... -- top-level alias of `dz meta prop ...` (curated
