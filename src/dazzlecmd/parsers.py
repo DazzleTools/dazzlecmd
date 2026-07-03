@@ -68,6 +68,32 @@ def _level_help():
     return " < ".join(LEVEL_CONTINUUM.levels())
 
 
+# One-liners for the level rungs. INTERIM hand-map: when SD-FQCN-2 derives
+# the tree these become properties ON the rung nodes (dz:.level:kit ...)
+# and this dict is replaced by a derived read.
+_RUNG_DESC = {
+    "fiber": "the internal mechanism plane (the ':.' world)",
+    "lib": "bedrock libraries (dazzle-lib et al.)",
+    "internaltool": "internal/vendored tools",
+    "tool": "single commands (dz find, dz safedel, ...)",
+    "kit": "named groups of tools (the media kit, ...)",
+    "aggregator": "the hosting command itself (dz, wtf, ...)",
+    "supra": "the containing world (envs, shells)",
+}
+
+
+def _level_rung_table():
+    """The per-rung legend for `dz level -h`, cold -> warm."""
+    from dazzlecmd_lib.verb_axis import LEVEL_CONTINUUM
+    lines = ["The containment ladder, cold -> warm:"]
+    for rung in LEVEL_CONTINUUM.levels():
+        lines.append(f"  {rung:<13} {_RUNG_DESC.get(rung, '')}")
+    lines.append("")
+    lines.append("The foreground is a gentle default: it tie-breaks ambiguous")
+    lines.append("bare names on reads; it never gates or mutates.")
+    return "\n".join(lines)
+
+
 def _add_prop_subtree(sub):
     """Register the ``prop`` verb family under ``sub`` (an add_subparsers
     handle). Called TWICE -- under ``meta`` (the canonical home,
@@ -678,7 +704,9 @@ def _register_meta_commands(subparsers):
     # face of the root property `<root>.level` (v2 contract R1.7).
     level_parser = subparsers.add_parser(
         "level", help="Report or set the foreground level -- the gentle default that "
-             "tie-breaks ambiguous bare names (it does not filter listings)")
+             "tie-breaks ambiguous bare names (it does not filter listings)",
+        description=_level_rung_table(),
+        formatter_class=argparse.RawDescriptionHelpFormatter)
     level_parser.add_argument(
         "level", nargs="?", default=None,
         help="One of: " + _level_help() + " (omit to report the "
