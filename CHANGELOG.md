@@ -6,7 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 
 ## [0.11.27-alpha] - 2026-07-03
 
-The `=` assignment marker: `dz level=kit`, `dz .note="some words"`, `dz :.kit.channels.verbosity=-3`, and `dz .note=` (set-to-empty -- previously untypable on PowerShell 5.1). One shell token, split at the first `=`; the RHS is opaque; same validation and added/updated echo as every write. Also in the 0.11.24-27 group: `dz -h` shows canonical fiber homes and stops advertising `prop` as a top-level peer (its story moved to `dz prop -h`); `dz level -h` teaches the rung ladder with per-rung one-liners; the command grammar is published at `docs/grammar.md`.
+The `=` assignment marker: `dz level=kit`, `dz .note="some words"`, `dz :.kit.channels.verbosity=-3`, and `dz .note=` (set-to-empty -- previously untypable on PowerShell 5.1). One shell token, split at the first `=`; the RHS is opaque; same validation and added/updated echo as every write. Also in the 0.11.21-27 group: `dz -h` shows canonical fiber homes and stops advertising `prop` as a top-level peer (its story moved to `dz prop -h`); `dz level -h` teaches the rung ladder with per-rung one-liners; the command grammar is published at `docs/grammar.md`.
 
 ## [0.11.20-alpha] - 2026-07-02
 
