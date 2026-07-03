@@ -189,6 +189,9 @@ def _build_categorized_help(projects):
         ("tree", "Show the aggregator tree"),
         ("setup <tool>", "Run a tool's declared setup script"),
         ("version", "Show version info"),
+        ("level [<rung>]", "Report/set the foreground level (aliases: use, meta use)"),
+        ("prop <verb>", "Property CRUD: get/set/add/delete/list (or: dz .note \"hi\")"),
+        ("meta", "The context namespace: level/use/reset + prop"),
     ]
 
     # Group tools by kit import name (the top-level kit a tool belongs to)
