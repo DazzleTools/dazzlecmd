@@ -4,6 +4,10 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.27-alpha] - 2026-07-03
+
+The `=` assignment marker: `dz level=kit`, `dz .note="some words"`, `dz :.kit.channels.verbosity=-3`, and `dz .note=` (set-to-empty -- previously untypable on PowerShell 5.1). One shell token, split at the first `=`; the RHS is opaque; same validation and added/updated echo as every write. Also in the 0.11.24-27 group: `dz -h` shows canonical fiber homes and stops advertising `prop` as a top-level peer (its story moved to `dz prop -h`); `dz level -h` teaches the rung ladder with per-rung one-liners; the command grammar is published at `docs/grammar.md`.
+
 ## [0.11.20-alpha] - 2026-07-02
 
 `dz level [<rung>]` -- the level axis gets its canonical name. It, `dz use`, and `dz meta use` are one operation: a validated write of the root property `<root>.level` (`dz .level kit`, `dz prop get .level`, and `dz level` all address the same value). `dz meta reset` is its delete. The legacy `foreground_level` config key MIGRATES into the property store on first touch (read, write, or reset -- the value is honored, then moved; `config.json` no longer carries it). Validation now happens at runtime against the level continuum's rungs (exit 2, argparse-parity message), so extending the continuum widens the CLI automatically -- and the sugar (`dz .level bogus`) rejects exactly like the verb (`dz level bogus`). Accepted-change surfaces: `dz use -h` no longer shows a fixed `{tool,kit,aggregator}` choices list; the invalid-level error is now runtime-rendered.
@@ -3950,7 +3954,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.20a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.27a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
