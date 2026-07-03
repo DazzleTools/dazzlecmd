@@ -125,6 +125,29 @@ def dispatch_meta(args, projects, kits, project_root, engine=None):
         return _cmd_meta_use(args, engine)
     elif meta == "meta_reset":
         return _cmd_meta_reset(engine)
+    elif meta in ("prop", "prop_get", "prop_set", "prop_add",
+                  "prop_delete", "prop_list"):
+        # The prop verb family (v2 contract 3b"): thin routing into the
+        # lib's ONE implementation (prop_commands) -- the same handlers
+        # the sugar intercept reuses. FQCNParseError renders uniformly.
+        from dazzlecmd_lib.fqcn_grammar import FQCNParseError
+        from dazzlecmd_lib import prop_commands as _pc
+        try:
+            if meta == "prop_get":
+                return _pc.cmd_get(engine, args.path)
+            elif meta == "prop_set":
+                return _pc.cmd_set(engine, args.path, args.value)
+            elif meta == "prop_add":
+                return _pc.cmd_add(engine, args.path, args.value)
+            elif meta == "prop_delete":
+                return _pc.cmd_delete(engine, args.path)
+            elif meta == "prop_list":
+                return _pc.cmd_list(engine, args.path)
+            # bare `dz meta prop` -> the family listing (discoverability)
+            return _pc.cmd_list(engine, None)
+        except FQCNParseError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            return 2
     elif meta == "kit_list":
         # Unified renderer: the lib handler passes engine (kit-list DWP).
         from dazzlecmd_lib.default_meta_commands import kit_list_handler
