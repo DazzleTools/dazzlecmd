@@ -55,7 +55,7 @@ The routing mnemonic is the locked doctrine — **dot anywhere = look, all colon
 
 One token. Quote multi-word values. A bare negative number is a value (`dz :.kit.channels.verbosity -3` — same rule as argparse's own matcher); any other `-`-led value needs a `--` before it. Values parse as: counted verbosity (`vvvv` = +4, `qqq` = −3) → int → float → JSON literal (`true`, `null`, `["a"]`) → plain string. Deleting always requires the explicit verb (`dz prop delete .note`) — no sugar deletes.
 
-## PROPOSED (pending ratification): the `=` assignment marker
+## The `=` assignment marker (shipped 0.11.27-alpha / lib 0.10.8-alpha)
 
 ```ebnf
 assignment  ::= lhs "=" rhs                   (* ONE shell token, split at the FIRST "=" *)

@@ -103,7 +103,8 @@ def _cmd_meta_use(args, engine):
         print(f"Error: {exc}", file=sys.stderr)
         return 2
     engine.property_store.set(key, level)
-    print(f"Foreground level set to: {level}")
+    print(f"Foreground level set to: {level}   [explicit form: "
+          f"{'dz'} level={level}]")
     print("(a gentle default: it tie-breaks ambiguous bare names on reads; "
           "level-scoped listings land in a later release)")
     return 0
