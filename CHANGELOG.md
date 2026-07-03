@@ -4,6 +4,10 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.18-alpha] - 2026-07-02
+
+`dz prop ...` -- the top-level shortname of `dz meta prop ...` (same shape as the existing `dz use` alias of `dz meta use`). One definition serves both spellings; `prop` is reserved lib-wide (dazzlecmd-lib 0.10.5) so no tool can shadow it. `dz prop add .note "hi"`, `dz prop get :.kit.channels.verbosity`, `dz prop delete .note` -- identical behavior to the `meta prop` forms.
+
 ## [0.11.17-alpha] - 2026-07-02
 
 Opens the FQCN property surface (the app side of the fqcn-unification arc; dazzlecmd-lib 0.10.x). New `dz meta prop {get,set,add,delete,list}` -- read and write per-FQCN property values by bang-path: `dz meta prop add .note "hello"`, `dz meta prop get :.kit.channels.verbosity`. `add` creates (errors if the key exists), `set` changes (errors if it doesn't) -- so a typo'd path can't silently make garbage; `delete` is the only removal form. Paths canonicalize with a one-line echo when a spelling is forgiven (`:.note.author` -> `dz.note.author (canonical)`); values parse as numbers (including negatives after `--`), counted verbosity (`vvvv`), JSON literals, or strings. Properties persist in `properties.json` beside `config.json` with the same per-aggregator isolation. This is the explicit form of the coming assignment sugar (`dz .note "hi"`), which lands in a following release.
@@ -3938,7 +3942,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.17a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.18a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

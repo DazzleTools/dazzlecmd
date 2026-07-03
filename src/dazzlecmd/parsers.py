@@ -61,6 +61,42 @@ def _add_visibility_verb(sub, verb):
     return p
 
 
+def _add_prop_subtree(sub):
+    """Register the ``prop`` verb family under ``sub`` (an add_subparsers
+    handle). Called TWICE -- under ``meta`` (the canonical home,
+    ``<root>:.meta:prop``) and at the top level (the shortname alias) --
+    so both spellings share one definition (v2 contract R1.8: one
+    implementation, two addresses). add = must-not-exist, set =
+    must-exist, delete = the ONLY deletion spelling; paths are bang-paths
+    (``.note`` / ``:.kit.channels.verbosity``); values are single tokens
+    (quote multi-word)."""
+    prop_parser = sub.add_parser(
+        "prop", help="Properties: get/set/add/delete/list <path> values")
+    prop_sub = prop_parser.add_subparsers(dest="prop_command")
+    prop_get = prop_sub.add_parser("get", help="Read a property value")
+    prop_get.add_argument("path", help="The property bang-path (e.g. .note)")
+    prop_get.set_defaults(_meta="prop_get")
+    prop_set = prop_sub.add_parser(
+        "set", help="Change an EXISTING property (see `add` to create)")
+    prop_set.add_argument("path")
+    prop_set.add_argument("value")
+    prop_set.set_defaults(_meta="prop_set")
+    prop_add = prop_sub.add_parser(
+        "add", help="Create a NEW property (errors if it exists)")
+    prop_add.add_argument("path")
+    prop_add.add_argument("value")
+    prop_add.set_defaults(_meta="prop_add")
+    prop_delete = prop_sub.add_parser(
+        "delete", help="Remove a property (the only deletion form)")
+    prop_delete.add_argument("path")
+    prop_delete.set_defaults(_meta="prop_delete")
+    prop_list = prop_sub.add_parser(
+        "list", help="List a node's property family (default: everything)")
+    prop_list.add_argument("path", nargs="?", default=None)
+    prop_list.set_defaults(_meta="prop_list")
+    prop_parser.set_defaults(_meta="prop")
+
+
 def build_parser(projects, engine=None):
     """Build argparse parser with dynamic subparsers for discovered tools."""
     # Build categorized epilog for help display
@@ -607,34 +643,7 @@ def _register_meta_commands(subparsers):
 
     # dz meta prop -- CRUD over the per-FQCN property store (the explicit
     # form the `dz .note "hi"` sugar desugars to; v2 contract R1.1).
-    # add = must-not-exist, set = must-exist, delete = the ONLY deletion
-    # spelling. Paths are bang-paths (.note / :.kit.channels.verbosity);
-    # values are single tokens (quote multi-word).
-    prop_parser = meta_sub.add_parser(
-        "prop", help="Properties: get/set/add/delete/list <path> values")
-    prop_sub = prop_parser.add_subparsers(dest="prop_command")
-    prop_get = prop_sub.add_parser("get", help="Read a property value")
-    prop_get.add_argument("path", help="The property bang-path (e.g. .note)")
-    prop_get.set_defaults(_meta="prop_get")
-    prop_set = prop_sub.add_parser(
-        "set", help="Change an EXISTING property (see `add` to create)")
-    prop_set.add_argument("path")
-    prop_set.add_argument("value")
-    prop_set.set_defaults(_meta="prop_set")
-    prop_add = prop_sub.add_parser(
-        "add", help="Create a NEW property (errors if it exists)")
-    prop_add.add_argument("path")
-    prop_add.add_argument("value")
-    prop_add.set_defaults(_meta="prop_add")
-    prop_delete = prop_sub.add_parser(
-        "delete", help="Remove a property (the only deletion form)")
-    prop_delete.add_argument("path")
-    prop_delete.set_defaults(_meta="prop_delete")
-    prop_list = prop_sub.add_parser(
-        "list", help="List a node's property family (default: everything)")
-    prop_list.add_argument("path", nargs="?", default=None)
-    prop_list.set_defaults(_meta="prop_list")
-    prop_parser.set_defaults(_meta="prop")
+    _add_prop_subtree(meta_sub)
 
     meta_parser.set_defaults(_meta="meta")
 
@@ -646,3 +655,9 @@ def _register_meta_commands(subparsers):
         choices=["tool", "kit", "aggregator"],
         help="The level to foreground (omit to report the current one)")
     use_parser.set_defaults(_meta="meta_use")
+
+    # dz prop ... -- top-level alias of `dz meta prop ...` (curated
+    # admission: `prop` is reserved lib-wide, so no tool can shadow it;
+    # the verb's canonical node is <root>:.meta:prop and this is its
+    # shortname -- the same shape as the `use` alias above).
+    _add_prop_subtree(subparsers)
