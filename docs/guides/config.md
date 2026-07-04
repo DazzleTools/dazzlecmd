@@ -12,6 +12,8 @@ CLI commands that read and write this file, see `docs/guides/dz-kit.md`.
 
 - **Default**: `~/.dazzlecmd/config.json`
 - **Override**: set `DAZZLECMD_CONFIG` to an alternate path (used by tests
+
+> **Note:** `DAZZLECMD_CONFIG` points at the `config.json` file; the property store (`properties.json` -- `dz .note`, `dz level`, channel settings) resolves to a **sibling file in the same directory**, so the one variable isolates both. If you point it at a temp file for testing, expect a `properties.json` to appear beside it.
   and per-project scripts). Absolute paths only.
 
 The directory is created on first write. You can also create it manually
