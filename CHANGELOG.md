@@ -4,6 +4,10 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.29-alpha] - 2026-07-04
+
+cli.py decomposition completes (R6/R7, the last two slices of the 2026-06-25 plan): the READ/CARDS handlers move to `commands/inspect.py` and the dispatch fan-in (dispatch_meta, the verb x level dispatcher + its tag->handler table, the B4-mutate handlers, dispatch_tool, the sugar flags hook) moves to `dispatch.py`; `cli.py` shrinks 730 -> ~240 lines (main + re-exports). Pure moves -- behavior byte-identical (byte-gate 10/10) -- with one exception found BY the split: `dz version` had broken in the first cut (an unimported name flake8's F821 caught while all 1562 tests stayed green, because nothing exercised it); fixed, and a dispatch smoke-test module now pins version/list/info/tree routing plus the re-export surface so the gap stays closed.
+
 ## [0.11.27-alpha] - 2026-07-03
 
 The `=` assignment marker: `dz level=kit`, `dz .note="some words"`, `dz :.kit.channels.verbosity=-3`, and `dz .note=` (set-to-empty -- previously untypable on PowerShell 5.1). One shell token, split at the first `=`; the RHS is opaque; same validation and added/updated echo as every write. Also in the 0.11.21-27 group: `dz -h` shows canonical fiber homes and stops advertising `prop` as a top-level peer (its story moved to `dz prop -h`); `dz level -h` teaches the rung ladder with per-rung one-liners; the command grammar is published at `docs/grammar.md`.
@@ -3954,7 +3958,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.27a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.29a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

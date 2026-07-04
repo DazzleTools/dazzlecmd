@@ -11,6 +11,7 @@ unknown-verb / unresolved-target fallthrough.
 import inspect
 
 from dazzlecmd import cli
+from dazzlecmd import dispatch as _dispatch_mod
 from dazzlecmd.cli import verb_plan, _dispatch_verb_target
 from dazzlecmd_lib.engine import AggregatorEngine
 from dazzlecmd_lib.testing import make_tool, make_kit
@@ -43,7 +44,9 @@ def _stub_table(monkeypatch):
         return handler
 
     table = {t: mk(t) for t in ("tool_info", "kit_info", "aggregator_info")}
-    monkeypatch.setattr(cli, "_VERB_LEVEL_HANDLERS", table)
+    # R6/R7 decomposition: the LIVE table binds in dazzlecmd.dispatch
+    # (cli re-exports it); patch the module the dispatcher actually reads.
+    monkeypatch.setattr(_dispatch_mod, "_VERB_LEVEL_HANDLERS", table)
     return calls
 
 
