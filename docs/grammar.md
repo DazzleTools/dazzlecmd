@@ -65,7 +65,7 @@ rhs         ::= any-text                      (* opaque: multi-word (quote the w
                                                  negatives, "=", or EMPTY (lhs= sets "") *)
 ```
 
-`dz level=kit` · `dz .note="some words"` · `dz :.kit.channels.verbosity=-3` · `dz .note=` (empty). The rule: *operator-led addresses are disambiguated by position (the space form stays); bare-word addresses require the marker.* Once rung nodes ship, the space form `dz level kit` flips from SET to NAVIGATE — the marker is what makes that flip safe.
+`dz level=kit` · `dz .note="some words"` · `dz :.kit.channels.verbosity=-3` · `dz .note=` (empty). Spacing is forgiven: `dz level = kit`, `dz level= kit`, and `dz level =kit` all mean `dz level=kit`. The rule: *operator-led addresses are disambiguated by position (the space form stays); bare-word addresses require the marker.* Once rung nodes ship, the space form `dz level kit` flips from SET to NAVIGATE — the marker is what makes that flip safe.
 
 ## Not a grammar engine
 
