@@ -4,6 +4,10 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.32-alpha] - 2026-07-05
+
+`dz level` and `dz :.level` now agree in every state: when the level property is unset or deleted, both answer the gentle default (`tool (default)`, exit 0) instead of one defaulting while the other errored; and `dz :.level:.` correctly lists the fiber family under the level axis again (a listing is about the node's children, not its value). Both were tester-checklist finds on the new one-node alias surface.
+
 ## [0.11.31-alpha] - 2026-07-05
 
 `dz :.level` and `dz level` are now ONE value in both directions: writing the fiber spelling (`dz :.level=kit`, or `=bogus` -> the validator's exit-2 rejection) routes to the same validated level property the `dz level` verb uses, and reading it shows the current level -- no more silent inert writes to a lookalike key (found by the tester sweep). A dangling `--` with no value gets a truthful error message.
@@ -3962,7 +3966,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.31a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.32a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

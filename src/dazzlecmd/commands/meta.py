@@ -47,10 +47,15 @@ def register_level_property(engine):
     """Wire the level property's validator into the shared write path.
     Called once at app startup (beside the sugar_flags_hook)."""
     from dazzlecmd_lib.prop_commands import (
+        register_key_default,
         register_node_value_alias,
         register_validated_key,
     )
     register_validated_key(level_property_key(engine), level_validator)
+    # Tester REAL-BUG 2: `dz level` and `dz :.level` must agree when the
+    # property is unset/deleted -- BOTH resolve to the same registered
+    # default (the gentle foreground), echoed "(default)".
+    register_key_default(level_property_key(engine), DEFAULT_FOREGROUND)
     # One-node (F2, sweep 2026-07-04): the level AXIS NODE's bare value IS
     # this property -- `dz :.level=bogus` must hit the validator, never an
     # inert shadow key; `dz :.level` reads the current level.

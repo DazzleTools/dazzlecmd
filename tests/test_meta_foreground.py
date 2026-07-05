@@ -140,3 +140,16 @@ class TestLevelNodeValueAlias:
         e.property_store.set("tst.level", "tool")
         assert e._intercept_path_form([":.level"]) == ("result", 0)
         assert "tool" in capsys.readouterr().out
+
+    def test_bug2_spellings_agree_after_delete(self, tmp_path, capsys):
+        from dazzlecmd_lib import prop_commands
+        from dazzlecmd.commands.meta import foreground_level
+        e = self._engine(tmp_path)
+        e._intercept_path_form([":.level=kit"])
+        capsys.readouterr()
+        prop_commands.cmd_delete(e, ".level")
+        capsys.readouterr()
+        # the verb's view and the path form's view agree post-delete:
+        assert foreground_level(e) == "tool"
+        assert e._intercept_path_form([":.level"]) == ("result", 0)
+        assert "tool (default)" in capsys.readouterr().out
