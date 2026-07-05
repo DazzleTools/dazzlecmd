@@ -108,3 +108,35 @@ class TestForegroundState:
 
     def test_foreground_level_tolerates_no_engine(self):
         assert foreground_level(None) == DEFAULT_FOREGROUND
+
+
+class TestLevelNodeValueAlias:
+    """F2 regression (sweep 2026-07-04): `dz :.level=<x>` routes to the
+    VALIDATED level property -- never an inert fiber shadow key. The
+    one-node doctrine: the axis node's bare value IS the property."""
+
+    def _engine(self, tmp_path):
+        import dazzlecmd_lib.prop_commands as pc
+        from dazzlecmd_lib.engine import AggregatorEngine
+        from dazzlecmd.commands.meta import register_level_property
+        e = AggregatorEngine(name="t", command="tst",
+                             config_dir=str(tmp_path))
+        register_level_property(e)
+        return e
+
+    def test_fiber_spelled_write_validates(self, tmp_path, capsys):
+        e = self._engine(tmp_path)
+        assert e._intercept_path_form([":.level=bogus"]) == ("result", 2)
+        assert "invalid level" in capsys.readouterr().err
+        assert e.property_store.get("tst:.level") is None  # no shadow key
+
+    def test_fiber_spelled_write_sets_the_level(self, tmp_path, capsys):
+        e = self._engine(tmp_path)
+        assert e._intercept_path_form([":.level=kit"]) == ("result", 0)
+        assert e.property_store.get("tst.level") == "kit"
+
+    def test_fiber_spelled_read_shows_the_level(self, tmp_path, capsys):
+        e = self._engine(tmp_path)
+        e.property_store.set("tst.level", "tool")
+        assert e._intercept_path_form([":.level"]) == ("result", 0)
+        assert "tool" in capsys.readouterr().out
