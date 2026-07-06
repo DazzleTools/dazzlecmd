@@ -4,6 +4,10 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.39-alpha] - 2026-07-06
+
+`version` leaves the `dz -h` commands list (same decluttering as `level`): `--version`/`-V` remain in options, `dz version` still works as the compatibility spelling, and `dz info version` carries its card. Full retirement waits until spellings are DERIVED from the version property (the flags-as-spellings plan), at which point redundant surfaces cost nothing to keep or drop.
+
 ## [0.11.38-alpha] - 2026-07-06
 
 `dz meta level` is now real -- `dz -h` had promised it under meta while `dz meta -h` rejected it (a hand-written help drifting from the parser: exactly the class the tree-generated help will retire). The top-level `dz -h` row for level is removed in favor of discovery through meta; `dz level [<rung>]` remains as the no-collision shorthand of `dz meta level`.
@@ -3990,7 +3994,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.38a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.39a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -180,3 +180,14 @@ class TestMetaLevelSubcommand:
         p = build_parser([], engine=None)
         ns = p.parse_args(["level", "kit"])
         assert ns.level == "kit"
+
+    def test_version_row_removed_but_surfaces_stay(self):
+        # 2026-07-06: version leaves the dz -h commands list (--version
+        # is in options; dz info version has its card) -- the SUBCOMMAND
+        # itself stays until spellings derive (the flags-note ledger).
+        from dazzlecmd.parsers import build_parser
+        p = build_parser([], engine=None)
+        assert '("version"' not in (p.epilog or "")
+        assert "version" not in (p.epilog or "").split("commands:")[-1].split("\n")[1:2]
+        ns = p.parse_args(["version"])  # still parses
+        assert ns._meta == "version"

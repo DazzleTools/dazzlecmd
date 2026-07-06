@@ -222,7 +222,6 @@ def _build_categorized_help(projects):
         ("mode", "Toggle dev/publish mode"),
         ("tree", "Show the aggregator tree"),
         ("setup <tool>", "Run a tool's declared setup script"),
-        ("version", "Show version info"),
         ("meta", "The internals namespace [dz:.meta]: prop, level, use, reset"),
     ]
 
