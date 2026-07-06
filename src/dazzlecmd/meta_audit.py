@@ -130,6 +130,27 @@ def totality_audit(engine, projects: Optional[list] = None,
         check(name, f"{cmd}:.meta:prop:{name}", "registry:#101",
               "F7/schema: the registry node")
 
+    # 7. THE TYPING TEST (user guardrail 2026-07-06): every node must
+    #    BE one of the four ladder types (its obj's type, or its declared
+    #    kind for derived nodes). Untyped nodes are stranded-class items.
+    LADDER = {"Unified", "Groupable", "Continuum", "ContinuumSpace"}
+    for nkey in tree.nodes:
+        kind = tree.nodes[nkey].get("kind", "")
+        base = kind.split(" ", 1)[0]
+        if base in LADDER:
+            homed += 1
+        elif kind in ("namespace", "rung", "verb", "pending",
+                      "aggregator-root", "kit", "tool", "virtual-kit"):
+            # legacy role-as-kind spellings -- typed implicitly as
+            # Unified; stranded until the renderers/grafts declare
+            # kind=<ladder type> + role=<word> everywhere
+            stranded.append({"item": nkey, "source": "tree:untyped",
+                             "homes_with": "the typing alignment "
+                                           "(kind=type + role)"})
+        else:
+            stranded.append({"item": nkey, "source": "tree:unknown-kind",
+                             "homes_with": "the typing alignment"})
+
     return {"homed": homed, "stranded": stranded,
             "tree_nodes": len(tree.nodes)}
 

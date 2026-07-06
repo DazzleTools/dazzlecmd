@@ -240,6 +240,8 @@ def main():
     register_level_property(engine)
     from dazzlecmd.commands.inspect import _graft_app_verbs
     engine.tree_extensions.append(_graft_app_verbs)
+    from dazzlecmd.tree_plane import graft_instance_plane
+    engine.tree_extensions.append(graft_instance_plane)
 
     return engine.run()
 

@@ -50,7 +50,12 @@ def _info_at_tool(res, args, projects, kits, project_root, engine):
                                project_root=project_root)
         return _render_interrogation(interro, as_json=True)
     from dazzlecmd_lib.default_meta_commands import render_info
-    return render_info(args, projects, engine)
+    rc = render_info(args, projects, engine)
+    from dazzlecmd.tree_plane import instance_level_line
+    line = instance_level_line(engine, getattr(args, "tool", None) or res.name)
+    if line:
+        print(line)
+    return rc
 
 
 def _info_at_kit(res, args, projects, kits, project_root, engine):
@@ -136,11 +141,25 @@ def _info_tree_node(engine, target):
     if not target:
         return False
     from dazzlecmd_lib.fqcn_grammar import canonicalize, FQCNParseError
-    from dazzlecmd_lib.fqcn_tree import build_tree, resolve_path
-    tree = build_tree(engine.command)
-    _graft_app_verbs(engine, tree)
-    key = None
-    if any(op in target for op in (":.", ":+")) or target.startswith(":"):
+
+    from dazzlecmd_lib.fqcn_tree import build_engine_tree, resolve_path
+    # Row-1 (the surface matrix): every surface sees the SAME tree --
+    # the engine-extension build, never a raw build_tree + manual graft
+    # (that path silently missed registered extensions, e.g. the
+    # instance plane).
+    if _graft_app_verbs not in engine.tree_extensions:
+        engine.tree_extensions.append(_graft_app_verbs)
+    tree = build_engine_tree(engine)
+    if target == ":.":
+        # the ROOT CARD (B-2): the one graph's front door -- hidden
+        # machinery children + the visible user namespaces
+        key = engine.command
+        target = engine.command
+    else:
+        key = None
+    if key is not None:
+        pass
+    elif any(op in target for op in (":.", ":+")) or target.startswith(":"):
         try:
             canon, _ = canonicalize(target, implicit_root=engine.command)
         except FQCNParseError:
@@ -175,6 +194,10 @@ def _info_tree_node(engine, target):
             rung = key.rsplit(":", 1)[-1]
             print(f"  -- a position on the axis AND the class of {rung} "
                   f"entities; the fiber below is {rung}-ness's machinery.")
+    if node.get("level"):
+        handles = node.get("instance_of") or []
+        tail = f"   ({', '.join(handles)})" if handles else ""
+        print(f"  level: {node['level']}{tail}")
     if node.get("help"):
         # the help FACET's degenerate renderer (the one-line info; the
         # full page stays `dz <verb> -h`)
