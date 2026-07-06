@@ -93,6 +93,34 @@ def _cmd_info(args, projects, engine, kits=None, project_root=None):
     return render_info(args, projects, engine)
 
 
+def _graft_app_verbs(engine, tree):
+    """2f slice 2: the APP's verb inventory joins the tree. Verb->help
+    pairs come from the LIVE argparse tree (no second registry). A verb
+    whose name already matches an existing node (a pole like `enable`,
+    a rung-surface like `kit`) ATTACHES its help there (one-node); the
+    rest gain flat nodes under `<root>:.meta:verb:<name>` (family
+    refinement -- e.g. an inspect axis -- is a later slice)."""
+    try:
+        from dazzlecmd.parsers import build_parser
+        parser = build_parser([], engine=None)
+        sub = parser._subparsers._group_actions[0]
+        pairs = [(a.dest, a.help) for a in sub._choices_actions]
+    except Exception:
+        return
+    verb_root = f"{engine.command}:.meta:verb"
+    by_segment = {}
+    for n in tree.nodes:
+        by_segment.setdefault(n.rsplit(":", 1)[-1].lstrip("."), []).append(n)
+    for name, help_text in pairs:
+        hits = by_segment.get(name, [])
+        if len(hits) == 1:
+            tree.nodes[hits[0]].setdefault("help", help_text)
+        elif not hits:
+            key = f"{verb_root}:{name}"
+            tree.add_node(key, obj=None, kind="verb", help=help_text)
+            tree.add_edge(verb_root, key)
+
+
 def _info_tree_node(engine, target):
     """Render the card for a DERIVED-TREE node (the fiber plane's read
     surface -- SD-FQCN-2 2f). Returns True when ``target`` resolves to a
@@ -102,6 +130,7 @@ def _info_tree_node(engine, target):
     from dazzlecmd_lib.fqcn_grammar import canonicalize, FQCNParseError
     from dazzlecmd_lib.fqcn_tree import build_tree, resolve_path
     tree = build_tree(engine.command)
+    _graft_app_verbs(engine, tree)
     key = None
     if any(op in target for op in (":.", ":+")) or target.startswith(":"):
         try:
@@ -131,9 +160,16 @@ def _info_tree_node(engine, target):
     print(f"  kind: {kind}")
     if "axis" in node:
         print(f"  rung of: {node['axis']}  (rank {node['rank']})")
-        rung = key.rsplit(":", 1)[-1]
-        print(f"  -- a position on the axis AND the class of {rung} "
-              f"entities; the fiber below is {rung}-ness's machinery.")
+        if node["axis"].endswith(":.level"):
+            # the class-vs-instance doctrine line -- LEVEL rungs only
+            # (a verb pole is a position, not a class of entities)
+            rung = key.rsplit(":", 1)[-1]
+            print(f"  -- a position on the axis AND the class of {rung} "
+                  f"entities; the fiber below is {rung}-ness's machinery.")
+    if node.get("help"):
+        # the help FACET's degenerate renderer (the one-line info; the
+        # full page stays `dz <verb> -h`)
+        print(f"  help: {node['help']}")
     obj = node.get("obj")
     if obj is not None and getattr(obj, "invariant", ""):
         print(f"  invariant: {obj.invariant} (conserved at 0)")

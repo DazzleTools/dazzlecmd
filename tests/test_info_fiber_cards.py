@@ -63,3 +63,31 @@ class TestFiberCards:
         engine.property_store.set("tst:.level:kit.note", "x")
         ok, out = _info(engine, ":.level:kit", capsys)
         assert ok and "tst:.level:kit.note = 'x'" in out
+
+
+class TestVerbCards:
+    """2f slice 2: the app's verbs join the tree; info shows the one-line
+    help FACET (the full page stays `dz <verb> -h`)."""
+
+    def test_flat_verb_card_with_help(self, engine, capsys):
+        ok, out = _info(engine, "version", capsys)
+        assert ok and "kind: verb" in out and "help:" in out
+
+    def test_new_verb_resolves(self, engine, capsys):
+        ok, out = _info(engine, "new", capsys)
+        assert ok and "tst:.meta:verb:new" in out
+
+    def test_pole_gains_attached_help(self, engine, capsys):
+        ok, out = _info(engine, "enable", capsys)
+        assert ok and "rung of: tst:.meta:verb:activation" in out
+        assert "help:" in out
+        assert "class of" not in out  # the doctrine line is level-only
+
+    def test_kit_stays_the_rung_one_node(self, engine, capsys):
+        ok, out = _info(engine, "kit", capsys)
+        assert ok and "tst:.level:kit" in out
+        assert "kind: verb" not in out
+
+    def test_verb_space_lists_flat_verbs(self, engine, capsys):
+        ok, out = _info(engine, ":.meta:verb", capsys)
+        assert ok and "version" in out and "activation" in out

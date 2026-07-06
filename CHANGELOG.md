@@ -4,6 +4,10 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.34-alpha] - 2026-07-05
+
+Every `dz` verb is now info-able (`dz info version`, `dz info new`, `dz info setup`, ...): the app's verb inventory joins the derived tree straight from the live argparse parser (no second registry to maintain), and each verb's card shows its one-line help -- the help facet's first renderer, distinct from the full `dz <verb> -h` page. Verbs that already exist as axis poles (`enable`, `attach`, ...) attach their help to the pole's card instead of duplicating; names that match a rung surface (`kit`) keep resolving to the rung (one node). The class-vs-instance line now appears only on level rungs, where it is true.
+
 ## [0.11.33-alpha] - 2026-07-05
 
 `dz info` learns the fiber plane (the first slice of info universality): `dz info :.level` renders the level axis's card with EVERY rung, kind, and rank -- the structural view of the ladder, derived from the live objects, not help text; `dz info :.level:kit` (or the alias `:.kit`, or bare `dz info kit`) renders the rung card -- its axis and rank, the class-vs-instance line ("a position on the axis AND the class of kit entities"), its conserved invariant, the grafted machinery it contains, and any stored properties. Bare axis/rung/pole names resolve when unique; ambiguous names list their candidates; unknown names keep the legacy not-found path and exit code.
@@ -3970,7 +3974,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.33a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.34a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
