@@ -109,7 +109,8 @@ class TestCurrentPosition:
         e = self._registered(tmp_path)
         ok, out = _info(e, ":.level", capsys)
         assert ok and "current: tool (default)" in out
-        assert "tool          rung (rank -2)  <- current" in out
+        assert "default: tool" in out
+        assert "tool          rung (rank -2)  <- current  (default)" in out
 
     def test_set_level_moves_the_marker(self, tmp_path, capsys):
         e = self._registered(tmp_path)
@@ -117,4 +118,5 @@ class TestCurrentPosition:
         ok, out = _info(e, ":.level", capsys)
         assert "current: kit" in out
         assert "kit           ContinuumSpace (rank -1)  <- current" in out
-        assert "tool          rung (rank -2)\n" in out  # marker moved
+        # current moved to kit; the default tag stays visible on tool
+        assert "tool          rung (rank -2)  (default)" in out

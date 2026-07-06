@@ -173,15 +173,21 @@ def _info_tree_node(engine, target):
     # one-node: an axis whose bare VALUE is property-backed shows its
     # CURRENT position on the card (and marks the active rung below)
     current = None
+    default_val = None
     from dazzlecmd_lib.prop_commands import KEY_DEFAULTS, NODE_VALUE_ALIASES
     value_key = NODE_VALUE_ALIASES.get(key)
     if value_key is not None:
+        default_val = KEY_DEFAULTS.get(value_key)
         current = engine.property_store.get(value_key)
-        if current is None and value_key in KEY_DEFAULTS:
-            print(f"  current: {KEY_DEFAULTS[value_key]} (default)")
-            current = KEY_DEFAULTS[value_key]
+        if current is None and default_val is not None:
+            print(f"  current: {default_val} (default)")
+            current = default_val
         elif current is not None:
             print(f"  current: {current}")
+        if default_val is not None:
+            # defaults expressed CLEARLY (user directive 2026-07-05):
+            # the chart center, distinct from the structural invariant
+            print(f"  default: {default_val}")
     obj = node.get("obj")
     if obj is not None and getattr(obj, "invariant", ""):
         print(f"  invariant: {obj.invariant} (conserved at 0)")
@@ -195,7 +201,11 @@ def _info_tree_node(engine, target):
             kn = tree.nodes[k]
             rank = f" (rank {kn['rank']})" if "rank" in kn else ""
             seg = k.rsplit(":", 1)[-1]
-            marker = "  <- current" if current is not None and seg == current else ""
+            marker = ""
+            if current is not None and seg == current:
+                marker += "  <- current"
+            if default_val is not None and seg == default_val:
+                marker += "  (default)"
             print(f"    {seg:<14}{kn.get('kind', '')}{rank}{marker}")
     props = engine.property_store.list_prefix(key)
     if props:
