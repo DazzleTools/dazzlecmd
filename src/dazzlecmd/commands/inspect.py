@@ -61,6 +61,17 @@ def _info_at_tool(res, args, projects, kits, project_root, engine):
         engine, getattr(args, "tool", None) or res.name)
     if level_line:
         lines = out.splitlines()
+        # "Short FQCN" when a DIFFERING Absolute exists (user directive:
+        # users should know the actual root -- the aggregator sits at
+        # the co-level of .meta on the one tree)
+        fq = next((i for i, ln in enumerate(lines)
+                   if ln.startswith("FQCN:")), None)
+        ab = next((ln for ln in lines if ln.startswith("Absolute:")), None)
+        if fq is not None and ab is not None:
+            fq_val = lines[fq].split(":", 1)[1].strip()
+            ab_val = ab.split(":", 1)[1].strip().split()[0]
+            if ab_val != fq_val:
+                lines[fq] = f"{'Short FQCN:':<13}{fq_val}"
         # Level joins the IDENTITY block (after Namespace:, else Kit:)
         for anchor in ("Namespace:", "Kit:", "FQCN:"):
             idx = next((i for i, ln in enumerate(lines)
