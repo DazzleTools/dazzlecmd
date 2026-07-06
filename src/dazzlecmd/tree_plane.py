@@ -190,6 +190,14 @@ def derived_instance_read(engine, key):
     if node_key == engine.command:
         return None  # the root's properties are NOT instance metadata
     try:
+        # the intercept runs PRE-discovery (the fast-path rider); an
+        # INSTANCE key is worth the discovery cost -- run it on demand
+        # (found live: the hook silently missed and a write landed)
+        if not (getattr(engine, "projects", None) or []):
+            import contextlib
+            import io as _io
+            with contextlib.redirect_stdout(_io.StringIO()):
+                engine.discover()
         from dazzlecmd_lib.fqcn_tree import build_engine_tree, resolve_path
         tree = build_engine_tree(engine)
         node_key = resolve_path(tree, node_key)

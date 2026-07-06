@@ -77,6 +77,9 @@ def _info_at_tool(res, args, projects, kits, project_root, engine):
             block = ["Fibers:"] + fibers + [""]
             lines[state_idx:state_idx] = block
         out = "\n".join(lines) + ("\n" if out.endswith("\n") else "")
+    # space-conscious state block (user nit): no blank line between
+    # "Current state:" and its rows -- consistent with Fibers:
+    out = out.replace("Current state:\n\n", "Current state:\n")
     print(out, end="")
     return rc
 
