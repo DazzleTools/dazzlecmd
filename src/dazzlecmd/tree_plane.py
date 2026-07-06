@@ -169,3 +169,32 @@ def instance_level_line(engine, name):
     except Exception:
         pass
     return None
+
+
+# --- B-5: the metadata ring's derived reads (instance-ring DWP F4;
+# the plan B-5; rides lib 0.10.22's engine.derived_reads tier) --------
+_DERIVED_INSTANCE_FIELDS = ("version", "level", "help")
+
+
+def derived_instance_read(engine, key):
+    """A derived read for INSTANCE metadata: `dz:core:safedel.version`
+    answers from the item's own manifest data (via the tree), read-only
+    (the authority model). Root-level keys (`dz.level`) never match --
+    the node part must step past the root, so the foreground property
+    stays user-writable."""
+    node_key, dot, prop = key.partition(".")
+    if not dot or prop not in _DERIVED_INSTANCE_FIELDS:
+        return None
+    if ":" not in node_key[len(engine.command):].lstrip(":"):
+        pass  # single-segment instances (kits) are fine; root is not
+    if node_key == engine.command:
+        return None  # the root's properties are NOT instance metadata
+    try:
+        from dazzlecmd_lib.fqcn_tree import build_engine_tree, resolve_path
+        tree = build_engine_tree(engine)
+        node_key = resolve_path(tree, node_key)
+        if node_key in tree and tree.nodes[node_key].get("instance_of"):
+            return tree.nodes[node_key].get(prop)
+    except Exception:
+        return None
+    return None

@@ -73,3 +73,28 @@ if __name__ == "__main__":  # regenerate the baseline deliberately
                   fh, indent=2)
     print(render_stranded_report(result))
     print(f"\nbaseline written: {BASELINE}")
+
+
+class TestMetadataRing:
+    """B-5 (the plan; instance-ring DWP F4): instance metadata reads
+    derive from the item's own data; claimed keys are read-only."""
+
+    def test_version_derives_and_is_read_only(self, capsys=None):
+        import tempfile, os, dazzlecmd
+        from dazzlecmd_lib.engine import AggregatorEngine
+        from dazzlecmd_lib import prop_commands
+        from dazzlecmd.commands.inspect import _graft_app_verbs
+        from dazzlecmd.tree_plane import (graft_instance_plane,
+                                          derived_instance_read)
+        e = AggregatorEngine(name="dazzlecmd", command="dz",
+                             config_dir=tempfile.mkdtemp())
+        e.project_root = os.path.dirname(dazzlecmd.__file__)
+        import io, contextlib
+        with contextlib.redirect_stdout(io.StringIO()):
+            e.discover()
+        e.tree_extensions += [_graft_app_verbs, graft_instance_plane]
+        e.derived_reads.append(derived_instance_read)
+        assert derived_instance_read(e, "dz:core:safedel.version") == "0.1.1"
+        assert derived_instance_read(e, "dz:core:safedel.level") == "internaltool"
+        assert derived_instance_read(e, "dz.level") is None  # root untouched
+        assert e._intercept_path_form([":core:safedel.version=9"]) == ("result", 2)

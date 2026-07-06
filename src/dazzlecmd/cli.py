@@ -242,6 +242,8 @@ def main():
     engine.tree_extensions.append(_graft_app_verbs)
     from dazzlecmd.tree_plane import graft_instance_plane
     engine.tree_extensions.append(graft_instance_plane)
+    from dazzlecmd.tree_plane import derived_instance_read
+    engine.derived_reads.append(derived_instance_read)
 
     return engine.run()
 
