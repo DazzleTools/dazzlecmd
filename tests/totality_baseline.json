@@ -15,6 +15,7 @@
     "discovery:tool::core:find",
     "discovery:tool::core:fixpath",
     "discovery:tool::core:links",
+    "discovery:tool::core:listall",
     "discovery:tool::core:rn",
     "discovery:tool::core:safedel",
     "discovery:tool::dazzletools:claude-cleanup",
