@@ -120,6 +120,37 @@ def graft_instance_plane(engine, tree) -> None:
             node["version"] = str(version)
 
 
+def instance_card_sections(engine, name):
+    """Card sections for an instance (the user's clarity directive:
+    what's IDENTITY, what's a FIBER, what's internal). Returns
+    (level_line, fibers_lines) -- level joins the identity block;
+    the Fibers block carries the ring (instance_of now; aliases and
+    members join at B-5/B-6)."""
+    try:
+        from dazzlecmd_lib.fqcn_tree import build_engine_tree
+        tree = build_engine_tree(engine)
+        hits = [n for n in tree.nodes
+                if n.rsplit(":", 1)[-1] == name
+                and tree.nodes[n].get("instance_of")]
+        if len(hits) != 1:
+            return None, []
+        node = tree.nodes[hits[0]]
+        level = node.get("level", "?")
+        handles = node.get("instance_of") or []
+        level_line = f"{'Level:':<13}{level}"
+        cmd = engine.command
+        fibers = [
+            f"  instance of  {h}   ({cmd} info "
+            f"{h[len(cmd):] if h.startswith(cmd + ':') else h})"
+            for h in handles
+        ]
+        for m in (node.get("members") or [])[:0]:  # members render at B-6
+            pass
+        return level_line, fibers
+    except Exception:
+        return None, []
+
+
 def instance_level_line(engine, name):
     """The HEADLINE reflection (AC-F2): the Level line for a legacy tool
     card -- `Level: internaltool  (dz:.level:internaltool)`, the handle

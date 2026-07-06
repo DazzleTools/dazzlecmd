@@ -49,12 +49,35 @@ def _info_at_tool(res, args, projects, kits, project_root, engine):
         interro = _interrogate(res.entity, engine, level="tool",
                                project_root=project_root)
         return _render_interrogation(interro, as_json=True)
+    import contextlib
+    import io as _io
     from dazzlecmd_lib.default_meta_commands import render_info
-    rc = render_info(args, projects, engine)
-    from dazzlecmd.tree_plane import instance_level_line
-    line = instance_level_line(engine, getattr(args, "tool", None) or res.name)
-    if line:
-        print(line)
+    from dazzlecmd.tree_plane import instance_card_sections
+    buf = _io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = render_info(args, projects, engine)
+    out = buf.getvalue()
+    level_line, fibers = instance_card_sections(
+        engine, getattr(args, "tool", None) or res.name)
+    if level_line:
+        lines = out.splitlines()
+        # Level joins the IDENTITY block (after Namespace:, else Kit:)
+        for anchor in ("Namespace:", "Kit:", "FQCN:"):
+            idx = next((i for i, ln in enumerate(lines)
+                        if ln.startswith(anchor)), None)
+            if idx is not None:
+                lines.insert(idx + 1, level_line)
+                break
+        # the FIBERS section (the ring, visibly distinct) sits before
+        # the internal-state block
+        if fibers:
+            state_idx = next((i for i, ln in enumerate(lines)
+                              if ln.startswith("Current state:")),
+                             len(lines))
+            block = ["Fibers:"] + fibers + [""]
+            lines[state_idx:state_idx] = block
+        out = "\n".join(lines) + ("\n" if out.endswith("\n") else "")
+    print(out, end="")
     return rc
 
 
