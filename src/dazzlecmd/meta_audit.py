@@ -33,8 +33,10 @@ def _tree_for(engine):
     from dazzlecmd_lib.fqcn_tree import build_engine_tree
     try:
         from dazzlecmd.commands.inspect import _graft_app_verbs
-        if _graft_app_verbs not in engine.tree_extensions:
-            engine.tree_extensions.append(_graft_app_verbs)
+        from dazzlecmd.tree_plane import graft_instance_plane
+        for ext in (_graft_app_verbs, graft_instance_plane):
+            if ext not in engine.tree_extensions:
+                engine.tree_extensions.append(ext)
     except Exception:
         pass
     return build_engine_tree(engine)
