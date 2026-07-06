@@ -88,6 +88,7 @@ exclude = ["dazzlecmd.projects*", "dazzlecmd.kits*"]
 ]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 # tests/one-offs/ is a scratchpad (per the one-offs-vs-regression-tests
 # policy) -- experiments, diagnostic scripts, single-use probes. They are
 # NOT regression coverage and must not block CI / pre-push. Real regressions

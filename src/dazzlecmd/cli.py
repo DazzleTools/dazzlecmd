@@ -238,6 +238,8 @@ def main():
     # identically (v2 contract C-7 / R1.7).
     from dazzlecmd.commands.meta import register_level_property
     register_level_property(engine)
+    from dazzlecmd.commands.inspect import _graft_app_verbs
+    engine.tree_extensions.append(_graft_app_verbs)
 
     return engine.run()
 

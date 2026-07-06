@@ -120,3 +120,34 @@ class TestCurrentPosition:
         assert "kit           ContinuumSpace (rung) (rank -1)  <- current" in out
         # current moved to kit; the default tag stays visible on tool
         assert "tool          Unified (rung) (rank -2)  (default)" in out
+
+
+class TestMatrixSweepFixes:
+    """The surface-matrix sweep's three findings (2026-07-06), fixed."""
+
+    def _reg(self, tmp_path):
+        from dazzlecmd_lib.engine import AggregatorEngine
+        e = AggregatorEngine(name="t", command="tst",
+                             config_dir=str(tmp_path))
+        e.tree_extensions.append(inspect_cmds._graft_app_verbs)
+        return e
+
+    def test_row1_listing_shows_flat_verbs(self, tmp_path, capsys):
+        from dazzlecmd_lib import prop_commands
+        e = self._reg(tmp_path)
+        assert prop_commands.cmd_list(e, ":.meta:verb") == 0
+        out = capsys.readouterr().out
+        for v in ("version", "new", "list"):
+            assert v in out  # ONE tree, every surface
+
+    def test_row3_ambiguous_segment_help_attaches_to_verb_plane(
+            self, tmp_path, capsys):
+        e = self._reg(tmp_path)
+        ok, out = _info(e, ":.meta:verb:loading:attach", capsys)
+        assert ok and "help:" in out  # never silently dropped
+
+    def test_padding_survives_long_names(self, tmp_path, capsys):
+        e = self._reg(tmp_path)
+        ok, out = _info(e, ":.meta:verb:mode", capsys)
+        assert ok and "materialization  Continuum" in out
+        assert "materializationContinuum" not in out

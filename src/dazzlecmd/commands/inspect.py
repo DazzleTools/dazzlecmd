@@ -113,6 +113,12 @@ def _graft_app_verbs(engine, tree):
         by_segment.setdefault(n.rsplit(":", 1)[-1].lstrip("."), []).append(n)
     for name, help_text in pairs:
         hits = by_segment.get(name, [])
+        if len(hits) > 1:
+            # Row-3 fix: an ambiguous segment (attach exists under BOTH
+            # kit:loading and meta:verb:loading) attaches to the VERB
+            # PLANE's own pole -- never silently dropped
+            verb_hits = [h for h in hits if ":.meta:verb" in h]
+            hits = verb_hits[:1] or hits[:1]
         if len(hits) == 1:
             tree.nodes[hits[0]].setdefault("help", help_text)
         elif not hits:
@@ -200,6 +206,7 @@ def _info_tree_node(engine, target):
                        tree.nodes[n].get("rank", 0), n))
     if kids:
         print("  contains:")
+        width = max([14] + [len(k.rsplit(":", 1)[-1]) + 2 for k in kids])
         for k in kids:
             kn = tree.nodes[k]
             rank = f" (rank {kn['rank']})" if "rank" in kn else ""
@@ -210,7 +217,7 @@ def _info_tree_node(engine, target):
                 marker += "  <- current"
             if default_val is not None and seg == default_val:
                 marker += "  (default)"
-            print(f"    {seg:<14}{kn.get('kind', '')}{rolet}{rank}{marker}")
+            print(f"    {seg:<{width}}{kn.get('kind', '')}{rolet}{rank}{marker}")
     props = engine.property_store.list_prefix(key)
     if props:
         print("  properties:")
