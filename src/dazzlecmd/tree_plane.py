@@ -58,6 +58,13 @@ def graft_instance_plane(engine, tree) -> None:
     parents are containment, never the rung)."""
     cmd = engine.command
     graft_virtual_kit_rung(engine, tree)
+    # the ROOT's two spellings are ONE node (ODR alias): the NAME
+    # ("dazzlecmd", used by Absolute FQCNs) aliases to the COMMAND
+    # ("dz", the tree root) -- prefix-aware, so dazzlecmd:core:find
+    # and dazzlecmd:.level resolve on the tree like dz-spelled paths.
+    name = getattr(engine, "name", None)
+    if name and name != cmd:
+        tree.graph.setdefault("aliases", {})[name] = cmd
 
     root = cmd
     if root in tree:
@@ -129,8 +136,9 @@ def instance_card_sections(engine, name):
     try:
         from dazzlecmd_lib.fqcn_tree import build_engine_tree
         tree = build_engine_tree(engine)
+        short = name.rsplit(":", 1)[-1]  # absolute spellings enrich too
         hits = [n for n in tree.nodes
-                if n.rsplit(":", 1)[-1] == name
+                if n.rsplit(":", 1)[-1] == short
                 and tree.nodes[n].get("instance_of")]
         if len(hits) != 1:
             return None, []
