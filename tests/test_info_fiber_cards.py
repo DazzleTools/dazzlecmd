@@ -91,3 +91,30 @@ class TestVerbCards:
     def test_verb_space_lists_flat_verbs(self, engine, capsys):
         ok, out = _info(engine, ":.meta:verb", capsys)
         assert ok and "version" in out and "activation" in out
+
+
+class TestCurrentPosition:
+    """The axis card shows WHERE WE ARE (one-node: the axis's value is
+    its current position) -- user find 2026-07-05."""
+
+    def _registered(self, tmp_path):
+        from dazzlecmd_lib.engine import AggregatorEngine
+        from dazzlecmd.commands.meta import register_level_property
+        e = AggregatorEngine(name="t", command="tst",
+                             config_dir=str(tmp_path))
+        register_level_property(e)
+        return e
+
+    def test_default_current_shown_and_marked(self, tmp_path, capsys):
+        e = self._registered(tmp_path)
+        ok, out = _info(e, ":.level", capsys)
+        assert ok and "current: tool (default)" in out
+        assert "tool          rung (rank -2)  <- current" in out
+
+    def test_set_level_moves_the_marker(self, tmp_path, capsys):
+        e = self._registered(tmp_path)
+        e.property_store.set("tst.level", "kit")
+        ok, out = _info(e, ":.level", capsys)
+        assert "current: kit" in out
+        assert "kit           ContinuumSpace (rank -1)  <- current" in out
+        assert "tool          rung (rank -2)\n" in out  # marker moved
