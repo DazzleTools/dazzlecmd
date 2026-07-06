@@ -153,3 +153,30 @@ class TestLevelNodeValueAlias:
         assert foreground_level(e) == "tool"
         assert e._intercept_path_form([":.level"]) == ("result", 0)
         assert "tool (default)" in capsys.readouterr().out
+
+
+class TestMetaLevelSubcommand:
+    """User find 2026-07-06: dz -h promised `level` under meta but
+    `dz meta level` was an invalid choice. Now real (routes to the same
+    report-or-set handler as `use`); the dz -h row is removed in favor
+    of discovery through meta; `dz level` stays as the shorthand."""
+
+    def test_meta_level_parses_and_routes(self):
+        from dazzlecmd.parsers import build_parser
+        p = build_parser([], engine=None)
+        ns = p.parse_args(["meta", "level", "kit"])
+        assert ns._meta == "meta_use" and ns.level == "kit"
+        ns = p.parse_args(["meta", "level"])
+        assert ns.level is None  # report form
+
+    def test_dz_h_epilog_drops_the_level_row(self):
+        from dazzlecmd.parsers import build_parser
+        p = build_parser([], engine=None)
+        assert "level [<rung>]" not in (p.epilog or "")
+        assert "dz:.meta" in (p.epilog or "")  # meta row remains
+
+    def test_top_level_shorthand_still_works(self):
+        from dazzlecmd.parsers import build_parser
+        p = build_parser([], engine=None)
+        ns = p.parse_args(["level", "kit"])
+        assert ns.level == "kit"

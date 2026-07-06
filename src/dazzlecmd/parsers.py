@@ -224,7 +224,6 @@ def _build_categorized_help(projects):
         ("setup <tool>", "Run a tool's declared setup script"),
         ("version", "Show version info"),
         ("meta", "The internals namespace [dz:.meta]: prop, level, use, reset"),
-        ("level [<rung>]", "Foreground level [dz:.meta:level] (aliases: use, meta use)"),
     ]
 
     # Group tools by kit import name (the top-level kit a tool belongs to)
@@ -683,6 +682,18 @@ def _register_meta_commands(subparsers):
     meta_reset = meta_sub.add_parser(
         "reset", help="Reset the foreground level back to the default (tool)")
     meta_reset.set_defaults(_meta="meta_reset")
+    # dz meta level [<rung>] -- the FQCN-lite form (`dz level` is its
+    # no-collision shorthand; the dz -h row was removed in favor of
+    # discovery through meta -- user directive 2026-07-06). Same handler
+    # as `use` (report-or-set).
+    meta_level = meta_sub.add_parser(
+        "level", help="Report or set the foreground level "
+                      "(the `dz level` shorthand's home)")
+    meta_level.add_argument(
+        "level", nargs="?", default=None,
+        help="One of: " + _level_help() + " (omit to report the "
+             "current one)")
+    meta_level.set_defaults(_meta="meta_use")
 
     # dz meta prop -- CRUD over the per-FQCN property store (the explicit
     # form the `dz .note "hi"` sugar desugars to; v2 contract R1.1).
