@@ -34,7 +34,10 @@ def _tree_for(engine):
     try:
         from dazzlecmd.commands.inspect import _graft_app_verbs
         from dazzlecmd.tree_plane import graft_instance_plane
-        for ext in (_graft_app_verbs, graft_instance_plane):
+        from dazzlecmd.tree_plane import (graft_kit_frame_projections,
+                                          register_aliases_on_tree)
+        for ext in (_graft_app_verbs, graft_instance_plane,
+                    graft_kit_frame_projections, register_aliases_on_tree):
             if ext not in engine.tree_extensions:
                 engine.tree_extensions.append(ext)
     except Exception:
@@ -152,6 +155,25 @@ def totality_audit(engine, projects: Optional[list] = None,
         else:
             stranded.append({"item": nkey, "source": "tree:unknown-kind",
                              "homes_with": "the typing alignment"})
+
+    # 8. THE ODR CHECK (ODR DWP: enforcement + D10): every projection
+    #    names a resolvable SOURCE; every alias resolves on the tree.
+    for nkey in tree.nodes:
+        n = tree.nodes[nkey]
+        if n.get("role") == "projection":
+            src = n.get("source")
+            if src and src in tree:
+                homed += 1
+            else:
+                stranded.append({"item": nkey, "source": "odr:projection",
+                                 "homes_with": "a resolvable source handle"})
+    for alias, target in (tree.graph.get("aliases") or {}).items():
+        if target in tree:
+            homed += 1
+        else:
+            stranded.append({"item": f"{alias} -> {target}",
+                             "source": "odr:alias",
+                             "homes_with": "alias target must resolve"})
 
     return {"homed": homed, "stranded": stranded,
             "tree_nodes": len(tree.nodes)}

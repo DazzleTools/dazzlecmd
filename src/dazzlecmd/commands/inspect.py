@@ -251,6 +251,11 @@ def _info_tree_node(engine, target):
         handles = node.get("instance_of") or []
         tail = f"   ({', '.join(handles)})" if handles else ""
         print(f"  level: {node['level']}{tail}")
+    if node.get("source"):
+        src = node["source"]
+        follow = src[len(engine.command):] if src.startswith(
+            engine.command + ":") else src
+        print(f"  source: {src}   ({engine.command} info {follow})")
     for m in (node.get("members") or []):
         print(f"  member: {m}")
     for a in (node.get("aliases") or []):

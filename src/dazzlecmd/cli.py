@@ -244,6 +244,10 @@ def main():
     engine.tree_extensions.append(graft_instance_plane)
     from dazzlecmd.tree_plane import derived_instance_read
     engine.derived_reads.append(derived_instance_read)
+    from dazzlecmd.tree_plane import (graft_kit_frame_projections,
+                                      register_aliases_on_tree)
+    engine.tree_extensions.append(graft_kit_frame_projections)
+    engine.tree_extensions.append(register_aliases_on_tree)
 
     return engine.run()
 

@@ -230,3 +230,72 @@ def derived_instance_read(engine, key):
     except Exception:
         return None
     return None
+
+
+# --- B-7: the one alias registry (ODR DWP D10) + kit-frame PROJECTIONS
+# (ODR DWP Case 2; the plan B-7; convergence DWP F11) ------------------
+
+def alias_registry(engine):
+    """D10: aliases are DATA declared once -- every surface projects
+    from THIS dict (alias -> {"to": canonical, "provenance": str}).
+    Seeded here: the root name/command pair + virtual-kit rewrites.
+    The tree builder consumes it below; the FQCN dispatch tiers and the
+    property value-aliases unify onto it at merge-back (D10 ledger)."""
+    reg = getattr(engine, "_alias_registry", None)
+    if reg is None:
+        reg = {}
+        cmd = engine.command
+        name = getattr(engine, "name", None)
+        if name and name != cmd:
+            reg[name] = {"to": cmd, "provenance": "system:root-name"}
+        for kit in (getattr(engine, "kits", None) or []):
+            for canonical, short in (getattr(kit, "name_rewrite", None)
+                                     or {}).items():
+                reg[f"{cmd}:{kit.name}:{short}"] = {
+                    "to": f"{cmd}:{canonical}",
+                    "provenance": f"virtual-kit:{kit.name}"}
+        engine._alias_registry = reg
+    return reg
+
+
+def graft_kit_frame_projections(engine, tree):
+    """ODR Case 2 made real: the kit-frame verb view. The DEFINING home
+    of each kit-applicable verb axis is the verb space
+    (`dz:.meta:verb:<axis>`); `dz:.level:kit:management:<axis>` is a
+    PROJECTION -- a derived node carrying the kit frame plus a SOURCE
+    handle back to its definition. Supersedes the Row-3 heuristic with
+    declared relations."""
+    cmd = engine.command
+    kit_rung = f"{cmd}:.level:kit"
+    verb_root = f"{cmd}:.meta:verb"
+    if kit_rung not in tree or verb_root not in tree:
+        return
+    mgmt = f"{kit_rung}:management"
+    if mgmt not in tree:
+        tree.add_node(mgmt, obj=None, kind="ContinuumSpace",
+                      role="projection", source=verb_root,
+                      help="the verb space, seen from the kit frame")
+        tree.add_edge(kit_rung, mgmt)
+    for axis in ("membership", "loading", "activation"):
+        src_axis = f"{verb_root}:{axis}"
+        if src_axis not in tree:
+            continue
+        proj_axis = f"{mgmt}:{axis}"
+        if proj_axis not in tree:
+            tree.add_node(proj_axis, obj=None, kind="Continuum",
+                          role="projection", source=src_axis)
+            tree.add_edge(mgmt, proj_axis)
+        for pole in tree.successors(src_axis):
+            pole_seg = pole.rsplit(":", 1)[-1]
+            proj_pole = f"{proj_axis}:{pole_seg}"
+            if proj_pole not in tree:
+                tree.add_node(proj_pole, obj=None, kind="Unified",
+                              role="projection", source=pole,
+                              help=tree.nodes[pole].get("help", ""))
+                tree.add_edge(proj_axis, proj_pole)
+
+
+def register_aliases_on_tree(engine, tree):
+    """The registry -> the tree's alias table (ONE source, projected)."""
+    for alias, rec in alias_registry(engine).items():
+        tree.graph.setdefault("aliases", {}).setdefault(alias, rec["to"])
