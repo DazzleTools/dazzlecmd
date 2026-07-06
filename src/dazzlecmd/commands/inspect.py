@@ -96,10 +96,26 @@ def _info_at_tool(res, args, projects, kits, project_root, engine):
 
 
 def _info_at_kit(res, args, projects, kits, project_root, engine):
-    """``kit_info`` handler: the kit identity + current-state card."""
+    """``kit_info`` handler: the kit identity + current-state card --
+    B-6: the Fibers section (instance-of, members, aliases) splices in,
+    same shape as the tool card."""
     kit_name = getattr(res.entity, "kit_name", None) or res.entity.name
-    return render_kit_info(kit_name, engine, project_root=project_root,
-                           as_json=getattr(args, "as_json", False))
+    if getattr(args, "as_json", False):
+        return render_kit_info(kit_name, engine, project_root=project_root,
+                               as_json=True)
+    import contextlib
+    import io as _io
+    from dazzlecmd.tree_plane import instance_card_sections
+    buf = _io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = render_kit_info(kit_name, engine, project_root=project_root)
+    out = buf.getvalue()
+    level_line, fibers = instance_card_sections(engine, kit_name)
+    if fibers:
+        block = "Fibers:" + chr(10) + chr(10).join(fibers) + chr(10)
+        out = out.rstrip() + chr(10) * 2 + block
+    print(out, end="")
+    return rc
 
 
 def _info_at_aggregator(res, args, projects, kits, project_root, engine):
@@ -235,6 +251,10 @@ def _info_tree_node(engine, target):
         handles = node.get("instance_of") or []
         tail = f"   ({', '.join(handles)})" if handles else ""
         print(f"  level: {node['level']}{tail}")
+    for m in (node.get("members") or []):
+        print(f"  member: {m}")
+    for a in (node.get("aliases") or []):
+        print(f"  alias: {a}")
     if node.get("help"):
         # the help FACET's degenerate renderer (the one-line info; the
         # full page stays `dz <verb> -h`)

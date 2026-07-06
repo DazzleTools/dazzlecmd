@@ -98,6 +98,16 @@ def graft_instance_plane(engine, tree) -> None:
         members = list(getattr(kit, "tools", None) or [])
         if members:
             node["members"] = [f"{cmd}:{m}" for m in members]
+        # B-6 (the aliases-on-cards directive): a virtual kit's
+        # name_rewrite entries are ALIAS declarations (ODR kind 1) --
+        # attach each spelling to its TARGET tool's node
+        for canonical, short in (getattr(kit, "name_rewrite", None)
+                                 or {}).items():
+            target = f"{cmd}:{canonical}"
+            if target not in tree:
+                tree.add_node(target, obj=None)
+            tree.nodes[target].setdefault("aliases", []).append(
+                f"{name}:{short}")
 
     for tool in (getattr(engine, "projects", None) or []):
         fqcn = getattr(tool, "_fqcn", None) or getattr(tool, "name", None)
@@ -147,13 +157,19 @@ def instance_card_sections(engine, name):
         handles = node.get("instance_of") or []
         level_line = f"{'Level:':<13}{level}"
         cmd = engine.command
+
+        def _follow(h):
+            return h[len(cmd):] if h.startswith(cmd + ":") else h
+
         fibers = [
-            f"  instance of  {h}   ({cmd} info "
-            f"{h[len(cmd):] if h.startswith(cmd + ':') else h})"
+            f"  instance of  {h}   ({cmd} info {_follow(h)})"
             for h in handles
         ]
-        for m in (node.get("members") or [])[:0]:  # members render at B-6
-            pass
+        for m in (node.get("members") or []):  # B-6: followable members
+            fibers.append(
+                f"  member       {m}   ({cmd} info {_follow(m)})")
+        for a in (node.get("aliases") or []):  # B-6: alias spellings
+            fibers.append(f"  alias        {a}   (runs the same tool)")
         return level_line, fibers
     except Exception:
         return None, []

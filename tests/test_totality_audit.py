@@ -98,3 +98,21 @@ class TestMetadataRing:
         assert derived_instance_read(e, "dz:core:safedel.level") == "internaltool"
         assert derived_instance_read(e, "dz.level") is None  # root untouched
         assert e._intercept_path_form([":core:safedel.version=9"]) == ("result", 2)
+
+    def test_b6_members_and_aliases_are_relations(self):
+        import tempfile, os, dazzlecmd, io, contextlib
+        from dazzlecmd_lib.engine import AggregatorEngine
+        from dazzlecmd_lib.fqcn_tree import build_engine_tree
+        from dazzlecmd.commands.inspect import _graft_app_verbs
+        from dazzlecmd.tree_plane import graft_instance_plane
+        e = AggregatorEngine(name="dazzlecmd", command="dz",
+                             config_dir=tempfile.mkdtemp())
+        e.project_root = os.path.dirname(dazzlecmd.__file__)
+        with contextlib.redirect_stdout(io.StringIO()):
+            e.discover()
+        e.tree_extensions += [_graft_app_verbs, graft_instance_plane]
+        tree = build_engine_tree(e)
+        f = tree.nodes["dz:f"]
+        assert "dz:core:safedel" in f["members"]          # followable
+        assert all(m in tree for m in f["members"])       # they RESOLVE
+        assert "f:rm" in tree.nodes["dz:core:safedel"]["aliases"]
