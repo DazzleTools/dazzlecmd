@@ -365,7 +365,10 @@ def test_kit_help_body_matches_golden():
     golden = os.path.join(os.path.dirname(__file__), "goldens",
                           "kit_help_body.txt")
     with open(golden, "r", newline="", encoding="utf-8") as f:
-        expected = f.read()
+        # normalize endings: a fresh checkout may materialize the golden
+        # CRLF (autocrlf) -- the byte-lock is on CONTENT, not on the
+        # platform's checkout filter (found by the fiber-work worktree).
+        expected = f.read().replace("\r\n", "\n")
     full = render_kit_help(_kit_parser(build_parser([])))
-    body = full[full.index("Each presence axis"):]
+    body = full[full.index("Each presence axis"):].replace("\r\n", "\n")
     assert body == expected
