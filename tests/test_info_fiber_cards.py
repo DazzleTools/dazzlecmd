@@ -71,7 +71,7 @@ class TestVerbCards:
 
     def test_flat_verb_card_with_help(self, engine, capsys):
         ok, out = _info(engine, "version", capsys)
-        assert ok and "kind: verb" in out and "help:" in out
+        assert ok and "kind: Unified (verb)" in out and "help:" in out
 
     def test_new_verb_resolves(self, engine, capsys):
         ok, out = _info(engine, "new", capsys)
@@ -110,13 +110,13 @@ class TestCurrentPosition:
         ok, out = _info(e, ":.level", capsys)
         assert ok and "current: tool (default)" in out
         assert "default: tool" in out
-        assert "tool          rung (rank -2)  <- current  (default)" in out
+        assert "tool          Unified (rung) (rank -2)  <- current  (default)" in out
 
     def test_set_level_moves_the_marker(self, tmp_path, capsys):
         e = self._registered(tmp_path)
         e.property_store.set("tst.level", "kit")
         ok, out = _info(e, ":.level", capsys)
         assert "current: kit" in out
-        assert "kit           ContinuumSpace (rank -1)  <- current" in out
+        assert "kit           ContinuumSpace (rung) (rank -1)  <- current" in out
         # current moved to kit; the default tag stays visible on tool
-        assert "tool          rung (rank -2)  (default)" in out
+        assert "tool          Unified (rung) (rank -2)  (default)" in out

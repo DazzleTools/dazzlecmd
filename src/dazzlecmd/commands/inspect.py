@@ -116,8 +116,10 @@ def _graft_app_verbs(engine, tree):
         if len(hits) == 1:
             tree.nodes[hits[0]].setdefault("help", help_text)
         elif not hits:
+            from dazzle_lib.groupable import Unified
             key = f"{verb_root}:{name}"
-            tree.add_node(key, obj=None, kind="verb", help=help_text)
+            tree.add_node(key, obj=Unified(label=name), kind="Unified",
+                          role="verb", help=help_text)
             tree.add_edge(verb_root, key)
 
 
@@ -155,9 +157,10 @@ def _info_tree_node(engine, target):
     if key is None:
         return False
     node = tree.nodes[key]
-    kind = node.get("kind", "namespace")
+    kind = node.get("kind", "Unified")
+    role = node.get("role")
     print(f"{key}")
-    print(f"  kind: {kind}")
+    print(f"  kind: {kind}" + (f" ({role})" if role else ""))
     if "axis" in node:
         print(f"  rung of: {node['axis']}  (rank {node['rank']})")
         if node["axis"].endswith(":.level"):
@@ -200,13 +203,14 @@ def _info_tree_node(engine, target):
         for k in kids:
             kn = tree.nodes[k]
             rank = f" (rank {kn['rank']})" if "rank" in kn else ""
+            rolet = f" ({kn['role']})" if kn.get("role") else ""
             seg = k.rsplit(":", 1)[-1]
             marker = ""
             if current is not None and seg == current:
                 marker += "  <- current"
             if default_val is not None and seg == default_val:
                 marker += "  (default)"
-            print(f"    {seg:<14}{kn.get('kind', '')}{rank}{marker}")
+            print(f"    {seg:<14}{kn.get('kind', '')}{rolet}{rank}{marker}")
     props = engine.property_store.list_prefix(key)
     if props:
         print("  properties:")

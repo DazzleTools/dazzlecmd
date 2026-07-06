@@ -4,6 +4,10 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.36-alpha] - 2026-07-06
+
+Cards and listings now show every node's LADDER TYPE with its role in parentheses -- `.meta` reads `Unified (namespace)` instead of the ontologically homeless `namespace`, verbs read `Unified (verb)`, rungs `Unified (rung)`; a mount that hosts a real object (like `.level`) shows the object's type alone. Rides dazzlecmd-lib 0.10.19-alpha's type/role split.
+
 ## [0.11.35-alpha] - 2026-07-05
 
 The level axis's card now shows WHERE YOU ARE: `dz info :.level` prints `current: <level>` (with the `(default)` marker when unset) and tags the active rung in the ladder listing (`tool ... <- current`). One-node in action: the axis's value is its position, so the card that shows the class also shows the state.
@@ -3978,7 +3982,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.35a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.36a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
