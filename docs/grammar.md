@@ -70,3 +70,33 @@ rhs         ::= any-text                      (* opaque: multi-word (quote the w
 ## Not a grammar engine
 
 The RHS of an assignment is never evaluated — `dz .x=(a+b)` stores the string `(a+b)`. If property values ever grow *computed* expressions, an expression grammar (operator precedence, nesting) becomes warranted; until then this grammar stays linear by design.
+
+## Navigating the system: the tree, fibers, and rings
+
+Everything in a dazzlecmd aggregator — levels, kits, tools, verbs, machinery, properties — is a node in **one derived tree**, and every node is addressable and inspectable. `dz info <anything>` renders its card:
+
+```
+> dz info :.level              > dz info kit                  > dz info version
+dz:.level                      dz:.level:kit                  dz:.meta:verb:version
+  kind: Continuum                kind: ContinuumSpace           kind: verb
+  contains:                      rung of: dz:.level (rank -1)   help: Show version info
+    fiber   rung (rank -5)       contains:
+    ...                            activation ...
+    supra   rung (rank +1)         visibility ...
+```
+
+Three ideas make the layout make sense:
+
+**A rung is a position AND a class.** `dz:media` is *a* kit (an instance, in the containment tree). `dz:.level:kit` is the kit *rung* — both a position on the level ladder and the class of all kits. The structure hanging beneath it (`:visibility`, `:activation`) is what kit-*ness* is made of: policy and machinery that belongs to no single kit and to no other level. That inner structure is a **fiber** — reachable through the `:.` step, and the reason the step exists: without it, class-level structure would have no address.
+
+**Fibers form rings of "aboutness."** Each `:.` step moves one level of indirection inward *about the same subject*: the instance, then the machinery about it, then the structure about that. Named paths address every ring (`dz:.level:kit:visibility:silenced` is "what *silenced* means for kits").
+
+**Per-class defaults are fiber properties.** Because properties cascade down the tree, one write at a rung governs its whole class: `dz :.level:tool.channels.verbosity=-2` quiets *every tool* — no instance path could say that.
+
+### Numeric addresses (shipping incrementally)
+
+Ranks are addresses. The rule is one law: **a segment key selects from the left node's children — a name selects by name, a number selects by rank.** `membership:1` and `membership:add` are the same slot. Siblings ride the parent step: `remove:+1` = up to `membership`, then rank +1 = `add` (and `:++` climbs two levels, like `../..`). `X:0` is the invariant seat — the node itself when the seat is unoccupied. Vacant ranks answer with a hint naming what *is* there. Anonymous rungs created between existing ones self-name as their position (`"5/2"`) until christened with a real name — *names are christenings of positions, not prerequisites*.
+
+### What we're shooting for
+
+The end state is a CLI that is **constructed from its axes** rather than hand-assembled: the tree derives from the live structures, help and cards derive from each item's own metadata, the option surfaces derive from the tree — so adding a verb, a level, or an axis is a *declaration*, and every surface (dispatch, help, info, completion) follows. The operators are deliberately few and single-meaning — `:` select, `.` look, `:.` step inward a ring, `:+` step up — because the power is meant to come from the *structure being uniform*, not from the notation being rich.
