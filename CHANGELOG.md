@@ -4,6 +4,10 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.11.33-alpha] - 2026-07-05
+
+`dz info` learns the fiber plane (the first slice of info universality): `dz info :.level` renders the level axis's card with EVERY rung, kind, and rank -- the structural view of the ladder, derived from the live objects, not help text; `dz info :.level:kit` (or the alias `:.kit`, or bare `dz info kit`) renders the rung card -- its axis and rank, the class-vs-instance line ("a position on the axis AND the class of kit entities"), its conserved invariant, the grafted machinery it contains, and any stored properties. Bare axis/rung/pole names resolve when unique; ambiguous names list their candidates; unknown names keep the legacy not-found path and exit code.
+
 ## [0.11.32-alpha] - 2026-07-05
 
 `dz level` and `dz :.level` now agree in every state: when the level property is unset or deleted, both answer the gentle default (`tool (default)`, exit 0) instead of one defaulting while the other errored; and `dz :.level:.` correctly lists the fiber family under the level axis again (a listing is about the node's children, not its value). Both were tester-checklist finds on the new one-node alias surface.
@@ -3966,7 +3970,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.32a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.33a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

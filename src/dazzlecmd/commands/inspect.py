@@ -83,8 +83,76 @@ def _cmd_info(args, projects, engine, kits=None, project_root=None):
         "info", args.tool, args, projects, kits, project_root, engine)
     if rc is not None:
         return rc
+    # 2f (AC-2-7 universality): before the legacy not-found, try the
+    # DERIVED TREE -- fiber paths (`dz info :.level`), rung/axis bare
+    # names (`dz info level`, `dz info kit`), verb poles. Everything
+    # addressable is info-able.
+    if engine is not None and _info_tree_node(engine, args.tool):
+        return 0
     from dazzlecmd_lib.default_meta_commands import render_info
     return render_info(args, projects, engine)
+
+
+def _info_tree_node(engine, target):
+    """Render the card for a DERIVED-TREE node (the fiber plane's read
+    surface -- SD-FQCN-2 2f). Returns True when ``target`` resolves to a
+    tree node; False lets the legacy fallback speak."""
+    if not target:
+        return False
+    from dazzlecmd_lib.fqcn_grammar import canonicalize, FQCNParseError
+    from dazzlecmd_lib.fqcn_tree import build_tree, resolve_path
+    tree = build_tree(engine.command)
+    key = None
+    if any(op in target for op in (":.", ":+")) or target.startswith(":"):
+        try:
+            canon, _ = canonicalize(target, implicit_root=engine.command)
+        except FQCNParseError:
+            return False
+        canon = resolve_path(tree, canon)
+        if canon in tree:
+            key = canon
+    else:
+        # a bare name: unique last-segment match across the tree
+        hits = [n for n in tree.nodes
+                if n.rsplit(":", 1)[-1].lstrip(".") == target
+                and n != engine.command]
+        if len(hits) == 1:
+            key = hits[0]
+        elif len(hits) > 1:
+            print(f"'{target}' is ambiguous in the fiber plane:")
+            for h in sorted(hits):
+                print(f"  {h}")
+            return True
+    if key is None:
+        return False
+    node = tree.nodes[key]
+    kind = node.get("kind", "namespace")
+    print(f"{key}")
+    print(f"  kind: {kind}")
+    if "axis" in node:
+        print(f"  rung of: {node['axis']}  (rank {node['rank']})")
+        rung = key.rsplit(":", 1)[-1]
+        print(f"  -- a position on the axis AND the class of {rung} "
+              f"entities; the fiber below is {rung}-ness's machinery.")
+    obj = node.get("obj")
+    if obj is not None and getattr(obj, "invariant", ""):
+        print(f"  invariant: {obj.invariant} (conserved at 0)")
+    kids = sorted(
+        tree.successors(key),
+        key=lambda n: (tree.nodes[n].get("rank") is None,
+                       tree.nodes[n].get("rank", 0), n))
+    if kids:
+        print("  contains:")
+        for k in kids:
+            kn = tree.nodes[k]
+            rank = f" (rank {kn['rank']})" if "rank" in kn else ""
+            print(f"    {k.rsplit(':', 1)[-1]:<14}{kn.get('kind', '')}{rank}")
+    props = engine.property_store.list_prefix(key)
+    if props:
+        print("  properties:")
+        for pk in sorted(props):
+            print(f"    {pk} = {props[pk]!r}")
+    return True
 
 
 
