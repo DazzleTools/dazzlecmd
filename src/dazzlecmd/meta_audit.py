@@ -28,18 +28,11 @@ RESERVED_VOCABULARY = (
 
 
 def _tree_for(engine):
-    # the adopted mechanism (main 0.11.35-39 / lib 0.10.21): ONE tree
-    # every surface shares -- build_engine_tree + engine.tree_extensions.
+    # the adopted mechanism + THE ONE CONFIG SOURCE (configure_tree)
     from dazzlecmd_lib.fqcn_tree import build_engine_tree
     try:
-        from dazzlecmd.commands.inspect import _graft_app_verbs
-        from dazzlecmd.tree_plane import graft_instance_plane
-        from dazzlecmd.tree_plane import (graft_kit_frame_projections,
-                                          register_aliases_on_tree)
-        for ext in (_graft_app_verbs, graft_instance_plane,
-                    graft_kit_frame_projections, register_aliases_on_tree):
-            if ext not in engine.tree_extensions:
-                engine.tree_extensions.append(ext)
+        from dazzlecmd.tree_plane import configure_tree
+        configure_tree(engine)
     except Exception:
         pass
     return build_engine_tree(engine)

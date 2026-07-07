@@ -239,45 +239,10 @@ def main():
     from dazzlecmd.commands.meta import register_level_property
     register_level_property(engine)
     from dazzlecmd.commands.inspect import _graft_app_verbs
-    # B-9 THE META FOLD (instance-ring M-A/F6; plan B-9; convergence D3):
-    # ONE intrinsic door -- level lives INSIDE meta; every shipped
-    # spelling stays alive via aliases (the relocatability proof).
-    from dazzlecmd_lib.verb_axis import (LEVEL_CONTINUUM, MODE_SPACE,
-                                         axis_by_name)
-    from dazzlecmd_lib.contexts import KIT_PRESENCE_SPACE
-    from dazzle_lib.continuum import ContinuumSpace
-    # V-C (the management DWP): management = a REAL COMPOSED SPACE (the
-    # fused lifecycle -- member > loaded > active; COUPLING_ALIGNED),
-    # nested in the verb space like mode always was. Defining homes move
-    # down; the flat spellings live as D10 registry aliases below.
-    _mgmt = ContinuumSpace.compose(
-        "management",
-        {ax: axis_by_name(ax).continuum()
-         for ax in ("membership", "loading", "activation")})
-    engine.tree_mounts = {
-        ":.meta:verb:management": _mgmt,
-        ":.meta:verb:projection": axis_by_name("projection").continuum(),
-        ":.meta:verb:mode": MODE_SPACE,
-        ":.meta:level": LEVEL_CONTINUUM,
-        ":.meta:level:kit": KIT_PRESENCE_SPACE,
-    }
-    engine.tree_aliases = {
-        ":.level": ":.meta:level",
-        ":.kit": ":.meta:level:kit",
-        # the flat axis spellings (pre-V-C defining homes) stay alive:
-        ":.meta:verb:membership": ":.meta:verb:management:membership",
-        ":.meta:verb:loading": ":.meta:verb:management:loading",
-        ":.meta:verb:activation": ":.meta:verb:management:activation",
-    }
-    engine.tree_extensions.append(_graft_app_verbs)
-    from dazzlecmd.tree_plane import graft_instance_plane
-    engine.tree_extensions.append(graft_instance_plane)
-    from dazzlecmd.tree_plane import derived_instance_read
-    engine.derived_reads.append(derived_instance_read)
-    from dazzlecmd.tree_plane import (graft_kit_frame_projections,
-                                      register_aliases_on_tree)
-    engine.tree_extensions.append(graft_kit_frame_projections)
-    engine.tree_extensions.append(register_aliases_on_tree)
+    # ONE tree-config source (mounts, aliases, extensions, derived
+    # reads) -- shared with the totality audit; see tree_plane.configure_tree
+    from dazzlecmd.tree_plane import configure_tree
+    configure_tree(engine)
     # B-8: exposed GENERATED commands must pass the meta-command gate
     # (found live: the gate silently returned 1 -- the third silent-gate
     # incident; the generated surface joins it at exposure time)

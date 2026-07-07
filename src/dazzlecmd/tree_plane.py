@@ -340,3 +340,39 @@ def classify_verb(engine, name):
     if name in PROPERTY_BACKED:
         return ("property-backed", PROPERTY_BACKED[name])
     return ("handler-backed", None)
+
+
+def configure_tree(engine):
+    """THE one tree-config source (D10's spirit at the config level --
+    found: the audit built with default mounts while the live CLI used
+    the fold+V-C mounts; two sources drifted). cli.main AND the audit
+    both call THIS."""
+    from dazzlecmd_lib.verb_axis import (LEVEL_CONTINUUM, MODE_SPACE,
+                                         axis_by_name)
+    from dazzlecmd_lib.contexts import KIT_PRESENCE_SPACE
+    from dazzle_lib.continuum import ContinuumSpace
+    from dazzlecmd.commands.inspect import _graft_app_verbs
+    mgmt = ContinuumSpace.compose(
+        "management",
+        {ax: axis_by_name(ax).continuum()
+         for ax in ("membership", "loading", "activation")})
+    engine.tree_mounts = {
+        ":.meta:verb:management": mgmt,
+        ":.meta:verb:projection": axis_by_name("projection").continuum(),
+        ":.meta:verb:mode": MODE_SPACE,
+        ":.meta:level": LEVEL_CONTINUUM,
+        ":.meta:level:kit": KIT_PRESENCE_SPACE,
+    }
+    engine.tree_aliases = {
+        ":.level": ":.meta:level",
+        ":.kit": ":.meta:level:kit",
+        ":.meta:verb:membership": ":.meta:verb:management:membership",
+        ":.meta:verb:loading": ":.meta:verb:management:loading",
+        ":.meta:verb:activation": ":.meta:verb:management:activation",
+    }
+    for ext in (_graft_app_verbs, graft_instance_plane,
+                graft_kit_frame_projections, register_aliases_on_tree):
+        if ext not in engine.tree_extensions:
+            engine.tree_extensions.append(ext)
+    if derived_instance_read not in engine.derived_reads:
+        engine.derived_reads.append(derived_instance_read)
