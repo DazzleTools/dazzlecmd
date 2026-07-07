@@ -159,7 +159,9 @@ def totality_audit(engine, projects: Optional[list] = None,
                 # V-C's FAITHFULNESS check: a projection presents its
                 # source TRULY -- its child segments must be a subset
                 # of the source's child segments
-                mine = {c.rsplit(":", 1)[-1] for c in tree.successors(nkey)}
+                mine = {c.rsplit(":", 1)[-1] for c in tree.successors(nkey)
+                        if not (tree.nodes[c].get("role") == "projection"
+                                and tree.nodes[c].get("source") in tree)}
                 theirs = {c.rsplit(":", 1)[-1]
                           for c in tree.successors(src)}
                 if mine <= theirs:

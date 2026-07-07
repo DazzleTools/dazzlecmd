@@ -167,6 +167,45 @@ def graft_instance_plane(engine, tree) -> None:
             node["version"] = str(version)
 
 
+def graft_vk_projections(engine, tree) -> None:
+    """D13 (the core:f: reconciliation): the LISTING's `core:f:` section
+    and dispatch's `core:f:rm` spelling become TREE STRUCTURE. The vk
+    entity keeps its defining home (dz:f -- registered top-level,
+    namespace-spanning by design); dz:<ns>:<vk> is a PROJECTION (the
+    vk's view over that namespace's tools) and each member is a
+    projection leaf sourcing its canonical tool (F11)."""
+    cmd = engine.command
+    for kit in (getattr(engine, "kits", None) or []):
+        if not getattr(kit, "virtual", False):
+            continue
+        vk = getattr(kit, "name", None)
+        home = f"{cmd}:{vk}"
+        rewrites = getattr(kit, "name_rewrite", None) or {}
+        by_ns = {}
+        for canonical, short in rewrites.items():
+            by_ns.setdefault(canonical.split(":", 1)[0], []).append(
+                (canonical, short))
+        for ns, pairs in by_ns.items():
+            door = f"{cmd}:{ns}:{vk}"
+            ns_key = f"{cmd}:{ns}"
+            if ns_key not in tree or home not in tree:
+                continue
+            if door not in tree:
+                tree.add_node(door, obj=None, kind="Unified",
+                              role="projection", source=home,
+                              help=f"the '{vk}' view over {ns}'s tools")
+                tree.add_edge(ns_key, door)
+            for canonical, short in pairs:
+                leaf = f"{door}:{short}"
+                src = f"{cmd}:{canonical}"
+                if leaf not in tree and src in tree:
+                    tree.add_node(leaf, obj=None, kind="Unified",
+                                  role="projection", source=src,
+                                  spelling=f"{vk}:{short}",
+                                  help=tree.nodes[src].get("help", ""))
+                    tree.add_edge(door, leaf)
+
+
 def instance_card_sections(engine, name):
     """Card sections for an instance (the user's clarity directive:
     what's IDENTITY, what's a FIBER, what's internal). Returns
@@ -401,6 +440,7 @@ def configure_tree(engine):
         ":.meta:verb:activation": ":.meta:verb:management:activation",
     }
     for ext in (_graft_app_verbs, graft_instance_plane,
+                graft_vk_projections,
                 graft_kit_frame_projections, register_aliases_on_tree):
         if ext not in engine.tree_extensions:
             engine.tree_extensions.append(ext)
