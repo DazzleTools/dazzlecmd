@@ -216,8 +216,12 @@ def build_parser(projects, engine=None):
             from dazzlecmd.tree_plane import exposed_generated_commands
             for cmd_name, help_text, meta in exposed_generated_commands(engine):
                 if cmd_name not in subparsers.choices:
-                    gen = subparsers.add_parser(cmd_name, help=help_text)
-                    gen.add_argument("name", nargs="?", default=None)
+                    # the help FACET flows into every generated surface
+                    gen = subparsers.add_parser(
+                        cmd_name, help=help_text, description=help_text)
+                    gen.add_argument(
+                        "name", nargs="?", default=None,
+                        help="target name (omit to show all)")
                     gen.set_defaults(_meta=meta)
         except Exception:
             pass
