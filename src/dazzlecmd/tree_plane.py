@@ -118,8 +118,26 @@ def graft_instance_plane(engine, tree) -> None:
             target = f"{cmd}:{canonical}"
             if target not in tree:
                 tree.add_node(target, obj=None)
-            tree.nodes[target].setdefault("aliases", []).append(
-                f"{name}:{short}")
+            spelling = f"{name}:{short}"
+            tree.nodes[target].setdefault("aliases", []).append(spelling)
+            # D12: the alias RELATION is itself an addressable object
+            # (edge properties: its own note/provenance) -- ring entries
+            # group by KIND; leaf keys sanitize ':' -> '-'
+            ring_door = f"{target}:.alias"
+            if ring_door not in tree:
+                tree.add_node(ring_door, obj=None, kind="Unified",
+                              role="ring-door",
+                              help="this item's alias relations")
+                tree.add_edge(target, ring_door)
+            leaf = f"{ring_door}:{spelling.replace(':', '-')}"
+            if leaf not in tree:
+                tree.add_node(leaf, obj=None, kind="Unified",
+                              role="alias-relation", spelling=spelling,
+                              provenance=f"virtual-kit:{name}",
+                              help=f"the alias '{spelling}' -> "
+                                   f"{canonical} (a relation object; "
+                                   f"its own properties live here)")
+                tree.add_edge(ring_door, leaf)
 
     for tool in (getattr(engine, "projects", None) or []):
         fqcn = getattr(tool, "_fqcn", None) or getattr(tool, "name", None)

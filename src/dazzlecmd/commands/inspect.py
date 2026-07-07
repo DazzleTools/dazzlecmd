@@ -427,7 +427,10 @@ def _info_ring(engine, prefix):
             print(f"  {_lbl('member')}       {m}   ({cmd} info {_follow(m)})")
             shown = True
         for a in (node.get("aliases") or []):
-            print(f"  {_lbl('alias')}        {a}")
+            leaf = f"{key}:.alias:{a.replace(':', '-')}"
+            tail = (f"   ({cmd} info {_follow(leaf)})"
+                    if leaf in tree else "")
+            print(f"  {_lbl('alias')}        {a}{tail}")
             shown = True
         hidden = [c for c in tree.successors(key)
                   if c.rsplit(":", 1)[-1].startswith(".")]
