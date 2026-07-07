@@ -191,3 +191,22 @@ class TestMetaLevelSubcommand:
         assert "version" not in (p.epilog or "").split("commands:")[-1].split("\n")[1:2]
         ns = p.parse_args(["version"])  # still parses
         assert ns._meta == "version"
+
+
+class TestExposeFlipInHelp:
+    """B-8's other half (certification 2026-07-07): the epilog derives
+    generated rows -- flip expose and the dz -h row appears/vanishes."""
+
+    def test_exposed_command_appears_in_epilog(self, tmp_path):
+        from dazzlecmd_lib.engine import AggregatorEngine
+        from dazzlecmd.tree_plane import configure_tree
+        from dazzlecmd.parsers import build_parser
+        e = AggregatorEngine(name="t", command="tst",
+                             config_dir=str(tmp_path))
+        configure_tree(e)
+        e.property_store.set("tst:.meta:verb:management.expose", True)
+        p = build_parser([], engine=e)
+        assert "management" in (p.epilog or "")
+        e.property_store.delete("tst:.meta:verb:management.expose")
+        p2 = build_parser([], engine=e)
+        assert "management" not in (p2.epilog or "")

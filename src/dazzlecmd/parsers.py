@@ -152,7 +152,15 @@ def build_parser(projects, engine=None):
     else:
         version_str = f"dazzlecmd {DISPLAY_VERSION} ({__version__})"
 
-    epilog = _build_categorized_help(projects)
+    generated_rows = []
+    if engine is not None:
+        try:
+            from dazzlecmd.tree_plane import exposed_generated_commands
+            generated_rows = [(n, h) for n, h, _m in
+                              exposed_generated_commands(engine)]
+        except Exception:
+            generated_rows = []
+    epilog = _build_categorized_help(projects, generated=generated_rows)
 
     parser = argparse.ArgumentParser(
         prog=prog,
@@ -229,7 +237,7 @@ def build_parser(projects, engine=None):
     return parser
 
 
-def _build_categorized_help(projects):
+def _build_categorized_help(projects, generated=()):
     """Build a categorized command listing for the help epilog."""
     # Meta-commands (builtins)
     builtins = [
@@ -243,6 +251,11 @@ def _build_categorized_help(projects):
         ("setup <tool>", "Run a tool's declared setup script"),
         ("meta", "The internals namespace [dz:.meta]: prop, level, use, reset"),
     ]
+    # B-8's other half (certification 2026-07-07): EXPOSED generated
+    # commands appear in dz -h live -- flip `expose` and the row
+    # appears/vanishes with it.
+    for gname, ghelp in generated:
+        builtins.append((gname, ghelp or "(generated command)"))
 
     # Group tools by kit import name (the top-level kit a tool belongs to)
     namespaces = {}

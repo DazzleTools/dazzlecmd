@@ -4,6 +4,10 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.1-alpha] - 2026-07-07
+
+The merge-certification fixes. The config ring's write refusal is now STRUCTURAL (a registered read-only family rejects every write beneath it -- both key spellings, present-or-absent from the file; the heuristic gap let phantom values shadow file-truth). Exposed generated commands appear in `dz -h` live (B-8's visibility half: flip `expose` and the row appears/vanishes). The surface-matrix generator gained the instance plane (project-root resolution adopted from the audit; 71 -> 191 derived probes) and probes the root by its canonical `:.` spelling.
+
 ## [0.12.0-alpha] - 2026-07-07
 
 The FQCN unification arc: every tool, kit, verb, level, alias, and config entry is now an addressable node in one derived tree, and the CLI surface increasingly generates from that structure.
@@ -4018,7 +4022,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.0a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.1a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

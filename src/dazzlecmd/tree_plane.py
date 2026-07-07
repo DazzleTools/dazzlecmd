@@ -448,6 +448,8 @@ def configure_tree(engine):
         engine.derived_reads.append(derived_instance_read)
     if derived_config_read not in engine.derived_reads:
         engine.derived_reads.append(derived_config_read)
+    from dazzlecmd_lib.prop_commands import register_readonly_family
+    register_readonly_family(f"{engine.command}:.meta:config")
     ft = getattr(engine, "fallthrough_reads", None)
     if ft is None:
         engine.fallthrough_reads = ft = []

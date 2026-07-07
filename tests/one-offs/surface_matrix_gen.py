@@ -46,6 +46,16 @@ def emit(root="dz"):
     import tempfile
     engine = AggregatorEngine(name=root, command=root,
                               config_dir=tempfile.mkdtemp())
+    # certification fix (2026-07-07): resolve project_root the way the
+    # live CLI does, else discovery no-ops and the INSTANCE PLANE is
+    # invisible (the audit already used this pattern; the generator
+    # never adopted it).
+    try:
+        import os as _os
+        import dazzlecmd as _dz
+        engine.project_root = _os.path.dirname(_dz.__file__)  # the audit's pattern
+    except Exception:
+        pass
     try:
         from dazzlecmd.tree_plane import configure_tree
         configure_tree(engine)
@@ -58,7 +68,9 @@ def emit(root="dz"):
         cls = classify(tree, key, root)
         rel = key[len(root):] or key
         spell = rel if rel.startswith(":") else key
-        probes.append({"class": cls, "node": key, "cmd": f"{root} info {spell}"})
+        info_spell = ":." if key == root else spell
+        probes.append({"class": cls, "node": key,
+                       "cmd": f"{root} info {info_spell}"})
         if tree.out_degree(key):
             probes.append({"class": cls, "node": key,
                            "cmd": f"{root} {spell}:." if rel.startswith(":")
