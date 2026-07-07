@@ -1,8 +1,9 @@
 Name:        git
-FQCN:        dazzletools:git
+Short FQCN:  dazzletools:git
 Absolute:    dazzlecmd:dazzletools:git
 Kit:         dazzletools
 Namespace:   dazzletools
+Level:       tool
 Version:     0.1.0
 Description: Git repo state inspector -- composition, workspace, and form at a
              glance
@@ -13,6 +14,8 @@ Script:      git.py
 Category:    dev-tools
 Tags:        git, repo, submodules, worktrees, composition, inspect
 
-Current state:
+Fibers:
+  instance of  dz:.meta:level:tool   (dz info :.meta:level:tool)
 
+Current state:
   Mode: EMBEDDED

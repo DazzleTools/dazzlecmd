@@ -1,8 +1,9 @@
 Name:        safedel
-FQCN:        core:safedel
+Short FQCN:  core:safedel
 Absolute:    dazzlecmd_lib:core:safedel   (constitutional; overlaid from dazzlecmd_lib)
 Kit:         core
 Namespace:   core
+Level:       internaltool
 Version:     0.1.1
 Description: Safe file/directory deletion with link-aware classification,
              metadata preservation, and recoverable trash store
@@ -13,6 +14,9 @@ Script:      safedel.py
 Category:    file-tools
 Tags:        delete, trash, safe, symlink, junction, hardlink, recycle, recovery, metadata
 
-Current state:
+Fibers:
+  instance of  dz:.meta:level:internaltool   (dz info :.meta:level:internaltool)
+  alias        f:rm   (runs the same tool)
 
+Current state:
   Mode: EMBEDDED

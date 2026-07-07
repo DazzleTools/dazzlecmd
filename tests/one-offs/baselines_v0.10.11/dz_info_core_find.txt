@@ -1,8 +1,9 @@
 Name:        find
-FQCN:        core:find
+Short FQCN:  core:find
 Absolute:    dazzlecmd:core:find
 Kit:         core
 Namespace:   core
+Level:       tool
 Version:     0.1.0
 Description: Cross-platform file search powered by fd
 Platform:    cross-platform
@@ -14,6 +15,8 @@ Tags:        find, search, fd, glob, regex, files
 Setup:       Install fd, the file-search binary that `dz find` wraps. Uses platform_detect to dispatch the right installer (winget/scoop/choco on Windows; brew on macOS; apt-get/dnf/pacman/apk on Linux per id_like; pkg/pkg_add on BSD). Supports --dry-run.
              Run: dz setup core:find
 
-Current state:
+Fibers:
+  instance of  dz:.meta:level:tool   (dz info :.meta:level:tool)
 
+Current state:
   Mode: EMBEDDED

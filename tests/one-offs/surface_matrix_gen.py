@@ -33,21 +33,26 @@ def classify(tree, key, root):
     if n.get("role") == "rung":
         return "grafted-rung" if n.get("kind") != "Unified" else (
             "verb-pole" if ":verb:" in key else "rung")
+    if n.get("role"):
+        return n["role"]  # instance / kit / virtual-kit / projection ...
     if n.get("kind") in ("Continuum", "ContinuumSpace"):
         return "axis"
     return "machinery"
 
 
 def emit(root="dz"):
-    tree = build_tree(root)
-    try:  # the app's verb graft, when available
-        from dazzlecmd.commands.inspect import _graft_app_verbs
-
-        class _E:  # a minimal engine-shaped carrier
-            command = root
-        _graft_app_verbs(_E, tree)
+    # post-merge (0.12): the ONE tree-config source -- the generator sees
+    # exactly what the live CLI sees (instances, rings, the meta fold).
+    import tempfile
+    engine = AggregatorEngine(name=root, command=root,
+                              config_dir=tempfile.mkdtemp())
+    try:
+        from dazzlecmd.tree_plane import configure_tree
+        configure_tree(engine)
     except Exception:
         pass
+    from dazzlecmd_lib.fqcn_tree import build_engine_tree
+    tree = build_engine_tree(engine)
     probes = []
     for key in sorted(tree.nodes):
         cls = classify(tree, key, root)

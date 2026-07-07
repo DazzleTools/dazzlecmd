@@ -1,8 +1,9 @@
 Name:        listall
-FQCN:        core:listall
+Short FQCN:  core:listall
 Absolute:    dazzlecmd:core:listall
 Kit:         core
 Namespace:   core
+Level:       tool
 Version:     0.0.2.2
 Description: List filenames, directories, or specific files with customizable
              sorting, collection, and output options
@@ -14,6 +15,9 @@ Category:    file-tools
 Tags:        list, ls, files, directories, sort, collect, tree, clipboard
 Python deps: pyperclip
 
-Current state:
+Fibers:
+  instance of  dz:.meta:level:tool   (dz info :.meta:level:tool)
+  alias        f:ls   (runs the same tool)
 
+Current state:
   Mode: PUBLISH (submodule)
