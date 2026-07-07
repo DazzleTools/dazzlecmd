@@ -4,6 +4,30 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.0-alpha] - 2026-07-07
+
+The FQCN unification arc: every tool, kit, verb, level, alias, and config entry is now an addressable node in one derived tree, and the CLI surface increasingly generates from that structure.
+
+### Added
+- `dz info` works on everything addressable: tools, kits, verbs (`dz info info`), level rungs (`dz info :.meta:level:kit`), fiber paths, and the aggregator root (`dz info :.`).
+- Instance cards are sectioned (identity / Fibers / current state) and show each item's level with a followable handle; kit and tool cards list members and alias spellings as followable addresses.
+- The ring view: `dz info <item>:.` lists an item's relations (instance-of, aliases, members, source) with every property set on them, each labeled with its full address. Alias relations are themselves addressable objects that can carry notes (`dz :core:safedel:.alias:f-rm.note=...`).
+- Reads round-robin related addresses: a property unset at one address answers from its counterpart, with the true source echoed.
+- Derived read-only properties: instance metadata (`dz :core:safedel.version`) and the at-rest config (`dz :.meta:config.list_view`) answer from their own data; writes to them are rejected with a pointer to the real mechanism.
+- Exposable generated commands: setting `.expose=true` on a verb node adds a live top-level command (first: `dz management`, the kit lifecycle quick-read); unsetting removes it.
+- Virtual-kit views are real structure: `core:f:` in listings corresponds to addressable projection nodes (`dz info :core:f:rm`) that name their canonical sources.
+- `docs/glossary.md` gains the navigation vocabulary: rung, axis, pole, fiber, instance-of, rank.
+- Tree cards use the listing color scheme (bold node key, dim labels) on TTYs.
+
+### Changed
+- The level machinery folded inside the meta door: `dz:.meta:level` is the canonical home; every previous spelling (`:.level`, `:.kit`) keeps working via aliases.
+- The lifecycle verb axes (membership, loading, activation) nest under `dz:.meta:verb:management`, matching the kit help's grouping; flat spellings remain as aliases.
+- Reading a real node with no value set answers with its identity and how to inspect it, instead of an error.
+
+### Internal
+- A totality audit with a committed baseline guards that everything the system knows stays addressable; projections are checked against their sources.
+- Rides dazzlecmd-lib 0.10.22-0.10.25 (derived reads, engine mount/alias seams, node hints, counterpart reads).
+
 ## [0.11.39-alpha] - 2026-07-06
 
 `version` leaves the `dz -h` commands list (same decluttering as `level`): `--version`/`-V` remain in options, `dz version` still works as the compatibility spelling, and `dz info version` carries its card. Full retirement waits until spellings are DERIVED from the version property (the flags-as-spellings plan), at which point redundant surfaces cost nothing to keep or drop.
@@ -3994,7 +4018,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.11.39a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.0a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
