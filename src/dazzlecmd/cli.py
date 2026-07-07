@@ -248,6 +248,13 @@ def main():
                                       register_aliases_on_tree)
     engine.tree_extensions.append(graft_kit_frame_projections)
     engine.tree_extensions.append(register_aliases_on_tree)
+    # B-8: exposed GENERATED commands must pass the meta-command gate
+    # (found live: the gate silently returned 1 -- the third silent-gate
+    # incident; the generated surface joins it at exposure time)
+    from dazzlecmd.tree_plane import exposed_generated_commands
+    for _cmd_name, _h, _m in exposed_generated_commands(engine):
+        if engine._meta_commands is not None:
+            engine._meta_commands = set(engine._meta_commands) | {_cmd_name}
 
     return engine.run()
 

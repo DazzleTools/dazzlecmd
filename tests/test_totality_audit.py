@@ -116,3 +116,23 @@ class TestMetadataRing:
         assert "dz:core:safedel" in f["members"]          # followable
         assert all(m in tree for m in f["members"])       # they RESOLVE
         assert "f:rm" in tree.nodes["dz:core:safedel"]["aliases"]
+
+    def test_b8_expose_generates_and_classifier_verdicts(self):
+        import tempfile, os, dazzlecmd
+        from dazzlecmd_lib.engine import AggregatorEngine
+        from dazzlecmd.tree_plane import (exposed_generated_commands,
+                                          classify_verb)
+        e = AggregatorEngine(name="dazzlecmd", command="dz",
+                             config_dir=tempfile.mkdtemp())
+        assert exposed_generated_commands(e) == []          # off by default
+        e.property_store.set("dz:.meta:verb:management.expose", True)
+        cmds = exposed_generated_commands(e)
+        assert cmds and cmds[0][0] == "management"          # flips on
+        from dazzlecmd.parsers import build_parser
+        p = build_parser([], engine=e)
+        assert "management" in p._subparsers._group_actions[0].choices
+        # D8's pinned demotion exhibits:
+        assert classify_verb(e, "use")[0] == "property-backed"
+        assert classify_verb(e, "reset")[0] == "property-backed"
+        assert classify_verb(e, "version")[0] == "property-backed"
+        assert classify_verb(e, "add")[0] == "handler-backed"

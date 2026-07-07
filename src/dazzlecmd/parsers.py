@@ -207,6 +207,21 @@ def build_parser(projects, engine=None):
         )
         sub.set_defaults(_project=project)
 
+    # B-8 (fiber-work): GENERATED commands -- the exposed projection of
+    # the graph (convergence DWP D1/D2). A node with .expose=true in the
+    # store gains a live top-level command; flip it off and the command
+    # leaves dz -h. The spike: `dz management`.
+    if engine is not None:
+        try:
+            from dazzlecmd.tree_plane import exposed_generated_commands
+            for cmd_name, help_text, meta in exposed_generated_commands(engine):
+                if cmd_name not in subparsers.choices:
+                    gen = subparsers.add_parser(cmd_name, help=help_text)
+                    gen.add_argument("name", nargs="?", default=None)
+                    gen.set_defaults(_meta=meta)
+        except Exception:
+            pass
+
     return parser
 
 

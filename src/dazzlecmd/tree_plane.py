@@ -299,3 +299,43 @@ def register_aliases_on_tree(engine, tree):
     """The registry -> the tree's alias table (ONE source, projected)."""
     for alias, rec in alias_registry(engine).items():
         tree.graph.setdefault("aliases", {}).setdefault(alias, rec["to"])
+
+
+# --- B-8: the expose property + the generator spike (convergence DWP
+# D1/D2/D8; the plan B-8). The generated command = the ONE with a
+# handler but no top-level surface: `dz management` (the quick-read). --
+GENERATED_ROUTES = {
+    # exposed node -> (command name, help, the _meta route it reuses)
+    "management": ("management",
+                   "Kit lifecycle state -- the composed axis quick-read",
+                   "kit_management"),
+}
+
+
+def exposed_generated_commands(engine):
+    """D2: `expose` is a PROPERTY -- the CLI surface is the exposed
+    projection of the graph. A node opts in via the store
+    (`dz :.meta:verb:management.expose=true`); flipping it adds/removes
+    the generated command from `dz -h` LIVE (the B-8 AC)."""
+    out = []
+    try:
+        store = engine.property_store
+        for node_name, (cmd_name, help_text, meta) in GENERATED_ROUTES.items():
+            key = f"{engine.command}:.meta:verb:{node_name}.expose"
+            if store.get(key) is True:
+                out.append((cmd_name, help_text, meta))
+    except Exception:
+        pass
+    return out
+
+
+def classify_verb(engine, name):
+    """D8 -- the sufficiency classifier: HANDLER-backed verbs earn a
+    generated command; PROPERTY-backed verbs dissolve into assignment
+    (+ optional alias). The pinned demotion exhibits: use, reset."""
+    PROPERTY_BACKED = {"use": "dz level=<rung> (the assignment surface)",
+                       "reset": "dz prop delete .level (+ the default)",
+                       "version": "dz.version (a derived property read)"}
+    if name in PROPERTY_BACKED:
+        return ("property-backed", PROPERTY_BACKED[name])
+    return ("handler-backed", None)
