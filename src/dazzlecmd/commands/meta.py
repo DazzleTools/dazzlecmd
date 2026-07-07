@@ -61,6 +61,8 @@ def register_level_property(engine):
     # inert shadow key; `dz :.level` reads the current level.
     register_node_value_alias(
         f"{engine.command}:.level", level_property_key(engine))
+    register_node_value_alias(
+        f"{engine.command}:.meta:level", level_property_key(engine))
 
 
 def _migrate_legacy(engine):

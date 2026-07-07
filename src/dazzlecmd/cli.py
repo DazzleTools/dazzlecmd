@@ -239,6 +239,20 @@ def main():
     from dazzlecmd.commands.meta import register_level_property
     register_level_property(engine)
     from dazzlecmd.commands.inspect import _graft_app_verbs
+    # B-9 THE META FOLD (instance-ring M-A/F6; plan B-9; convergence D3):
+    # ONE intrinsic door -- level lives INSIDE meta; every shipped
+    # spelling stays alive via aliases (the relocatability proof).
+    from dazzlecmd_lib.verb_axis import VERB_SPACE, LEVEL_CONTINUUM
+    from dazzlecmd_lib.contexts import KIT_PRESENCE_SPACE
+    engine.tree_mounts = {
+        ":.meta:verb": VERB_SPACE,
+        ":.meta:level": LEVEL_CONTINUUM,
+        ":.meta:level:kit": KIT_PRESENCE_SPACE,
+    }
+    engine.tree_aliases = {
+        ":.level": ":.meta:level",
+        ":.kit": ":.meta:level:kit",
+    }
     engine.tree_extensions.append(_graft_app_verbs)
     from dazzlecmd.tree_plane import graft_instance_plane
     engine.tree_extensions.append(graft_instance_plane)

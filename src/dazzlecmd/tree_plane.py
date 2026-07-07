@@ -41,7 +41,7 @@ def graft_virtual_kit_rung(engine, tree) -> None:
     frozen ladders, absent from the shipped LEVEL_CONTINUUM -- joins the
     TREE at the mediant between tool(-2) and kit(-1): rank -3/2. The lib
     ladder adopts it properly at merge-back (densify_between)."""
-    axis = f"{engine.command}:.level"
+    axis = f"{engine.command}:.meta:level"
     key = f"{axis}:virtual-kit"
     if axis in tree and key not in tree:
         tree.add_node(key, obj=None, kind="rung", axis=axis,
@@ -75,7 +75,7 @@ def graft_instance_plane(engine, tree) -> None:
         tree.nodes[root]["role"] = "aggregator-root"
         tree.nodes[root].setdefault("level", "aggregator")
         tree.nodes[root].setdefault(
-            "instance_of", [f"{cmd}:.level:aggregator"])
+            "instance_of", [f"{cmd}:.meta:level:aggregator"])
 
     for kit in (getattr(engine, "kits", None) or []):
         name = getattr(kit, "name", None)
@@ -93,7 +93,7 @@ def graft_instance_plane(engine, tree) -> None:
         node["kind"] = "Unified"
         node["role"] = level
         node["level"] = level
-        node["instance_of"] = [f"{cmd}:.level:{level}"]
+        node["instance_of"] = [f"{cmd}:.meta:level:{level}"]
         node.setdefault("help", getattr(kit, "description", "") or "")
         members = list(getattr(kit, "tools", None) or [])
         if members:
@@ -118,7 +118,7 @@ def graft_instance_plane(engine, tree) -> None:
         if ns_key not in tree:  # a namespace without a kit manifest
             tree.add_node(ns_key, obj=None, kind="Unified", role="kit",
                           level="kit",
-                          instance_of=[f"{cmd}:.level:kit"])
+                          instance_of=[f"{cmd}:.meta:level:kit"])
             tree.add_edge(root, ns_key)
         key = f"{cmd}:{fqcn}"
         level = _derive_level("tool", tool)
@@ -129,7 +129,7 @@ def graft_instance_plane(engine, tree) -> None:
         node["kind"] = "Unified"
         node["role"] = level  # tool | internaltool
         node["level"] = level
-        node["instance_of"] = [f"{cmd}:.level:{level}"]
+        node["instance_of"] = [f"{cmd}:.meta:level:{level}"]
         node.setdefault("help",
                         getattr(tool, "description", "") or "")
         version = getattr(tool, "version", None)

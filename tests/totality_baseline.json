@@ -1,7 +1,7 @@
 {
   "generated": "by test_totality_audit.py __main__",
-  "homed": 156,
-  "tree_nodes": 99,
+  "homed": 191,
+  "tree_nodes": 108,
   "stranded_keys": [
     "log_lib:channel::algorithm",
     "log_lib:channel::config",
@@ -34,7 +34,6 @@
     "registry:#101::source",
     "registry:#101::subtype",
     "registry:#101::tags",
-    "registry:#101::version",
-    "tree:untyped::dz:.level:virtual-kit"
+    "registry:#101::version"
   ]
 }
