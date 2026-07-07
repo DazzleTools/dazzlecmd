@@ -239,7 +239,17 @@ def main():
     from dazzlecmd.commands.meta import register_level_property
     register_level_property(engine)
     from dazzlecmd.commands.inspect import _graft_app_verbs
-    engine.tree_extensions.append(_graft_app_verbs)
+    # ONE tree-config source (mounts, aliases, extensions, derived
+    # reads) -- shared with the totality audit; see tree_plane.configure_tree
+    from dazzlecmd.tree_plane import configure_tree
+    configure_tree(engine)
+    # B-8: exposed GENERATED commands must pass the meta-command gate
+    # (found live: the gate silently returned 1 -- the third silent-gate
+    # incident; the generated surface joins it at exposure time)
+    from dazzlecmd.tree_plane import exposed_generated_commands
+    for _cmd_name, _h, _m in exposed_generated_commands(engine):
+        if engine._meta_commands is not None:
+            engine._meta_commands = set(engine._meta_commands) | {_cmd_name}
 
     return engine.run()
 

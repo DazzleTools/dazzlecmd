@@ -49,15 +49,73 @@ def _info_at_tool(res, args, projects, kits, project_root, engine):
         interro = _interrogate(res.entity, engine, level="tool",
                                project_root=project_root)
         return _render_interrogation(interro, as_json=True)
+    import contextlib
+    import io as _io
     from dazzlecmd_lib.default_meta_commands import render_info
-    return render_info(args, projects, engine)
+    from dazzlecmd.tree_plane import instance_card_sections
+    buf = _io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = render_info(args, projects, engine)
+    out = buf.getvalue()
+    level_line, fibers = instance_card_sections(
+        engine, getattr(args, "tool", None) or res.name)
+    if level_line:
+        lines = out.splitlines()
+        # "Short FQCN" when a DIFFERING Absolute exists (user directive:
+        # users should know the actual root -- the aggregator sits at
+        # the co-level of .meta on the one tree)
+        fq = next((i for i, ln in enumerate(lines)
+                   if ln.startswith("FQCN:")), None)
+        ab = next((ln for ln in lines if ln.startswith("Absolute:")), None)
+        if fq is not None and ab is not None:
+            fq_val = lines[fq].split(":", 1)[1].strip()
+            ab_val = ab.split(":", 1)[1].strip().split()[0]
+            if ab_val != fq_val:
+                lines[fq] = f"{'Short FQCN:':<13}{fq_val}"
+        # Level joins the IDENTITY block (after Namespace:, else Kit:)
+        for anchor in ("Namespace:", "Kit:", "FQCN:"):
+            idx = next((i for i, ln in enumerate(lines)
+                        if ln.startswith(anchor)), None)
+            if idx is not None:
+                lines.insert(idx + 1, level_line)
+                break
+        # the FIBERS section (the ring, visibly distinct) sits before
+        # the internal-state block
+        if fibers:
+            state_idx = next((i for i, ln in enumerate(lines)
+                              if ln.startswith("Current state:")),
+                             len(lines))
+            block = ["Fibers:"] + fibers + [""]
+            lines[state_idx:state_idx] = block
+        out = "\n".join(lines) + ("\n" if out.endswith("\n") else "")
+    # space-conscious state block (user nit): no blank line between
+    # "Current state:" and its rows -- consistent with Fibers:
+    out = out.replace("Current state:\n\n", "Current state:\n")
+    print(out, end="")
+    return rc
 
 
 def _info_at_kit(res, args, projects, kits, project_root, engine):
-    """``kit_info`` handler: the kit identity + current-state card."""
+    """``kit_info`` handler: the kit identity + current-state card --
+    B-6: the Fibers section (instance-of, members, aliases) splices in,
+    same shape as the tool card."""
     kit_name = getattr(res.entity, "kit_name", None) or res.entity.name
-    return render_kit_info(kit_name, engine, project_root=project_root,
-                           as_json=getattr(args, "as_json", False))
+    if getattr(args, "as_json", False):
+        return render_kit_info(kit_name, engine, project_root=project_root,
+                               as_json=True)
+    import contextlib
+    import io as _io
+    from dazzlecmd.tree_plane import instance_card_sections
+    buf = _io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = render_kit_info(kit_name, engine, project_root=project_root)
+    out = buf.getvalue()
+    level_line, fibers = instance_card_sections(engine, kit_name)
+    if fibers:
+        block = "Fibers:" + chr(10) + chr(10).join(fibers) + chr(10)
+        out = out.rstrip() + chr(10) * 2 + block
+    print(out, end="")
+    return rc
 
 
 def _info_at_aggregator(res, args, projects, kits, project_root, engine):
@@ -129,18 +187,50 @@ def _graft_app_verbs(engine, tree):
             tree.add_edge(verb_root, key)
 
 
+def _lbl(text):
+    """DIM a card label (the dz-list heading scheme; TTY-gated)."""
+    import sys as _sys
+    from dazzlecmd_lib.colors import DIM, colorize_for
+    return colorize_for(_sys.stdout, text, DIM)
+
+
+def _key_style(text):
+    """BOLD the node-key header line (TTY-gated)."""
+    import sys as _sys
+    from dazzlecmd_lib.colors import BOLD, colorize_for
+    return colorize_for(_sys.stdout, text, BOLD)
+
+
 def _info_tree_node(engine, target):
     """Render the card for a DERIVED-TREE node (the fiber plane's read
     surface -- SD-FQCN-2 2f). Returns True when ``target`` resolves to a
     tree node; False lets the legacy fallback speak."""
     if not target:
         return False
+    # D11: `X:.` = ENTER X'S RING -- relations (followable handles) +
+    # hidden children. The instance deref surface (`dz info safedel:.`).
+    if target.endswith(":.") and target != ":.":
+        return _info_ring(engine, target[:-2])
     from dazzlecmd_lib.fqcn_grammar import canonicalize, FQCNParseError
-    from dazzlecmd_lib.fqcn_tree import build_tree, resolve_path
-    tree = build_tree(engine.command)
-    _graft_app_verbs(engine, tree)
-    key = None
-    if any(op in target for op in (":.", ":+")) or target.startswith(":"):
+
+    from dazzlecmd_lib.fqcn_tree import build_engine_tree, resolve_path
+    # Row-1 (the surface matrix): every surface sees the SAME tree --
+    # the engine-extension build, never a raw build_tree + manual graft
+    # (that path silently missed registered extensions, e.g. the
+    # instance plane).
+    if _graft_app_verbs not in engine.tree_extensions:
+        engine.tree_extensions.append(_graft_app_verbs)
+    tree = build_engine_tree(engine)
+    if target == ":.":
+        # the ROOT CARD (B-2): the one graph's front door -- hidden
+        # machinery children + the visible user namespaces
+        key = engine.command
+        target = engine.command
+    else:
+        key = None
+    if key is not None:
+        pass
+    elif any(op in target for op in (":.", ":+")) or target.startswith(":"):
         try:
             canon, _ = canonicalize(target, implicit_root=engine.command)
         except FQCNParseError:
@@ -165,20 +255,41 @@ def _info_tree_node(engine, target):
     node = tree.nodes[key]
     kind = node.get("kind", "Unified")
     role = node.get("role")
-    print(f"{key}")
-    print(f"  kind: {kind}" + (f" ({role})" if role else ""))
+    print(_key_style(key))
+    print(f"  {_lbl('kind:')} {kind}" + (f" ({role})" if role else ""))
     if "axis" in node:
-        print(f"  rung of: {node['axis']}  (rank {node['rank']})")
+        print(f"  {_lbl('rung of:')} {node['axis']}  (rank {node['rank']})")
         if node["axis"].endswith(":.level"):
             # the class-vs-instance doctrine line -- LEVEL rungs only
             # (a verb pole is a position, not a class of entities)
             rung = key.rsplit(":", 1)[-1]
             print(f"  -- a position on the axis AND the class of {rung} "
                   f"entities; the fiber below is {rung}-ness's machinery.")
+    if node.get("level"):
+        handles = node.get("instance_of") or []
+        tail = f"   ({', '.join(handles)})" if handles else ""
+        print(f"  {_lbl('level:')} {node['level']}{tail}")
+    if node.get("source"):
+        src = node["source"]
+        follow = src[len(engine.command):] if src.startswith(
+            engine.command + ":") else src
+        print(f"  {_lbl('source:')} {src}   ({engine.command} info {follow})")
+    for m in (node.get("members") or []):
+        print(f"  {_lbl('member:')} {m}")
+    for a in (node.get("aliases") or []):
+        print(f"  {_lbl('alias:')} {a}")
+    if node.get("role") == "config-ring":
+        try:
+            cfg = engine._get_user_config() or {}
+            for ck in sorted(k for k in cfg if not k.startswith("_")):
+                print(f"  {_lbl(ck + ' =')} {cfg[ck]!r}"
+                      f"   {_lbl('(' + key + '.' + ck + ')')}")
+        except Exception:
+            pass
     if node.get("help"):
         # the help FACET's degenerate renderer (the one-line info; the
         # full page stays `dz <verb> -h`)
-        print(f"  help: {node['help']}")
+        print(f"  {_lbl('help:')} {node['help']}")
     # one-node: an axis whose bare VALUE is property-backed shows its
     # CURRENT position on the card (and marks the active rung below)
     current = None
@@ -189,23 +300,23 @@ def _info_tree_node(engine, target):
         default_val = KEY_DEFAULTS.get(value_key)
         current = engine.property_store.get(value_key)
         if current is None and default_val is not None:
-            print(f"  current: {default_val} (default)")
+            print(f"  {_lbl('current:')} {default_val} (default)")
             current = default_val
         elif current is not None:
-            print(f"  current: {current}")
+            print(f"  {_lbl('current:')} {current}")
         if default_val is not None:
             # defaults expressed CLEARLY (user directive 2026-07-05):
             # the chart center, distinct from the structural invariant
-            print(f"  default: {default_val}")
+            print(f"  {_lbl('default:')} {default_val}")
     obj = node.get("obj")
     if obj is not None and getattr(obj, "invariant", ""):
-        print(f"  invariant: {obj.invariant} (conserved at 0)")
+        print(f"  {_lbl('invariant:')} {obj.invariant} (conserved at 0)")
     kids = sorted(
         tree.successors(key),
         key=lambda n: (tree.nodes[n].get("rank") is None,
                        tree.nodes[n].get("rank", 0), n))
     if kids:
-        print("  contains:")
+        print(f"  {_lbl('contains:')}")
         width = max([14] + [len(k.rsplit(":", 1)[-1]) + 2 for k in kids])
         for k in kids:
             kn = tree.nodes[k]
@@ -220,7 +331,7 @@ def _info_tree_node(engine, target):
             print(f"    {seg:<{width}}{kn.get('kind', '')}{rolet}{rank}{marker}")
     props = engine.property_store.list_prefix(key)
     if props:
-        print("  properties:")
+        print(f"  {_lbl('properties:')}")
         for pk in sorted(props):
             print(f"    {pk} = {props[pk]!r}")
     return True
@@ -280,3 +391,93 @@ def _cmd_tree(args, engine):
     )
 
 
+
+
+def _ring_props(engine, tree, node_key, indent="    "):
+    """The aggregation rule (user directive): a ring entry's card-line
+    is followed by every STORE property set on it -- and, for an alias
+    relation, on its counterpart projection surface -- each labeled
+    with its true FQCN (copy-paste for set/unset). No hunting."""
+    lines = []
+    try:
+        store = engine.property_store
+        from dazzlecmd.tree_plane import counterpart_keys
+        keys = [node_key] + counterpart_keys(tree, node_key)
+        for k in keys:
+            for full, val in (store.list_prefix(k) or {}).items():
+                if full == k:
+                    continue  # the node's own value renders elsewhere
+                prop = full[len(k) + 1:]
+                lines.append(f"{indent}{_lbl(prop + ' =')} {val!r}"
+                             f"   {_lbl('(' + full + ')')}")
+    except Exception:
+        pass
+    return lines
+
+
+def _info_ring(engine, prefix):
+    """D11's ring card: `X:.` lists X's ring -- relation handles
+    (instance_of / aliases / members / source, each followable) plus
+    any hidden (dot-led) tree children. Cross-tree steps are ECHOED
+    redirects through handles (R-1); relations stay attributes."""
+    from dazzlecmd_lib.fqcn_tree import build_engine_tree, resolve_path
+    from dazzlecmd_lib.fqcn_grammar import canonicalize, FQCNParseError
+    try:
+        tree = build_engine_tree(engine)
+        if prefix.startswith(":") or prefix.startswith(engine.command):
+            try:
+                key, _ = canonicalize(prefix, implicit_root=engine.command)
+            except FQCNParseError:
+                return False
+            key = resolve_path(tree, key)
+        else:  # bare name -- the same matcher the cards use
+            hits = [n for n in tree.nodes
+                    if n.rsplit(":", 1)[-1] == prefix]
+            if len(hits) != 1:
+                return False
+            key = hits[0]
+        if key not in tree:
+            return False
+        node = tree.nodes[key]
+        cmd = engine.command
+
+        def _follow(h):
+            return h[len(cmd):] if h.startswith(cmd + ":") else h
+
+        print(_key_style(f"{key}:.") + "  (the ring)")
+        shown = False
+        for h in (node.get("instance_of") or []):
+            print(f"  {_lbl('instance of')}  {h}   ({cmd} info {_follow(h)})")
+            for ln in _ring_props(engine, tree, h):
+                print(ln)
+            shown = True
+        if node.get("source"):
+            src = node["source"]
+            print(f"  {_lbl('source')}       {src}   ({cmd} info {_follow(src)})")
+            shown = True
+        for m in (node.get("members") or []):
+            print(f"  {_lbl('member')}       {m}   ({cmd} info {_follow(m)})")
+            for ln in _ring_props(engine, tree, m):
+                print(ln)
+            shown = True
+        for a in (node.get("aliases") or []):
+            leaf = f"{key}:.alias:{a.replace(':', '-')}"
+            tail = (f"   ({cmd} info {_follow(leaf)})"
+                    if leaf in tree else "")
+            print(f"  {_lbl('alias')}        {a}{tail}")
+            for ln in _ring_props(engine, tree, leaf):
+                print(ln)
+            shown = True
+        hidden = [c for c in tree.successors(key)
+                  if c.rsplit(":", 1)[-1].startswith(".")]
+        for c in sorted(hidden):
+            seg = c.rsplit(":", 1)[-1]
+            print(f"  {_lbl('hidden')}       {seg}   ({cmd} info {_follow(c)})")
+            for ln in _ring_props(engine, tree, c):
+                print(ln)
+            shown = True
+        if not shown:
+            print("  (an empty ring -- no relations or hidden children)")
+        return True
+    except Exception:
+        return False

@@ -52,3 +52,12 @@ Each verb can be invoked three equivalent ways — they all reach the same handl
 | `dz <axis> on\|off <target>` | `dz kit loading on media` | Uniform; works for every axis |
 | `dz <axis> <special> <target>` | `dz kit loading attach media` | Explicit about both axis and action |
 | `dz <special> <target>` | `dz attach media` | The shortest hoistable form |
+
+## Navigating the structure (the tree behind the CLI)
+
+- **Rung** — one named position on an axis's ladder. The level ladder's rungs are `fiber < lib < internaltool < tool < kit < aggregator < supra`; a verb pair's rungs are its two poles (`enable` at the warm end, `disable` at the cold). A rung is two things at once: a *position* (its rank — a signed number, 0 being the axis's conserved center) and a *class* (everything at that level: `dz info :.level:kit` describes kit-ness itself, not any particular kit).
+- **Axis** — a ladder of rungs with one meaning ("what is conserved") at its center. `dz:.level` is the containment axis; `activation` is a verb axis.
+- **Pole** — a rung at an axis's end; for verb pairs, the two actions (`add`/`remove`).
+- **Fiber** — the structure *behind* a thing, reached with `:.`: what a rung's class is made of (`dz :.level:kit:.` lists kit-ness's machinery), or a tool's own backing details. Each `:.` step goes one ring of "aboutness" inward.
+- **Instance of** — the link from a concrete item to its class rung, shown in a card's `Fibers:` section (`safedel` → `dz:.level:internaltool`). Follow it with the command printed beside it.
+- **Rank** — a rung's signed position. `0` is the axis's fixed point (for the level ladder, the aggregator itself); fractions (like `-3/2`) mark rungs inserted between whole positions without renumbering anything.

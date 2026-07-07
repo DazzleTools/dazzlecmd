@@ -1,0 +1,4 @@
+# Goldens are byte-locked content: never materialize CRLF on checkout
+# (the fiber-work B-1 find -- fresh worktrees broke the golden test).
+tests/goldens/** text eol=lf
+tests/totality_baseline.json text eol=lf
