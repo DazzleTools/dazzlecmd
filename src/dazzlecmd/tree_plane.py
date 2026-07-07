@@ -57,6 +57,18 @@ def graft_instance_plane(engine, tree) -> None:
     card fields. The rung's extension stays a VIEW (I-A: instances'
     parents are containment, never the rung)."""
     cmd = engine.command
+    # tree consumers may run PRE-discovery (the intercept's fast path) --
+    # the instance plane is worth the discovery cost; self-feed on demand
+    # (the same rule as derived_instance_read; found live: `dz :.`
+    # showed no namespaces on the fast path)
+    if not (getattr(engine, "projects", None) or []):
+        try:
+            import contextlib
+            import io as _io
+            with contextlib.redirect_stdout(_io.StringIO()):
+                engine.discover()
+        except Exception:
+            pass
     graft_virtual_kit_rung(engine, tree)
     # the ROOT's two spellings are ONE node (ODR alias): the NAME
     # ("dazzlecmd", used by Absolute FQCNs) aliases to the COMMAND
@@ -376,3 +388,29 @@ def configure_tree(engine):
             engine.tree_extensions.append(ext)
     if derived_instance_read not in engine.derived_reads:
         engine.derived_reads.append(derived_instance_read)
+    hooks = getattr(engine, "node_hints", None)
+    if hooks is None:
+        engine.node_hints = hooks = []
+    if node_hint not in hooks:
+        hooks.append(node_hint)
+
+
+def node_hint(engine, key):
+    """The one-node answer for a VALUELESS read of a real node: identity
+    + how to look (R-1/hints doctrine; found live: `dz :.meta` said
+    'is not set' about a real node)."""
+    try:
+        from dazzlecmd_lib.fqcn_tree import build_engine_tree, resolve_path
+        tree = build_engine_tree(engine)
+        k = resolve_path(tree, key)
+        if k in tree:
+            n = tree.nodes[k]
+            kind = n.get("kind", "node")
+            role = f" ({n['role']})" if n.get("role") else ""
+            spell = k[len(engine.command):] if k.startswith(
+                engine.command + ":") else k
+            return (f"a {kind}{role} -- card: {engine.command} info "
+                    f"{spell}; list: {engine.command} {spell}:.")
+    except Exception:
+        pass
+    return None
