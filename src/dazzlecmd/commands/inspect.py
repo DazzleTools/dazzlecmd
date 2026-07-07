@@ -207,6 +207,10 @@ def _info_tree_node(engine, target):
     tree node; False lets the legacy fallback speak."""
     if not target:
         return False
+    # D11: `X:.` = ENTER X'S RING -- relations (followable handles) +
+    # hidden children. The instance deref surface (`dz info safedel:.`).
+    if target.endswith(":.") and target != ":.":
+        return _info_ring(engine, target[:-2])
     from dazzlecmd_lib.fqcn_grammar import canonicalize, FQCNParseError
 
     from dazzlecmd_lib.fqcn_tree import build_engine_tree, resolve_path
@@ -379,3 +383,60 @@ def _cmd_tree(args, engine):
     )
 
 
+
+
+def _info_ring(engine, prefix):
+    """D11's ring card: `X:.` lists X's ring -- relation handles
+    (instance_of / aliases / members / source, each followable) plus
+    any hidden (dot-led) tree children. Cross-tree steps are ECHOED
+    redirects through handles (R-1); relations stay attributes."""
+    from dazzlecmd_lib.fqcn_tree import build_engine_tree, resolve_path
+    from dazzlecmd_lib.fqcn_grammar import canonicalize, FQCNParseError
+    try:
+        tree = build_engine_tree(engine)
+        if prefix.startswith(":") or prefix.startswith(engine.command):
+            try:
+                key, _ = canonicalize(prefix, implicit_root=engine.command)
+            except FQCNParseError:
+                return False
+            key = resolve_path(tree, key)
+        else:  # bare name -- the same matcher the cards use
+            hits = [n for n in tree.nodes
+                    if n.rsplit(":", 1)[-1] == prefix]
+            if len(hits) != 1:
+                return False
+            key = hits[0]
+        if key not in tree:
+            return False
+        node = tree.nodes[key]
+        cmd = engine.command
+
+        def _follow(h):
+            return h[len(cmd):] if h.startswith(cmd + ":") else h
+
+        print(_key_style(f"{key}:.") + "  (the ring)")
+        shown = False
+        for h in (node.get("instance_of") or []):
+            print(f"  {_lbl('instance of')}  {h}   ({cmd} info {_follow(h)})")
+            shown = True
+        if node.get("source"):
+            src = node["source"]
+            print(f"  {_lbl('source')}       {src}   ({cmd} info {_follow(src)})")
+            shown = True
+        for m in (node.get("members") or []):
+            print(f"  {_lbl('member')}       {m}   ({cmd} info {_follow(m)})")
+            shown = True
+        for a in (node.get("aliases") or []):
+            print(f"  {_lbl('alias')}        {a}")
+            shown = True
+        hidden = [c for c in tree.successors(key)
+                  if c.rsplit(":", 1)[-1].startswith(".")]
+        for c in sorted(hidden):
+            seg = c.rsplit(":", 1)[-1]
+            print(f"  {_lbl('hidden')}       {seg}   ({cmd} info {_follow(c)})")
+            shown = True
+        if not shown:
+            print("  (an empty ring -- no relations or hidden children)")
+        return True
+    except Exception:
+        return False
