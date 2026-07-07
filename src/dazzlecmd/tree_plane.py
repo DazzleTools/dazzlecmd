@@ -446,6 +446,11 @@ def configure_tree(engine):
             engine.tree_extensions.append(ext)
     if derived_instance_read not in engine.derived_reads:
         engine.derived_reads.append(derived_instance_read)
+    ft = getattr(engine, "fallthrough_reads", None)
+    if ft is None:
+        engine.fallthrough_reads = ft = []
+    if counterpart_read not in ft:
+        ft.append(counterpart_read)
     hooks = getattr(engine, "node_hints", None)
     if hooks is None:
         engine.node_hints = hooks = []
@@ -475,4 +480,62 @@ def node_hint(engine, key):
                 f"{spell}; list: {engine.command} {spell}:.", DIM)
     except Exception:
         pass
+    return None
+
+
+def counterpart_keys(tree, node_key):
+    """The ring-identity join (D12/D13): an alias-relation leaf and its
+    projection surface(s) represent facets of ONE thing -- return the
+    OTHER addresses for a node (spelling+source matched, both ways)."""
+    n = tree.nodes.get(node_key) or {}
+    out = []
+    spelling = n.get("spelling")
+    if spelling and n.get("role") == "alias-relation":
+        owner = node_key.rsplit(":.alias:", 1)[0]
+        for cand in tree.nodes:
+            cn = tree.nodes[cand]
+            if (cn.get("role") == "projection"
+                    and cn.get("spelling") == spelling
+                    and cn.get("source") == owner):
+                out.append(cand)
+    elif spelling and n.get("role") == "projection":
+        src = n.get("source")
+        if src and src in tree:
+            leaf = f"{src}:.alias:{spelling.replace(':', '-')}"
+            if leaf in tree:
+                out.append(leaf)
+    return out
+
+
+def counterpart_read(engine, key):
+    """The round-robin read (user directive 2026-07-06): a property
+    unset at THIS address but set on a ring counterpart answers with
+    the counterpart's value; the lib echoes the true source (R-1).
+    Also forgives the sanitized spelling within a vk door
+    (:core:f:f-rm -> the leaf whose spelling sanitizes to f-rm)."""
+    node_key, dot, prop = key.partition(".")
+    if not dot or node_key == engine.command:
+        return None
+    try:
+        from dazzlecmd_lib.fqcn_tree import build_engine_tree, resolve_path
+        tree = build_engine_tree(engine)
+        k = resolve_path(tree, node_key)
+        if k not in tree:
+            # sanitized-spelling forgiveness within an existing parent
+            parent, _, seg = k.rpartition(":")
+            if parent in tree:
+                hits = [c for c in tree.successors(parent)
+                        if (tree.nodes[c].get("spelling") or "").replace(
+                            ":", "-") == seg]
+                if len(hits) == 1:
+                    k = hits[0]
+        if k not in tree:
+            return None
+        store = engine.property_store
+        for cand in [k] + counterpart_keys(tree, k):
+            val = store.get(f"{cand}.{prop}")
+            if val is not None:
+                return val, f"{cand}.{prop}"
+    except Exception:
+        return None
     return None

@@ -393,17 +393,8 @@ def _ring_props(engine, tree, node_key, indent="    "):
     lines = []
     try:
         store = engine.property_store
-        keys = [node_key]
-        n = tree.nodes.get(node_key) or {}
-        spelling = n.get("spelling")
-        if spelling and n.get("role") == "alias-relation":
-            owner = node_key.rsplit(":.alias:", 1)[0]
-            for cand in tree.nodes:
-                cn = tree.nodes[cand]
-                if (cn.get("role") == "projection"
-                        and cn.get("spelling") == spelling
-                        and cn.get("source") == owner):
-                    keys.append(cand)
+        from dazzlecmd.tree_plane import counterpart_keys
+        keys = [node_key] + counterpart_keys(tree, node_key)
         for k in keys:
             for full, val in (store.list_prefix(k) or {}).items():
                 if full == k:
