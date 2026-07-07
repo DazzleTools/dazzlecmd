@@ -385,6 +385,37 @@ def _cmd_tree(args, engine):
 
 
 
+def _ring_props(engine, tree, node_key, indent="    "):
+    """The aggregation rule (user directive): a ring entry's card-line
+    is followed by every STORE property set on it -- and, for an alias
+    relation, on its counterpart projection surface -- each labeled
+    with its true FQCN (copy-paste for set/unset). No hunting."""
+    lines = []
+    try:
+        store = engine.property_store
+        keys = [node_key]
+        n = tree.nodes.get(node_key) or {}
+        spelling = n.get("spelling")
+        if spelling and n.get("role") == "alias-relation":
+            owner = node_key.rsplit(":.alias:", 1)[0]
+            for cand in tree.nodes:
+                cn = tree.nodes[cand]
+                if (cn.get("role") == "projection"
+                        and cn.get("spelling") == spelling
+                        and cn.get("source") == owner):
+                    keys.append(cand)
+        for k in keys:
+            for full, val in (store.list_prefix(k) or {}).items():
+                if full == k:
+                    continue  # the node's own value renders elsewhere
+                prop = full[len(k) + 1:]
+                lines.append(f"{indent}{_lbl(prop + ' =')} {val!r}"
+                             f"   {_lbl('(' + full + ')')}")
+    except Exception:
+        pass
+    return lines
+
+
 def _info_ring(engine, prefix):
     """D11's ring card: `X:.` lists X's ring -- relation handles
     (instance_of / aliases / members / source, each followable) plus
@@ -418,6 +449,8 @@ def _info_ring(engine, prefix):
         shown = False
         for h in (node.get("instance_of") or []):
             print(f"  {_lbl('instance of')}  {h}   ({cmd} info {_follow(h)})")
+            for ln in _ring_props(engine, tree, h):
+                print(ln)
             shown = True
         if node.get("source"):
             src = node["source"]
@@ -425,18 +458,24 @@ def _info_ring(engine, prefix):
             shown = True
         for m in (node.get("members") or []):
             print(f"  {_lbl('member')}       {m}   ({cmd} info {_follow(m)})")
+            for ln in _ring_props(engine, tree, m):
+                print(ln)
             shown = True
         for a in (node.get("aliases") or []):
             leaf = f"{key}:.alias:{a.replace(':', '-')}"
             tail = (f"   ({cmd} info {_follow(leaf)})"
                     if leaf in tree else "")
             print(f"  {_lbl('alias')}        {a}{tail}")
+            for ln in _ring_props(engine, tree, leaf):
+                print(ln)
             shown = True
         hidden = [c for c in tree.successors(key)
                   if c.rsplit(":", 1)[-1].startswith(".")]
         for c in sorted(hidden):
             seg = c.rsplit(":", 1)[-1]
             print(f"  {_lbl('hidden')}       {seg}   ({cmd} info {_follow(c)})")
+            for ln in _ring_props(engine, tree, c):
+                print(ln)
             shown = True
         if not shown:
             print("  (an empty ring -- no relations or hidden children)")
