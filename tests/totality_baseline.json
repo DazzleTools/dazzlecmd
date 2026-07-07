@@ -1,7 +1,7 @@
 {
   "generated": "by test_totality_audit.py __main__",
-  "homed": 191,
-  "tree_nodes": 108,
+  "homed": 172,
+  "tree_nodes": 99,
   "stranded_keys": [
     "log_lib:channel::algorithm",
     "log_lib:channel::config",
@@ -15,6 +15,7 @@
     "log_lib:channel::timing",
     "log_lib:channel::trace",
     "log_lib:channel::vals",
+    "odr:projection::dz:.level:kit:management",
     "registry:#101::applies_at",
     "registry:#101::current",
     "registry:#101::default",

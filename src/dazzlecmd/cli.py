@@ -242,16 +242,32 @@ def main():
     # B-9 THE META FOLD (instance-ring M-A/F6; plan B-9; convergence D3):
     # ONE intrinsic door -- level lives INSIDE meta; every shipped
     # spelling stays alive via aliases (the relocatability proof).
-    from dazzlecmd_lib.verb_axis import VERB_SPACE, LEVEL_CONTINUUM
+    from dazzlecmd_lib.verb_axis import (LEVEL_CONTINUUM, MODE_SPACE,
+                                         axis_by_name)
     from dazzlecmd_lib.contexts import KIT_PRESENCE_SPACE
+    from dazzle_lib.continuum import ContinuumSpace
+    # V-C (the management DWP): management = a REAL COMPOSED SPACE (the
+    # fused lifecycle -- member > loaded > active; COUPLING_ALIGNED),
+    # nested in the verb space like mode always was. Defining homes move
+    # down; the flat spellings live as D10 registry aliases below.
+    _mgmt = ContinuumSpace.compose(
+        "management",
+        {ax: axis_by_name(ax).continuum()
+         for ax in ("membership", "loading", "activation")})
     engine.tree_mounts = {
-        ":.meta:verb": VERB_SPACE,
+        ":.meta:verb:management": _mgmt,
+        ":.meta:verb:projection": axis_by_name("projection").continuum(),
+        ":.meta:verb:mode": MODE_SPACE,
         ":.meta:level": LEVEL_CONTINUUM,
         ":.meta:level:kit": KIT_PRESENCE_SPACE,
     }
     engine.tree_aliases = {
         ":.level": ":.meta:level",
         ":.kit": ":.meta:level:kit",
+        # the flat axis spellings (pre-V-C defining homes) stay alive:
+        ":.meta:verb:membership": ":.meta:verb:management:membership",
+        ":.meta:verb:loading": ":.meta:verb:management:loading",
+        ":.meta:verb:activation": ":.meta:verb:management:activation",
     }
     engine.tree_extensions.append(_graft_app_verbs)
     from dazzlecmd.tree_plane import graft_instance_plane

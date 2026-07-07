@@ -271,13 +271,14 @@ def graft_kit_frame_projections(engine, tree):
     if kit_rung not in tree or verb_root not in tree:
         return
     mgmt = f"{kit_rung}:management"
+    src_mgmt = f"{verb_root}:management"
     if mgmt not in tree:
         tree.add_node(mgmt, obj=None, kind="ContinuumSpace",
-                      role="projection", source=verb_root,
-                      help="the verb space, seen from the kit frame")
+                      role="projection", source=src_mgmt,
+                      help="the lifecycle space, seen from the kit frame")
         tree.add_edge(kit_rung, mgmt)
     for axis in ("membership", "loading", "activation"):
-        src_axis = f"{verb_root}:{axis}"
+        src_axis = f"{src_mgmt}:{axis}"
         if src_axis not in tree:
             continue
         proj_axis = f"{mgmt}:{axis}"
