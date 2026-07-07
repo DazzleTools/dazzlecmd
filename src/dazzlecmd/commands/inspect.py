@@ -187,6 +187,20 @@ def _graft_app_verbs(engine, tree):
             tree.add_edge(verb_root, key)
 
 
+def _lbl(text):
+    """DIM a card label (the dz-list heading scheme; TTY-gated)."""
+    import sys as _sys
+    from dazzlecmd_lib.colors import DIM, colorize_for
+    return colorize_for(_sys.stdout, text, DIM)
+
+
+def _key_style(text):
+    """BOLD the node-key header line (TTY-gated)."""
+    import sys as _sys
+    from dazzlecmd_lib.colors import BOLD, colorize_for
+    return colorize_for(_sys.stdout, text, BOLD)
+
+
 def _info_tree_node(engine, target):
     """Render the card for a DERIVED-TREE node (the fiber plane's read
     surface -- SD-FQCN-2 2f). Returns True when ``target`` resolves to a
@@ -237,10 +251,10 @@ def _info_tree_node(engine, target):
     node = tree.nodes[key]
     kind = node.get("kind", "Unified")
     role = node.get("role")
-    print(f"{key}")
-    print(f"  kind: {kind}" + (f" ({role})" if role else ""))
+    print(_key_style(key))
+    print(f"  {_lbl('kind:')} {kind}" + (f" ({role})" if role else ""))
     if "axis" in node:
-        print(f"  rung of: {node['axis']}  (rank {node['rank']})")
+        print(f"  {_lbl('rung of:')} {node['axis']}  (rank {node['rank']})")
         if node["axis"].endswith(":.level"):
             # the class-vs-instance doctrine line -- LEVEL rungs only
             # (a verb pole is a position, not a class of entities)
@@ -250,20 +264,20 @@ def _info_tree_node(engine, target):
     if node.get("level"):
         handles = node.get("instance_of") or []
         tail = f"   ({', '.join(handles)})" if handles else ""
-        print(f"  level: {node['level']}{tail}")
+        print(f"  {_lbl('level:')} {node['level']}{tail}")
     if node.get("source"):
         src = node["source"]
         follow = src[len(engine.command):] if src.startswith(
             engine.command + ":") else src
-        print(f"  source: {src}   ({engine.command} info {follow})")
+        print(f"  {_lbl('source:')} {src}   ({engine.command} info {follow})")
     for m in (node.get("members") or []):
-        print(f"  member: {m}")
+        print(f"  {_lbl('member:')} {m}")
     for a in (node.get("aliases") or []):
-        print(f"  alias: {a}")
+        print(f"  {_lbl('alias:')} {a}")
     if node.get("help"):
         # the help FACET's degenerate renderer (the one-line info; the
         # full page stays `dz <verb> -h`)
-        print(f"  help: {node['help']}")
+        print(f"  {_lbl('help:')} {node['help']}")
     # one-node: an axis whose bare VALUE is property-backed shows its
     # CURRENT position on the card (and marks the active rung below)
     current = None
@@ -274,23 +288,23 @@ def _info_tree_node(engine, target):
         default_val = KEY_DEFAULTS.get(value_key)
         current = engine.property_store.get(value_key)
         if current is None and default_val is not None:
-            print(f"  current: {default_val} (default)")
+            print(f"  {_lbl('current:')} {default_val} (default)")
             current = default_val
         elif current is not None:
-            print(f"  current: {current}")
+            print(f"  {_lbl('current:')} {current}")
         if default_val is not None:
             # defaults expressed CLEARLY (user directive 2026-07-05):
             # the chart center, distinct from the structural invariant
-            print(f"  default: {default_val}")
+            print(f"  {_lbl('default:')} {default_val}")
     obj = node.get("obj")
     if obj is not None and getattr(obj, "invariant", ""):
-        print(f"  invariant: {obj.invariant} (conserved at 0)")
+        print(f"  {_lbl('invariant:')} {obj.invariant} (conserved at 0)")
     kids = sorted(
         tree.successors(key),
         key=lambda n: (tree.nodes[n].get("rank") is None,
                        tree.nodes[n].get("rank", 0), n))
     if kids:
-        print("  contains:")
+        print(f"  {_lbl('contains:')}")
         width = max([14] + [len(k.rsplit(":", 1)[-1]) + 2 for k in kids])
         for k in kids:
             kn = tree.nodes[k]
@@ -305,7 +319,7 @@ def _info_tree_node(engine, target):
             print(f"    {seg:<{width}}{kn.get('kind', '')}{rolet}{rank}{marker}")
     props = engine.property_store.list_prefix(key)
     if props:
-        print("  properties:")
+        print(f"  {_lbl('properties:')}")
         for pk in sorted(props):
             print(f"    {pk} = {props[pk]!r}")
     return True

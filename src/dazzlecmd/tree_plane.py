@@ -409,8 +409,12 @@ def node_hint(engine, key):
             role = f" ({n['role']})" if n.get("role") else ""
             spell = k[len(engine.command):] if k.startswith(
                 engine.command + ":") else k
-            return (f"a {kind}{role} -- card: {engine.command} info "
-                    f"{spell}; list: {engine.command} {spell}:.")
+            import sys as _sys
+            from dazzlecmd_lib.colors import DIM, colorize_for
+            return colorize_for(
+                _sys.stdout,
+                f"a {kind}{role} -- card: {engine.command} info "
+                f"{spell}; list: {engine.command} {spell}:.", DIM)
     except Exception:
         pass
     return None
