@@ -278,6 +278,14 @@ def _info_tree_node(engine, target):
         print(f"  {_lbl('member:')} {m}")
     for a in (node.get("aliases") or []):
         print(f"  {_lbl('alias:')} {a}")
+    if node.get("role") == "config-ring":
+        try:
+            cfg = engine._get_user_config() or {}
+            for ck in sorted(k for k in cfg if not k.startswith("_")):
+                print(f"  {_lbl(ck + ' =')} {cfg[ck]!r}"
+                      f"   {_lbl('(' + key + '.' + ck + ')')}")
+        except Exception:
+            pass
     if node.get("help"):
         # the help FACET's degenerate renderer (the one-line info; the
         # full page stays `dz <verb> -h`)

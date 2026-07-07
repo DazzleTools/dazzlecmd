@@ -440,12 +440,14 @@ def configure_tree(engine):
         ":.meta:verb:activation": ":.meta:verb:management:activation",
     }
     for ext in (_graft_app_verbs, graft_instance_plane,
-                graft_vk_projections,
+                graft_vk_projections, graft_config_ring,
                 graft_kit_frame_projections, register_aliases_on_tree):
         if ext not in engine.tree_extensions:
             engine.tree_extensions.append(ext)
     if derived_instance_read not in engine.derived_reads:
         engine.derived_reads.append(derived_instance_read)
+    if derived_config_read not in engine.derived_reads:
+        engine.derived_reads.append(derived_config_read)
     ft = getattr(engine, "fallthrough_reads", None)
     if ft is None:
         engine.fallthrough_reads = ft = []
@@ -538,4 +540,42 @@ def counterpart_read(engine, key):
                 return val, f"{cand}.{prop}"
     except Exception:
         return None
+    return None
+
+
+# --- B-11: the config ring, READ-ONLY (convergence DWP D6; the B-11
+# DWP 2026-07-07; writes = #99's epic) --------------------------------
+
+def graft_config_ring(engine, tree) -> None:
+    """`dz:.meta:config` -- the at-rest config as an addressable node.
+    NO value copies land in the tree (ODR: the FILE is the sole true
+    copy); reads go through derived_config_read at read time."""
+    cmd = engine.command
+    meta = f"{cmd}:.meta"
+    key = f"{meta}:config"
+    if meta in tree and key not in tree:
+        tree.add_node(key, obj=None, kind="Unified", role="config-ring",
+                      help="the at-rest config (config.json beside the "
+                           "aggregator's properties) -- READ-ONLY here; "
+                           "values change through the real verbs "
+                           "(dz kit enable/disable, hide, silence, ...)")
+        tree.add_edge(meta, key)
+
+
+def derived_config_read(engine, key):
+    """`dz:.meta:config.<key>` answers FROM THE FILE at read time.
+    The derived claim makes every such key write-REJECTED (B-5's
+    guard) -- the rejection text names the real mechanism."""
+    prefix = f"{engine.command}:.meta:config."
+    if not key.startswith(prefix):
+        return None
+    entry = key[len(prefix):]
+    if not entry or entry.startswith("_"):
+        return None
+    try:
+        cfg = engine._get_user_config() or {}
+    except Exception:
+        return None
+    if entry in cfg:
+        return cfg[entry]
     return None

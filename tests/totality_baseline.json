@@ -1,7 +1,7 @@
 {
   "generated": "by test_totality_audit.py __main__",
-  "homed": 227,
-  "tree_nodes": 134,
+  "homed": 228,
+  "tree_nodes": 135,
   "stranded_keys": [
     "log_lib:channel::algorithm",
     "log_lib:channel::config",
