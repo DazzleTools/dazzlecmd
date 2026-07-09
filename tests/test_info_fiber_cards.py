@@ -1,4 +1,10 @@
-"""2f slice-1 (AC-2-7): `dz info` resolves DERIVED-TREE nodes -- fiber
+"""CONSCIOUS RE-BASELINE (the consumer lift, 2026-07-08): engines now
+default to the FOLDED one-door mounts (lib 0.10.28) -- old input
+spellings (:.level...) keep resolving via aliases, but canonical
+OUTPUT spellings are :.meta:level... The vectors below assert the
+canonical forms; the alias-input behavior is itself asserted.
+
+2f slice-1 (AC-2-7): `dz info` resolves DERIVED-TREE nodes -- fiber
 paths, bare axis/rung names, verb poles. The user's exact wall
 (`dz info :.level` -> "Tool ':.level' not found") is the pinned origin."""
 import types
@@ -32,19 +38,19 @@ class TestFiberCards:
     def test_the_rung_card_class_vs_instance(self, engine, capsys):
         ok, out = _info(engine, ":.level:kit", capsys)
         assert ok
-        assert "rung of: tst:.level" in out
+        assert "rung of: tst:.meta:level" in out
         assert "class of kit entities" in out
         assert "visibility" in out  # the grafted machinery listed
 
     def test_bare_axis_and_rung_names_resolve(self, engine, capsys):
         ok, out = _info(engine, "level", capsys)
-        assert ok and "tst:.level" in out
+        assert ok and "tst:.meta:level" in out
         ok, out = _info(engine, "supra", capsys)
         assert ok and "rank 1" in out
 
     def test_verb_pole_resolves(self, engine, capsys):
         ok, out = _info(engine, ":.meta:verb:activation:enable", capsys)
-        assert ok and "rung of: tst:.meta:verb:activation" in out
+        assert ok and "rung of: tst:.meta:verb:management:activation" in out
 
     def test_ambiguous_bare_name_lists_candidates(self, engine, capsys):
         # "visibility" appears twice (the space and its inner axis)
@@ -57,12 +63,12 @@ class TestFiberCards:
 
     def test_alias_spelling_resolves(self, engine, capsys):
         ok, out = _info(engine, ":.kit", capsys)  # the alias -> the rung
-        assert ok and "tst:.level:kit" in out
+        assert ok and "tst:.meta:level:kit" in out
 
     def test_stored_properties_listed(self, engine, capsys):
-        engine.property_store.set("tst:.level:kit.note", "x")
+        engine.property_store.set("tst:.meta:level:kit.note", "x")
         ok, out = _info(engine, ":.level:kit", capsys)
-        assert ok and "tst:.level:kit.note = 'x'" in out
+        assert ok and "tst:.meta:level:kit.note = 'x'" in out
 
 
 class TestVerbCards:
@@ -79,18 +85,22 @@ class TestVerbCards:
 
     def test_pole_gains_attached_help(self, engine, capsys):
         ok, out = _info(engine, "enable", capsys)
-        assert ok and "rung of: tst:.meta:verb:activation" in out
+        assert ok and "rung of: tst:.meta:verb:management:activation" in out
         assert "help:" in out
         assert "class of" not in out  # the doctrine line is level-only
 
     def test_kit_stays_the_rung_one_node(self, engine, capsys):
         ok, out = _info(engine, "kit", capsys)
-        assert ok and "tst:.level:kit" in out
+        assert ok and "tst:.meta:level:kit" in out
         assert "kind: verb" not in out
 
-    def test_verb_space_lists_flat_verbs(self, engine, capsys):
+    def test_verb_space_lists_verbs_and_management(self, engine, capsys):
+        # post-V-C: the lifecycle axes NEST under management (the
+        # composed space); verbs stay flat beside it
         ok, out = _info(engine, ":.meta:verb", capsys)
-        assert ok and "version" in out and "activation" in out
+        assert ok and "version" in out and "management" in out
+        ok2, out2 = _info(engine, ":.meta:verb:management", capsys)
+        assert ok2 and "activation" in out2
 
 
 class TestCurrentPosition:

@@ -259,7 +259,7 @@ def _info_tree_node(engine, target):
     print(f"  {_lbl('kind:')} {kind}" + (f" ({role})" if role else ""))
     if "axis" in node:
         print(f"  {_lbl('rung of:')} {node['axis']}  (rank {node['rank']})")
-        if node["axis"].endswith(":.level"):
+        if node["axis"].endswith((":.level", ":.meta:level")):
             # the class-vs-instance doctrine line -- LEVEL rungs only
             # (a verb pole is a position, not a class of entities)
             rung = key.rsplit(":", 1)[-1]
