@@ -5,6 +5,11 @@ Wraps fd (sharkdp/fd) with dazzlecmd-style actions: open files,
 browse in file manager, or copy paths to clipboard. Provides a
 consistent interface across Windows, Linux, macOS, and BSD.
 
+Unlike raw fd, ignore files (.gitignore/.ignore/.fdignore) are NOT
+respected by default: dz find is a finder -- its contract is the
+filesystem, not the VCS's opinion of it. Use --gitignore to opt back
+into fd's code-search filtering.
+
 Two escape hatches let power users reach fd's full surface without
 us re-exposing every flag:
 
@@ -187,8 +192,10 @@ def build_fd_command(fd_path, pattern, paths, args, passthrough=None):
     if args.hidden:
         cmd.append("--hidden")
 
-    # No ignore (.gitignore)
-    if args.no_ignore:
+    # Ignore rules: bypassed by default (a finder reports the
+    # filesystem); --gitignore opts back into fd's filtering. The
+    # legacy --no-ignore flag is accepted but now redundant.
+    if not args.gitignore:
         cmd.append("--no-ignore")
 
     # Depth
@@ -332,6 +339,7 @@ examples:
   dz find "*.md" -c                     Find and copy path to clipboard
   dz find "*.md" --dir ~/code -l        Find and browse in file manager
   dz find -e py -E node_modules         Exclude a directory
+  dz find "*.py" --gitignore            Respect .gitignore (filter venv, build)
   dz find -e py -0 | xargs -0 rg "TODO" Pipe NUL-delimited paths to rg
   dz find -- --strip-cwd-prefix --owner +me
                                         Pass raw fd flags we don't surface
@@ -381,8 +389,14 @@ requires fd: https://github.com/sharkdp/fd""",
         help="Include hidden files and directories",
     )
     search.add_argument(
+        "--gitignore", action="store_true",
+        help="Respect .gitignore/.ignore/.fdignore rules "
+             "(fd's code-search filtering; the pre-0.12 default)",
+    )
+    search.add_argument(
         "--no-ignore", action="store_true",
-        help="Don't respect .gitignore rules",
+        help="Don't respect .gitignore rules (default; kept for "
+             "backward compatibility)",
     )
     search.add_argument(
         "-d", "--depth", type=int, default=None,
@@ -451,6 +465,9 @@ def main(argv=None):
     parser = build_parser()
     args = parser.parse_args(main_argv)
 
+    if args.gitignore and args.no_ignore:
+        parser.error("--gitignore and --no-ignore are contradictory")
+
     # --check: verify fd installation
     if args.check:
         return _check_fd()
@@ -469,6 +486,12 @@ def main(argv=None):
     if not results:
         if args.pattern:
             print(f"  No matches for: {args.pattern}", file=sys.stderr)
+            if args.gitignore:
+                print("  (ignore-rules filtering is on; drop --gitignore "
+                      "to search ignored paths)", file=sys.stderr)
+            elif not args.hidden:
+                print("  (hidden files/dirs are not searched; add -H "
+                      "to include them)", file=sys.stderr)
         return 1
 
     # --count mode

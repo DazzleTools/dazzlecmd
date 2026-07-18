@@ -4,6 +4,18 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.2-alpha] - 2026-07-14
+
+`dz find` now finds what `dir /s` finds. The tool silently inherited fd's code-search default of filtering out anything matched by `.gitignore`/`.ignore`/`.fdignore`, so a finder standing in a repo whose ignore rules excluded `*.exe` denied that an existing file existed -- `dz find locate32.exe` reported "No matches" inside Dazzle-Locate32, a project that vendors locate32, itself a file finder. Ignore rules are now bypassed by default: a finder's contract is the filesystem, not the VCS's opinion of it (the sibling `fixpath` fd fallback already worked this way). Opt back into fd's filtering with the new `--gitignore` flag; the legacy `--no-ignore` flag remains accepted as the now-default spelling (passing both is an error). Zero-result output gains a one-line hint at the applicable blind spot: add `-H` for hidden files, or drop `--gitignore` when filtering is on. A side effect worth naming: results no longer differ between git and non-git directories (fd only applies `.gitignore` inside repositories, so the same command used to answer differently depending on an invisible `.git`).
+
+### Changed
+- **`dz find` searches ignored paths by default.** fd is always invoked with `--no-ignore` unless `--gitignore` is passed. Pattern searches inside repos will now surface previously-hidden matches (venv, build artifacts); use `--gitignore` or `-E` to prune.
+
+### Added
+- `dz find --gitignore` -- respect `.gitignore`/`.ignore`/`.fdignore` rules (the pre-0.12 default). Contradictory `--gitignore --no-ignore` exits with an error.
+- Zero-result hints on stderr: `-H` (hidden files are the remaining default blind spot) or drop `--gitignore` (when filtering caused the miss).
+- 11 new tests in `tests/test_find_ignore_defaults.py` (command-build defaults, contradiction guard, and real-fd integration against a `.fdignore`d file).
+
 ## [0.12.1-alpha] - 2026-07-07
 
 The merge-certification fixes. The config ring's write refusal is now STRUCTURAL (a registered read-only family rejects every write beneath it -- both key spellings, present-or-absent from the file; the heuristic gap let phantom values shadow file-truth). Exposed generated commands appear in `dz -h` live (B-8's visibility half: flip `expose` and the row appears/vanishes). The surface-matrix generator gained the instance plane (project-root resolution adopted from the audit; 71 -> 191 derived probes) and probes the root by its canonical `:.` spelling.
@@ -4022,7 +4034,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.1a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.2a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

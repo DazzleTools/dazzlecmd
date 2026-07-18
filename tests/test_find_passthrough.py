@@ -32,8 +32,8 @@ def _args(**overrides):
     """A minimal args Namespace carrying build_fd_command's expected attrs."""
     base = dict(
         regex=False, case_sensitive=False, hidden=False, no_ignore=False,
-        depth=None, type=None, extension=None, size=None, newer=None,
-        older=None, exclude=None, print0=False,
+        gitignore=False, depth=None, type=None, extension=None, size=None,
+        newer=None, older=None, exclude=None, print0=False,
     )
     base.update(overrides)
     return SimpleNamespace(**base)

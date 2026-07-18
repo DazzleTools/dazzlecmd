@@ -19,6 +19,7 @@ fd is excellent, but `dz find` adds the dazzlecmd action layer on top:
 - **`-o` (open)**: Find a file and open it in one command -- no piping or `xargs`
 - **`-l` (lister)**: Find a file and reveal it in your file manager (Directory Opus, Explorer, Finder)
 - **`-c` (copy)**: Find a file and copy its path to your clipboard
+- **Finder defaults, not code-search defaults**: raw fd silently hides anything matched by `.gitignore`/`.ignore`/`.fdignore`; `dz find` searches the real filesystem by default (`--gitignore` opts back into fd's filtering)
 - **fixpath integration**: `dz fixpath creating-tools.md -o` searches for the file when the path doesn't resolve
 - **Consistent cross-platform actions**: Same flags work on Windows, macOS, and Linux -- no remembering `os.startfile` vs `open` vs `xdg-open`
 
@@ -53,7 +54,8 @@ dz find [pattern] [--dir DIR] [options] [-o|-l|-c]
 | `--regex` | Use regex instead of glob |
 | `--case-sensitive` | Case-sensitive (default: case-insensitive) |
 | `-H`, `--hidden` | Include hidden files |
-| `--no-ignore` | Don't respect .gitignore |
+| `--gitignore` | Respect `.gitignore`/`.ignore`/`.fdignore` rules (fd's code-search filtering; off by default) |
+| `--no-ignore` | Don't respect .gitignore (default since 0.12.2; kept for backward compatibility) |
 | `-d`, `--depth N` | Maximum search depth |
 | `-t`, `--type` | Filter: `file`, `dir`, `symlink` |
 | `-e`, `--extension` | Filter by extension (e.g., `md`, `py`) |
