@@ -136,3 +136,15 @@ class TestMetadataRing:
         assert classify_verb(e, "reset")[0] == "property-backed"
         assert classify_verb(e, "version")[0] == "property-backed"
         assert classify_verb(e, "add")[0] == "handler-backed"
+
+    def test_p5_reserved_registry_is_one_source(self):
+        # P-5 (keyword sweep finding #1): the app extends the LIB's
+        # registry -- prop/level/setup/action are now collision-
+        # protected; the app's pipeline verbs ride on top.
+        from dazzlecmd._constants import RESERVED_COMMANDS
+        from dazzlecmd_lib.reserved import DEFAULT_RESERVED_COMMANDS
+        assert DEFAULT_RESERVED_COMMANDS <= RESERVED_COMMANDS
+        for name in ("prop", "level", "setup", "action"):
+            assert name in RESERVED_COMMANDS, name
+        for name in ("search", "build", "enhance", "graduate"):
+            assert name in RESERVED_COMMANDS, name

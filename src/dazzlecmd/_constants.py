@@ -8,12 +8,14 @@ re-exports ``RESERVED_COMMANDS`` for backward compatibility
 """
 
 # Reserved command names that cannot be used as tool names.
-RESERVED_COMMANDS = {
-    "new", "add", "list", "info", "kit", "search",
-    "build", "tree", "version", "enhance", "graduate", "mode",
-    # B4-mutate: the bare-verb cross-level toggles (`dz enable <kit>` etc.).
-    # Listed here so engine.run treats them as meta-commands, not tool names.
-    "enable", "disable", "attach", "detach",
-    # SD-B: the foreground namespace (`dz meta use <level>`) + its top alias.
-    "meta", "use",
+# P-5 (the keyword-hygiene sweep, finding #1): the app IMPORTS-AND-
+# EXTENDS the lib's registry -- previously two uncoordinated sets
+# (the lib's was never imported, leaving prop/level/setup/action
+# unprotected against tool-name collisions). One source + the app's
+# own pipeline verbs.
+from dazzlecmd_lib.reserved import DEFAULT_RESERVED_COMMANDS
+
+RESERVED_COMMANDS = set(DEFAULT_RESERVED_COMMANDS) | {
+    # dz-specific pipeline verbs (not universal across aggregators)
+    "search", "build", "enhance", "graduate",
 }
