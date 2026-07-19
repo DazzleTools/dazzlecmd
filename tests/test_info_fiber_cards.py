@@ -161,3 +161,12 @@ class TestMatrixSweepFixes:
         ok, out = _info(e, ":.meta:verb:mode", capsys)
         assert ok and "materialization  Continuum" in out
         assert "materializationContinuum" not in out
+
+
+class TestRootPrefixedSpelling:
+    """Blind-run finding #2 (2026-07-18): dz:core:x must equal :core:x
+    on the tree-card path -- the tree key IS the root-prefixed string."""
+
+    def test_root_prefixed_renders(self, engine, capsys):
+        ok, out = _info(engine, "tst:.meta:level", capsys)
+        assert ok and "tst:.meta:level" in out

@@ -11,6 +11,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 ### Changed
 - **`dz find` searches ignored paths by default.** fd is always invoked with `--no-ignore` unless `--gitignore` is passed. Pattern searches inside repos will now surface previously-hidden matches (venv, build artifacts); use `--gitignore` or `-E` to prune.
 
+### Fixed
+- Root-prefixed addresses (`dz info dz:core:safedel`) now render the tree card, equal to their `:`-led spellings; bare names resolve to an item's defining home when projections share the name (a bare `enable` no longer reports ambiguity against its kit-frame view).
+
 ### Added
 - `docs/tutorial.md` -- the tour: one tree, four operators. Why each operator exists, its rules, where the worlds overlap (entity `:` / machinery `:.` / property `.` / up `:+`), reading at different depths, levels and verbs, and what to do when lost. Every example is live-verified and pinned by a companion checklist so the doc cannot drift from real behavior.
 - `dz find --gitignore` -- respect `.gitignore`/`.ignore`/`.fdignore` rules (the pre-0.12 default). Contradictory `--gitignore --no-ignore` exits with an error.

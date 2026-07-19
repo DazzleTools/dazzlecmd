@@ -230,7 +230,12 @@ def _info_tree_node(engine, target):
         key = None
     if key is not None:
         pass
-    elif any(op in target for op in (":.", ":+")) or target.startswith(":"):
+    elif (any(op in target for op in (":.", ":+")) or target.startswith(":")
+          or target.startswith(engine.command + ":")):
+        # the last arm: ROOT-PREFIXED spellings (dz:core:safedel) are
+        # first-class addresses -- the tree key IS that string (the
+        # blind run's finding #2: the tutorial's equivalence claim was
+        # aspirationally right; the gate just never admitted the form)
         try:
             canon, _ = canonicalize(target, implicit_root=engine.command)
         except FQCNParseError:
@@ -243,6 +248,15 @@ def _info_tree_node(engine, target):
         hits = [n for n in tree.nodes
                 if n.rsplit(":", 1)[-1].lstrip(".") == target
                 and n != engine.command]
+        if len(hits) > 1:
+            # ODR: a BARE name resolves to the DEFINING home --
+            # projections are reachable by path, never by bare-name
+            # tiebreak (surfaced when the restored kit-frame
+            # projections made every pole name ambiguous)
+            defining = [h for h in hits
+                        if tree.nodes[h].get("role") != "projection"]
+            if len(defining) == 1:
+                hits = defining
         if len(hits) == 1:
             key = hits[0]
         elif len(hits) > 1:

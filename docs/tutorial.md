@@ -39,6 +39,7 @@ The compound `:.` selects *within the machinery* (the "ring") of whatever node t
 dz:core:safedel:.  (the ring)
   instance of  dz:.meta:level:internaltool   (dz info :.meta:level:internaltool)
   alias        f:rm   (dz info :core:safedel:.alias:f-rm)
+  hidden       .alias   (dz info :core:safedel:.alias)
 ```
 
 ## The operators, one by one
@@ -51,6 +52,8 @@ dz:core:safedel:.  (the ring)
 > dz info dz:core:safedel      # the tool's card (same as, dz info :core:safedel)
 > dz info :dazzletools:claude  # a projection: the 'claude' view over dazzletools' tools
 ```
+
+(A seam to know about: today the *path* spelling renders the compact tree card, while the *bare name* — `dz info safedel` — renders the fuller identity card with `Fibers:` and `Current state:` sections. Same node, two renderings; one of the gaps the presentation continuum is scheduled to close.)
 
 That second one is worth pausing on: virtual kits project their views into the namespaces they cover, so `dz:dazzletools:claude` is a real node whose card names its **source** (`dz:claude`). Follow any handle a card prints — they are all real addresses.
 
@@ -74,6 +77,7 @@ The signature operator. `X:.b` selects `b` **within X's ring**, X being the node
 dz:core:safedel:.  (the ring)
   instance of  dz:.meta:level:internaltool   (dz info :.meta:level:internaltool)
   alias        f:rm   (dz info :core:safedel:.alias:f-rm)
+  hidden       .alias   (dz info :core:safedel:.alias)
 ```
 
 Every entry is followable. The alias line points at a *relation object* — the alias itself, which can carry its own notes (`dz :core:safedel:.alias:f-rm.note=...`). Rules: `:.` has **one meaning** (ring select); it never repeats bare (`:..` is a parse error — see grammar.md §rejected); a leading dot on a name is always this operator's serialization, never part of the name.
@@ -111,7 +115,16 @@ The same node answers at several depths — this is itself a machinery axis you 
 
 ```
 > dz info :.meta:presentation
-  contains: value (rank -2) · row (-1) · card (0) · full (+1) · dump (+2)
+dz:.meta:presentation
+  kind: Continuum
+  help: How much a READ returns, per target -- commands compose SCOPE
+        (self/children/subtree) with a DEPTH rung: info = self@card, ...
+  contains:
+    value         Unified (rung) (rank -2)
+    row           Unified (rung) (rank -1)
+    card          Unified (rung) (rank 0)
+    full          Unified (rung) (rank 1)
+    dump          Unified (rung) (rank 2)
 ```
 
 `dz :core:safedel.version` is a **value** read. A `dz list` row is a **row**. `dz info safedel` is the **card** — the standard answer about one thing. Commands compose a *scope* (one node, children, subtree) with one of these depths: `list` = children@row, `tree` = subtree@row, `info` = self@card. That's the whole relationship between those three commands.
