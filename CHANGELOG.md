@@ -12,6 +12,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Se
 - **`dz find` searches ignored paths by default.** fd is always invoked with `--no-ignore` unless `--gitignore` is passed. Pattern searches inside repos will now surface previously-hidden matches (venv, build artifacts); use `--gitignore` or `-E` to prune.
 
 ### Added
+- `docs/tutorial.md` -- the tour: one tree, four operators. Why each operator exists, its rules, where the worlds overlap (entity `:` / machinery `:.` / property `.` / up `:+`), reading at different depths, levels and verbs, and what to do when lost. Every example is live-verified and pinned by a companion checklist so the doc cannot drift from real behavior.
 - `dz find --gitignore` -- respect `.gitignore`/`.ignore`/`.fdignore` rules (the pre-0.12 default). Contradictory `--gitignore --no-ignore` exits with an error.
 - Zero-result hints on stderr: `-H` (hidden files are the remaining default blind spot) or drop `--gitignore` (when filtering caused the miss).
 - 11 new tests in `tests/test_find_ignore_defaults.py` (command-build defaults, contradiction guard, and real-fd integration against a `.fdignore`d file).

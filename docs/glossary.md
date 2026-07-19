@@ -53,6 +53,18 @@ Each verb can be invoked three equivalent ways — they all reach the same handl
 | `dz <axis> <special> <target>` | `dz kit loading attach media` | Explicit about both axis and action |
 | `dz <special> <target>` | `dz attach media` | The shortest hoistable form |
 
+## The three relations (why one thing can appear in several places)
+
+Everything has exactly **one defining home** in the tree. When you meet the same thing somewhere else, that appearance is one of three declared kinds — never an unexplained copy:
+
+- **Alias** — another *name* for the same node. `f:rm` runs `core:safedel`; nothing new exists, the spelling just lands on the one node. Every rewrite is echoed so you always see where you landed.
+- **Projection** — a real *derived node* that shows something from another vantage, and whose card always names its `source:`. `dz:dazzletools:claude` is the claude kit's view over dazzletools' tools; the kit-frame verb views work the same way. A projection exists because a second, honest way of *looking* at something is useful — and it stays honest by declaring what it reflects.
+- **Instance-of** — the link from a concrete item to its class rung (`safedel` → `internaltool`). It says what kind of thing you're holding.
+
+The rule that makes these a system instead of a hodge-podge: **an appearance must declare its kind.** If a card shows `source:`, you're on a projection; if a spelling gets echoed to another, you used an alias; if a `Fibers:` section says `instance of`, you're reading a classification. No node ever silently appears twice.
+
+*(Naming note: the verb axis called "projection" — `favorite`/`unfavorite`, a saved shortcut — is an unrelated, older sense of the word.)*
+
 ## Navigating the structure (the tree behind the CLI)
 
 - **Rung** — one named position on an axis's ladder. The level ladder's rungs are `fiber < lib < internaltool < tool < kit < aggregator < supra`; a verb pair's rungs are its two poles (`enable` at the warm end, `disable` at the cold). A rung is two things at once: a *position* (its rank — a signed number, 0 being the axis's conserved center) and a *class* (everything at that level: `dz info :.level:kit` describes kit-ness itself, not any particular kit).
