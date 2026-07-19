@@ -164,3 +164,15 @@ def pytest_collection_modifyitems(config, items):
                         reason=f"requires {marker_name.replace('shell_', '')} on PATH"
                     )
                 )
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_color_env(monkeypatch):
+    """Suite hermeticity (handoff finding 2026-07-19): the color gate
+    honors FORCE_COLOR/DZ_COLOR before TTY detection, so an ambient
+    env var colors captured output and breaks substring assertions
+    (found: the pole-help test failed ONLY under a color-forcing
+    environment). Tests always run color-free."""
+    monkeypatch.setenv("NO_COLOR", "1")
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.delenv("DZ_COLOR", raising=False)
