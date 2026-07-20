@@ -554,6 +554,11 @@ def _register_meta_commands(subparsers):
              "aggregator itself.",
     )
     setup_parser.add_argument(
+        "--clip", action="store_true",
+        help="Copy the emitted shell-fix line to the clipboard "
+             "(never touched without this flag).",
+    )
+    setup_parser.add_argument(
         "--emit-shell-fix", action="store_true",
         help="Machine channel: print exactly the one line that heals the "
              "CURRENT shell's PATH (writes per-shell fix scripts to the "

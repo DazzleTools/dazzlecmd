@@ -40,8 +40,10 @@ jobs:
         python -m pip install --upgrade pip
         # dazzlecmd-lib is a published PyPI dependency -- its source lives in its
         # own repo (DazzleLib/dazzlecmd-lib), not vendored here -- so the editable
-        # install below pulls it from the index.
-        pip install -e ".[dev]"
+        # install below pulls it from the index. --pre lets the resolver select
+        # the alpha-line lib releases (0.10.3xaN); pip's default-install behavior
+        # for end users is unaffected -- prereleases never overwrite stable picks.
+        pip install --pre -e ".[dev]"
 
     - name: Smoke test - import
       run: |
