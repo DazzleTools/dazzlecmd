@@ -531,14 +531,33 @@ def _register_meta_commands(subparsers):
                              help="Include enabled kits that have no tools (childless branches)")
     tree_parser.set_defaults(_meta="tree")
 
-    # dz setup <tool>
+    # dz setup <tool>  |  dz setup <self> (aggregator PATH bootstrap, #103)
     setup_parser = subparsers.add_parser(
         "setup",
         help="Run a tool's declared setup script (install deps, build, etc.)",
     )
     setup_parser.add_argument(
         "tool", nargs="?", default=None,
-        help="Tool name (or FQCN). Omit to list tools with setup commands.",
+        help="Tool name (or FQCN). Omit to list tools with setup commands. "
+             "Name the aggregator itself (dz / dazzlecmd) to run its own "
+             "PATH bootstrap.",
+    )
+    setup_parser.add_argument(
+        "-y", "--yes", action="store_true",
+        help="Skip confirmation prompts (any setup target that asks; "
+             "the aggregator self-setup prompts before changing PATH).",
+    )
+    setup_parser.add_argument(
+        "--dry-run", action="store_true",
+        help="Show what setup would do without doing it: the resolved "
+             "command for a tool, the would-be PATH change for the "
+             "aggregator itself.",
+    )
+    setup_parser.add_argument(
+        "--emit-shell-fix", action="store_true",
+        help="Machine channel: print exactly the one line that heals the "
+             "CURRENT shell's PATH (writes per-shell fix scripts to the "
+             "temp dir). Pipe-friendly; diagnostics go to stderr.",
     )
     setup_parser.set_defaults(_meta="setup")
 

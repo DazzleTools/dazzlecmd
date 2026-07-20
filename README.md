@@ -51,9 +51,9 @@ If `argparse` turns one script into a tidy CLI, `dz` does the same for a whole *
 pip install dazzlecmd
 ```
 
-This puts the `dz` command on your PATH. The short alias `dazzle-dz` installs the same tool.
+This installs the `dz` command (and its long form `dazzlecmd`). The PyPI package alias `dazzle-dz` installs the same tool. On most systems `dz` is immediately available; if your shell can't find it, see the next section.
 
-**On externally-managed Python** (PEP 668 -- recent Debian/Ubuntu and similar block a system-wide `pip install`): install into a virtual environment, or use [pipx](https://pipx.pypa.io):
+**On externally-managed Python** (PEP 668 -- recent Debian/Ubuntu and similar block a system-wide `pip install`): install into a virtual environment, or use [pipx](https://pipx.pypa.io) (whose `pipx ensurepath` handles PATH for you):
 
 ```bash
 pipx install dazzlecmd
@@ -67,6 +67,16 @@ git clone https://github.com/DazzleTools/dazzlecmd.git
 cd dazzlecmd
 pip install -e .
 ```
+
+### Problems running after installing?
+
+**`dz` not found after install?** One command diagnoses and fixes it (it runs even though `dz` doesn't):
+
+```bash
+python -m dazzlecmd setup dazzlecmd
+```
+
+Then either run the printed activation line to use `dz` in your **current** shell (venv/conda-style), or just open a **new** terminal -- both work. Details, flags (`--yes`, `--dry-run`, `--clip`, `--emit-shell-fix`), and Linux/macOS notes: [docs/guides/troubleshooting.md](docs/guides/troubleshooting.md).
 
 ## Usage
 

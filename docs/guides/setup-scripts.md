@@ -80,6 +80,8 @@ dz setup mytool -- --dry-run
 
 and see exactly what's about to happen. (The double-dash forwards `--dry-run` to the script rather than letting `dz setup` try to consume it.)
 
+> **Contract (#104):** `setup` subscribes to the *verb-mediated* variant of the argument-contract continuum: `dz setup <target> [<verb-params>] -- [<target-params>]`. The verb owns the space before `--` (`--yes` to skip prompts, `--dry-run` to preview the resolved invocation without running it -- these work for EVERY setup target); everything after `--` forwards verbatim to the target's setup script or command. Note the two dry-runs are different and both useful: `dz setup mytool --dry-run` is the VERB's preview (shows what would run, runs nothing), while `dz setup mytool -- --dry-run` runs the script in ITS OWN dry-run mode per the policy above. The ladder-wide contract formalization (and querying a verb's contract as a property via the `:.` ring) is tracked in #104.
+
 Minimal pattern:
 
 ```python

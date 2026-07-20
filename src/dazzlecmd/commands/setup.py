@@ -9,23 +9,115 @@ import sys
 
 from dazzlecmd_lib import colors as _colors
 
+def _self_names(engine):
+    """The aggregator's own identity: root token + aliases (#103).
+
+    Static names first (self-setup must work when the engine is broken
+    -- it is the thing you run when everything else isn't working),
+    then whatever the engine and the ``python -m`` launch add.
+    """
+    names = ["dz", "dazzlecmd"]
+    for candidate in (getattr(engine, "command", None),
+                      getattr(engine, "name", None)):
+        if candidate and candidate not in names:
+            names.append(candidate)
+    try:
+        from dazzlecmd_lib.self_setup import python_dash_m_target
+        target = python_dash_m_target()
+        if target and target not in names:
+            names.append(target)
+    except ImportError:
+        pass
+    return names
+
+
+def _run_self_setup(args, engine):
+    """``dz setup dz`` / ``python -m dazzlecmd setup dazzlecmd`` (#103)."""
+    try:
+        from dazzlecmd_lib import self_setup
+    except ImportError:
+        print(_colors.error(
+            "Error: this dazzlecmd-lib predates self-setup; upgrade "
+            "dazzlecmd-lib to use the PATH bootstrap."), file=sys.stderr)
+        return 1
+    import dazzlecmd as _pkg
+    location = os.path.dirname(getattr(_pkg, "__file__", "") or "") or None
+    return self_setup.run_self_setup(
+        _self_names(engine),
+        package_name="dazzlecmd",
+        package_location=location,
+        assume_yes=getattr(args, "yes", False),
+        dry_run=getattr(args, "dry_run", False),
+        emit_shell_fix=getattr(args, "emit_shell_fix", False),
+    )
+
+
 def _cmd_setup(args, engine):
     """Run a tool's declared setup script.
 
     The engine doesn't install dependencies itself — it dispatches the
     tool's own ``setup.command`` (or platform-specific variant). The tool
     author writes the setup script; the engine runs it when the user asks.
+
+    Naming the aggregator itself (``dz setup dz``, ``dz setup
+    dazzlecmd``, or the ``python -m`` package) runs the self-setup PATH
+    bootstrap instead -- and does so even when the engine failed to
+    build, because a broken PATH is exactly when this command matters.
     """
+    tool_name = getattr(args, "tool", None)
+    # Variant-2 contract (#104): the engine split everything after the
+    # first `--` into level_args -- owned by the TARGET, never the verb.
+    level_args = list(getattr(args, "level_args", []) or [])
+
+    if tool_name and tool_name in _self_names(engine):
+        if level_args:
+            # The self-target defines no level-params yet; reserved.
+            print(_colors.warn(
+                "note: self-setup takes its options before '--' "
+                f"(--yes/--dry-run); ignoring reserved trailing args: "
+                f"{level_args}"), file=sys.stderr)
+        # Shadow visibility (#103 criterion 5): if a real tool bears the
+        # aggregator's name, say which one and how to reach its setup.
+        if engine is not None:
+            try:
+                shadowed, _sctx = engine.resolve_command(tool_name)
+            except Exception:
+                shadowed = None
+            if shadowed is not None:
+                shadow_name = shadowed.fqcn or shadowed.name
+                print(_colors.warn(
+                    f"note: {tool_name!r} is also a tool ({shadow_name}) "
+                    f"-- running the aggregator's self-setup; use "
+                    f"'dz setup {shadow_name}' for the tool."),
+                    file=sys.stderr)
+        return _run_self_setup(args, engine)
+
     if engine is None:
         print("Error: engine unavailable", file=sys.stderr)
         return 1
-
-    tool_name = getattr(args, "tool", None)
 
     # No tool specified: list tools that have setup declared (v0.7.21 polish).
     # Detection: `setup.command` OR any `setup.platforms.*` present -- catches
     # tools with ONLY platform-specific setup commands (no top-level default).
     if not tool_name:
+        if level_args:
+            # Tester finding (2026-07-19): a `--` tail with no target
+            # was silently dropped; say so instead.
+            print(_colors.warn(
+                "note: no setup target given; args after '--' were "
+                f"ignored: {level_args}. Usage: dz setup <target> -- "
+                "<target-args>"), file=sys.stderr)
+        # One-line PATH-health warning (#103): the listing is also the
+        # discovery path, so guide recovery from here too.
+        try:
+            from dazzlecmd_lib.self_setup import first_run_hint
+            hint = first_run_hint(_self_names(engine),
+                                  package_name="dazzlecmd")
+            if hint:
+                print(_colors.warn(hint), file=sys.stderr)
+        except ImportError:
+            pass
+
         source = getattr(engine, "all_projects", engine.projects)
 
         def _has_setup(p):
@@ -177,16 +269,24 @@ def _cmd_setup(args, engine):
                 file=sys.stderr,
             )
             return 1
-        invocation = prefix + [full_script_path]
+        # Variant-2 contract (#104): forwarded level-args ride the argv
+        # list verbatim -- no shell parsing, no quoting concerns.
+        invocation = prefix + [full_script_path] + level_args
         # Display: human-readable form joining argv with spaces. Real
         # dispatch uses the argv list (no shell parsing, no quote
         # escaping concerns).
         display_form = " ".join(invocation)
     else:
+        # Command strings run shell=True; forwarded args need
+        # host-correct quoting (v0.7.46's documented forwarding, wired).
+        if level_args:
+            from dazzlecmd_lib.verb_contracts import join_for_shell
+            cmd_str = f"{cmd_str} {join_for_shell(level_args)}"
         invocation = cmd_str
         display_form = cmd_str
 
-    print(f"Running setup for {fqcn}...")
+    dry_run = getattr(args, "dry_run", False)
+    print(f"{'[dry-run] Would run' if dry_run else 'Running'} setup for {fqcn}...")
     if effective.get("note"):
         print(f"  Note: {effective['note']}")
     if script_path:
@@ -197,6 +297,12 @@ def _cmd_setup(args, engine):
     print(f"  Working dir: {tool_dir}")
     print()
     sys.stdout.flush()
+
+    # Verb-level --dry-run: show the resolved invocation, run nothing.
+    # (Distinct from `dz setup <tool> -- --dry-run`, which passes the flag
+    # INTO the tool's own setup script.)
+    if dry_run:
+        return 0
 
     # `script` path uses argv (shell=False); `command` path keeps shell=True
     # for legacy back-compat (existing setup.command strings often use && and

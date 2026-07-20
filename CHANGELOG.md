@@ -4,6 +4,18 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.3-alpha] - 2026-07-19
+
+### Added
+- `dz setup dz` / `dz setup dazzlecmd` -- the aggregator's own setup (#103): the `setup` verb, aimed at the aggregator itself, diagnoses whether `dz` is reachable and repairs the most common Windows install failure. A non-elevated `pip install dazzlecmd` on an all-users Python silently lands in the user scheme, whose `%APPDATA%\Python\Python3XY\Scripts` directory Windows never puts on PATH -- `dz` is then "not recognized" in every shell. `python -m dazzlecmd setup dazzlecmd` (the door that always opens) reports the install scheme, scripts directory, launcher presence, and effective + persisted PATH state, then offers the fix: a registry-safe append to the user PATH (value kind preserved, prior value backed up under `~/.dazzlecmd/`, `WM_SETTINGCHANGE` broadcast), with `--yes` and `--dry-run`. On POSIX it prints the exact rc-file line instead of editing dotfiles. A venv-local install gets activation guidance instead of a PATH offer; a tool shadowing the `dz`/`dazzlecmd` name is surfaced with its FQCN; an orphaned `--` tail warns instead of silently dropping. Works even when the engine fails to build -- a broken install is exactly when this command matters.
+- First-run guidance: `python -m dazzlecmd <anything>` prints a one-line stderr pointer at the bootstrap when `dz` is installed but off PATH (silent when healthy), and the `dz setup` listing leads with the same health warning.
+- Current-shell healing: after the PATH fix (or when the shell predates it), setup writes per-shell fix scripts (`dz-path.cmd`/`.ps1`/`.sh`) to the temp dir and prints the one line that fixes THIS shell (clipboard only via opt-in `--clip`) without opening a new one (`%TEMP%\dz-path.cmd` in cmd; dot-sourced forms for PowerShell/POSIX). `dz setup dz --emit-shell-fix` prints exactly that line for scripting.
+- `dz setup <target> --dry-run` and `--yes` are verb-level flags with one meaning for every target: `--dry-run` shows what setup would do without doing it (a tool's resolved invocation; the aggregator's would-be PATH change), `--yes` skips confirmation prompts wherever a target asks. `setup` subscribes to the verb-mediated argument contract (#104): the verb owns the space before `--`, the target owns everything after.
+
+### Fixed
+- `dz setup <tool> -- <args>` forwarding now actually works. The convention was documented in v0.7.46 (setup-scripts guide: "the double-dash forwards `--dry-run` to the script") but the transport was never wired -- trailing args were rejected with `unrecognized arguments` before reaching the script. The engine now splits the first `--` pre-parse and the handler appends the forwarded args to the setup invocation (argv-verbatim for `setup.script`, host-correct quoting for `setup.command`).
+- README no longer claims `pip install` unconditionally puts `dz` on PATH; a "dz not found after install?" section documents the Windows user-scheme trap and its one-command fix.
+
 ## [0.12.2-alpha] - 2026-07-14
 
 `dz find` now finds what `dir /s` finds. The tool silently inherited fd's code-search default of filtering out anything matched by `.gitignore`/`.ignore`/`.fdignore`, so a finder standing in a repo whose ignore rules excluded `*.exe` denied that an existing file existed -- `dz find locate32.exe` reported "No matches" inside Dazzle-Locate32, a project that vendors locate32, itself a file finder. Ignore rules are now bypassed by default: a finder's contract is the filesystem, not the VCS's opinion of it (the sibling `fixpath` fd fallback already worked this way). Opt back into fd's filtering with the new `--gitignore` flag; the legacy `--no-ignore` flag remains accepted as the now-default spelling (passing both is an error). Zero-result output gains a one-line hint at the applicable blind spot: add `-H` for hidden files, or drop `--gitignore` when filtering is on. A side effect worth naming: results no longer differ between git and non-git directories (fd only applies `.gitignore` inside repositories, so the same command used to answer differently depending on an invisible `.git`).
@@ -4038,7 +4050,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.2a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.3a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
