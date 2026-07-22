@@ -1,0 +1,28 @@
+{
+    "name": "link-mirror",
+    "version": "0.1.0",
+    "description": "Reconcile NTFS links between a source tree and a mirrored copy: scan, diff, recreate missing symlinks/junctions (and optionally hardlink groups) with verbatim targets and link-own timestamps",
+    "long_description": "After a file-level mirror (robocopy, Beyond Compare, preserve COPY) the destination holds the regular files but not the links. link-mirror scans the source for every link object (walk backend, or MFT/USN enumeration when elevated), diffs against the destination, and recreates what is missing -- same kind, verbatim target bytes (relative unresolved, broken unrepaired), link-own timestamps at 100ns precision, parent-directory times restored. Dry-run by default; additive only; conflicts reported, never overwritten; idempotent. Hardlink reconciliation (--hardlinks recreate) is opt-in and sha256-guarded. Thin CLI over dazzle_preservelib.linkmirror.",
+    "namespace": "core",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "link_mirror.py"
+    },
+    "pass_through": false,
+    "dependencies": {
+        "python_optional": ["dazzle-preservelib", "dazzle-filekit"]
+    },
+    "taxonomy": {
+        "category": "file-tools",
+        "tags": ["links", "symlink", "junction", "hardlink", "mirror", "migration", "backup", "filesystem"]
+    },
+    "lifecycle": {
+        "type": "tool",
+        "status": "active",
+        "created_as": "tool"
+    }
+}

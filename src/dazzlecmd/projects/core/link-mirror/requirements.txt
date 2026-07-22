@@ -1,0 +1,5 @@
+# link-mirror runs embedded in dazzlecmd's environment; these engine
+# dependencies are already satisfied by dazzlecmd's own install requirements
+# (listed here for documentation and standalone use).
+dazzle-preservelib>=0.9.0
+dazzle-filekit>=0.3.4

@@ -4,6 +4,11 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.4-alpha] - 2026-07-22
+
+### Added
+- `dz link-mirror` (core kit) -- reconcile NTFS links between a source tree and a mirrored copy. After a file-level mirror (robocopy, Beyond Compare, preserve COPY) the destination holds the regular files but not the links; link-mirror scans the source for every link object (portable walk backend, or MFT/USN enumeration on an elevated Windows console for multi-million-record volumes), diffs against the destination, and recreates what is missing: same kind (file/dir symlink, junction), verbatim target bytes (relative targets unresolved, intentionally-broken targets unrepaired), link-own timestamps restored at 100ns precision, and dirtied parent-directory times put back. Dry-run by default; additive only (conflicts are reported, never overwritten); idempotent. Hardlink groups are reported by default; `--hardlinks recreate` opt-in replaces destination duplicates with real hardlinks (sha256-guarded, atomic swap). `--rewrite-prefix OLD NEW` rewrites absolute targets for drive-retirement migrations. Manifest save/load (`--save-manifest`/`--load-manifest`) for audit and big-scan reuse; `--json` for machines. Display is surrogate-safe (NTFS names need not be valid UTF-16; unprintable units are backslash-escaped on whatever console encoding is active) and the elevation hint appears only for actual access-denied MFT failures. Thin CLI over `dazzle_preservelib.linkmirror` (the mirror-scoped implementation of DazzleTools/preserve#48 Phase 2), per the engine/CLI constitutional contract. Completes the links trio: `dz links` shows them, `dz safedel` protects them, `dz link-mirror` restores them. Born from the 2026-07 D:->B: failing-drive migration; first real-world run recreated the dropped links with nanosecond-identical timestamps.
+
 ## [0.12.3-alpha] - 2026-07-19
 
 ### Added

@@ -20,11 +20,13 @@ dependencies = [
     # module top level), de-vendored from the old safedel/_lib bundle. unctools is
     # win32-only -- it is used solely for UNC->local-drive path conversion, and
     # only ever in guarded/lazy try/except imports.
-    "dazzle-filekit>=0.3.2",
+    # link-mirror needs create_junction_raw + exact-ns link timestamps (0.3.4)
+    "dazzle-filekit>=0.3.4",
     "unctools>=0.2.2; sys_platform == 'win32'",
     # safe copy/move with metadata preservation, behind the _f_common/safe_ops
     # adapter (the f-cp / f-mv tools). De-vendored from safedel/_lib/preservelib.
-    "dazzle-preservelib>=0.8.1",
+    # link-mirror is a thin CLI over dazzle_preservelib.linkmirror (0.9.0).
+    "dazzle-preservelib>=0.9.0",
 ]
 
 [project.optional-dependencies]
