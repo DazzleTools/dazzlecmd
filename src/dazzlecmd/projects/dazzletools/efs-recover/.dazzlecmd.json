@@ -1,0 +1,30 @@
+{
+    "name": "efs-recover",
+    "version": "0.1.0",
+    "description": "Owner-authorized offline EFS recovery: rebuild a lost EFS certificate/key from an old backup profile (incl. cross/defunct SID) and decrypt + strip encryption from the affected files",
+    "long_description": "",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "efs_recover.py",
+        "venv": ".venv"
+    },
+    "setup": {
+        "note": "Create .venv and install dependencies. The setup script detects which Python installer to use (uv, poetry, pdm, pipenv, conda, pip + pyproject.toml, pip + requirements.txt).",
+        "script": "dz_setup.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "security-recovery",
+        "tags": ["efs", "encryption", "decrypt", "recovery", "dpapi", "certificate", "backup", "cross-sid"]
+    },
+    "lifecycle": {
+        "type": "tool",
+        "status": "active",
+        "created_as": "tool"
+    }
+}

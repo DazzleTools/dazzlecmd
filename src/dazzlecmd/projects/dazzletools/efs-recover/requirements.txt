@@ -1,0 +1,14 @@
+# Dependencies for efs-recover -- installed into this tool's own .venv by
+#   dz setup dazzletools:efs-recover
+# Isolated here (NOT in dazzlecmd's environment) because these are
+# specialized crypto-recovery deps only this tool needs.
+
+# Offline DPAPI / CryptoAPI engine: decrypt user master keys from
+# password + SID, and decrypt CAPI RSA private-key containers. This is the
+# crypto engine we REUSE rather than reimplementing (no mimikatz).
+dpapick3>=0.7.1
+
+# Assemble the recovered RSA private key + certificate into a PKCS#12 (.pfx)
+# for import, and handle key/cert (de)serialization. Pure-Python, no OpenSSL
+# binary required.
+cryptography>=42.0

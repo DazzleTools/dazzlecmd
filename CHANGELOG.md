@@ -4,6 +4,11 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.5-alpha] - 2026-07-22
+
+### Added
+- `dz efs-recover` (dazzletools kit) -- owner-authorized offline recovery of EFS-encrypted files whose certificate/private key was lost. Rebuilds the private key from an OLD backup profile (the certificate, the `Crypto\RSA` key container, and the `Protect` DPAPI master keys) -- including the hard case where the backup profile's account SID differs from the current machine (a "defunct / cross SID", e.g. after an OS reinstall) -- then imports it and strips EFS from the affected files so they become plain, portable files. Reuses the `dpapick3` DPAPI/CryptoAPI engine (no mimikatz, no reimplemented crypto) and `cryptography` for PKCS#12; runs offline. Owner-authorized by construction: it requires your own backup key material AND your own account password. Notable specifics: passwords are supplied only as files and never printed, logged, or placed on a command line (a literal `--password` argument is refused); dry-run by default (`--apply` to act); the master-key derivation is tried with a standard PBKDF2 then dpapick3's own variant, since some profiles unlock only under the latter; keys import into a legacy CryptoAPI provider via `certutil -csp` (XP/Server-2003-compat EFS files are unusable under a modern CNG/KSP import); the recovered key is saved as a passwordless `.pfx` for reuse (no random/ephemeral password), and `--save-keymaterial` archives the raw components. Runs in its own isolated `.venv` (`dz setup dazzletools:efs-recover`); the offline unwrap is cross-platform while the import + `cipher /d` strip are Windows-only. Ships with 21 unit tests (run in the tool's venv; they skip cleanly under the main suite) plus a human checklist for the real-key-material end-to-end.
+
 ## [0.12.4-alpha] - 2026-07-22
 
 ### Fixed
