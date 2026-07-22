@@ -78,6 +78,12 @@ jobs:
 
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        # Tag-push publishes must be idempotent: the alias package version
+        # moves slower than the main package, so re-publishing an existing
+        # file is expected, not an error (400 File already exists killed the
+        # v0.12.4-alpha alias job -- the workflow's second-ever run).
+        skip-existing: true
 
   publish-alias:
     name: Publish dazzle-dz
@@ -98,3 +104,9 @@ jobs:
 
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        # Tag-push publishes must be idempotent: the alias package version
+        # moves slower than the main package, so re-publishing an existing
+        # file is expected, not an error (400 File already exists killed the
+        # v0.12.4-alpha alias job -- the workflow's second-ever run).
+        skip-existing: true
