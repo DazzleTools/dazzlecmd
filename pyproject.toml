@@ -90,13 +90,21 @@ exclude = ["dazzlecmd.projects*", "dazzlecmd.kits*"]
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+# Per-tool suites live beside their tool (projects/<kit>/<tool>/tests/ and
+# projects/<kit>/_<shared>/tests/), matching where the code they cover lives.
+# Without the second entry they are never collected: 200+ passing tests sat
+# dormant outside CI until this was noticed.
+testpaths = ["tests", "src/dazzlecmd/projects"]
 # tests/one-offs/ is a scratchpad (per the one-offs-vs-regression-tests
 # policy) -- experiments, diagnostic scripts, single-use probes. They are
 # NOT regression coverage and must not block CI / pre-push. Real regressions
 # live in tests/ (and packages/*/tests/) as conventional pytest modules.
+# projects/wtf/ is a VENDORED aggregator (upstream: djdarcy/wtf-windows) with
+# its own test tree that assumes its own rootdir -- collecting it from here
+# fails on imports like 'tests.generate_golden'. Its tests belong to it and
+# run in its own repo, not in dazzlecmd's suite.
 # Also preserve pytest's default exclusions.
-norecursedirs = [".*", "build", "dist", "CVS", "_darcs", "{arch}", "*.egg", "venv", "one-offs"]
+norecursedirs = [".*", "build", "dist", "CVS", "_darcs", "{arch}", "*.egg", "venv", "one-offs", "wtf"]
 markers = [
     "shell_cmd: tests requiring Windows cmd.exe",
     "shell_bash: tests requiring bash in PATH",
