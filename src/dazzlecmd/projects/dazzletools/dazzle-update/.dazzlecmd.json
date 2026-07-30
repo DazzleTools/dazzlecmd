@@ -1,0 +1,25 @@
+{
+    "name": "dazzle-update",
+    "version": "0.1.0",
+    "description": "Ecosystem-wide update/status scanner: what needs fetching, pushing, or reinstalling across every namespace we own",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "dazzle_update.py"
+    },
+    "pass_through": false,
+    "dependencies": {
+        "system": ["git", "gh"]
+    },
+    "taxonomy": {
+        "category": "dev-tools",
+        "tags": ["git", "repo", "inventory", "update", "drift", "pypi", "ecosystem"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

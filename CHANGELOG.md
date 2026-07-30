@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.6-alpha] - 2026-07-29
+
+### Added
+- `dz dazzle-update` (dazzletools kit) -- ecosystem-wide update/status scanner. Answers "what do I need to pull, push, or reinstall?" across every GitHub namespace you own, in one command. It joins four independent views of the same question -- namespace listings, editable installs, the filesystem, and PyPI -- because each is authoritative for something and blind to something else. A repo can be perfectly clean in git while the environment runs months-old metadata for it; a repo can exist on exactly one machine, backed up nowhere, and be invisible to every listing. Repos are keyed by canonical identity rather than by remote URL, so a clone whose URL still names a pre-transfer namespace is recognized as the repo it actually is instead of being reported as missing. Reports commits to pull, work that exists only on this machine, broken editable installs, install metadata that has fallen behind its own source tree, remote URLs that now resolve elsewhere, repos with no remote at all, uncommitted changes, and repos present in a namespace but absent locally. Remote refs are refreshed by default (in parallel, with per-repo timeouts) because a behind-count measured against a stale ref reports zero and reads as current. Output is ordered by what to do about it, colour-coded by what a state would cost you, filterable by finding kind, sortable by recency, and available as JSON for comparing two machines. `--fix` is opt-in and narrow: fast-forward-only pulls on clean trees and editable reinstalls, nothing else -- it refuses rather than stashing, merging, pushing, or rewriting a remote. Configurable via JSON/YAML for roots, namespaces, membership rules, exclusions, ordering, and caching.
+- `projects/dazzletools/_repo_common/` -- shared, location-explicit git primitives used by both `dz git` and `dz dazzle-update`: repo state, canonical GitHub identity resolution (including transfer-redirect detection), and the discovery sources. No dependency on dazzlecmd, no reliance on the process working directory, so it remains extractable as a standalone library.
+
+### Changed
+- `dz git` is now a thin shim over `_repo_common`, reduced from 770 lines. Behaviour is unchanged and verified byte-for-byte against captured output across varied repo shapes; `--json` gains `upstream`, `ahead`, `behind`, `dirty_count`, and `untracked_count`.
+- Per-tool test suites under `src/dazzlecmd/projects/**/tests/` are now collected by the default pytest run. They previously existed but were never executed in CI, leaving several hundred passing tests dormant. The vendored `projects/wtf/` aggregator is excluded, since it carries its own test tree that assumes its own rootdir.
+
 ## [0.12.5-alpha] - 2026-07-22
 
 ### Added
@@ -4063,7 +4073,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.3a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.6a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
