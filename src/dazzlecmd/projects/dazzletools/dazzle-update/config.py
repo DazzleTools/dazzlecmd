@@ -36,6 +36,13 @@ DEFAULTS = {
     "include": [],               # force-include, wins over exclude
     "member_prefixes": ["dazzle"],
     "personal_allow": [],        # personal-namespace repos to treat as members
+    # Working sets: named, OVERLAPPING lenses over the population.
+    #   {"<name>": {"namespaces": [globs], "include": [exact owner/repo],
+    #               "exclude": [globs], "declared": bool}}
+    # namespaces carry the body; include takes exact names (globs warn --
+    # measured over-broad in every real case); declared opts in to
+    # membership derived from kit manifests and tool requirements.
+    "sets": {},
     "third_party_owners": [],    # merged with built-in defaults
     "local_only_branches": [],   # merged with built-in defaults
     "sort": "newest",            # newest | oldest | name
@@ -114,7 +121,11 @@ def load(explicit=None, cwd=None):
             return dict(DEFAULTS), None, f"{path}: expected a mapping at top level"
 
         merged = dict(DEFAULTS)
-        unknown = [k for k in data if k not in DEFAULTS]
+        # Underscore keys are comments (JSON has no comment syntax; the
+        # shipped template itself uses "_comment"). Warning about them
+        # made the template nag about its own documentation.
+        unknown = [k for k in data
+                   if k not in DEFAULTS and not k.startswith("_")]
         merged.update({k: v for k, v in data.items() if k in DEFAULTS})
         warn = None
         if unknown:
@@ -144,6 +155,28 @@ def write_template(path):
         "include": [],
         "member_prefixes": ["dazzle"],
         "personal_allow": [],
+        # Two worked examples, from the measured rule-language design:
+        # `dazzle` names its orgs and carries two exact includes whose
+        # membership rests on reliance nobody has declared yet (they
+        # retire to `declared` the moment a manifest names them);
+        # `wtf` shows a set whose body is a repo-glob product line
+        # rather than an org. Overlap is deliberate -- wtf-windows is
+        # in both, via declaration on one side and the glob on the other.
+        "sets": {
+            "dazzle": {
+                "namespaces": ["DazzleTools/*", "DazzleLib/*"],
+                "include": ["djdarcy/dazzle-claude-code-config",
+                            "djdarcy/dazzle-claude-code-history-viewer"],
+                "exclude": ["*/.github"],
+                "declared": True,
+            },
+            "wtf": {
+                "namespaces": ["djdarcy/wtf-*"],
+                "include": [],
+                "exclude": [],
+                "declared": False,
+            },
+        },
         "sort": "newest",
         "order": ["behind-upstream", "unpushed", "dirty"],
         "cache_write": True,

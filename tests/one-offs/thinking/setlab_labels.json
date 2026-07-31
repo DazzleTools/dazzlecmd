@@ -1,0 +1,234 @@
+{
+  "_help": "Set in_dazzle_set on each CLUSTER below (7 booleans, not 52). Every repo in a cluster is indistinguishable to all candidate rules, so they must share a verdict -- unless you put a per-repo exception in `overrides`, which is itself the finding that no rule can express the set. Values are PROPOSALS to review, not ground truth. Then run: python setlab.py score --verbose",
+  "agreed_in": [
+    "DazzleLib/dazzle-filekit",
+    "DazzleLib/dazzle-preservelib",
+    "DazzleLib/dazzlecmd-lib"
+  ],
+  "agreed_out_count": 38,
+  "overrides": {},
+  "clusters": {
+    "C1": {
+      "in_dazzle_set": false,
+      "_signature_key": "fullname-substring,layered,layered+backs_tool,org-only",
+      "_rules_saying_yes": [
+        "fullname-substring",
+        "layered",
+        "layered+backs_tool",
+        "org-only"
+      ],
+      "repos": [
+        "DazzleML/Claude-Code-Infinite-Perfect-Context",
+        "DazzleML/Claude-Session-Backup",
+        "DazzleML/MCP-Server-Tutorial",
+        "DazzleML/ai-training-monitor",
+        "DazzleML/claude-session-logger",
+        "DazzleML/comfyui-triton-and-sageattention-installer",
+        "DazzleML/contradiction-extraction-poc",
+        "DazzleML/find-best-images",
+        "DazzleNodes/ComfyUI-Dazzle-VAE-DeGrid",
+        "DazzleNodes/ComfyUI-DazzleCommand",
+        "DazzleNodes/ComfyUI-DazzleKSampler",
+        "DazzleNodes/ComfyUI-DazzleKSampler.wiki",
+        "DazzleNodes/ComfyUI-DazzleSwitch",
+        "DazzleNodes/ComfyUI-PreviewBridgeExtended",
+        "DazzleNodes/ComfyUI-Smart-Resolution-Calc",
+        "DazzleNodes/LoRA-Merger-ComfyUI",
+        "DazzleNodes/comfydbg",
+        "DazzleNodes/fit-mask-to-image"
+      ],
+      "_proposed_why": "DazzleML + DazzleNodes: ML tooling and ComfyUI nodes. Neither ships a dz subcommand; these are separate sets, not this one."
+    },
+    "C2": {
+      "in_dazzle_set": true,
+      "_signature_key": "fullname-substring,layered,layered+backs_tool,ns+declared-exc,ns+declared-exc+inc,ns+declared-exc+names,org-only,org-subset,org-subset+declared",
+      "_rules_saying_yes": [
+        "fullname-substring",
+        "layered",
+        "layered+backs_tool",
+        "ns+declared-exc",
+        "ns+declared-exc+inc",
+        "ns+declared-exc+names",
+        "org-only",
+        "org-subset",
+        "org-subset+declared"
+      ],
+      "repos": [
+        "DazzleTools/Windows-No-Internet-Secured-BUGFIX",
+        "DazzleTools/folder-datetime-fix",
+        "DazzleTools/git-repokit",
+        "DazzleTools/git-repokit-common",
+        "DazzleTools/git-repokit-template",
+        "DazzleTools/listall",
+        "DazzleTools/notepad-cleanup",
+        "DazzleTools/preserve",
+        "DazzleTools/process-delta",
+        "DazzleTools/teeclip",
+        "DazzleTools/temp-renamer",
+        "DazzleTools/test-template-project",
+        "DazzleTools/windows-update-no-reboot",
+        "DazzleTools/wingather",
+        "DazzleTools/xormove"
+      ],
+      "_proposed_why": "DazzleTools originals -- the CLI tools themselves."
+    },
+    "C3": {
+      "in_dazzle_set": true,
+      "_signature_key": "fullname-substring,layered,layered+backs_tool,name-prefix,ns+declared-exc,ns+declared-exc+inc,ns+declared-exc+names,org-only,org-subset,org-subset+declared",
+      "_rules_saying_yes": [
+        "fullname-substring",
+        "layered",
+        "layered+backs_tool",
+        "name-prefix",
+        "ns+declared-exc",
+        "ns+declared-exc+inc",
+        "ns+declared-exc+names",
+        "org-only",
+        "org-subset",
+        "org-subset+declared"
+      ],
+      "repos": [
+        "DazzleLib/dazzle-lib",
+        "DazzleLib/dazzle-linklib",
+        "DazzleLib/dazzle-tree-lib",
+        "DazzleTools/Dazzle-Locate64",
+        "DazzleTools/dazzlecmd",
+        "DazzleTools/dazzlelink",
+        "DazzleTools/dazzlesum"
+      ],
+      "_proposed_why": "dazzle-named core tools and libs. Uncontroversial."
+    },
+    "C4": {
+      "in_dazzle_set": false,
+      "_signature_key": "fullname-substring,layered,layered+backs_tool,name-prefix,org-only",
+      "_rules_saying_yes": [
+        "fullname-substring",
+        "layered",
+        "layered+backs_tool",
+        "name-prefix",
+        "org-only"
+      ],
+      "repos": [
+        "DazzleML/dazzle-claude-code-config",
+        "DazzleML/dazzle-claude-config",
+        "DazzleNodes/Dazzle-ComfyUI-TiledDiffusion",
+        "DazzleNodes/DazzleNodes",
+        "DazzleNodes/dazzle-comfy-plasma-fast",
+        "DazzleProj/dazzle"
+      ],
+      "_proposed_why": "dazzle-NAMED but in the ML/Nodes/Proj orgs. THE decisive test: if false, the name rule's accuracy is coincidental."
+    },
+    "C5": {
+      "in_dazzle_set": false,
+      "_signature_key": "fullname-substring,layered,layered+backs_tool,name-prefix,ns+declared-exc+inc",
+      "_rules_saying_yes": [
+        "fullname-substring",
+        "layered",
+        "layered+backs_tool",
+        "name-prefix",
+        "ns+declared-exc+inc"
+      ],
+      "repos": [
+        "djdarcy/dazzle-claude-vault",
+        "djdarcy/dazzle-comfyui-frame-interpolation",
+        "djdarcy/dazzle-opentimestamps-client",
+        "djdarcy/dazzle-python-bitcoinlib"
+      ],
+      "_proposed_why": "USER VERDICT 2026-07-31: dazzle-adjacent. vault dated/probably unneeded; frame-interp -> DazzleNodes if upstream declines; otc + bitcoinlib -> ecosystem tools if maintainers stay AFK."
+    },
+    "C6": {
+      "in_dazzle_set": true,
+      "_signature_key": "declared-only,layered,layered+backs_tool,ns+declared-exc,ns+declared-exc+inc,ns+declared-exc+names,org-subset+declared",
+      "_rules_saying_yes": [
+        "declared-only",
+        "layered",
+        "layered+backs_tool",
+        "ns+declared-exc",
+        "ns+declared-exc+inc",
+        "ns+declared-exc+names",
+        "org-subset+declared"
+      ],
+      "repos": [
+        "djdarcy/DPAPIck3",
+        "djdarcy/wtf-windows"
+      ],
+      "_proposed_why": "DPAPIck3 (backs dz efs-recover) + wtf-windows (wtf.kit.json source). Both DECLARED by a manifest."
+    },
+    "C7": {
+      "in_dazzle_set": true,
+      "_signature_key": "fullname-substring,layered,layered+backs_tool,name-prefix,ns+declared-exc+inc,ns+declared-exc+names",
+      "_rules_saying_yes": [
+        "fullname-substring",
+        "layered",
+        "layered+backs_tool",
+        "name-prefix",
+        "ns+declared-exc+inc",
+        "ns+declared-exc+names"
+      ],
+      "repos": [
+        "djdarcy/dazzle-claude-code-config",
+        "djdarcy/dazzle-claude-code-history-viewer"
+      ],
+      "_proposed_why": "USER VERDICT 2026-07-31: config is 'very much part of our dazzle ecosystem'; history-viewer is 'a fork that our claude tools rely on'."
+    },
+    "C8": {
+      "in_dazzle_set": false,
+      "_signature_key": "layered,layered+backs_tool",
+      "_rules_saying_yes": [
+        "layered",
+        "layered+backs_tool"
+      ],
+      "repos": [
+        "djdarcy/wtf-privacy",
+        "djdarcy/wtf-restarted"
+      ],
+      "_proposed_why": "wtf-privacy, wtf-restarted -- swept in only by the djdarcy/wtf-* glob; no manifest declares them."
+    },
+    "C9": {
+      "in_dazzle_set": false,
+      "_signature_key": "fullname-substring,org-only,org-subset,org-subset+declared",
+      "_rules_saying_yes": [
+        "fullname-substring",
+        "org-only",
+        "org-subset",
+        "org-subset+declared"
+      ],
+      "repos": [
+        "DazzleLib/.github"
+      ],
+      "_proposed_why": ".github meta-repo, not a project."
+    },
+    "C10": {
+      "in_dazzle_set": true,
+      "_signature_key": "declared-only,fullname-substring,layered,layered+backs_tool,ns+declared-exc,ns+declared-exc+inc,ns+declared-exc+names,org-only,org-subset,org-subset+declared",
+      "_rules_saying_yes": [
+        "declared-only",
+        "fullname-substring",
+        "layered",
+        "layered+backs_tool",
+        "ns+declared-exc",
+        "ns+declared-exc+inc",
+        "ns+declared-exc+names",
+        "org-only",
+        "org-subset",
+        "org-subset+declared"
+      ],
+      "repos": [
+        "DazzleLib/UNCtools"
+      ],
+      "_proposed_why": "UNCtools -- declared dependency of a shipped tool."
+    },
+    "C11": {
+      "in_dazzle_set": false,
+      "_signature_key": "fullname-substring,org-only",
+      "_rules_saying_yes": [
+        "fullname-substring",
+        "org-only"
+      ],
+      "repos": [
+        "DazzleProj/.github"
+      ],
+      "_proposed_why": ".github meta-repo, not a project."
+    }
+  }
+}

@@ -61,6 +61,11 @@ from config import (  # noqa: E402
     write_template,
 )
 import scancache  # noqa: E402
+from sets import (  # noqa: E402
+    annotate as annotate_sets,
+    declared_members,
+    load_sets,
+)
 from ecosystem import (  # noqa: E402
     DEFAULT_EXCLUDES,
     FINDING_ALIASES,
@@ -382,6 +387,29 @@ def _visible_kinds(only_kinds, skip_kinds, show_clean=False,
     return base
 
 
+def apply_set_lens(findings, wanted_names):
+    """Filter every findings bucket to records in the named set(s).
+
+    Returns (filtered_findings, hidden). `hidden` counts the DISTINCT
+    repos that carried at least one real finding and were dropped by the
+    lens -- the number the report must state, because a lens that hides
+    silently is the report describing the question instead of the
+    machine. `clean` and `excluded-by-policy` are not findings and do
+    not count toward it.
+    """
+    wanted = {n.lower() for n in wanted_names}
+    out, hidden = {}, set()
+    for kind, items in findings.items():
+        keep = []
+        for r in items:
+            if wanted & {s.lower() for s in (r.get("sets") or [])}:
+                keep.append(r)
+            elif kind not in ("clean", "excluded-by-policy"):
+                hidden.add(r["key"])
+        out[kind] = keep
+    return out, len(hidden)
+
+
 def _display_name(r):
     """A name a human can act on.
 
@@ -404,7 +432,7 @@ def _display_name(r):
     return r["key"]
 
 
-def _fmt_repo(r, kind=None):
+def _fmt_repo(r, kind=None, hide_sets=frozenset()):
     """Render a row. `kind` selects WHICH checkout the row describes.
 
     Checkout-scoped findings (unpushed / no-upstream / dirty) must show
@@ -412,6 +440,9 @@ def _fmt_repo(r, kind=None):
     a repo appears under NO UPSTREAM displaying a branch that plainly has
     one, which reads as a bug in the tool rather than a fact about the
     machine.
+
+    `hide_sets` suppresses set tags the reader already knows: under
+    --only-set dazzle, tagging every row `in:dazzle` is noise.
     """
     name = _display_name(r)
     live = [c for c in (r.get("checkouts") or []) if not c.get("excluded")]
@@ -446,6 +477,9 @@ def _fmt_repo(r, kind=None):
         bits.append(f"{g['dirty_count']} dirty")
     if g.get("untracked_count"):
         bits.append(f"{g['untracked_count']} untracked")
+    tags = [s for s in (r.get("sets") or []) if s.lower() not in hide_sets]
+    if tags:
+        bits.append("in:" + ",".join(tags))
     return name, ", ".join(bits)
 
 
@@ -465,6 +499,12 @@ def render_text(records, findings, meta, pal=None):
     if meta.get("narrowed"):
         safe_print("  NOTE        --root narrows the scan; 'not cloned' is "
                    "suppressed and installs outside it are skipped")
+    if meta.get("set_lens"):
+        hidden = meta.get("set_hidden", 0)
+        tail = (f"; {hidden} repo(s) with findings outside the set hidden"
+                if hidden else "; nothing with findings falls outside it")
+        safe_print("  SET LENS    showing only "
+                   f"'{', '.join(meta['set_lens'])}'{tail}")
     for err in meta.get("errors", []):
         safe_print(f"  WARNING     {err}")
 
@@ -506,8 +546,9 @@ def render_text(records, findings, meta, pal=None):
         colour = FINDING_COLOURS.get(kind, "reset")
         safe_print("")
         safe_print("  " + pal(colour, pal.bold(FINDING_LABELS[kind])))
+        lens_names = frozenset(n.lower() for n in meta.get("set_lens") or ())
         for r in items[:40]:
-            raw, detail = _fmt_repo(r, kind)
+            raw, detail = _fmt_repo(r, kind, hide_sets=lens_names)
             if len(raw) > 38:
                 raw = raw[:37] + "~"
             # Pad BEFORE colouring: ANSI codes are characters, so padding
@@ -548,7 +589,24 @@ def render_text(records, findings, meta, pal=None):
             safe_print(f"    ... and {len(items) - 40} more")
 
     safe_print("")
-    safe_print("  " + pal("green", f"{meta['clean']} repos clean and current."))
+    if meta.get("set_lens"):
+        # Under a lens the bare count invites a misreading: "4 repos
+        # clean" directly under 4 dirty rows read as a contradiction (a
+        # live user hit exactly this, helped by the numeric coincidence).
+        # Scope and denominator make it unambiguous: clean repos are
+        # OTHER members of the set, counted against the set's scanned
+        # size. not-cloned and excluded repos were never scanned, so
+        # they cannot sit in the denominator of "clean".
+        scanned = {r["key"] for k, items in findings.items()
+                   for r in items
+                   if k not in ("excluded-by-policy", "not-cloned")}
+        names = ", ".join(meta["set_lens"])
+        safe_print("  " + pal("green",
+                   f"{meta['clean']} of {len(scanned)} repo(s) in "
+                   f"'{names}' clean and current."))
+    else:
+        safe_print("  " + pal("green",
+                   f"{meta['clean']} repos clean and current."))
     if not shown:
         # "Nothing needs attention" must describe the MACHINE, not the
         # filter. Printing it because --only hid every section produced a
@@ -595,6 +653,7 @@ def render_json(records, findings, meta):
                 "source_version": r["source_version"],
                 "published": r["published"],
                 "excluded": r["excluded"],
+                "sets": r.get("sets") or [],
             } for r in (findings.get(k) or [])]
             for k in FINDING_ORDER if findings.get(k)
         },
@@ -850,6 +909,13 @@ def build_parser():
                    help="Show only these finding kinds (repeatable). "
                         "Names or aliases, e.g. --only dirty --only behind. "
                         "Use --list-kinds to see them all.")
+    p.add_argument("--only-set", action="append", default=None,
+                   metavar="NAME",
+                   help="Show only repos in this working set (repeatable). "
+                        "Sets are defined in the config; --list-sets shows "
+                        "them. What the lens hides is counted, never silent.")
+    p.add_argument("--list-sets", action="store_true",
+                   help="List configured working sets, then exit")
     p.add_argument("--skip", action="append", default=None, metavar="KIND",
                    help="Hide these finding kinds (repeatable)")
     p.add_argument("--list-kinds", action="store_true",
@@ -901,6 +967,47 @@ def main(argv=None):
     cfg, cfg_path, cfg_err = load_config(args.config)
     if cfg_err:
         errors.append(cfg_err)
+
+    # Working sets: parsed early so definition problems surface as
+    # warnings in every path, cached replay included.
+    set_defs, set_warns = load_sets(cfg.get("sets"))
+    errors.extend(set_warns)
+
+    if args.list_sets:
+        safe_print("")
+        if not set_defs:
+            safe_print("  no sets configured.")
+            safe_print("  add a 'sets' mapping to your config; --init-config "
+                       "writes worked examples.")
+            return 0
+        safe_print("  configured working sets (membership needs a scan; "
+                   "these are the rules):")
+        for s in set_defs:
+            safe_print(f"    {s.name}")
+            if s.namespaces:
+                safe_print(f"      namespaces: {', '.join(s.namespaces)}")
+            for entry in s.include:
+                safe_print(f"      include:    {entry}")
+            if s.exclude:
+                safe_print(f"      exclude:    {', '.join(s.exclude)}")
+            dec = ("yes -- kit sources and tool requirements count"
+                   if s.declared else "no")
+            safe_print(f"      declared:   {dec}")
+        safe_print("")
+        return 0
+
+    if args.only_set:
+        defined = {s.name.lower() for s in set_defs}
+        bad = [n for n in args.only_set if n.lower() not in defined]
+        if bad:
+            safe_print(f"  unknown set(s): {', '.join(bad)}")
+            if set_defs:
+                safe_print("  configured sets: "
+                           + ", ".join(s.name for s in set_defs))
+            else:
+                safe_print("  no sets configured -- add a 'sets' mapping to "
+                           "your config (--init-config writes examples)")
+            return 2
 
     sort_mode = args.sort or cfg.get("sort") or "newest"
     if sort_mode not in SORT_MODES:
@@ -1002,11 +1109,35 @@ def main(argv=None):
             return 2
         records = rec
         meta = dict(cmeta)
-        meta["errors"] = list(meta.get("errors") or []) + [
+        # Cached errors describe the replayed DATA; current-run errors
+        # (config problems, set-definition warnings) describe THIS run
+        # and were silently dropped here -- a malformed set warned on a
+        # fresh scan and said nothing on replay, which is exactly the
+        # silent-degradation this tool exists to refuse. Dedupe keeps
+        # the same-config case from saying everything twice.
+        merged, seen = [], set()
+        for e in (list(meta.get("errors") or []) + errors):
+            if e not in seen:
+                seen.add(e)
+                merged.append(e)
+        meta["errors"] = merged + [
             f"REPLAYED from cache, {scancache.format_age(cached_age)} old -- "
             "remote state may have changed since"]
+        # The Sources line must name the config governing THIS replay
+        # (lens, order, visibility) -- showing whichever file produced
+        # the cached scan sent a reader to the wrong config entirely.
+        meta["config"] = cfg_path
         findings = classify(records, EcosystemConfig(),
                             sort_mode=args.sort or cfg.get("sort") or "newest")
+        # Sets are re-derived on replay, never trusted from the cache:
+        # the config may have changed since the scan was written.
+        declared = (declared_members()
+                    if any(s.declared for s in set_defs) else None)
+        annotate_sets(records, set_defs, declared)
+        if args.only_set:
+            findings, hidden = apply_set_lens(findings, args.only_set)
+            meta["set_lens"] = list(args.only_set)
+            meta["set_hidden"] = hidden
         meta["clean"] = clean_count(records, findings)
         meta["visible_kinds"] = _visible_kinds(only_kinds, skip_kinds,
                                                show_clean=args.all,
@@ -1084,6 +1215,24 @@ def main(argv=None):
                    declared_dists=declared, pypi_meta=pypi_meta)
     findings = classify(records, config, sort_mode=sort_mode)
 
+    set_declared = (declared_members()
+                    if any(s.declared for s in set_defs) else None)
+    annotate_sets(records, set_defs, set_declared)
+    set_lens, set_hidden = None, 0
+    if args.only_set:
+        findings, set_hidden = apply_set_lens(findings, args.only_set)
+        set_lens = list(args.only_set)
+        # A set whose body is a namespace cannot see its uncloned members
+        # when the org listing failed. Under a lens that incompleteness
+        # deceives, so it must be said out loud, per set.
+        if not gh_ok:
+            wanted = {n.lower() for n in args.only_set}
+            for s in set_defs:
+                if s.name.lower() in wanted and s.namespaces:
+                    errors.append(
+                        f"set '{s.name}': namespace listing unavailable -- "
+                        f"members not cloned locally cannot be detected")
+
     meta = {
         "namespace_count": len(namespaces) + (1 if personal else 0),
         "org_repo_count": len(org_repos),
@@ -1101,6 +1250,8 @@ def main(argv=None):
         "order": report_order,
         "sort": sort_mode,
         "narrowed": narrowed,
+        "set_lens": set_lens,
+        "set_hidden": set_hidden,
         "stale_behind": bool(args.no_fetch) or not cfg.get("fetch", True),
     }
 

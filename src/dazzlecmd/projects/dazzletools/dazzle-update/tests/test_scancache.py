@@ -217,3 +217,18 @@ class TestFormatAge:
 
     def test_float_seconds_truncated(self):
         assert scancache.format_age(59.9) == "59s"
+
+
+class TestNamespaceCachePathCollision:
+    def test_custom_cache_path_never_collides(self):
+        """REGRESSION: a cache_path without the default '-scan.json'
+        suffix made scan and namespace caches share ONE file, and the
+        namespace save silently destroyed the scan payload."""
+        import scancache as sc
+        for base in (r"C:\x\scan.json", "/tmp/mycache.json", "plain"):
+            assert sc.namespace_cache_path(base) != base
+
+    def test_default_suffix_still_maps_cleanly(self):
+        import scancache as sc
+        got = sc.namespace_cache_path(r"C:\x\dazzle-update-scan.json")
+        assert got == r"C:\x\dazzle-update-namespaces.json"

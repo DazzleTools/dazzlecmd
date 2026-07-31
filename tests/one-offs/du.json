@@ -1,0 +1,45 @@
+{
+    "_comment": [
+        "Tweakable working-sets playground for dz dazzle-update.",
+        "Underscore keys are comments and never warn. Each set below",
+        "demonstrates one mechanism of the rule language -- edit freely",
+        "and re-run; membership follows the file, even under --cached.",
+        "Rule of thumb from the measurements: globs belong in",
+        "'namespaces', 'include' takes exact owner/repo names, 'exclude'",
+        "vetoes everything, 'declared: true' adds repos that kit",
+        "manifests and tool requirements name."
+    ],
+    "_comment_cache": "Private cache so playground replays never mix with the shared user cache (or anything a test agent writes there). Seed it once with a fresh run, then --cached replays are instant.",
+    "cache_path": "C:\\code\\dazzlecmd\\github\\tests\\one-offs\\du-scan.json",
+    "sets": {
+        "dazzle": {
+            "_comment": "The measured set: org body + 2 exact includes + declaration. This exact shape scored 1.00 precision / 1.00 recall against the adjudicated ground truth.",
+            "namespaces": ["DazzleTools/*", "DazzleLib/*"],
+            "include": ["djdarcy/dazzle-claude-code-config",
+                        "djdarcy/dazzle-claude-code-history-viewer"],
+            "exclude": ["*/.github"],
+            "declared": true
+        },
+        "wtf": {
+            "_comment": "A product line as a repo-glob body. Overlaps dazzle on wtf-windows (declaration on one side, glob on the other) -- overlap is a lens, not a conflict.",
+            "namespaces": ["djdarcy/wtf-*"]
+        },
+        "comfy": {
+            "_comment": "TRANSFERABILITY TEST -- an org body plus a cross-org text glob. Judge the membership against your mental model; if the language fights you here, that is the finding.",
+            "namespaces": ["DazzleNodes/*", "*comfy*"]
+        },
+        "claude": {
+            "_comment": "A purely cross-org text set: claude tooling lives in DazzleML, djdarcy, and dazzle-claude-* names. Tweak idea: exclude the dated dazzle-claude-vault and see the roster change.",
+            "namespaces": ["*claude*"],
+            "exclude": []
+        },
+        "ml": {
+            "_comment": "Plain org body, one line.",
+            "namespaces": ["DazzleML/*"]
+        },
+        "repokit": {
+            "_comment": "A sub-org slice: namespaces globs work at repo granularity too.",
+            "namespaces": ["DazzleTools/git-repokit*"]
+        }
+    }
+}

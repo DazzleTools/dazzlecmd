@@ -71,9 +71,18 @@ def load(path=None, max_age=None, now=None):
 
 
 def namespace_cache_path(path=None):
-    """Where cached GitHub namespace listings live."""
+    """Where cached GitHub namespace listings live.
+
+    Must NEVER equal the scan-cache path: a custom cache_path without
+    the default's "-scan.json" suffix used to make both caches share one
+    file, and the namespace save quietly destroyed the scan it was
+    supposed to sit beside.
+    """
     base = path or default_path()
-    return base.replace("-scan.json", "-namespaces.json")
+    if base.endswith("-scan.json"):
+        return base.replace("-scan.json", "-namespaces.json")
+    root, ext = os.path.splitext(base)
+    return root + "-namespaces" + (ext or ".json")
 
 
 def load_namespaces(path=None, ttl=None, now=None):

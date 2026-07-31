@@ -199,10 +199,13 @@ class TestWriteTemplate:
         assert ok
         cfg, path, load_err = config.load(explicit=str(target), cwd=str(tmp_path))
         assert path == str(target)
-        # The template's own "_comment" key is not a real config key, so
-        # load() correctly warns about it -- not silent, not fatal.
-        assert load_err is not None
-        assert "_comment" in load_err
+        # DECISION REVERSED (v0.12.8): underscore keys are the JSON
+        # comment convention, and the template uses "_comment" itself.
+        # The old contract made every load of the SHIPPED template warn
+        # about its own documentation, which trains users to ignore
+        # warnings. Real unknown keys still warn (tested elsewhere).
+        assert load_err is None
+        assert cfg["sets"], "template must ship worked set examples"
         assert cfg["sort"] == "newest"
 
     def test_oserror_returns_false_and_error(self, tmp_path, monkeypatch):

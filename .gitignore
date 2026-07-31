@@ -179,3 +179,7 @@ private/docs/
 /src/dazzlecmd/kits/wtf.kit.json
 /projects/wtf/
 /kits/wtf.kit.json
+
+# dz dazzle-update playground cache (machine-specific scan data)
+tests/one-offs/du-scan.json
+tests/one-offs/du-namespaces.json

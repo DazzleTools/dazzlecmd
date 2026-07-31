@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.8-alpha] - 2026-07-31
+
+### Added
+- `dz dazzle-update` working sets: named, deliberately overlapping groupings of repos ("dazzle", "wtf", "comfy") that act as lenses over the report. A set is defined in the config by four sources of unequal weight, chosen by measuring nine candidate rule forms against a human-adjudicated ground truth of a real 100-repo population rather than by argument: `namespaces` (glob patterns over owner/repo -- the body of the set; choosing these per set was the largest accuracy effect measured), `include` (exact repo names for memberships no pattern can see; globs here warn, having measured over-broad in every real case), `exclude` (small nameable noise), and `declared` (opt-in membership derived from what the installed ecosystem already states about itself -- kit manifests naming their source repo, tools naming their dependencies -- at zero config lines). New CLI: `--only-set NAME` filters the report to a set and always states how many repos with findings the lens hid; `--list-sets` prints the configured rules; rows show their other set memberships as an `in:` tag; under a lens the footer reports clean counts as "N of M repo(s) in 'set'" so a clean count cannot read as contradicting the findings above it. Set definitions get health warnings at load time (a glob in `include`, more than 3 include entries), and `--init-config` ships two worked examples. Sets never affect `--fix` eligibility or ownership labels -- they are lenses, not permissions.
+
+### Fixed
+- `--cached` replays silently dropped every current-run warning (malformed config, set-definition problems) and displayed whichever config file had produced the cached scan rather than the one governing the replay -- both found by an independent tester agent reproducing what a fresh scan reported and a replay omitted. Current-run warnings now survive replay, deduplicated against scan-time entries, and the Sources line names the active config.
+- A custom `cache_path` without the default's `-scan.json` suffix made the scan cache and the namespace cache share one file, so saving namespace listings silently destroyed the scan the cache existed to replay. The two paths can no longer collide.
+- Top-level and per-set keys beginning with an underscore (`_comment`) are now treated as comments rather than warned about as unknown -- the shipped config template was warning about its own documentation on every load. Genuinely unknown keys still warn.
+
 ## [0.12.7-alpha] - 2026-07-31
 
 ### Fixed
@@ -4093,7 +4103,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.7a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.8a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
