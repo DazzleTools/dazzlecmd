@@ -70,6 +70,54 @@ def load(path=None, max_age=None, now=None):
     return payload.get("records") or {}, payload.get("meta") or {}, age, None
 
 
+def namespace_cache_path(path=None):
+    """Where cached GitHub namespace listings live."""
+    base = path or default_path()
+    return base.replace("-scan.json", "-namespaces.json")
+
+
+def load_namespaces(path=None, ttl=None, now=None):
+    """Return (payload, age, error) for cached org listings.
+
+    Org membership changes on the order of days, but listing eleven
+    namespaces costs ~4.7s of sequential `gh repo list` calls on every
+    single run -- the bulk of the wait before scanning even begins. This
+    is the one axis where reuse is honest: it never affects fetch, which
+    must stay live.
+    """
+    p = namespace_cache_path(path)
+    if not os.path.isfile(p):
+        return None, None, "no cached namespace listing"
+    try:
+        with open(p, "r", encoding="utf-8") as fh:
+            payload = json.load(fh)
+    except (OSError, json.JSONDecodeError) as exc:
+        return None, None, f"unreadable namespace cache: {exc}"
+    if payload.get("schema") != SCHEMA:
+        return None, None, "namespace cache written by a different version"
+    age = (now if now is not None else time.time()) - (payload.get("saved_at") or 0)
+    if ttl is not None and age > ttl:
+        return None, age, f"namespace cache is {format_age(age)} old (ttl {format_age(ttl)})"
+    return payload.get("namespaces") or {}, age, None
+
+
+def save_namespaces(namespaces, path=None, now=None):
+    """Persist org listings. Best effort; failure is never fatal."""
+    p = namespace_cache_path(path)
+    payload = {"schema": SCHEMA,
+               "saved_at": now if now is not None else time.time(),
+               "namespaces": namespaces}
+    try:
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        tmp = p + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, indent=2, sort_keys=True, default=str)
+        os.replace(tmp, p)
+        return True, None
+    except OSError as exc:
+        return False, str(exc)
+
+
 def format_age(seconds):
     """Human age: '3m', '2h 10m', '4d'."""
     if seconds is None:

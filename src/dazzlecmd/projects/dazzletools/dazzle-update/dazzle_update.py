@@ -32,7 +32,10 @@ from _repo_common.discovery import (  # noqa: E402
     editable_installs,
     find_git_repos,
     list_org_repos,
-    pypi_version,
+    normalize_dist,
+    pypi_owned_by,
+    pypi_project,
+    read_declared_dist_name,
 )
 from _repo_common.gh_identity import (  # noqa: E402
     IdentityResolver,
@@ -326,17 +329,54 @@ LAYOUT_DIRS = {"github", "local", "dev", "private", "main", "src", "repo",
                "current", "master", "trunk"}
 
 
-def _visible_kinds(only_kinds, skip_kinds, show_clean=False):
+def installs_in_scope(installs, roots):
+    """Keep only editable installs whose source lives under a scanned root.
+
+    The pip axis is environment-wide: it sees every editable install in
+    the interpreter, wherever it lives. Narrowing the filesystem with
+    --root but leaving this unfiltered made the report mix "what is under
+    this directory" with "everything installed anywhere", so scanning
+    C:\\code\\dazzlecmd listed wtf-privacy and dazzlelink as stale.
+
+    Scope is decided on the RECORDED path, whether or not that directory
+    still exists. An earlier version short-circuited on "the path is
+    missing, keep it regardless" before applying the root filter, which
+    let a broken install anywhere on disk leak into every narrowed run --
+    amdead-lib surfaced while scanning dazzlecmd, rendered only as
+    "excluded by policy", which explains nothing. A broken install is
+    still worth reporting; it is worth reporting in a run that was
+    actually asking about it.
+    """
+    normed = [norm(r) for r in (roots or []) if r]
+    kept, dropped = [], 0
+    for inst in installs:
+        np = norm(inst.get("path"))
+        if not normed or any(np == r or np.startswith(r + os.sep)
+                             for r in normed):
+            kept.append(inst)
+        else:
+            dropped += 1
+    return kept, dropped
+
+
+def _visible_kinds(only_kinds, skip_kinds, show_clean=False,
+                   drop_not_cloned=False):
     """Which finding kinds to render. None means 'all except clean'.
 
     'clean' is opt-in: on a 150-repo box it is the longest section and
     says nothing actionable. But it must be REACHABLE, because otherwise
     there is no way to tell "scanned and fine" from "never scanned" --
     which is exactly the doubt a scanned inventory should remove.
+
+    'not-cloned' is suppressed when the caller narrowed the filesystem
+    for this run, because the finding would then be measuring the scope
+    of the question rather than the state of the machine.
     """
     if only_kinds:
         return [k for k in only_kinds if k not in (skip_kinds or [])]
     base = [k for k in FINDING_ORDER if k != "clean" or show_clean]
+    if drop_not_cloned:
+        base = [k for k in base if k != "not-cloned"]
     if skip_kinds:
         base = [k for k in base if k not in skip_kinds]
     return base
@@ -364,10 +404,38 @@ def _display_name(r):
     return r["key"]
 
 
-def _fmt_repo(r):
+def _fmt_repo(r, kind=None):
+    """Render a row. `kind` selects WHICH checkout the row describes.
+
+    Checkout-scoped findings (unpushed / no-upstream / dirty) must show
+    the checkout that triggered them, not the repo's primary -- otherwise
+    a repo appears under NO UPSTREAM displaying a branch that plainly has
+    one, which reads as a bug in the tool rather than a fact about the
+    machine.
+    """
     name = _display_name(r)
-    g = r["git"] or {}
+    live = [c for c in (r.get("checkouts") or []) if not c.get("excluded")]
+    triggered = (r.get("triggers") or {}).get(kind) or []
+
+    if triggered:
+        shown = triggered[0]
+        g = shown.get("git") or {}
+    else:
+        shown = None
+        g = r["git"] or {}
+
     bits = []
+    if r.get("foreign"):
+        bits.append("not ours")
+    if shown is not None and len(live) > 1:
+        label = os.path.basename(str(shown.get("path", "")).rstrip("\\/"))
+        extra = f" +{len(triggered) - 1}" if len(triggered) > 1 else ""
+        bits.append(f"{label}{extra} of {len(live)}")
+    elif len(live) > 1 and r.get("primary"):
+        bits.append(os.path.basename(str(r["primary"]).rstrip("\\/"))
+                    + f" of {len(live)}")
+    elif len(live) > 1:
+        bits.append(f"{len(live)} checkouts, none primary")
     if g.get("branch"):
         bits.append(g["branch"])
     if g.get("ahead"):
@@ -394,6 +462,9 @@ def render_text(records, findings, meta, pal=None):
                f"filesystem [{', '.join(meta['roots'])}]")
     safe_print(f"              published [{meta['published_detail']}]"
                + (f" * config [{meta['config']}]" if meta.get("config") else ""))
+    if meta.get("narrowed"):
+        safe_print("  NOTE        --root narrows the scan; 'not cloned' is "
+                   "suppressed and installs outside it are skipped")
     for err in meta.get("errors", []):
         safe_print(f"  WARNING     {err}")
 
@@ -402,8 +473,16 @@ def render_text(records, findings, meta, pal=None):
     # feel like it answers a different question than the one you asked.
     counts = {k: len(findings.get(k) or []) for k in FINDING_ORDER}
     to_pull = counts.get("behind-upstream", 0)
-    headline = (pal("red", f"{to_pull} to pull") if to_pull
-                else pal("green", "nothing to pull"))
+    # Without a fetch, behind-counts came from whatever the last fetch
+    # left behind. Saying "nothing to pull" then is a confident negative
+    # we have not earned -- the same class of claim as the original bug
+    # where a stale ref made every repo read as current.
+    if meta.get("stale_behind") and not to_pull:
+        headline = pal("yellow", "pull status unknown (no fetch)")
+    elif to_pull:
+        headline = pal("red", f"{to_pull} to pull")
+    else:
+        headline = pal("green", "nothing to pull")
     parts = [headline]
     for kind, label in (("unpushed", "to push"),
                         ("stale-install-metadata", "to reinstall"),
@@ -428,7 +507,7 @@ def render_text(records, findings, meta, pal=None):
         safe_print("")
         safe_print("  " + pal(colour, pal.bold(FINDING_LABELS[kind])))
         for r in items[:40]:
-            raw, detail = _fmt_repo(r)
+            raw, detail = _fmt_repo(r, kind)
             if len(raw) > 38:
                 raw = raw[:37] + "~"
             # Pad BEFORE colouring: ANSI codes are characters, so padding
@@ -445,6 +524,16 @@ def render_text(records, findings, meta, pal=None):
                 inst = r["installed"] or {}
                 safe_print(f"    {name} installed {inst.get('version')} "
                            f"< PyPI {r['published']}")
+            elif kind == "stale-dist-name":
+                inst = r["installed"] or {}
+                safe_print(f"    {name} installed as {inst.get('name')!r}, "
+                           f"repo declares {r['declared_dist']!r} "
+                           f"({r['declared_dist_source']})")
+            elif kind == "pypi-name-collision":
+                urls = ", ".join((r.get("pypi_urls") or [])[:1])
+                safe_print(f"    {name} PyPI {r['published']} at {urls or '?'}"
+                           f" -- that is a different project; installing "
+                           f"would overwrite this checkout")
             elif kind == "source-missing":
                 inst = r["installed"] or {}
                 safe_print(f"    {name} {inst.get('name')} "
@@ -461,7 +550,27 @@ def render_text(records, findings, meta, pal=None):
     safe_print("")
     safe_print("  " + pal("green", f"{meta['clean']} repos clean and current."))
     if not shown:
-        safe_print("  Nothing needs attention.")
+        # "Nothing needs attention" must describe the MACHINE, not the
+        # filter. Printing it because --only hid every section produced a
+        # flat contradiction with the Summary line directly above it.
+        #
+        # Count only what the USER's filter hid. `not-cloned` under a
+        # narrowed scan was suppressed for a different reason, already
+        # stated in the NOTE above -- blaming --only for it inflated the
+        # tally from 5 to 128 and simply moved the inaccuracy.
+        suppressed_elsewhere = {"clean", "excluded-by-policy"}
+        if meta.get("narrowed"):
+            suppressed_elsewhere.add("not-cloned")
+        hidden = sum(n for k, n in counts.items()
+                     if n and k not in suppressed_elsewhere
+                     and (visible is not None and k not in visible))
+        if hidden:
+            safe_print(f"  {hidden} finding(s) hidden by --only/--skip.")
+        elif meta.get("stale_behind"):
+            safe_print("  Nothing else needs attention, but behind-counts "
+                       "were not refreshed (--no-fetch).")
+        else:
+            safe_print("  Nothing needs attention.")
     safe_print("")
     return 0
 
@@ -479,6 +588,9 @@ def render_json(records, findings, meta):
                 "configured_slugs": r["configured_slugs"],
                 "redirected": r["redirected"],
                 "git": r["git"],
+                "primary": r.get("primary"),
+                "primary_reason": r.get("primary_reason"),
+                "checkouts": r.get("checkouts") or [],
                 "installed": r["installed"],
                 "source_version": r["source_version"],
                 "published": r["published"],
@@ -491,7 +603,63 @@ def render_json(records, findings, meta):
     return 0
 
 
-def apply_fixes(findings, dry_run=False):
+def _norm(name):
+    """PEP 503 dist-name normalization."""
+    return normalize_dist(name)
+
+
+def _describe_action(verb, record, cmd):
+    """What this action will do, in plain language, for the ? prompt."""
+    g = record.get("git") or {}
+    if verb == "pull":
+        return (f"    fast-forward only -- no merge, no rebase.\n"
+                f"    checkout : {record.get('primary')}\n"
+                f"    branch   : {g.get('branch')} tracking {g.get('upstream')}\n"
+                f"    behind   : {g.get('behind')} commit(s)\n"
+                f"    chosen because: {record.get('primary_reason')}\n"
+                f"    aborts if the tree is not clean; nothing is stashed.")
+    inst = record.get("installed") or {}
+    return (f"    refresh this package's recorded version metadata.\n"
+            f"    installed: {inst.get('name')} {inst.get('version')}\n"
+            f"    source   : {record.get('source_version')}\n"
+            f"    --no-deps, so no other package is touched.\n"
+            f"    source files are NOT modified.")
+
+
+def _confirm(prompt, describe, assume_yes=False):
+    """Ask before acting. Returns 'yes' | 'no' | 'all' | 'quit'.
+
+    Default is NO on a bare Enter. This writes to real repositories
+    across a whole machine; the safe answer must be the one you get by
+    reflex. Without a TTY there is no safe way to ask, so the caller
+    must have passed --yes explicitly.
+    """
+    if assume_yes:
+        return "yes"
+    while True:
+        try:
+            answer = input(f"  {prompt} [y/N/a/q/?] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return "quit"
+        if answer in ("", "n", "no"):
+            return "no"
+        if answer in ("y", "yes"):
+            return "yes"
+        if answer in ("a", "all"):
+            return "all"
+        if answer in ("q", "quit"):
+            return "quit"
+        if answer in ("?", "h", "help"):
+            safe_print(describe)
+            safe_print("    y = do this one   n = skip (default)")
+            safe_print("    a = do this and all remaining without asking")
+            safe_print("    q = stop; nothing further is done")
+            continue
+        safe_print("    unrecognized -- y, n, a, q, or ? for detail")
+
+
+def apply_fixes(findings, dry_run=False, assume_yes=False, interactive=True):
     """The two provably-safe operations. Everything else refuses.
 
     Refuses on any dirty tree rather than stashing: auto-stashing is a
@@ -502,20 +670,54 @@ def apply_fixes(findings, dry_run=False):
 
     for r in findings.get("behind-upstream") or []:
         g = r["git"] or {}
+        if not g.get("upstream"):
+            # A fast-forward needs a tracking branch. Without one there is
+            # nothing to fast-forward FROM, and pulling would guess a
+            # remote/branch pair on the user's behalf.
+            refused.append((r, "primary checkout has no upstream -- "
+                               "nothing to fast-forward from"))
+            continue
         if (g.get("dirty_count") or 0) > 0 or (g.get("untracked_count") or 0) > 0:
             refused.append((r, "dirty tree -- refusing to pull (will not stash)"))
             continue
         if (g.get("ahead") or 0) > 0:
             refused.append((r, "diverged -- needs a merge, not a fast-forward"))
             continue
+        if r.get("foreign"):
+            refused.append((r, "not ours -- refusing to pull an upstream you "
+                               "only track"))
+            continue
         actions.append(("pull", r))
 
     for r in findings.get("stale-install-metadata") or []:
+        # Never reinstall across a name mismatch: the dist installed under
+        # the old name and the repo's declared name are different PyPI
+        # identities, and the old one may now belong to someone else (#106).
+        inst = r.get("installed") or {}
+        declared = r.get("declared_dist")
+        if declared and _norm(inst.get("name")) != _norm(declared):
+            refused.append((r, f"installed dist {inst.get('name')!r} != repo "
+                               f"declares {declared!r} -- these are different "
+                               f"PyPI identities; uninstall the old, install "
+                               f"the new; refusing to guess"))
+            continue
+        if r.get("pypi_owned") is False:
+            refused.append((r, "that PyPI name belongs to a different project "
+                               "-- installing would overwrite this checkout, "
+                               "not update it"))
+            continue
         actions.append(("reinstall", r))
 
-    for kind in ("unpushed", "no-upstream", "stale-remote-url"):
-        for r in findings.get(kind) or []:
-            refused.append((r, f"{kind}: reported only -- needs your decision"))
+    # Categories --fix structurally never acts on. Listing each one as a
+    # "refusal" implied the tool had considered acting and declined; ~40
+    # such lines buried the ~10 dirty-tree refusals, which are the ones
+    # you can actually do something about. Summarize instead.
+    never_acted = {}
+    for kind in ("unpushed", "no-upstream", "stale-remote-url",
+                 "stale-dist-name", "pypi-name-collision"):
+        n = len(findings.get(kind) or [])
+        if n:
+            never_acted[kind] = n
 
     # dazzlecmd is updated LAST: dz runs from an editable install of it,
     # so pulling it mid-run swaps source under the running process.
@@ -523,9 +725,23 @@ def apply_fixes(findings, dry_run=False):
         return "dazzlecmd" in (rec["full_name"] or rec["key"]).lower()
     actions.sort(key=lambda a: is_self(a[1]))
 
+    done = skipped = 0
     for verb, r in actions:
-        target = r["paths"][0] if r["paths"] else None
+        # Act ONLY on the primary checkout, never on paths[0]. paths[0]
+        # is discovery order (alphabetical), which for dazzlecmd is
+        # `fiber-work` -- a feature branch. Reinstalling or fast-
+        # forwarding there would put main's material into someone's
+        # in-progress work. Where no primary could be chosen, refuse:
+        # guessing is exactly what this must not do.
+        target = r.get("primary")
+        if not target and not (r.get("checkouts") or []):
+            # An install-only record (a subpackage, or a package whose
+            # source is outside any scanned repo) has no checkouts to
+            # choose between -- its single install path is unambiguous.
+            target = (r.get("installed") or {}).get("path")
         if not target:
+            refused.append((r, f"no primary checkout ({r.get('primary_reason')})"
+                               " -- refusing to guess which one to touch"))
             continue
         if verb == "pull":
             cmd = ["git", "-C", str(target), "pull", "--ff-only"]
@@ -536,18 +752,51 @@ def apply_fixes(findings, dry_run=False):
         if dry_run:
             safe_print(f"    [dry-run] {label}: {' '.join(cmd)}")
             continue
+
+        if interactive and not assume_yes:
+            safe_print("")
+            safe_print(f"  {verb.upper()}  {label}")
+            safe_print(f"    {' '.join(cmd)}")
+            choice = _confirm("apply?", _describe_action(verb, r, cmd))
+            if choice == "quit":
+                safe_print("")
+                safe_print(f"  stopped -- {done} applied, "
+                           f"{len(actions) - done - 1} not attempted")
+                break
+            if choice == "no":
+                skipped += 1
+                continue
+            if choice == "all":
+                assume_yes = True
+
         res = subprocess.run(cmd, capture_output=True, text=True,
                              encoding="utf-8", errors="replace")
         status = "ok" if res.returncode == 0 else "FAILED"
         safe_print(f"    {label}: {verb} {status}")
+        done += 1
         if res.returncode != 0:
             safe_print(f"      {(res.stderr or '').strip().splitlines()[:1]}")
 
+    if not dry_run:
+        safe_print("")
+        safe_print(f"  {done} applied, {skipped} skipped, "
+                   f"{len(refused)} refused.")
     if refused:
         safe_print("")
-        safe_print("  REFUSED -- reported, not acted on:")
+        safe_print("  BLOCKED -- would act, but something is in the way:")
         for r, why in refused:
-            safe_print(f"    {(r['full_name'] or r['key']):<38} {why}")
+            name = _display_name(r)
+            if len(name) > 38:
+                name = name[:37] + "~"
+            safe_print(f"    {name:<38} {why}")
+    if never_acted:
+        safe_print("")
+        total = sum(never_acted.values())
+        detail = ", ".join(f"{n} {k}" for k, n in sorted(never_acted.items()))
+        safe_print(f"  NOT ACTED ON -- {total} finding(s) in categories --fix "
+                   f"never touches:")
+        safe_print(f"    {detail}")
+        safe_print("    these need a decision from you; see the report above.")
     return 0
 
 
@@ -573,6 +822,9 @@ def build_parser():
                    help="Apply ff-only pulls and editable reinstalls")
     p.add_argument("--dry-run", action="store_true",
                    help="With --fix, show actions without running them")
+    p.add_argument("--yes", "-y", action="store_true",
+                   help="With --fix, apply every action without asking. "
+                        "Required for non-interactive use.")
     p.add_argument("--scope", action="append", default=None,
                    help="Limit to a namespace (repeatable)")
     p.add_argument("--root", action="append", default=None,
@@ -663,11 +915,22 @@ def main(argv=None):
     # CLI beats config; config beats built-in default.
     roots = args.root or cfg.get("roots") or [DEFAULT_ROOT]
 
+    # "Not cloned" means "we own it and it is nowhere on this machine".
+    # That claim is only honest when the scan covered the machine. If the
+    # caller deliberately narrowed the filesystem for this run, every repo
+    # outside that directory would be reported missing -- 123 of them, on
+    # a real run -- which is noise dressed up as a finding.
+    narrowed = bool(args.root)
+
+    progress = Progress(enabled=not args.no_progress,
+                        verbose=args.verbose)
+    progress.update("checking gh auth", 0)
     gh_ok, gh_detail = gh_status()
     namespaces, ns_err = ([], None)
     if cfg.get("namespaces"):
         namespaces = list(cfg["namespaces"])          # explicit override
     elif gh_ok:
+        progress.update("deriving namespaces", 0)
         namespaces, ns_err = derive_namespaces()      # preferred: derived
         if ns_err:
             errors.append(ns_err)
@@ -685,18 +948,47 @@ def main(argv=None):
         excludes=excludes, roots=roots,
         member_prefixes=tuple(cfg.get("member_prefixes") or ("dazzle",)),
         personal_allow=cfg.get("personal_allow") or (),
-        include=cfg.get("include") or ())
+        include=cfg.get("include") or (),
+        local_only_branches=cfg.get("local_only_branches") or ())
 
     cache = {} if args.no_cache else load_cache(_cache_path())
     resolver = IdentityResolver(cache=cache)
 
-    org_repos = []
-    for ns in namespaces + ([personal] if personal else []):
-        repos, err = list_org_repos(ns)
-        if err:
-            errors.append(err)
-        for entry in repos:
-            org_repos.append({"full_name": entry.get("nameWithOwner")})
+    # Listing every namespace costs ~4.7s of sequential gh calls -- the
+    # bulk of the wait before scanning starts, with nothing on screen.
+    # Reuse it within namespace_ttl (org membership moves in days, not
+    # seconds) and narrate it either way so the tool never looks hung.
+    want = namespaces + ([personal] if personal else [])
+    ns_ttl = cfg.get("namespace_ttl", 86400)
+    cached_ns, ns_age, ns_cache_err = ({}, None, "caching disabled")
+    if ns_ttl and not args.no_cache:
+        cached_ns, ns_age, ns_cache_err = scancache.load_namespaces(
+            path=cfg.get("cache_path"), ttl=ns_ttl)
+        cached_ns = cached_ns or {}
+
+    org_repos, fetched_ns = [], {}
+    for idx, ns in enumerate(want, 1):
+        hit = cached_ns.get(ns)
+        if hit is not None:
+            progress.update("namespaces (cached)", idx, len(want), ns)
+            names = hit
+        else:
+            progress.update("listing namespaces", idx, len(want), ns)
+            repos, err = list_org_repos(ns)
+            if err:
+                errors.append(err)
+            names = [e.get("nameWithOwner") for e in repos
+                     if e.get("nameWithOwner")]
+        fetched_ns[ns] = names
+        org_repos.extend({"full_name": n} for n in names)
+    progress.done()
+
+    if ns_ttl and not args.no_cache and fetched_ns != cached_ns:
+        scancache.save_namespaces(fetched_ns, path=cfg.get("cache_path"))
+    if cached_ns and ns_age is not None:
+        errors.append(f"namespace listing reused from cache "
+                      f"({scancache.format_age(ns_age)} old; "
+                      f"--no-cache to refresh)")
 
     cached_age = None
     if args.cached:
@@ -717,14 +1009,14 @@ def main(argv=None):
                             sort_mode=args.sort or cfg.get("sort") or "newest")
         meta["clean"] = clean_count(records, findings)
         meta["visible_kinds"] = _visible_kinds(only_kinds, skip_kinds,
-                                               show_clean=args.all)
+                                               show_clean=args.all,
+                                               drop_not_cloned=bool(args.root))
         meta["order"] = apply_order(cfg.get("order"))[0] if cfg else meta.get("order")
         pal = make_palette(args.color)
         if args.json:
             return render_json(records, findings, meta)
         return render_text(records, findings, meta, pal=pal)
 
-    progress = Progress(enabled=not args.no_progress, verbose=args.verbose)
     local, fetch_failures = collect_local(
         roots, resolver, config, verbose=args.verbose, progress=progress,
         do_fetch=(not args.no_fetch) and cfg.get("fetch", True),
@@ -735,7 +1027,10 @@ def main(argv=None):
     if fetch_failures:
         errors.append(f"{len(fetch_failures)} repo(s) could not be fetched; "
                       "their behind-counts may be stale")
-    installs = editable_installs()
+    installs, out_of_scope = installs_in_scope(editable_installs(), roots)
+    if out_of_scope:
+        errors.append(f"{out_of_scope} editable install(s) outside the scanned "
+                      f"root(s) were skipped")
 
     source_versions = {}
     for inst in installs:
@@ -745,15 +1040,38 @@ def main(argv=None):
             if v:
                 source_versions[norm(p)] = v
 
-    published, published_detail = {}, "skipped -- pass --published"
+    # Declared dist names come from each repo's OWN metadata. Never from
+    # the installed dist name -- see issue #106.
+    declared = {}
+    for inst in installs:
+        p = inst.get("path")
+        if p and os.path.isdir(str(p)):
+            name, source = read_declared_dist_name(p)
+            if name:
+                declared[norm(p)] = (name, source)
+
+    owners = list(namespaces) + ([personal] if personal else [])
+    published, pypi_meta = {}, {}
+    published_detail = "skipped -- pass --published"
     if args.published or cfg.get("published"):
         failures = 0
+        seen = set()
         for inst in installs:
-            v, err = pypi_version(inst["name"])
+            dec = declared.get(norm(inst.get("path")))
+            query = dec[0] if dec else inst["name"]
+            key = normalize_dist(query)
+            if key in seen:
+                continue
+            seen.add(key)
+            info, err = pypi_project(query)
             if err:
                 failures += 1
-            elif v:
-                published[inst["name"].lower()] = v
+            elif info:
+                published[key] = info["version"]
+                pypi_meta[key] = {
+                    "owned": pypi_owned_by(info, owners),
+                    "urls": info["urls"],
+                }
         published_detail = f"{len(published)} resolved"
         if failures:
             published_detail += f", {failures} failed"
@@ -762,7 +1080,8 @@ def main(argv=None):
         save_cache(_cache_path(), resolver.cache)
 
     records = join(org_repos, local, installs, config,
-                   source_versions=source_versions, published=published)
+                   source_versions=source_versions, published=published,
+                   declared_dists=declared, pypi_meta=pypi_meta)
     findings = classify(records, config, sort_mode=sort_mode)
 
     meta = {
@@ -777,9 +1096,12 @@ def main(argv=None):
         "clean": clean_count(records, findings),
         "config": cfg_path,
         "visible_kinds": _visible_kinds(only_kinds, skip_kinds,
-                                        show_clean=args.all),
+                                        show_clean=args.all,
+                                        drop_not_cloned=narrowed),
         "order": report_order,
         "sort": sort_mode,
+        "narrowed": narrowed,
+        "stale_behind": bool(args.no_fetch) or not cfg.get("fetch", True),
     }
 
     ok, cache_err = (True, None)
@@ -792,8 +1114,18 @@ def main(argv=None):
     pal = make_palette(args.color)
     if args.fix:
         render_text(records, findings, meta, pal=pal)
-        safe_print("  APPLYING FIXES" + (" (dry run)" if args.dry_run else ""))
-        return apply_fixes(findings, dry_run=args.dry_run)
+        interactive = sys.stdin.isatty()
+        if not args.dry_run and not args.yes and not interactive:
+            safe_print("  --fix needs a terminal to confirm each action.")
+            safe_print("  Re-run with --dry-run to preview, or --yes to apply "
+                       "without asking.")
+            return 2
+        safe_print("")
+        safe_print("  APPLYING FIXES" + (" (dry run)" if args.dry_run
+                                         else " -- you will be asked per repo"
+                                         if not args.yes else " (--yes)"))
+        return apply_fixes(findings, dry_run=args.dry_run,
+                           assume_yes=args.yes, interactive=interactive)
     if args.json:
         return render_json(records, findings, meta)
     return render_text(records, findings, meta, pal=pal)

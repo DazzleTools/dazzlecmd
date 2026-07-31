@@ -4,6 +4,26 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.7-alpha] - 2026-07-31
+
+### Fixed
+- `dz dazzle-update` reported the wrong checkout for any repo that exists as several worktrees or clones. Only the first-discovered checkout's git state was kept -- discovery order, which is alphabetical -- so a repo could report "clean" while a sibling worktree held dirty and unpushed work, and `--fix` would have acted on that sibling. On one real layout, 22 of 142 canonical identities span several paths, and in 7 of the 9 cases where pip already recorded which checkout the environment runs, the wrong one was being reported. Every checkout is now retained; a primary is chosen by stated precedence (the pip-installed path first, then a uniquely-tracking checkout, then a unique default branch, else none); and findings are split between those asked of the primary (behind-upstream) and those asked of every checkout (unpushed, no-upstream, dirty), so a sibling holding unpushed work can no longer hide behind a tidy one. Rows name the checkout they describe.
+- `--fix` selected its target as the first discovered path rather than the primary checkout, so on a repo with a feature-branch worktree it would have fast-forwarded or reinstalled into someone's in-progress work. It now acts only on the primary, refuses when no primary can be chosen, additionally requires the primary to track an upstream before pulling, and declines repos we do not own.
+- Supply-chain hazard on renamed distributions (#106). A project renamed from `preserve` to `dazzle-preserve` left a stale install under the old name; the old name now belongs to an unrelated PyPI project; the tool compared against it and reported an upgrade whose remedy installed a stranger's package over our console entry point. PyPI identity is now read from the repo's own `pyproject.toml`/`setup.py`, never from the installed distribution's name. A name mismatch is its own finding and blocks the version comparison entirely, and a PyPI project whose declared URLs do not point at one of our namespaces is reported as a collision rather than an upgrade. `--fix` refuses across both.
+- The footer under-reported clean repos, deriving the count by subtraction in a way that made each clean record cancel itself; it printed `0` on a machine where 24 repos were clean.
+- An unparseable installed version (a `v`-prefixed tag, say) sorted below every real version and produced a stale-install finding from formatting alone. Unknown now compares as unknown. Version parsing also treats `1.2` and `1.2.0` as equal and orders prereleases `a < b < rc < final`.
+- `--root` narrowed only the filesystem scan while the installed-package and namespace axes carried on unfiltered, so scanning one project reported unrelated installs as stale and 123 org repos as "not cloned". All axes now respect it, and the suppression is stated rather than silent.
+- Repos in the user's own personal namespace were labelled "not ours", sorted below third-party upstreams, and refused by `--fix`. Ownership and ecosystem membership are now separate questions: ownership governs the label and `--fix` eligibility, membership governs ranking only.
+- "Nothing to pull" was printed under `--no-fetch`, and "Nothing needs attention" was printed when a filter had hidden every section -- both asserting things the run had not established.
+
+### Added
+- `--fix` is interactive by default, confirming each repo with `[y/N/a/q/?]` where a bare Enter declines; `?` explains exactly what the action will do. `--yes` applies without asking and is required for non-interactive use. EOF and Ctrl-C stop without acting.
+- `--all` reveals repos with nothing to do, so "scanned and fine" is distinguishable from "never scanned"; `--only`/`--skip` filter by finding kind with short aliases, `--list-kinds` documents them; `--sort newest|oldest|name` orders rows within each section, ours before repos we merely track.
+- Configurable report `order` (partial lists promote without hiding), `local_only_branches` for branches that are unpushed by design, and `namespace_ttl` for reusing GitHub namespace listings.
+
+### Changed
+- Discovery is ~2.5x faster: a filesystem check now precedes the `git rev-parse` subprocess, cutting 377 of 603 process spawns on a 204-repo tree. Namespace listings are cached (24h default), taking a warm scoped run from ~6s to ~1.8s, and every pre-scan phase reports progress so the tool never looks hung.
+
 ## [0.12.6-alpha] - 2026-07-29
 
 ### Added
@@ -4073,7 +4093,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.6a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.7a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

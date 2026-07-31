@@ -22,6 +22,7 @@ drops a source looks complete while being wrong.
 
 import json
 import os
+import re
 import subprocess
 import urllib.error
 import urllib.request
@@ -109,6 +110,23 @@ def find_git_repos(root, max_depth=3, skip_names=None):
     found = []
     root = os.path.abspath(root)
 
+    def _has_git_entry(path):
+        """Cheap stat gate before the expensive subprocess.
+
+        is_repo_root() spawns `git rev-parse`, ~14ms each. Calling it on
+        every directory encountered cost 603 subprocesses and 8.6s to
+        walk one code drive, two thirds of them on ordinary folders that
+        were never repos. A repo root always has a `.git` entry -- a
+        directory for a normal clone, a FILE for a worktree or submodule
+        -- so an os.path.exists() first turns the subprocess into a
+        confirmation step rather than a search.
+
+        The subprocess is still required: `.git` present does not prove a
+        VALID repo root, and git resolves paths against enclosing repos.
+        This narrows what gets asked, it does not trust the answer.
+        """
+        return os.path.exists(os.path.join(path, ".git"))
+
     def walk(path, depth):
         if depth > max_depth:
             return
@@ -121,12 +139,12 @@ def find_git_repos(root, max_depth=3, skip_names=None):
                 continue
             if entry.name in skip or entry.name.startswith("."):
                 continue
-            if is_repo_root(entry.path):
+            if _has_git_entry(entry.path) and is_repo_root(entry.path):
                 found.append(entry.path)
                 continue  # do not descend into a matched repo
             walk(entry.path, depth + 1)
 
-    if is_repo_root(root):
+    if _has_git_entry(root) and is_repo_root(root):
         found.append(root)
     else:
         walk(root, 1)
@@ -174,18 +192,74 @@ def list_org_repos(owner, runner=_run_gh, limit=300, include_archived=False):
 
 # -- PyPI --
 
-def pypi_version(package, opener=None, timeout=20):
-    """Return (version, error) for a package's latest PyPI release.
+def read_declared_dist_name(path):
+    """Return (dist_name, source) declared by a repo, or (None, None).
 
-    A 404 is a normal, informative answer -- "not published" -- not a
-    failure, so it comes back as (None, None) rather than as an error.
+    THE authoritative answer to "what is this repo's PyPI identity".
+
+    It must never be inferred from the INSTALLED distribution's name. A
+    project that has been renamed leaves the old dist installed under the
+    old name, and if that old name has since been taken by an unrelated
+    project on PyPI, comparing against it produces an "update available"
+    row whose remedy installs a stranger's code. That is not theoretical:
+    our `preserve` was renamed to `dazzle-preserve`, PyPI `preserve` is
+    now an unrelated key/value store, and following the recommendation
+    installed it over our console entry point (issue #106).
+    """
+    pyproject = os.path.join(path, "pyproject.toml")
+    if os.path.isfile(pyproject):
+        try:
+            import tomllib
+            with open(pyproject, "rb") as fh:
+                data = tomllib.load(fh)
+            name = (data.get("project") or {}).get("name")
+            if name:
+                return name, "pyproject.toml [project].name"
+        except Exception:  # noqa: BLE001 - malformed metadata is not fatal
+            pass
+    for candidate in ("setup.py", "setup.cfg"):
+        target = os.path.join(path, candidate)
+        if not os.path.isfile(target):
+            continue
+        try:
+            text = open(target, encoding="utf-8", errors="replace").read()
+        except OSError:
+            continue
+        m = re.search(r'^\s*name\s*[=:]\s*["\']?([A-Za-z0-9._-]+)',
+                      text, re.MULTILINE)
+        if m:
+            return m.group(1), f"{candidate} name="
+    return None, None
+
+
+def normalize_dist(name):
+    """PEP 503 normalization, so Foo_Bar and foo-bar compare equal."""
+    if not name:
+        return ""
+    return re.sub(r'[-_.]+', '-', str(name)).strip().lower()
+
+
+def pypi_project(package, opener=None, timeout=20):
+    """Return (info_dict, error) for a PyPI project.
+
+    info_dict has keys: version, urls (list of str), summary. A 404 is a
+    normal, informative answer -- "not published" -- and returns
+    (None, None) rather than an error.
     """
     url = f"https://pypi.org/pypi/{package}/json"
     _open = opener or urllib.request.urlopen
     try:
         with _open(url, timeout=timeout) as resp:
             payload = json.load(resp)
-        return payload.get("info", {}).get("version"), None
+        info = payload.get("info") or {}
+        urls = [u for u in ([info.get("home_page")]
+                            + list((info.get("project_urls") or {}).values()))
+                if u]
+        return {
+            "version": info.get("version"),
+            "urls": urls,
+            "summary": info.get("summary") or "",
+        }, None
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
             return None, None  # not published: an answer, not an error
@@ -194,3 +268,31 @@ def pypi_version(package, opener=None, timeout=20):
         return None, f"{package}: {exc}"
     except (json.JSONDecodeError, ValueError) as exc:
         return None, f"{package}: unparseable PyPI response ({exc})"
+
+
+def pypi_owned_by(info, owners):
+    """Does this PyPI project plausibly belong to one of `owners`?
+
+    Defense in depth behind the declared-name fix. Even with the right
+    name, a project we do not own must never produce an "update
+    available" row: the remedy would install someone else's code. Answers
+    only from the project's own declared URLs -- absence of evidence is
+    reported as unknown (None), never as ownership.
+    """
+    if not info:
+        return None
+    urls = " ".join(info.get("urls") or []).lower()
+    if not urls:
+        return None
+    for owner in owners or ():
+        if not owner:
+            continue
+        if f"github.com/{str(owner).lower()}/" in urls:
+            return True
+    return False
+
+
+def pypi_version(package, opener=None, timeout=20):
+    """Backwards-compatible shim: just the latest version string."""
+    info, err = pypi_project(package, opener=opener, timeout=timeout)
+    return (info or {}).get("version"), err

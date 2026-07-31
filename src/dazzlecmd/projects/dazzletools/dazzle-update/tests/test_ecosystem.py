@@ -31,7 +31,8 @@ _HERE = Path(__file__).resolve().parent
 _TOOL_DIR = _HERE.parent
 sys.path.insert(0, str(_TOOL_DIR))
 
-from ecosystem import (  # noqa: E402
+from ecosystem import (
+    _is_older,  # noqa: E402
     EcosystemConfig,
     FINDING_ORDER,
     _version_tuple,
@@ -40,6 +41,7 @@ from ecosystem import (  # noqa: E402
     clean_count,
     join,
     resolve_kinds,
+    select_primary,
     sort_records,
 )
 
@@ -48,9 +50,11 @@ from ecosystem import (  # noqa: E402
 
 class TestVersionTuple:
     def test_empty_and_none_are_unparseable(self):
-        assert _version_tuple(None) == ()
-        assert _version_tuple("") == ()
-        assert _version_tuple("   ") == ()
+        """None means "cannot tell" -- distinct from (), which sorted
+        below every real version and drove false stale findings."""
+        assert _version_tuple(None) is None
+        assert _version_tuple("") is None
+        assert _version_tuple("   ") is None
 
     def test_pep440_and_tree_spelling_are_equal(self):
         """0.10.33a0 (PEP 440) and 0.10.33-alpha (tree spelling) are the
@@ -82,16 +86,16 @@ class TestVersionTuple:
         assert _version_tuple("0.12.6.post1") >= _version_tuple("0.12.6")
 
     def test_malformed_no_leading_digits_is_unparseable(self):
-        assert _version_tuple("abc") == ()
+        assert _version_tuple("abc") is None
 
     def test_v_prefixed_tag_style_is_unparseable(self):
-        """A 'v1.2.3'-style tag has no leading digit and is NOT recognized
-        -- a real gap if any source ever hands this format in."""
-        assert _version_tuple("v1.2.3") == ()
+        """A 'v1.2.3'-style tag is still not recognized -- but it now
+        reports None ("cannot tell") rather than sorting as oldest."""
+        assert _version_tuple("v1.2.3") is None
 
     # -- gaps found while stress-testing (reported, not fixed) --
 
-    def test_GAP_short_and_long_numeric_tuples_not_equal(self):
+    def test_FIXED_short_and_long_numeric_tuples_are_equal(self):
         """PEP 440 treats '1.2' and '1.2.0' as the same release, but this
         loose parser does not pad/truncate numeric tuples before
         comparing, so they compare UNEQUAL (and '1.2' sorts below
@@ -101,27 +105,33 @@ class TestVersionTuple:
         so this can produce a false install-behind-published finding for
         a package that is actually current.
 
-        This test documents the CURRENT (buggy) behavior so a future fix
-        is visible as an intentional change, not a silent regression.
+        FIXED: numeric segments are zero-padded before comparison, so
+        these now compare equal. Previously they did not, which could
+        report a current package as behind-published purely because PyPI
+        publishes '4.0' where the tree says '4.0.0'.
         """
-        assert _version_tuple("1.2") != _version_tuple("1.2.0")
-        assert _version_tuple("1.2") < _version_tuple("1.2.0")
+        assert _version_tuple("1.2") == _version_tuple("1.2.0")
+        assert _version_tuple("1.2") == _version_tuple("1.2.0.0")
+        assert _version_tuple("1.2.1") > _version_tuple("1.2")
 
-    def test_GAP_prerelease_ordinal_not_distinguished(self):
+    def test_FIXED_prerelease_ordinals_are_distinguished(self):
         """alpha/beta/rc of the SAME numeric release all collapse to the
         same tier (is_pre=True), so a genuine forward move from a0 to b0
         is invisible to the stale/behind-published comparisons. This is
         a false-NEGATIVE risk (a real bump goes unreported), the opposite
         direction from the false-positive risk the caller cares about
-        most, but it's a real blind spot worth having on record.
+        FIXED: alpha < beta < rc, and ordinals within a tier order too.
         """
-        assert _version_tuple("0.12.6a0") == _version_tuple("0.12.6b0")
-        assert _version_tuple("0.12.6a0") == _version_tuple("0.12.6rc1")
+        assert _version_tuple("0.12.6a0") < _version_tuple("0.12.6b0")
+        assert _version_tuple("0.12.6b0") < _version_tuple("0.12.6rc1")
+        assert _version_tuple("0.12.6a0") < _version_tuple("0.12.6a1")
+        assert _version_tuple("0.12.6rc1") < _version_tuple("0.12.6")
 
-    def test_GAP_post_release_ordinal_not_distinguished(self):
-        assert _version_tuple("0.12.6.post1") == _version_tuple("0.12.6.post2")
+    def test_FIXED_post_release_ordinals_are_distinguished(self):
+        assert _version_tuple("0.12.6.post1") < _version_tuple("0.12.6.post2")
+        assert _version_tuple("0.12.6") < _version_tuple("0.12.6.post1")
 
-    def test_GAP_unparseable_installed_version_always_sorts_oldest(self):
+    def test_FIXED_unparseable_version_never_claims_staleness(self):
         """() < any parseable tuple is always True in Python's tuple
         ordering, so an installed version string this parser cannot read
         (e.g. a 'v'-prefixed tag, or genuinely empty metadata) ALWAYS
@@ -131,9 +141,17 @@ class TestVersionTuple:
         install-behind-published finding driven by formatting alone, not
         real staleness. See TestClassify::test_GAP_malformed_installed_version_forces_false_stale
         for the effect at classify() level.
+
+        FIXED: _version_tuple returns None for unparseable input and
+        _is_older() returns False whenever either side is None. "I cannot
+        tell" must never render as "out of date".
         """
-        assert _version_tuple("v1.2.3") < _version_tuple("1.2.3")
-        assert _version_tuple("garbage-not-a-version") < _version_tuple("0.0.1")
+        assert _version_tuple("v1.2.3") is None
+        assert _version_tuple("garbage-not-a-version") is None
+        assert _is_older("v1.2.3", "1.2.3") is False
+        assert _is_older("garbage-not-a-version", "0.0.1") is False
+        # ...and a genuine comparison still works
+        assert _is_older("0.8.7a0", "0.9.0") is True
 
 
 # -- join() --------------------------------------------------------------
@@ -207,24 +225,19 @@ class TestJoin:
         records = join([], local_repos, [], _cfg())
         assert records["org/proj"]["last_activity"] == 999
 
-    @pytest.mark.xfail(
-        reason=(
-            "known bug (2026-07 dazzle-update test session): join() keeps "
-            "the FIRST local_repos entry's git state per canonical record "
-            "(`if entry.get('git') and not r['git']: r['git'] = entry['git']` "
-            "never overwrites once set) and never reconciles across "
-            "multiple checkouts of the same repo. For a project checked "
-            "out as several worktrees, whichever one is discovered first "
-            "(alphabetical by directory name within find_git_repos) wins "
-            "-- even if a LATER worktree is the one that's actually dirty "
-            "and unpushed. Confirmed live: a 3-worktree record where the "
-            "first-discovered worktree is clean but a later one has 7 "
-            "dirty files and 3 unpushed commits currently classifies as "
-            "'clean', producing zero findings for real, actionable drift."
-        ),
-        strict=True,
-    )
-    def test_GAP_multi_worktree_git_state_first_wins(self):
+    def test_FIXED_multi_worktree_reports_the_right_checkout(self):
+        """Regression test for the attribution bug.
+
+        join() used to keep only the FIRST discovered checkout's git
+        state (`if entry.get('git') and not r['git']`), so whichever
+        worktree sorted first alphabetically spoke for the whole repo.
+        A record could report 'clean' while a sibling held 7 dirty files
+        and 3 unpushed commits -- and --fix would have fast-forwarded
+        that sibling, merging main's material into a feature branch.
+
+        FIXED: every checkout is retained; repo-scoped findings ask the
+        primary (pip-installed first), checkout-scoped findings ask all.
+        """
         local_repos = [
             {  # discovered first (alphabetically: dev < github)
                 "path": r"C:\code\dazzlecmd\dev",
@@ -360,12 +373,18 @@ class TestClassify:
         # exact case -- see TestCleanCount::test_GAP_clean_count_undercounts_clean_repos.
         # Not asserted here to keep this test scoped to classify()'s bucketing.
 
-    def test_GAP_malformed_installed_version_forces_false_stale(self, tmp_path):
-        """Concrete classify()-level demonstration of the _version_tuple
-        gap: an installed version string this parser cannot read (here,
-        a 'v'-prefixed tag some tooling might report) makes the record
-        LOOK stale even though nothing is actually known to be wrong --
-        it should be 'unknown', not 'definitely oldest possible'."""
+    def test_FIXED_malformed_installed_version_does_not_force_false_stale(
+            self, tmp_path):
+        """classify()-level regression test for the false stale finding.
+
+        An installed version string the parser cannot read (here a
+        'v'-prefixed tag) used to compare as "definitely oldest", firing
+        stale-install-metadata purely from formatting. A false "you are
+        out of date" is worse than a missed one: it sends someone
+        reinstalling for no reason.
+
+        FIXED: unknown compares as unknown, so no finding is emitted.
+        """
         cfg = _cfg()
         proj = tmp_path / "proj"
         proj.mkdir()
@@ -375,33 +394,42 @@ class TestClassify:
         records = join([], local_repos, installs, cfg,
                        source_versions={records_norm(proj): "1.0.0"})
         findings = classify(records, cfg)
-        # Documents CURRENT behavior (a false positive), not desired
-        # behavior -- reported as a bug, not asserted as correct.
         keys = {r["key"] for r in findings["stale-install-metadata"]}
-        assert "org/proj" in keys
+        assert "org/proj" not in keys
+
+    def test_genuinely_stale_install_is_still_reported(self, tmp_path):
+        """The fix must not silence real staleness -- the counterpart to
+        the test above, so 'never report anything' cannot pass both."""
+        cfg = _cfg()
+        proj = tmp_path / "proj2"
+        proj.mkdir()
+        local_repos = [{"path": str(proj), "full_name": "Org/proj2",
+                        "slug": "Org/proj2", "git": {"branch": "main"}}]
+        installs = [{"name": "proj2", "version": "0.8.7a0", "path": str(proj)}]
+        records = join([], local_repos, installs, cfg,
+                       source_versions={records_norm(proj): "0.9.0"})
+        findings = classify(records, cfg)
+        keys = {r["key"] for r in findings["stale-install-metadata"]}
+        assert "org/proj2" in keys
 
 
 class TestCleanCount:
-    @pytest.mark.xfail(
-        reason=(
-            "known bug (2026-07 dazzle-update test session): clean_count() "
-            "sums record keys across EVERY findings bucket except "
-            "'excluded-by-policy' -- including 'clean' itself -- into a "
-            "single 'flagged' set, then returns total_in_scope minus "
-            "len(flagged). Since a clean, cloned record lands in "
-            "findings['clean'], its key is already in 'flagged', so it "
-            "gets subtracted out of its OWN count. render_text()'s footer "
-            "line ('{n} repos clean and current.') is meta['clean'] "
-            "verbatim -- the primary human-readable summary of every run. "
-            "With 2 clean repos and 1 dirty repo scanned, this currently "
-            "prints '0 repos clean and current.' instead of '2', on "
-            "essentially every real invocation (it's only nonzero for the "
-            "narrow case of install-only records that hit no check at "
-            "all, which is NOT what the footer text claims to report)."
-        ),
-        strict=True,
-    )
-    def test_GAP_clean_count_undercounts_clean_repos(self):
+    def test_FIXED_clean_count_matches_the_clean_bucket(self):
+        """Regression test for the footer that lied on every run.
+
+        clean_count() used to sum record keys across every findings
+        bucket except 'excluded-by-policy' -- INCLUDING 'clean' itself --
+        and return total_in_scope minus that set. A clean record was
+        therefore subtracted from its own count, so the footer
+        ('N repos clean and current.') printed 0 where it should have
+        printed 2. Observed live: '24 repos clean and current' on a box
+        where zero scanned git repos were actually clean.
+
+        FIXED: the count now reads the clean bucket directly. Deriving it
+        by subtraction also assumed every in-scope record was either
+        flagged or clean, which is false for install-only records that
+        hit no check at all.
+        """
         cfg = _cfg()
         local_repos = [
             {"path": r"C:\dirty", "full_name": "Org/dirty", "slug": "Org/dirty",
@@ -416,8 +444,7 @@ class TestCleanCount:
         ]
         records = join([], local_repos, [], cfg)
         findings = classify(records, cfg)
-        assert len(findings["clean"]) == 2  # the bucket itself is correct
-        # DESIRED: the summary count should match the clean bucket, not 0.
+        assert len(findings["clean"]) == 2
         assert clean_count(records, findings) == 2
 
 
@@ -532,3 +559,103 @@ class TestSortRecords:
     def test_default_mode_is_newest(self):
         items = [_rec("a", 100), _rec("b", 300)]
         assert sort_records(items) == sort_records(items, "newest")
+
+
+# -- select_primary() ----------------------------------------------------
+
+class TestSelectPrimary:
+    """Which checkout speaks for a repo that has several.
+
+    Found by an independent reviewer reading the code, then confirmed
+    empirically: an earlier version returned the FIRST default-branch
+    match it walked, which is directory order. That reintroduced the
+    arbitrary pick the function exists to eliminate, one rule deeper.
+    The live dazzlecmd layout has three tracking checkouts on `main`.
+    """
+
+    @staticmethod
+    def _ck(path, branch, upstream, dirty=0, excluded=False):
+        return {"path": path, "excluded": excluded,
+                "git": {"branch": branch, "upstream": upstream,
+                        "dirty_count": dirty, "untracked_count": 0}}
+
+    def _rec(self, checkouts, installed=None, excluded_paths=()):
+        return {"checkouts": checkouts, "installed": installed,
+                "excluded_paths": list(excluded_paths)}
+
+    def test_no_checkouts(self):
+        assert select_primary(self._rec([]))[0] is None
+
+    def test_single_checkout_wins_trivially(self):
+        c = self._ck(r"C:\a", "main", "origin/main")
+        got, why = select_primary(self._rec([c]))
+        assert got is c and "only checkout" in why
+
+    def test_pip_installed_path_beats_a_tracking_sibling(self):
+        """Rule 1 over rule 2, deliberately.
+
+        For two real repos the INSTALLED checkout has no upstream while a
+        tidier sibling has one. "What does this environment run" is
+        answered by pip, not by which copy looks cleaner.
+        """
+        installed = self._ck(r"C:\a\local", "private", None)
+        sibling = self._ck(r"C:\a\github", "main", "origin/main")
+        rec = self._rec([sibling, installed],
+                        installed={"path": r"C:\a\local"})
+        got, why = select_primary(rec)
+        assert got is installed
+        assert "pip-installed" in why
+
+    def test_pip_path_matches_case_insensitively_on_windows(self):
+        c = self._ck(r"C:\Code\Proj", "main", "origin/main")
+        rec = self._rec([c], installed={"path": r"c:\code\proj"})
+        assert select_primary(rec)[0] is c
+
+    def test_sole_tracking_checkout_wins(self):
+        untracked = self._ck(r"C:\a\feat", "feature/x", None)
+        tracked = self._ck(r"C:\a\github", "main", "origin/main")
+        got, why = select_primary(self._rec([untracked, tracked]))
+        assert got is tracked and "only checkout with an upstream" in why
+
+    def test_two_tracking_checkouts_both_on_main_REFUSES(self):
+        """The regression this class was written for."""
+        a = self._ck(r"C:\a\github", "main", "origin/main")
+        b = self._ck(r"C:\a\mirror", "main", "origin/main")
+        got, why = select_primary(self._rec([a, b]))
+        assert got is None, "picked arbitrarily instead of refusing"
+        assert "ambiguous" in why
+
+    def test_tracking_checkouts_on_distinct_branches_picks_the_default(self):
+        feat = self._ck(r"C:\a\feat", "feature/x", "origin/feature/x")
+        main = self._ck(r"C:\a\github", "main", "origin/main")
+        got, why = select_primary(self._rec([feat, main]))
+        assert got is main and "only tracking checkout on main" in why
+
+    def test_tracking_but_none_on_a_default_branch_refuses(self):
+        a = self._ck(r"C:\a\x", "feature/a", "origin/feature/a")
+        b = self._ck(r"C:\a\y", "feature/b", "origin/feature/b")
+        got, why = select_primary(self._rec([a, b]))
+        assert got is None and "none on a default branch" in why
+
+    def test_excluded_checkouts_are_not_eligible(self):
+        live = self._ck(r"C:\a\github", "main", "origin/main")
+        stale = self._ck(r"C:\a\github - Copy", "main", "origin/main")
+        rec = self._rec([stale, live], excluded_paths=[r"C:\a\github - Copy"])
+        got, why = select_primary(rec)
+        assert got is live
+
+    def test_all_excluded_falls_back_rather_than_returning_nothing(self):
+        """If every path is excluded the record is excluded anyway, but
+        select_primary must not crash or invent a checkout."""
+        a = self._ck(r"C:\a\one", "main", "origin/main")
+        rec = self._rec([a], excluded_paths=[r"C:\a\one"])
+        got, _ = select_primary(rec)
+        assert got is a
+
+    def test_installed_path_not_among_checkouts_falls_through(self):
+        """A broken editable pointing outside the scan must not win."""
+        c = self._ck(r"C:\a\github", "main", "origin/main")
+        rec = self._rec([c], installed={"path": r"C:\somewhere\else"})
+        got, why = select_primary(rec)
+        assert got is c
+        assert "pip-installed" not in why
