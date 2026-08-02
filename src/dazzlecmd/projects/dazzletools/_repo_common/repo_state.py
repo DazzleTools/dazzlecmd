@@ -247,25 +247,112 @@ def get_ahead_behind(repo_path=None, upstream=None):
         return (None, None)
 
 
-def get_status_counts(repo_path=None):
-    """Return {dirty_count, untracked_count} from porcelain status.
+def get_status_counts(repo_path=None, churn_patterns=None):
+    """Return {dirty_count, untracked_count, churn_count} from porcelain.
 
     dirty_count counts tracked paths with staged or unstaged changes;
     untracked_count counts '??' entries separately, because an untracked
     file is a much weaker signal than a modified tracked one.
+
+    churn_patterns names files whose modifications are MACHINE-MADE
+    (version files restamped by commit hooks): a tracked change whose
+    path or basename fnmatches a pattern moves from dirty_count to
+    churn_count, so a caller can distinguish "someone edited this repo"
+    from "the tooling rewrote a stamp". With no patterns (the default)
+    behavior is exactly as before -- dz git passes nothing and must not
+    change output.
+
+    The filename is only the GATE; content is the verdict. A matched
+    file counts as churn only when its diff is a version restamp: at
+    most two changed line-pairs, where each removed line equals its
+    added counterpart once version-shaped tokens are masked -- "the
+    same line, only the version moved". Format-agnostic on purpose:
+    `__version__ = "..."` in Python, a bare `1.2.3` in a VERSION file,
+    and `"version": "1.2.3",` in JSON all restamp the same way. A real
+    edit that lives in a version file (new logic, a manual MAJOR/MINOR/
+    PATCH bump, a deletion) fails the shape test and stays dirty.
     """
-    counts = {"dirty_count": 0, "untracked_count": 0}
+    import fnmatch
+    counts = {"dirty_count": 0, "untracked_count": 0, "churn_count": 0}
     rc, out, _ = git("status", "--porcelain", cwd=repo_path)
     if rc != 0:
         return counts
+    pats = [str(p).lower() for p in (churn_patterns or ()) if p]
     for line in out.splitlines():
         if not line.strip():
             continue
         if line.startswith("??"):
             counts["untracked_count"] += 1
-        else:
-            counts["dirty_count"] += 1
+            continue
+        if pats:
+            code = line[:2]
+            path = line[3:].strip()
+            if " -> " in path:          # rename: the destination is the file
+                path = path.split(" -> ", 1)[1]
+            raw = path.strip('"')
+            p = raw.replace("\\", "/").lower()
+            base = p.rsplit("/", 1)[-1]
+            # Only plain modifications can be stamps; an added, deleted,
+            # renamed, or conflicted version file is a decision, not churn.
+            if (set(code) <= {"M", " "}
+                    and any(fnmatch.fnmatch(p, q) or fnmatch.fnmatch(base, q)
+                            for q in pats)
+                    and _stamp_only_change(repo_path, raw)):
+                counts["churn_count"] += 1
+                continue
+        counts["dirty_count"] += 1
     return counts
+
+
+#: A version-shaped token: at least X.Y, with an optional prerelease /
+#: build tail (0.4.0-alpha_main_5-20260224-0c11da0 is one token).
+_VERSION_TOKEN = None  # compiled lazily
+
+
+def _stamp_only_change(repo_path, rel_path):
+    """True when the file's diff is a version restamp and nothing else.
+
+    The test is structural, not syntactic, so it works for any file
+    format: mask every version-shaped token in each changed line, then
+    require the removed lines to equal the added lines -- the same line
+    with only the version moved. Two extra tells bound it: at most two
+    changed line-pairs (hooks restamp one or two lines; humans editing
+    write more), and at least one version token must actually have been
+    masked (a whitespace-only wiggle is not a restamp).
+
+    Diffs against HEAD so staged and unstaged edits are judged together
+    (a stamp that was `git add`ed is still a stamp). Every uncertainty
+    -- no HEAD, unreadable diff, no textual change, pure addition or
+    deletion -- answers False: misreading real work as churn is the
+    failure this check exists to prevent, so doubt lands dirty.
+    """
+    global _VERSION_TOKEN
+    if _VERSION_TOKEN is None:
+        import re
+        _VERSION_TOKEN = re.compile(r'\d+\.\d+[0-9A-Za-z._+\-]*')
+    rc, out, _ = git("diff", "HEAD", "--", rel_path, cwd=repo_path)
+    if rc != 0:
+        return False
+    minus, plus, masked = [], [], 0
+
+    def norm(text):
+        nonlocal masked
+        replaced, n = _VERSION_TOKEN.subn("~V~", text.rstrip())
+        masked += n
+        return replaced
+
+    for ln in out.splitlines():
+        if ln.startswith(("+++", "---")):
+            continue
+        if ln[:1] == "-":
+            minus.append(norm(ln[1:]))
+        elif ln[:1] == "+":
+            plus.append(norm(ln[1:]))
+    if not minus or not plus or len(minus) > 2 or len(plus) > 2:
+        return False
+    if not masked:
+        return False
+    return sorted(minus) == sorted(plus)
 
 
 # -- detection functions --

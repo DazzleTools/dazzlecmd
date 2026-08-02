@@ -217,12 +217,129 @@ def test_diverged_reports_both_directions(linked, elsewhere):
 
 def test_status_counts_separate_tracked_from_untracked(repo, elsewhere):
     """Untracked files are a weaker signal and must be counted apart."""
-    assert get_status_counts(repo) == {"dirty_count": 0, "untracked_count": 0}
+    assert get_status_counts(repo) == {"dirty_count": 0,
+                                       "untracked_count": 0,
+                                       "churn_count": 0}
 
     (repo / "README.md").write_text("modified\n", encoding="utf-8")
     (repo / "brand_new.txt").write_text("new\n", encoding="utf-8")
     counts = get_status_counts(repo)
-    assert counts == {"dirty_count": 1, "untracked_count": 1}
+    assert counts == {"dirty_count": 1, "untracked_count": 1,
+                      "churn_count": 0}
+
+
+class TestChurnPatterns:
+    """Machine-made churn (hook-restamped files) split from real dirt.
+
+    Trigger: a repokit-heavy machine listed repos as DIRTY whose only
+    change was the commit hook rewriting `_version.py` build metadata --
+    the report was measuring the tooling, not the work.
+    """
+
+    def _add_version_file(self, repo, nested=False):
+        target = repo / "src" / "pkg" / "_version.py" if nested \
+            else repo / "_version.py"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text('__version__ = "1.0"\n', encoding="utf-8")
+        _run(repo, "add", "-A")
+        _run(repo, "commit", "-m", "add version file")
+        return target
+
+    def test_churn_reclassified_not_hidden(self, repo, elsewhere):
+        target = self._add_version_file(repo)
+        target.write_text('__version__ = "1.0+stamp"\n', encoding="utf-8")
+        counts = get_status_counts(repo, churn_patterns=["_version.py"])
+        assert counts == {"dirty_count": 0, "untracked_count": 0,
+                          "churn_count": 1}
+
+    def test_no_patterns_counts_churn_as_dirty(self, repo, elsewhere):
+        """dz git passes nothing and must see the old behavior exactly."""
+        target = self._add_version_file(repo)
+        target.write_text('__version__ = "1.0+stamp"\n', encoding="utf-8")
+        counts = get_status_counts(repo)
+        assert counts["dirty_count"] == 1 and counts["churn_count"] == 0
+
+    def test_basename_match_catches_nested_paths(self, repo, elsewhere):
+        target = self._add_version_file(repo, nested=True)
+        target.write_text('__version__ = "1.0+stamp"\n', encoding="utf-8")
+        counts = get_status_counts(repo, churn_patterns=["_version.py"])
+        assert counts == {"dirty_count": 0, "untracked_count": 0,
+                          "churn_count": 1}
+
+    def test_real_edit_alongside_churn_still_dirty(self, repo, elsewhere):
+        """A repo with churn AND a real edit must never read clean."""
+        target = self._add_version_file(repo)
+        target.write_text('__version__ = "1.0+stamp"\n', encoding="utf-8")
+        (repo / "README.md").write_text("real work\n", encoding="utf-8")
+        counts = get_status_counts(repo, churn_patterns=["_version.py"])
+        assert counts == {"dirty_count": 1, "untracked_count": 0,
+                          "churn_count": 1}
+
+    # -- content is the verdict, not just the filename ------------------
+
+    def _commit(self, repo, name, content):
+        f = repo / name
+        f.write_text(content, encoding="utf-8")
+        _run(repo, "add", "-A")
+        _run(repo, "commit", "-m", f"add {name}")
+        return f
+
+    def test_plain_text_version_file_restamp_is_churn(self, repo, elsewhere):
+        """USER DESIGN 2026-08-02: 'X.Y.Z -> A.B.C' works for ANY file
+        format -- a bare version string in a txt file restamps the same
+        way a Python assignment does."""
+        f = self._commit(repo, "VERSION", "1.2.3\n")
+        f.write_text("1.2.4\n", encoding="utf-8")
+        counts = get_status_counts(repo, churn_patterns=["VERSION"])
+        assert counts["churn_count"] == 1 and counts["dirty_count"] == 0
+
+    def test_json_version_line_restamp_is_churn(self, repo, elsewhere):
+        f = self._commit(repo, "version.py",
+                         '{\n  "version": "1.2.3",\n  "name": "x"\n}\n')
+        f.write_text('{\n  "version": "1.2.4",\n  "name": "x"\n}\n',
+                     encoding="utf-8")
+        counts = get_status_counts(repo, churn_patterns=["version.py"])
+        assert counts["churn_count"] == 1 and counts["dirty_count"] == 0
+
+    def test_real_logic_edit_in_version_file_is_dirty(self, repo, elsewhere):
+        """Structural change fails the same-line-masked test."""
+        f = self._commit(repo, "_version.py", '__version__ = "1.0"\n')
+        f.write_text('__version__ = "1.0"\nimport os\n', encoding="utf-8")
+        counts = get_status_counts(repo, churn_patterns=["_version.py"])
+        assert counts["dirty_count"] == 1 and counts["churn_count"] == 0
+
+    def test_manual_component_bump_is_dirty(self, repo, elsewhere):
+        """A human editing MAJOR/MINOR/PATCH is doing version WORK; the
+        changed line has no dotted version token, so it stays dirty."""
+        f = self._commit(repo, "_version.py",
+                         'MAJOR = 0\n__version__ = "0.1"\n')
+        f.write_text('MAJOR = 1\n__version__ = "0.1"\n', encoding="utf-8")
+        counts = get_status_counts(repo, churn_patterns=["_version.py"])
+        assert counts["dirty_count"] == 1 and counts["churn_count"] == 0
+
+    def test_more_than_two_changed_lines_is_dirty(self, repo, elsewhere):
+        """'If it's just one or two lines that's a good tell in its own
+        right' -- and past it, no stamp explanation is plausible."""
+        f = self._commit(repo, "_version.py",
+                         'a = "1.0"\nb = "2.0"\nc = "3.0"\n')
+        f.write_text('a = "1.1"\nb = "2.1"\nc = "3.1"\n', encoding="utf-8")
+        counts = get_status_counts(repo, churn_patterns=["_version.py"])
+        assert counts["dirty_count"] == 1 and counts["churn_count"] == 0
+
+    def test_staged_stamp_is_still_churn(self, repo, elsewhere):
+        """Diffing HEAD, not the worktree: an added stamp is a stamp."""
+        f = self._add_version_file(repo)
+        f.write_text('__version__ = "1.0+stamp"\n', encoding="utf-8")
+        _run(repo, "add", "-A")
+        counts = get_status_counts(repo, churn_patterns=["_version.py"])
+        assert counts["churn_count"] == 1 and counts["dirty_count"] == 0
+
+    def test_deleted_version_file_is_dirty(self, repo, elsewhere):
+        """A missing version file is a decision, never a restamp."""
+        f = self._add_version_file(repo)
+        f.unlink()
+        counts = get_status_counts(repo, churn_patterns=["_version.py"])
+        assert counts["dirty_count"] == 1 and counts["churn_count"] == 0
 
 
 def test_staged_changes_count_as_dirty(repo, elsewhere):
@@ -434,4 +551,6 @@ def test_primitives_are_quiet_outside_any_repo(tmp_path, elsewhere, monkeypatch)
     assert detect_stashes(plain) == 0
     assert get_upstream(plain) is None
     assert get_ahead_behind(plain) == (None, None)
-    assert get_status_counts(plain) == {"dirty_count": 0, "untracked_count": 0}
+    assert get_status_counts(plain) == {"dirty_count": 0,
+                                        "untracked_count": 0,
+                                        "churn_count": 0}

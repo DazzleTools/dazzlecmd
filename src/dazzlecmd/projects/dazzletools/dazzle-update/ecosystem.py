@@ -179,6 +179,21 @@ THIRD_PARTY_OWNERS = {
 # as unbacked-up is a false positive that buries the real findings.
 LOCAL_ONLY_BRANCHES = {"private"}
 
+# Files whose modifications are machine-made churn, not work. The repokit
+# git hook restamps `_version.py` build metadata after every commit, so on
+# a repokit-heavy machine a scan lists repos as DIRTY whose only change is
+# the tooling talking to itself -- which trains the reader to ignore the
+# dirty section. Matched against porcelain paths AND basenames.
+#
+# Both entries are MEASURED, not guessed (2026-08-02 survey of every
+# dirty repo on a real machine): `_version.py` is the current repokit
+# stamp; `version.py` is the same stamp under the older convention the
+# DazzleNodes-era projects still use -- 19 dirty files, every sampled
+# diff a pure `__version__` restamp. Nothing else version-ish observed
+# (test_version.py, update-version.sh, version.h) is a stamp, so
+# nothing else is default-filtered.
+DEFAULT_CHURN_FILES = ["_version.py", "version.py"]
+
 DEFAULT_EXCLUDES = [
     # Archive trees and dated snapshots. Patterns are deliberately narrow.
     # A bare "*backup*" also matches legitimate names such as
@@ -309,7 +324,8 @@ class EcosystemConfig:
 
     def __init__(self, namespaces=None, personal_namespace=None,
                  excludes=None, roots=None, member_prefixes=("dazzle",),
-                 personal_allow=(), include=(), local_only_branches=()):
+                 personal_allow=(), include=(), local_only_branches=(),
+                 churn_files=None, churn_files_replace=False):
         self.namespaces = list(namespaces or [])
         self.personal_namespace = personal_namespace
         self.excludes = list(excludes if excludes is not None else DEFAULT_EXCLUDES)
@@ -326,6 +342,12 @@ class EcosystemConfig:
             LOCAL_ONLY_BRANCHES | {b.strip().lower()
                                    for b in (local_only_branches or [])
                                    if b and b.strip()})
+        # Files whose dirt is machine churn, not work. Merged with the
+        # built-in default; `churn_files_replace` uses ONLY the configured
+        # list (set it true with an empty list to disable filtering for a
+        # project whose _version.py is hand-maintained).
+        base = [] if churn_files_replace else list(DEFAULT_CHURN_FILES)
+        self.churn_files = base + [str(c) for c in (churn_files or []) if c]
 
     def is_local_only_branch(self, branch):
         return bool(branch) and branch.strip().lower() in self.local_only_branches

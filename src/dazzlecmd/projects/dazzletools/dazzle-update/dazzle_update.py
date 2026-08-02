@@ -292,12 +292,13 @@ def collect_local(roots, resolver, config, verbose=0, progress=None,
     total = len(discovered)
     for idx, path in enumerate(discovered, 1):
         progress.update("reading", idx, total, os.path.basename(path))
-        out.append(_read_one(path, resolver))
+        out.append(_read_one(path, resolver,
+                             churn_patterns=config.churn_files))
     progress.done()
     return out, fetch_failures
 
 
-def _read_one(path, resolver):
+def _read_one(path, resolver, churn_patterns=()):
     """All axes for a single repo path."""
     remotes = detect_remotes(path)
     origin = next((r for r in remotes if r["name"] == "origin"), None)
@@ -307,7 +308,7 @@ def _read_one(path, resolver):
     info = resolver.resolve(slug) if slug else None
     upstream = get_upstream(path)
     behind, ahead = get_ahead_behind(path, upstream=upstream)
-    counts = get_status_counts(path)
+    counts = get_status_counts(path, churn_patterns=churn_patterns)
     return {
         "path": path,
         "slug": slug,
@@ -320,6 +321,7 @@ def _read_one(path, resolver):
             "behind": behind,
             "dirty_count": counts["dirty_count"],
             "untracked_count": counts["untracked_count"],
+            "churn_count": counts.get("churn_count", 0),
         },
         "error": (info or {}).get("error"),
         "last_activity": get_last_commit_epoch(path),
@@ -385,6 +387,21 @@ def _visible_kinds(only_kinds, skip_kinds, show_clean=False,
     if skip_kinds:
         base = [k for k in base if k not in skip_kinds]
     return base
+
+
+def count_churn_repos(records):
+    """In-scope repos where any checkout carries reclassified churn.
+
+    The number the NOTE line reports: churn is filtered from dirty, and a
+    filter that does not say what it filtered is how a report starts
+    describing the question instead of the machine.
+    """
+    return sum(
+        1 for r in records.values()
+        if r.get("cloned") and not r.get("excluded")
+        and not r.get("third_party")
+        and any((c.get("git") or {}).get("churn_count")
+                for c in (r.get("checkouts") or [])))
 
 
 def apply_set_lens(findings, wanted_names):
@@ -477,6 +494,8 @@ def _fmt_repo(r, kind=None, hide_sets=frozenset()):
         bits.append(f"{g['dirty_count']} dirty")
     if g.get("untracked_count"):
         bits.append(f"{g['untracked_count']} untracked")
+    if g.get("churn_count"):
+        bits.append(f"{g['churn_count']} churn")
     tags = [s for s in (r.get("sets") or []) if s.lower() not in hide_sets]
     if tags:
         bits.append("in:" + ",".join(tags))
@@ -499,6 +518,11 @@ def render_text(records, findings, meta, pal=None):
     if meta.get("narrowed"):
         safe_print("  NOTE        --root narrows the scan; 'not cloned' is "
                    "suppressed and installs outside it are skipped")
+    if meta.get("churn_repos"):
+        pats = ", ".join(meta.get("churn_files") or [])
+        safe_print(f"  NOTE        auto-stamp churn in {meta['churn_repos']} "
+                   f"repo(s) ({pats}) is not counted dirty; rows show it as "
+                   "'N churn'")
     if meta.get("set_lens"):
         hidden = meta.get("set_hidden", 0)
         tail = (f"; {hidden} repo(s) with findings outside the set hidden"
@@ -589,6 +613,16 @@ def render_text(records, findings, meta, pal=None):
             safe_print(f"    ... and {len(items) - 40} more")
 
     safe_print("")
+    # Churn-only repos land in `clean`, whose section is hidden by
+    # default -- so without this parenthetical they appear NOWHERE: not
+    # dirty (reclassified), not listed (clean is a noop section). The
+    # footer is the one line that still accounts for them.
+    churn_clean = sum(
+        1 for r in findings.get("clean") or []
+        if any((c.get("git") or {}).get("churn_count")
+               for c in (r.get("checkouts") or [])))
+    churn_tail = (f" ({churn_clean} with only auto-stamp churn)"
+                  if churn_clean else "")
     if meta.get("set_lens"):
         # Under a lens the bare count invites a misreading: "4 repos
         # clean" directly under 4 dirty rows read as a contradiction (a
@@ -603,10 +637,10 @@ def render_text(records, findings, meta, pal=None):
         names = ", ".join(meta["set_lens"])
         safe_print("  " + pal("green",
                    f"{meta['clean']} of {len(scanned)} repo(s) in "
-                   f"'{names}' clean and current."))
+                   f"'{names}' clean and current{churn_tail}."))
     else:
         safe_print("  " + pal("green",
-                   f"{meta['clean']} repos clean and current."))
+                   f"{meta['clean']} repos clean and current{churn_tail}."))
     if not shown:
         # "Nothing needs attention" must describe the MACHINE, not the
         # filter. Printing it because --only hid every section produced a
@@ -738,6 +772,13 @@ def apply_fixes(findings, dry_run=False, assume_yes=False, interactive=True):
             continue
         if (g.get("dirty_count") or 0) > 0 or (g.get("untracked_count") or 0) > 0:
             refused.append((r, "dirty tree -- refusing to pull (will not stash)"))
+            continue
+        if (g.get("churn_count") or 0) > 0:
+            # Churn is not counted dirty for REPORTING, but the write
+            # path stays conservative: a pull often touches the very
+            # file the hook restamps, and git would refuse mid-fix.
+            refused.append((r, "auto-stamp churn present -- refusing to "
+                               "pull (will not stash)"))
             continue
         if (g.get("ahead") or 0) > 0:
             refused.append((r, "diverged -- needs a merge, not a fast-forward"))
@@ -1056,7 +1097,9 @@ def main(argv=None):
         member_prefixes=tuple(cfg.get("member_prefixes") or ("dazzle",)),
         personal_allow=cfg.get("personal_allow") or (),
         include=cfg.get("include") or (),
-        local_only_branches=cfg.get("local_only_branches") or ())
+        local_only_branches=cfg.get("local_only_branches") or (),
+        churn_files=cfg.get("churn_files") or (),
+        churn_files_replace=bool(cfg.get("churn_files_replace")))
 
     cache = {} if args.no_cache else load_cache(_cache_path())
     resolver = IdentityResolver(cache=cache)
@@ -1138,6 +1181,8 @@ def main(argv=None):
             findings, hidden = apply_set_lens(findings, args.only_set)
             meta["set_lens"] = list(args.only_set)
             meta["set_hidden"] = hidden
+        meta["churn_repos"] = count_churn_repos(records)
+        meta["churn_files"] = config.churn_files
         meta["clean"] = clean_count(records, findings)
         meta["visible_kinds"] = _visible_kinds(only_kinds, skip_kinds,
                                                show_clean=args.all,
@@ -1252,6 +1297,8 @@ def main(argv=None):
         "narrowed": narrowed,
         "set_lens": set_lens,
         "set_hidden": set_hidden,
+        "churn_repos": count_churn_repos(records),
+        "churn_files": config.churn_files,
         "stale_behind": bool(args.no_fetch) or not cfg.get("fetch", True),
     }
 

@@ -36,6 +36,14 @@ DEFAULTS = {
     "include": [],               # force-include, wins over exclude
     "member_prefixes": ["dazzle"],
     "personal_allow": [],        # personal-namespace repos to treat as members
+    # Files whose modifications are machine-made churn (hook-restamped
+    # version files); matched by fnmatch against porcelain paths and
+    # basenames, merged with the built-in defaults (_version.py and the
+    # older stamp convention version.py). Set
+    # churn_files_replace true to use ONLY your list -- true plus an
+    # empty list disables churn filtering entirely.
+    "churn_files": [],
+    "churn_files_replace": False,
     # Working sets: named, OVERLAPPING lenses over the population.
     #   {"<name>": {"namespaces": [globs], "include": [exact owner/repo],
     #               "exclude": [globs], "declared": bool}}

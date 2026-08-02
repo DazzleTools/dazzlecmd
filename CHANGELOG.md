@@ -4,6 +4,14 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.9-alpha] - 2026-08-02
+
+### Added
+- `dz dazzle-update` churn filtering: version files restamped by commit hooks no longer read as uncommitted work. On a hook-heavy machine the DIRTY section listed repos whose only change was the tooling rewriting `_version.py` build metadata -- noise that trains the reader to ignore the one section that holds real edits. A modified file now counts as churn instead of dirty when two things hold: its name matches `churn_files` (defaults `_version.py` and `version.py`, both taken from a survey of every dirty repo on a real machine rather than guessed -- 21 and 19 hits respectively, every sampled diff a pure restamp), and its diff has the restamp shape -- at most two changed line-pairs where each removed line equals its added counterpart once version-shaped tokens are masked, "the same line, only the version moved". The content check is format-agnostic (a Python `__version__` assignment, a bare version in a text file, and a JSON version field all restamp the same way) and every uncertainty classifies as dirty: real logic added to a version file, a manual MAJOR/MINOR/PATCH bump, deletions, renames, and anything past two lines all stay dirty, and a repo with churn beside a real edit is still dirty. Reclassification is disclosed at three levels -- a NOTE naming the affected repo count and patterns, `N churn` in row details, and the clean footer accounting for repos whose only change was churn -- because a filter that hides silently makes the report describe the question instead of the machine. `--fix` still refuses to pull over churn (the pull usually touches the very file the hook restamps). Configurable via `churn_files` (merged with defaults) and `churn_files_replace` (with an empty list, disables filtering entirely). An audit script that prints every churn verdict with its diff, cross-checked against the production classifier, ships in the one-off tests; a 30-checkout live audit found zero false positives.
+
+### Changed
+- The working-sets playground config moved from the repo-global one-off tests into dazzle-update's own test tree, matching the convention that tool-specific artifacts live with their tool.
+
 ## [0.12.8-alpha] - 2026-07-31
 
 ### Added
@@ -4103,7 +4111,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.8a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.9a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
