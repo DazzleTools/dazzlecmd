@@ -500,9 +500,18 @@ def join(org_repos, local_repos, installs, config,
         key = (full or slug or np).lower()
         r = rec(key)
         r["full_name"] = r["full_name"] or full
-        if slug and slug not in r["configured_slugs"]:
-            r["configured_slugs"].append(slug)
-        r["redirected"] = r["redirected"] or bool(entry.get("redirected"))
+        # Identity claims come from LIVE checkouts only. An archived
+        # snapshot keeps whatever URL it had when it was frozen, and that
+        # URL is not actionable: excluded paths are never fetched, so
+        # "fetching through a redirect" is false of them. Letting a bak
+        # drive the finding made dazzlesum keep reporting stale-remote-url
+        # after its live remote had been repointed -- the report
+        # describing an archive rather than the machine. Same family as
+        # the every-path-excluded rule below.
+        if not config.is_excluded(path):
+            if slug and slug not in r["configured_slugs"]:
+                r["configured_slugs"].append(slug)
+            r["redirected"] = r["redirected"] or bool(entry.get("redirected"))
         r["third_party"] = config.is_third_party(full)
         r["paths"].append(path)
         r["cloned"] = True

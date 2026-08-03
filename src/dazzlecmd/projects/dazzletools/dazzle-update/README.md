@@ -21,11 +21,21 @@ This tool joins all four against **canonical repo identity** and reports the asy
 
 ```
 dz dazzle-update                    Report what needs attention
+dz dazzle-update dazzlesum          Everything about one repo, every axis
+dz dazzle-update "dazzle*"          Same, matched by glob
 dz dazzle-update --published        Also compare against PyPI (network)
 dz dazzle-update --json             Machine-readable, for cross-box diffing
 dz dazzle-update --fix --dry-run    Show what --fix would do
 dz dazzle-update --fix              Apply ff-only pulls + editable reinstalls
 ```
+
+Bare positional arguments are always repo queries -- a name or glob,
+matched against owner/repo, dist names, and checkout folder names. The
+answer is a detail card: identity and redirects, every checkout with
+its state (the primary marked `*`), the editable install, PyPI, set
+memberships, and which findings the repo currently triggers. Instant
+with `--cached`, and the card states the scan's scope and config so a
+narrowed scan cannot masquerade as a global answer.
 
 Narrowing the output:
 

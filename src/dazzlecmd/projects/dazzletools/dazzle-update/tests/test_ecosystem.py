@@ -659,3 +659,36 @@ class TestSelectPrimary:
         got, why = select_primary(rec)
         assert got is c
         assert "pip-installed" not in why
+
+
+class TestRedirectFromLiveCheckoutsOnly:
+    """An archived snapshot's frozen URL must not drive the redirect
+    finding: excluded paths are never fetched, so "fetching through a
+    redirect" is false of them. Live case (dazzlesum, 2026-08-02): the
+    live remote was repointed to the org, two baks/ copies kept the old
+    personal-namespace URL, and the repo kept reporting stale-remote-url
+    even after a full fresh scan."""
+
+    def _entry(self, path, slug, redirected):
+        return {"path": path, "slug": slug, "full_name": "Org/thing",
+                "redirected": redirected,
+                "git": {"branch": "main", "upstream": "origin/main"}}
+
+    def test_excluded_checkout_does_not_flag_redirect(self):
+        cfg = EcosystemConfig(namespaces=["Org"], excludes=["*/baks/*"])
+        recs = join(
+            [],
+            [self._entry("C:/x/thing", "Org/thing", False),
+             self._entry("C:/x/baks/thing", "olduser/thing", True)],
+            [], cfg)
+        r = recs["org/thing"]
+        assert r["redirected"] is False
+        assert r["configured_slugs"] == ["Org/thing"]
+
+    def test_live_checkout_still_flags_redirect(self):
+        cfg = EcosystemConfig(namespaces=["Org"], excludes=["*/baks/*"])
+        recs = join(
+            [],
+            [self._entry("C:/x/thing", "olduser/thing", True)],
+            [], cfg)
+        assert recs["org/thing"]["redirected"] is True

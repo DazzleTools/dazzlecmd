@@ -49,7 +49,14 @@ class TestLoad:
         assert path is None
         assert err is None
 
-    def test_explicit_missing_file_is_reported_not_silent(self, tmp_path):
+    def test_explicit_missing_file_is_reported_not_silent(self, tmp_path,
+                                                          monkeypatch):
+        # Isolate LOCALAPPDATA: this test silently depended on no REAL
+        # user config existing, and broke the day one was created --
+        # which also exposed that load() fell through a missing explicit
+        # path to whatever the search found next (fixed: explicit is a
+        # command, not a suggestion).
+        monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "appdata"))
         missing = str(tmp_path / "does-not-exist.json")
         cfg, path, err = config.load(explicit=missing, cwd=str(tmp_path))
         assert cfg == config.DEFAULTS

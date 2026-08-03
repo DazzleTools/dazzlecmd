@@ -7,7 +7,14 @@ listings, editable installs, the filesystem, and PyPI.
 Read-only by default. --fix applies exactly two provably-safe
 operations and refuses anything requiring judgment.
 
+CONTRACT: bare positional arguments are repo QUERIES (names or globs),
+permanently. This tool is flag-shaped; capability growth happens as
+flags, not verbs, so queries and modes can never collide. (Decided
+2026-08-02; relitigable only as a deliberate breaking change -- see the
+single-repo-query-surface design doc.)
+
     dz dazzle-update                 The report
+    dz dazzle-update dazzlesum       Everything about one repo (globs ok)
     dz dazzle-update --published     Add the PyPI axis (network)
     dz dazzle-update --json          Machine-readable, for cross-box diffs
     dz dazzle-update --fix           ff-only pulls + editable reinstalls
@@ -16,6 +23,7 @@ operations and refuses anything requiring judgment.
 
 import argparse
 import json
+import time
 import os
 import platform
 import re
@@ -79,6 +87,7 @@ from ecosystem import (  # noqa: E402
     join,
     norm,
     resolve_kinds,
+    select_primary,
 )
 
 DEFAULT_ROOT = r"C:\code" if os.name == "nt" else os.path.expanduser("~/code")
@@ -900,6 +909,289 @@ def apply_fixes(findings, dry_run=False, assume_yes=False, interactive=True):
     return 0
 
 
+#: QF-1: at most this many matched records get live verification per
+#: query. Measured: `dazzle*` matches 68 records; uncapped that is a
+#: scan wearing a query's clothes. Matches beyond the cap render from
+#: cache, and the header says so.
+QUERY_REFRESH_CAP = 8
+
+
+def refresh_matched(records, matched, config, do_fetch=True,
+                    cap=QUERY_REFRESH_CAP, fetch_timeout=60,
+                    resolver=None):
+    """Live truth for the matched slice only (QF-1, querylab-validated).
+
+    Re-reads git state, install metadata, source version, and declared
+    dist for matched records' NON-EXCLUDED checkouts -- refreshing a
+    baks snapshot cost 0.9s of the measured 1.29s and told us nothing
+    (querylab amendment 1). Fetches run through the same parallel
+    machinery as a scan (amendment 3). Returns
+    {refreshed, from_cache, fetch_failures} for the provenance header.
+
+    IDENTITY is re-resolved too, not just git state: a remote repointed
+    since the cache was written would otherwise keep reporting
+    stale-remote-url from cached identity -- the card contradicting the
+    fix the user had just made, which is the worst moment to be wrong.
+    """
+    picked, from_cache = [], []
+    for key, r in matched.items():
+        live_cos = [c for c in (r.get("checkouts") or [])
+                    if not c.get("excluded") and c.get("path")
+                    and os.path.isdir(str(c["path"]))]
+        if not live_cos:
+            continue        # not-cloned or gone: nothing to verify live
+        if len(picked) >= cap:
+            from_cache.append(key)
+            continue
+        picked.append((key, r, live_cos))
+
+    failures = []
+    if do_fetch and picked:
+        allp = [c["path"] for _, _, cos in picked for c in cos]
+        failures = fetch_all(allp, Progress(enabled=False),
+                             timeout=fetch_timeout)
+
+    live_installs = {}
+    if picked:
+        live_installs = {norm(i.get("path")): i for i in editable_installs()
+                         if i.get("path")}
+
+    for key, r, cos in picked:
+        for c in cos:
+            path = c["path"]
+            upstream = get_upstream(path)
+            behind, ahead = get_ahead_behind(path, upstream=upstream)
+            counts = get_status_counts(path,
+                                       churn_patterns=config.churn_files)
+            c["git"] = {
+                "branch": get_branch(path),
+                "upstream": upstream,
+                "ahead": ahead,
+                "behind": behind,
+                "dirty_count": counts["dirty_count"],
+                "untracked_count": counts["untracked_count"],
+                "churn_count": counts.get("churn_count", 0),
+            }
+            c["last_activity"] = get_last_commit_epoch(path)
+        slugs, redirected, canonical = [], False, None
+        for c in cos:
+            o = next((x for x in detect_remotes(c["path"])
+                      if x["name"] == "origin"), None)
+            if not o:
+                continue
+            slug = o.get("slug") or parse_slug(o.get("fetch_url"))
+            if not slug:
+                continue
+            if slug not in slugs:
+                slugs.append(slug)
+            info = resolver.resolve(slug) if resolver else None
+            if info:
+                canonical = canonical or info.get("full_name")
+                redirected = redirected or bool(info.get("redirected"))
+        if slugs:
+            r["configured_slugs"] = slugs
+            r["redirected"] = redirected
+            if canonical:
+                r["full_name"] = canonical
+        for path in r.get("paths") or []:
+            li = live_installs.get(norm(path))
+            if li:
+                r["installed"] = li
+                r["source_version"] = read_source_version(path)
+                name, source = read_declared_dist_name(path)
+                if name:
+                    r["declared_dist"] = name
+                    r["declared_dist_source"] = source
+        primary, reason = select_primary(r, config)
+        r["primary"] = primary.get("path") if primary else None
+        r["primary_reason"] = reason
+        r["git"] = (primary or {}).get("git") or None
+    return {"refreshed": [k for k, _, _ in picked],
+            "from_cache": from_cache, "fetch_failures": failures}
+
+
+def match_records(records, queries):
+    """Records matching any query term, case-insensitive.
+
+    A term with glob characters fnmatches; a plain term substring-matches.
+    Candidates per record: canonical name, key, bare repo name, installed
+    and declared dist names, and every checkout's directory basename --
+    so `dazzlesum`, `DazzleTools/dazzlesum`, `dazzle-sum*`, and the name
+    of the folder you are standing in all find the same record.
+    """
+    import fnmatch as _fn
+    out = {}
+    for key, r in records.items():
+        cands = {key.lower()}
+        if r.get("full_name"):
+            full = r["full_name"].lower()
+            cands.add(full)
+            cands.add(full.split("/", 1)[-1])
+        inst = r.get("installed") or {}
+        if inst.get("name"):
+            cands.add(str(inst["name"]).lower())
+        if r.get("declared_dist"):
+            cands.add(str(r["declared_dist"]).lower())
+        for path in r.get("paths") or []:
+            cands.add(os.path.basename(str(path).rstrip("\\/")).lower())
+        for q in queries:
+            ql = q.lower()
+            if any(ch in ql for ch in "*?["):
+                hit = any(_fn.fnmatch(c, ql) for c in cands)
+            else:
+                hit = any(ql in c for c in cands)
+            if hit:
+                out[key] = r
+                break
+    return out
+
+
+def render_query(records, findings, queries, meta, pal=None, as_json=False,
+                 stats=None):
+    """The detail card: one repo, every axis. `pip show` for the ecosystem."""
+    pal = pal or Palette(False)
+    for err in (meta or {}).get("errors") or []:
+        safe_print(f"  WARNING     {err}")
+    matched = match_records(records, queries)
+    if not matched:
+        safe_print(f"  no repo matches {', '.join(repr(q) for q in queries)}")
+        safe_print("  (matching covers owner/repo names, dist names, and "
+                   "checkout folder names; globs allowed)")
+        return 2
+
+    if as_json:
+        print(json.dumps({"schema": 1, "query": list(queries),
+                          "matches": list(matched.values())},
+                         indent=2, sort_keys=True, default=str))
+        return 0
+
+    kinds_of = {}
+    for kind in FINDING_ORDER:
+        for r in findings.get(kind) or []:
+            kinds_of.setdefault(r["key"], []).append(kind)
+
+    shown = list(matched.values())[:10]
+    for r in shown:
+        name = r.get("full_name") or r["key"]
+        safe_print("")
+        safe_print("  " + pal.bold(name))
+        slugs = [s for s in (r.get("configured_slugs") or [])
+                 if s.lower() != (r.get("full_name") or "").lower()]
+        if slugs:
+            tag = " (redirected)" if r.get("redirected") else ""
+            safe_print(f"    identity    configured as "
+                       f"{', '.join(slugs)}{tag}")
+        bits = []
+        bits.append("in namespace" if r.get("in_namespace")
+                    else "not in any listed namespace")
+        if r.get("third_party"):
+            bits.append("third-party upstream")
+        if r.get("foreign"):
+            bits.append("not ours")
+        safe_print(f"    status      {'; '.join(bits)}")
+        if r.get("sets"):
+            safe_print(f"    sets        {', '.join(r['sets'])}")
+        inst = r.get("installed") or {}
+        if inst:
+            safe_print(f"    install     {inst.get('name')} "
+                       f"{inst.get('version')} (editable) at "
+                       f"{inst.get('path')}")
+        if r.get("source_version"):
+            safe_print(f"    source      {r['source_version']}")
+        if r.get("declared_dist"):
+            safe_print(f"    declares    {r['declared_dist']} "
+                       f"({r.get('declared_dist_source')})")
+        if r.get("published"):
+            owned = r.get("pypi_owned")
+            note = ("" if owned else "  [NOT OURS -- name collision]"
+                    if owned is False else "  [ownership unverified]")
+            safe_print(f"    published   PyPI {r['published']}{note}")
+        checkouts = r.get("checkouts") or []
+        if checkouts:
+            prim = norm(r.get("primary") or "")
+            safe_print(f"    checkouts   {len(checkouts)}"
+                       + (f"  (primary: {r.get('primary_reason')})"
+                          if r.get("primary") else
+                          f"  ({r.get('primary_reason')})"))
+            for c in checkouts:
+                g = c.get("git") or {}
+                state = []
+                if g.get("branch"):
+                    state.append(g["branch"])
+                if g.get("upstream"):
+                    state.append(f"-> {g['upstream']}")
+                else:
+                    state.append("no upstream")
+                for k, label in (("ahead", "ahead"), ("behind", "behind"),
+                                 ("dirty_count", "dirty"),
+                                 ("untracked_count", "untracked"),
+                                 ("churn_count", "churn")):
+                    if g.get(k):
+                        state.append(f"{g[k]} {label}")
+                mark = "*" if norm(c.get("path")) == prim and prim else " "
+                excl = "  [excluded]" if c.get("excluded") else ""
+                safe_print(f"      {mark} {c.get('path')}{excl}")
+                safe_print(f"          {', '.join(state)}")
+        elif r.get("paths"):
+            safe_print(f"    paths       {'; '.join(r['paths'])}")
+        if r.get("excluded"):
+            safe_print(f"    excluded    {r['excluded']}")
+        kinds = kinds_of.get(r["key"]) or []
+        if kinds:
+            coloured = [pal(FINDING_COLOURS.get(k, "reset"), k)
+                        for k in kinds]
+            safe_print(f"    findings    {', '.join(coloured)}")
+        else:
+            safe_print("    findings    "
+                       + pal("green", "none -- not classified this run"))
+    if len(matched) > 10:
+        rest = [r.get("full_name") or r["key"]
+                for r in list(matched.values())[10:]]
+        safe_print("")
+        safe_print(f"  ... and {len(matched) - 10} more match(es): "
+                   + ", ".join(rest[:15]))
+    if stats:
+        n = len(matched)
+        bits = [f"{n} match{'es' if n != 1 else ''} of "
+                f"{len(records)} repos"]
+        mode = stats.get("mode")
+        if mode == "live":
+            r = stats.get("refreshed", 0)
+            bits.append(f"{r} verified live just now" if r
+                        else "nothing to verify live")
+        elif mode == "local":
+            bits.append("re-read locally (no fetch; behind-counts from "
+                        "last fetch)")
+        elif mode == "replay":
+            bits.append("replayed from cache")
+        elif mode == "fresh":
+            bits.append("from a fresh full scan")
+        if stats.get("fetch_failures"):
+            bits.append(f"{stats['fetch_failures']} fetch failure(s)")
+        if stats.get("beyond_cap"):
+            bits.append(f"{stats['beyond_cap']} beyond the live-refresh "
+                        f"cap shown from cache")
+        if stats.get("t_start") is not None:
+            bits.append(f"{time.perf_counter() - stats['t_start']:.2f}s")
+        safe_print("")
+        safe_print("  " + pal("grey", "; ".join(bits)))
+    safe_print("")
+    return 0
+
+
+def _print_timing(verbose, t_start, phases=None):
+    """Operation timing at -v; per-phase breakdown at -vv (stderr, so
+    --json stdout stays clean). Deeper -vvv levels are reserved."""
+    if not verbose:
+        return
+    total = time.perf_counter() - t_start
+    line = f"[timing] total {total:.2f}s"
+    if verbose >= 2 and phases:
+        parts = ", ".join(f"{name} {dt:.2f}s" for name, dt in phases)
+        line += f"  ({parts})"
+    print(line, file=sys.stderr)
+
+
 def build_parser():
     p = argparse.ArgumentParser(
         prog="dz dazzle-update",
@@ -915,6 +1207,11 @@ def build_parser():
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    p.add_argument("query", nargs="*", metavar="REPO",
+                   help="Show a detail card for repos matching these "
+                        "names or globs, across every axis the scanner "
+                        "knows (identity, checkouts, install, PyPI, sets, "
+                        "findings). Read-only; instant with --cached.")
     p.add_argument("--json", action="store_true", help="Output as JSON")
     p.add_argument("--published", action="store_true",
                    help="Query PyPI (network; off by default)")
@@ -976,6 +1273,7 @@ def build_parser():
 
 
 def main(argv=None):
+    t_start = time.perf_counter()
     args = build_parser().parse_args(argv if argv is not None else sys.argv[1:])
     set_verbosity(args.verbose)
 
@@ -1016,6 +1314,8 @@ def main(argv=None):
 
     if args.list_sets:
         safe_print("")
+        if cfg_err:
+            safe_print(f"  WARNING     {cfg_err}")
         if not set_defs:
             safe_print("  no sets configured.")
             safe_print("  add a 'sets' mapping to your config; --init-config "
@@ -1036,6 +1336,11 @@ def main(argv=None):
             safe_print(f"      declared:   {dec}")
         safe_print("")
         return 0
+
+    if args.query and args.fix:
+        safe_print("  the detail view is read-only; drop the repo name to "
+                   "use --fix, or run --fix with --only/--only-set to scope it")
+        return 2
 
     if args.only_set:
         defined = {s.name.lower() for s in set_defs}
@@ -1059,6 +1364,98 @@ def main(argv=None):
     if bad_order:
         errors.append("config 'order': unknown kind(s) ignored: "
                       + ", ".join(bad_order))
+
+    # QF-2 fast path: a query with a cache present answers from the
+    # index, verifying only the matches live -- no namespace listing, no
+    # filesystem walk, no fleet fetch. Explicit scope flags (--root,
+    # --scope, --cached, --no-cache) name a different pipeline and fall
+    # through to it.
+    if (args.query and not args.cached and not args.no_cache
+            and not args.root and not args.scope):
+        t_load0 = time.perf_counter()
+        rec, cmeta, cage, cerr = scancache.load(
+            path=cfg.get("cache_path"), max_age=None)
+        t_load = time.perf_counter() - t_load0
+        if not cerr and rec:
+            excludes = (list(cfg["exclude"]) if cfg.get("exclude_replace")
+                        else DEFAULT_EXCLUDES + list(cfg.get("exclude") or []))
+            lite = EcosystemConfig(
+                namespaces=[],
+                personal_namespace=cfg.get("personal_namespace"),
+                excludes=excludes,
+                member_prefixes=tuple(cfg.get("member_prefixes")
+                                      or ("dazzle",)),
+                personal_allow=cfg.get("personal_allow") or (),
+                include=cfg.get("include") or (),
+                local_only_branches=cfg.get("local_only_branches") or (),
+                churn_files=cfg.get("churn_files") or (),
+                churn_files_replace=bool(cfg.get("churn_files_replace")))
+            t_m0 = time.perf_counter()
+            matched = match_records(rec, args.query)
+            t_match = time.perf_counter() - t_m0
+            t_r0 = time.perf_counter()
+            info = refresh_matched(
+                rec, matched, lite, do_fetch=not args.no_fetch,
+                fetch_timeout=args.fetch_timeout
+                or cfg.get("fetch_timeout", 60),
+                resolver=IdentityResolver(
+                    cache={} if args.no_cache
+                    else load_cache(_cache_path())))
+            t_refresh = time.perf_counter() - t_r0
+            t_c0 = time.perf_counter()
+            set_declared = (declared_members()
+                            if any(s.declared for s in set_defs) else None)
+            annotate_sets(rec, set_defs, set_declared)
+            findings = classify(rec, lite, sort_mode=sort_mode)
+            t_classify = time.perf_counter() - t_c0
+
+            meta = dict(cmeta)
+            merged, seen = [], set()
+            for e in (list(meta.get("errors") or []) + errors):
+                if e not in seen:
+                    seen.add(e)
+                    merged.append(e)
+            # QF-4: the cache's SCOPE travels with it (a narrowed-config
+            # scan made an org repo read "not ours"); a query must say
+            # when its population was written under a different config.
+            if cmeta.get("narrowed"):
+                merged.append(
+                    "population cache was written by a --root-narrowed "
+                    f"scan ({', '.join(cmeta.get('roots') or [])}); repos "
+                    "outside that root are absent from this answer -- "
+                    "run a full scan to rebuild the index")
+            cached_cfg = cmeta.get("config")
+            if (cached_cfg or cfg_path) and cached_cfg != cfg_path:
+                merged.append(
+                    f"population cache was written under config "
+                    f"{cached_cfg or '(defaults)'}; this run uses "
+                    f"{cfg_path or '(defaults)'} -- population scope "
+                    f"may differ")
+            meta["errors"] = merged
+
+            pal = make_palette(args.color)
+            safe_print("")
+            safe_print(f"  (population from cache, "
+                       f"{scancache.format_age(cage)} old; scan covered "
+                       f"{meta.get('namespace_count', '?')} namespace(s), "
+                       f"{meta.get('org_repo_count', '?')} namespace repos"
+                       + (f"; config {cached_cfg}" if cached_cfg else "")
+                       + ")")
+            rc = render_query(
+                rec, findings, args.query, meta, pal=pal,
+                as_json=args.json,
+                stats={"mode": "local" if args.no_fetch else "live",
+                       "refreshed": len(info["refreshed"]),
+                       "beyond_cap": len(info["from_cache"]),
+                       "fetch_failures": len(info["fetch_failures"]),
+                       "t_start": t_start})
+            _print_timing(args.verbose, t_start,
+                          [("cache", t_load), ("match", t_match),
+                           ("refresh", t_refresh), ("classify", t_classify)])
+            return rc
+        errors.append("no scan cache yet -- this first query performs a "
+                      "full scan; later queries answer from the index "
+                      "in about a second")
 
     # CLI beats config; config beats built-in default.
     roots = args.root or cfg.get("roots") or [DEFAULT_ROOT]
@@ -1184,14 +1581,38 @@ def main(argv=None):
         meta["churn_repos"] = count_churn_repos(records)
         meta["churn_files"] = config.churn_files
         meta["clean"] = clean_count(records, findings)
+        if args.query:
+            pal = make_palette(args.color)
+            safe_print("")
+            # Provenance matters MORE for a single-repo card than for the
+            # full report: "not in any listed namespace" is a statement
+            # about the SCAN's scope, and a card that omits the scope
+            # presents a narrowed answer as a global one. Live case: a
+            # 1-namespace scan cached under a scoped config made
+            # DazzleTools/dazzlesum read "not ours".
+            safe_print(f"  (from cache, "
+                       f"{scancache.format_age(cached_age)} old; scan "
+                       f"covered {meta.get('namespace_count', '?')} "
+                       f"namespace(s), {meta.get('org_repo_count', '?')} "
+                       f"namespace repos"
+                       + (f"; config {meta.get('config')}"
+                          if meta.get("config") else "") + ")")
+            rc = render_query(records, findings, args.query, meta,
+                              pal=pal, as_json=args.json,
+                              stats={"mode": "replay", "t_start": t_start})
+            _print_timing(args.verbose, t_start)
+            return rc
         meta["visible_kinds"] = _visible_kinds(only_kinds, skip_kinds,
                                                show_clean=args.all,
                                                drop_not_cloned=bool(args.root))
         meta["order"] = apply_order(cfg.get("order"))[0] if cfg else meta.get("order")
         pal = make_palette(args.color)
         if args.json:
-            return render_json(records, findings, meta)
-        return render_text(records, findings, meta, pal=pal)
+            rc = render_json(records, findings, meta)
+        else:
+            rc = render_text(records, findings, meta, pal=pal)
+        _print_timing(args.verbose, t_start)
+        return rc
 
     local, fetch_failures = collect_local(
         roots, resolver, config, verbose=args.verbose, progress=progress,
@@ -1303,13 +1724,28 @@ def main(argv=None):
     }
 
     ok, cache_err = (True, None)
-    if cfg.get("cache_write", True):
+    if cfg.get("cache_write", True) and not narrowed:
         ok, cache_err = scancache.save(records, meta,
                                        path=cfg.get("cache_path"))
+    elif narrowed and args.verbose:
+        # A --root run answers a narrower question than the cache exists
+        # to answer. Overwriting the shared index with it silently
+        # replaced a 184-repo population with 124 and made later queries
+        # report against a partial world -- caught only because a repo
+        # count moved. Narrowed scans are complete for their root and
+        # wrong as an index, so they are not written.
+        safe_print("  (--root narrows the scan; not overwriting the "
+                   "shared scan cache)")
     if not ok and args.verbose:
         errors.append(f"could not cache scan: {cache_err}")
 
     pal = make_palette(args.color)
+    if args.query:
+        rc = render_query(records, findings, args.query, meta,
+                          pal=pal, as_json=args.json,
+                          stats={"mode": "fresh", "t_start": t_start})
+        _print_timing(args.verbose, t_start)
+        return rc
     if args.fix:
         render_text(records, findings, meta, pal=pal)
         interactive = sys.stdin.isatty()
@@ -1325,8 +1761,11 @@ def main(argv=None):
         return apply_fixes(findings, dry_run=args.dry_run,
                            assume_yes=args.yes, interactive=interactive)
     if args.json:
-        return render_json(records, findings, meta)
-    return render_text(records, findings, meta, pal=pal)
+        rc = render_json(records, findings, meta)
+    else:
+        rc = render_text(records, findings, meta, pal=pal)
+    _print_timing(args.verbose, t_start)
+    return rc
 
 
 if __name__ == "__main__":

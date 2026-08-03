@@ -114,7 +114,16 @@ def load(explicit=None, cwd=None):
 
     A missing config is normal and silent. A malformed one is reported
     and defaults are used -- loud degradation, never a silent fallback.
+
+    An EXPLICIT path that does not exist fails immediately: --config is
+    a command, not a suggestion. Falling through the search order meant
+    a typo'd --config silently used whatever config the search found
+    next -- undetectable until a real user config existed to fall
+    through TO, at which point the run was governed by a file the user
+    never named.
     """
+    if explicit and not os.path.isfile(explicit):
+        return dict(DEFAULTS), None, f"{explicit}: config file not found"
     for path in candidate_paths(explicit, cwd):
         if not os.path.isfile(path):
             continue

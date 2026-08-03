@@ -4,6 +4,20 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.10-alpha] - 2026-08-02
+
+### Added
+- `dz dazzle-update <name>` -- a detail card for one repo, every axis at once: identity and redirects, every checkout with its state (the primary marked and the reason it was chosen), the editable install, source and declared distribution names, PyPI, working-set membership, and the findings the repo currently triggers. Bare positional arguments are repo queries permanently -- a name or a glob, matched against owner/repo, distribution names, and checkout folder names, so the repo you are standing in is findable by the name of its directory. The card is read-only and refuses `--fix`.
+- The query answers in about a second rather than about seventy, by treating the scan cache as an index rather than a replay: the population comes from cache while the *matched* repos are re-verified live -- fetched, re-read, re-resolved -- so the axes being asked about are current rather than remembered. Which half came from where is stated in a two-line header, and a stats line closes the card with match counts, verification mode, and elapsed time. `--cached` still means pure replay, `--no-fetch` re-reads locally, `--no-cache` forces a full scan; a machine with no cache yet performs one full scan and says so.
+- `-v` reports total elapsed time and `-vv` a per-phase breakdown, both on stderr so `--json` output stays parseable.
+
+### Fixed
+- A repo kept reporting a stale remote URL after its live remote had been corrected, because archived copies -- `baks/` snapshots, excluded from every other calculation -- still carried the old URL and drove the finding. Identity claims now come from live checkouts only: an excluded path is never fetched, so "fetching through a redirect" was never true of it.
+- The detail card replayed cached identity, so a remote repointed since the last scan kept its finding until a full rescan -- the report contradicting a fix the user had just made. Matched repos now have their identity re-resolved along with their git state.
+- A `--root`-narrowed scan overwrote the shared scan cache with a partial population, so later runs answered against a fraction of the machine with nothing to indicate it. Narrowed scans no longer write the shared cache, and a population that is narrowed says so when used.
+- `--config` pointing at a nonexistent file fell through the normal search order and silently used whatever config was found next. An explicit path is a command, not a suggestion: it now fails loudly and immediately.
+- Configuration warnings were dropped entirely on the `--list-sets` and detail-card paths, so a malformed set was reported by a full scan and silently ignored by every other command.
+
 ## [0.12.9-alpha] - 2026-08-02
 
 ### Added
@@ -4111,7 +4125,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.9a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.10a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
