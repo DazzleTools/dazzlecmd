@@ -4,6 +4,18 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.11-alpha] - 2026-08-04
+
+### Added
+- A `private/` axis for projects that keep working notes in a gitignored `private/` directory. Because that directory is gitignored, it is invisible to every other axis: git status will not mention it, no install knows it exists, no namespace listing includes it -- so a directory of design documents can sit in exactly one place, with no history and no backup, and nothing reports it. A new finding, `private-uninitialized`, names projects holding private material with no repository behind it; `private:split` and `private:broken` appear as row tags rather than findings, because keeping separate private repositories is a legitimate way to hold sensitive work apart. The detail card states the full picture for one repo: whether the store is versioned, which path it resolves to, and whether the project's checkouts all use one.
+- The axis is opt-in by evidence and silent otherwise. `private_check` defaults to `auto`, which enables it only when the convention is visibly in use on this machine -- at least one repository whose private store is a git repo. Someone who does not keep such directories sees no tags, no findings, and has no setting to discover. Scope is decided the same way: a repository is inspected because it *has* private material, never because of who owns it, since notes taken while reading someone else's code are real work and often the only record of understanding it. A repository with no `private/` is never reported at all -- the tool does not propose that the convention be adopted. `private_ignore` takes owner/repo globs for projects that keep material unversioned or separated deliberately.
+- A scan that finds no repositories now says so, with the likely cause and the remedy, instead of reporting an empty machine as a healthy one. Wrong `roots` is the first thing to go wrong on a new machine, and the previous output ("0 cloned here" followed by "Nothing needs attention") read as reassurance.
+- `--help` gained the repo-query examples and a first-run section; the tool's README documents setting up on another machine, including which configuration travels between machines and which single key does not.
+
+### Fixed
+- `--json` produced output that would not parse: the provenance header and warnings printed to stdout ahead of the document. Stdout now carries the document alone, and the context that used to precede it travels inside the payload, where the program that asked for JSON can actually read it.
+- A repository with no remote at all was counted as a fetch failure while verifying a query match, turning "nothing to fetch from" into "fetching went wrong".
+
 ## [0.12.10-alpha] - 2026-08-02
 
 ### Added
@@ -4125,7 +4137,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.10a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.11a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

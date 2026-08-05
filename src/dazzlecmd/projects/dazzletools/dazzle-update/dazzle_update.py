@@ -52,6 +52,7 @@ from _repo_common.gh_identity import (  # noqa: E402
     parse_slug,
     save_cache,
 )
+from _repo_common.private_state import private_state  # noqa: E402
 from _repo_common.repo_state import (  # noqa: E402
     detect_remotes,
     fetch_remote,
@@ -334,6 +335,7 @@ def _read_one(path, resolver, churn_patterns=()):
         },
         "error": (info or {}).get("error"),
         "last_activity": get_last_commit_epoch(path),
+        "private": private_state(path),
     }
 
 
@@ -505,6 +507,13 @@ def _fmt_repo(r, kind=None, hide_sets=frozenset()):
         bits.append(f"{g['untracked_count']} untracked")
     if g.get("churn_count"):
         bits.append(f"{g['churn_count']} churn")
+    # Notable-only: `ok` and `none` say nothing, because a tag that
+    # appears on every row stops being read. `split` and `broken` are
+    # encouragement, not fault -- separated private repos can be
+    # deliberate, so this never becomes a finding.
+    pstate = r.get("private_state")
+    if pstate in ("split", "broken"):
+        bits.append(f"private:{pstate}")
     tags = [s for s in (r.get("sets") or []) if s.lower() not in hide_sets]
     if tags:
         bits.append("in:" + ",".join(tags))
@@ -527,6 +536,21 @@ def render_text(records, findings, meta, pal=None):
     if meta.get("narrowed"):
         safe_print("  NOTE        --root narrows the scan; 'not cloned' is "
                    "suppressed and installs outside it are skipped")
+    # Finding NOTHING on disk is not a clean bill of health, it is a
+    # scan that could not see the machine -- almost always a `roots`
+    # that does not match where the code lives, which is the one
+    # machine-specific setting and therefore the first thing wrong on a
+    # new box. Saying "nothing needs attention" here would be the report
+    # describing its own scope instead of reality.
+    if not meta.get("cloned_count"):
+        where = ", ".join(meta.get("roots") or []) or "(no roots configured)"
+        safe_print(f"  SETUP       no git repos found under {where}")
+        if meta.get("org_repo_count"):
+            safe_print(f"              but {meta['org_repo_count']} repo(s) "
+                       f"exist in your namespaces -- 'roots' is probably "
+                       f"pointing at the wrong place")
+        safe_print("              set 'roots' in your config "
+                   "(dz dazzle-update --init-config writes one)")
     if meta.get("churn_repos"):
         pats = ", ".join(meta.get("churn_files") or [])
         safe_print(f"  NOTE        auto-stamp churn in {meta['churn_repos']} "
@@ -612,6 +636,13 @@ def render_text(records, findings, meta, pal=None):
                 inst = r["installed"] or {}
                 safe_print(f"    {name} {inst.get('name')} "
                            f"{inst.get('version')} -> {inst.get('path')}")
+            elif kind == "private-uninitialized":
+                stores = r.get("private_stores") or []
+                where = stores[0] if stores else "?"
+                extra = " (claude docs)" if any(
+                    (c.get("private") or {}).get("claude")
+                    for c in (r.get("checkouts") or [])) else ""
+                safe_print(f"    {name} {where}{extra}")
             elif kind == "not-cloned":
                 safe_print(f"    {name}")
             elif kind == "excluded-by-policy":
@@ -667,6 +698,11 @@ def render_text(records, findings, meta, pal=None):
                      and (visible is not None and k not in visible))
         if hidden:
             safe_print(f"  {hidden} finding(s) hidden by --only/--skip.")
+        elif not meta.get("cloned_count"):
+            # Ranked above the no-fetch caveat: "we scanned nothing" is
+            # the more fundamental fact, and mentioning stale behind-
+            # counts first implies a scan happened.
+            safe_print("  Nothing was scanned -- see SETUP above.")
         elif meta.get("stale_behind"):
             safe_print("  Nothing else needs attention, but behind-counts "
                        "were not refreshed (--no-fetch).")
@@ -947,9 +983,16 @@ def refresh_matched(records, matched, config, do_fetch=True,
 
     failures = []
     if do_fetch and picked:
-        allp = [c["path"] for _, _, cos in picked for c in cos]
-        failures = fetch_all(allp, Progress(enabled=False),
-                             timeout=fetch_timeout)
+        # Only checkouts that HAVE a remote can be fetched. Without this
+        # filter a remoteless repo (no origin at all -- a real category
+        # the tool reports as no-upstream) was counted as a fetch
+        # FAILURE, turning "nothing to fetch from" into "fetching went
+        # wrong". The population scan has always filtered this way.
+        allp = [c["path"] for _, _, cos in picked for c in cos
+                if detect_remotes(c["path"])]
+        if allp:
+            failures = fetch_all(allp, Progress(enabled=False),
+                                 timeout=fetch_timeout)
 
     live_installs = {}
     if picked:
@@ -973,6 +1016,7 @@ def refresh_matched(records, matched, config, do_fetch=True,
                 "churn_count": counts.get("churn_count", 0),
             }
             c["last_activity"] = get_last_commit_epoch(path)
+            c["private"] = private_state(path)
         slugs, redirected, canonical = [], False, None
         for c in cos:
             o = next((x for x in detect_remotes(c["path"])
@@ -1050,10 +1094,21 @@ def render_query(records, findings, queries, meta, pal=None, as_json=False,
                  stats=None):
     """The detail card: one repo, every axis. `pip show` for the ecosystem."""
     pal = pal or Palette(False)
-    for err in (meta or {}).get("errors") or []:
-        safe_print(f"  WARNING     {err}")
+    # In JSON mode stdout belongs to the document, exclusively: warnings
+    # and provenance travel INSIDE the payload (meta) rather than being
+    # printed above it. Printing them first made `--json > out.json`
+    # produce a file that would not parse -- the machine-readable mode
+    # emitting something no machine could read.
+    if not as_json:
+        for err in (meta or {}).get("errors") or []:
+            safe_print(f"  WARNING     {err}")
     matched = match_records(records, queries)
     if not matched:
+        if as_json:
+            print(json.dumps({"schema": 1, "query": list(queries),
+                              "meta": meta or {}, "matches": []},
+                             indent=2, sort_keys=True, default=str))
+            return 2
         safe_print(f"  no repo matches {', '.join(repr(q) for q in queries)}")
         safe_print("  (matching covers owner/repo names, dist names, and "
                    "checkout folder names; globs allowed)")
@@ -1061,6 +1116,7 @@ def render_query(records, findings, queries, meta, pal=None, as_json=False,
 
     if as_json:
         print(json.dumps({"schema": 1, "query": list(queries),
+                          "meta": meta or {},
                           "matches": list(matched.values())},
                          indent=2, sort_keys=True, default=str))
         return 0
@@ -1106,6 +1162,31 @@ def render_query(records, findings, queries, meta, pal=None, as_json=False,
             note = ("" if owned else "  [NOT OURS -- name collision]"
                     if owned is False else "  [ownership unverified]")
             safe_print(f"    published   PyPI {r['published']}{note}")
+        pstate = r.get("private_state")
+        if pstate and pstate != "none":
+            # Say what is true rather than grading it. "shared" alone
+            # invited the question "shared with whom?" -- the answer is
+            # always "this repo's own checkouts", so name them and the
+            # count instead of using a word that implies more.
+            stores = r.get("private_stores") or []
+            live = len([c for c in (r.get("checkouts") or [])
+                        if not c.get("excluded")])
+            if pstate == "ok":
+                line = (f"versioned -- all {live} checkouts use {stores[0]}"
+                        if live > 1 and stores
+                        else f"versioned -- {stores[0]}" if stores
+                        else "versioned")
+            elif pstate == "split":
+                line = (f"versioned, but {len(stores)} separate stores; "
+                        f"these checkouts do not use one")
+            elif pstate == "unversioned":
+                where = f" -- {stores[0]}" if len(stores) == 1 else ""
+                line = f"no repo behind it (dz private-init){where}"
+            elif pstate == "broken":
+                line = "link target is missing"
+            else:
+                line = pstate
+            safe_print(f"    private     {line}")
         checkouts = r.get("checkouts") or []
         if checkouts:
             prim = norm(r.get("primary") or "")
@@ -1200,10 +1281,18 @@ def build_parser():
         epilog=(
             "examples:\n"
             "  dz dazzle-update                 Report what needs attention\n"
+            "  dz dazzle-update dazzlesum       Everything about one repo\n"
+            "  dz dazzle-update \"wtf-*\"         Same, by glob\n"
             "  dz dazzle-update --published     Also compare against PyPI\n"
             "  dz dazzle-update --json          Machine-readable output\n"
             "  dz dazzle-update --fix --dry-run Show what --fix would do\n"
             "  dz dazzle-update --scope DazzleLib\n"
+            "\n"
+            "first run on a new machine:\n"
+            "  dz dazzle-update --init-config   Write a config to edit\n"
+            "  dz dazzle-update --root D:/src   Scan elsewhere for one run\n"
+            "  Identity is derived from `gh` (authenticate first); of the\n"
+            "  config, only 'roots' is machine-specific -- the rest travels.\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -1389,7 +1478,9 @@ def main(argv=None):
                 include=cfg.get("include") or (),
                 local_only_branches=cfg.get("local_only_branches") or (),
                 churn_files=cfg.get("churn_files") or (),
-                churn_files_replace=bool(cfg.get("churn_files_replace")))
+                churn_files_replace=bool(cfg.get("churn_files_replace")),
+                private_check=cfg.get("private_check", "auto"),
+                private_ignore=cfg.get("private_ignore") or ())
             t_m0 = time.perf_counter()
             matched = match_records(rec, args.query)
             t_match = time.perf_counter() - t_m0
@@ -1434,13 +1525,15 @@ def main(argv=None):
             meta["errors"] = merged
 
             pal = make_palette(args.color)
-            safe_print("")
-            safe_print(f"  (population from cache, "
-                       f"{scancache.format_age(cage)} old; scan covered "
-                       f"{meta.get('namespace_count', '?')} namespace(s), "
-                       f"{meta.get('org_repo_count', '?')} namespace repos"
-                       + (f"; config {cached_cfg}" if cached_cfg else "")
-                       + ")")
+            if not args.json:
+                cfg_note = f"; config {cached_cfg}" if cached_cfg else ""
+                safe_print("")
+                safe_print(
+                    f"  (population from cache, "
+                    f"{scancache.format_age(cage)} old; scan covered "
+                    f"{meta.get('namespace_count', '?')} namespace(s), "
+                    f"{meta.get('org_repo_count', '?')} namespace repos"
+                    f"{cfg_note})")
             rc = render_query(
                 rec, findings, args.query, meta, pal=pal,
                 as_json=args.json,
@@ -1496,7 +1589,9 @@ def main(argv=None):
         include=cfg.get("include") or (),
         local_only_branches=cfg.get("local_only_branches") or (),
         churn_files=cfg.get("churn_files") or (),
-        churn_files_replace=bool(cfg.get("churn_files_replace")))
+        churn_files_replace=bool(cfg.get("churn_files_replace")),
+        private_check=cfg.get("private_check", "auto"),
+        private_ignore=cfg.get("private_ignore") or ())
 
     cache = {} if args.no_cache else load_cache(_cache_path())
     resolver = IdentityResolver(cache=cache)

@@ -157,3 +157,53 @@ class TestFixGate:
         assert out.count("o/a") == 1
         assert "dirty tree" in out
         assert "Would pull" not in out and "pulled" not in out
+
+
+class TestSetupGuard:
+    """A scan that finds nothing must not read as a clean machine.
+
+    On a new box the one machine-specific setting is `roots`; when it
+    points at the wrong place the tool found 0 repos, knew 125 existed
+    in the user's namespaces, and printed "Nothing needs attention".
+    """
+
+    def _meta(self, cloned, org=125, **kw):
+        m = {"namespace_count": 11, "org_repo_count": org,
+             "cloned_count": cloned, "install_count": 0,
+             "gh_detail": "test", "published_detail": "skipped",
+             "roots": ["D:/wrong"], "errors": [], "clean": 0}
+        m.update(kw)
+        return m
+
+    def test_zero_repos_prints_setup_help(self, capsys):
+        du.render_text({}, {}, self._meta(0))
+        out = capsys.readouterr().out
+        assert "SETUP" in out
+        assert "no git repos found under D:/wrong" in out
+        assert "125 repo(s) exist in your namespaces" in out
+        assert "--init-config" in out
+
+    def test_zero_repos_footer_does_not_claim_calm(self, capsys):
+        du.render_text({}, {}, self._meta(0))
+        out = capsys.readouterr().out
+        assert "Nothing needs attention." not in out
+        assert "Nothing was scanned" in out
+
+    def test_nothing_scanned_outranks_the_no_fetch_caveat(self, capsys):
+        """Mentioning stale behind-counts first implies a scan happened."""
+        du.render_text({}, {}, self._meta(0, stale_behind=True))
+        out = capsys.readouterr().out
+        assert "Nothing was scanned" in out
+        assert "behind-counts were not refreshed" not in out
+
+    def test_no_namespace_info_still_advises(self, capsys):
+        """Unauthenticated gh: we cannot say repos exist, but the roots
+        advice still applies."""
+        du.render_text({}, {}, self._meta(0, org=0))
+        out = capsys.readouterr().out
+        assert "SETUP" in out
+        assert "exist in your namespaces" not in out
+
+    def test_populated_scan_prints_no_setup_block(self, capsys):
+        du.render_text({}, {}, self._meta(42))
+        assert "SETUP" not in capsys.readouterr().out

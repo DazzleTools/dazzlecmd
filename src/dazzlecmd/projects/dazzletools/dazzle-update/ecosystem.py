@@ -24,6 +24,17 @@ import fnmatch
 import os
 import re
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from _repo_common.private_state import (  # noqa: E402
+    PRIVATE_BROKEN,
+    PRIVATE_NONE,
+    PRIVATE_SPLIT,
+    PRIVATE_UNVERSIONED,
+    has_private_material,
+    judge_private,
+)
+
 
 # The order here IS the report order, and it is ordered by WHAT THE READER
 # SHOULD DO, not by abstract severity:
@@ -50,6 +61,7 @@ FINDING_ORDER = [
     "stale-remote-url",
     "vendored-drift",
     "no-upstream",
+    "private-uninitialized",
     "dirty",
     "not-cloned",
     "excluded-by-policy",
@@ -70,6 +82,8 @@ FINDING_ALIASES = {
     "url": "stale-remote-url",
     "vendored": "vendored-drift",
     "unbacked": "no-upstream",
+    "private": "private-uninitialized",
+    "privinit": "private-uninitialized",
     "missing": "not-cloned",
     "clone": "not-cloned",
     "excluded": "excluded-by-policy",
@@ -131,6 +145,8 @@ FINDING_LABELS = {
     "stale-remote-url": "STALE REMOTE URL -- fetching through a transfer redirect",
     "behind-upstream": "BEHIND UPSTREAM -- a pull would advance these",
     "not-cloned": "NOT CLONED -- in a namespace, absent here",
+    "private-uninitialized": ("PRIVATE NOT INITIALIZED -- private material "
+                              "with no repo behind it (dz private-init)"),
     "dirty": "DIRTY -- uncommitted changes",
     "vendored-drift": "VENDORED DRIFT -- embedded copy differs from upstream",
     "excluded-by-policy": "EXCLUDED BY POLICY",
@@ -325,7 +341,8 @@ class EcosystemConfig:
     def __init__(self, namespaces=None, personal_namespace=None,
                  excludes=None, roots=None, member_prefixes=("dazzle",),
                  personal_allow=(), include=(), local_only_branches=(),
-                 churn_files=None, churn_files_replace=False):
+                 churn_files=None, churn_files_replace=False,
+                 private_check="auto", private_ignore=()):
         self.namespaces = list(namespaces or [])
         self.personal_namespace = personal_namespace
         self.excludes = list(excludes if excludes is not None else DEFAULT_EXCLUDES)
@@ -348,6 +365,32 @@ class EcosystemConfig:
         # project whose _version.py is hand-maintained).
         base = [] if churn_files_replace else list(DEFAULT_CHURN_FILES)
         self.churn_files = base + [str(c) for c in (churn_files or []) if c]
+        self.private_check = private_check
+        self.private_ignore = [str(g) for g in (private_ignore or []) if g]
+
+    def private_axis_enabled(self, records):
+        """Is the private/ convention in use on this machine?
+
+        "auto" derives the answer instead of asking: if no repo anywhere
+        has a VERSIONED private store, the convention is not in use here
+        and the axis stays entirely silent -- no tags, no findings, no
+        setting to discover. Same reasoning as deriving namespaces
+        rather than hardcoding them.
+        """
+        if self.private_check is True:
+            return True
+        if self.private_check is False:
+            return False
+        return any(
+            (c.get("private") or {}).get("versioned")
+            for r in records.values()
+            for c in (r.get("checkouts") or []))
+
+    def private_ignored(self, full_name):
+        if not full_name or not self.private_ignore:
+            return False
+        n = str(full_name).lower()
+        return any(fnmatch.fnmatch(n, g.lower()) for g in self.private_ignore)
 
     def is_local_only_branch(self, branch):
         return bool(branch) and branch.strip().lower() in self.local_only_branches
@@ -523,6 +566,7 @@ def join(org_repos, local_repos, installs, config,
             "git": entry.get("git") or {},
             "last_activity": entry.get("last_activity"),
             "excluded": config.is_excluded(path),
+            "private": entry.get("private"),
         })
         act = entry.get("last_activity")
         if act and (r["last_activity"] or 0) < act:
@@ -685,6 +729,22 @@ def classify(records, config, sort_mode="newest"):
     findings = {k: [] for k in FINDING_ORDER}
     flagged = set()
 
+    # The private/ axis is gated on EVIDENCE that the convention is in
+    # use here (see private_axis_enabled). When it is off, no record
+    # gains a verdict and the finding kind stays empty -- a machine
+    # that does not use private/ never learns the axis exists.
+    private_on = config.private_axis_enabled(records)
+    if private_on:
+        for r in records.values():
+            live = [c for c in (r.get("checkouts") or [])
+                    if not c.get("excluded")]
+            states = [c.get("private") for c in live]
+            r["private_state"] = judge_private(states)
+            r["private_content"] = has_private_material(states)
+            r["private_stores"] = sorted(
+                {s["storage"] for s in states
+                 if s and s.get("storage")})
+
     for r in records.values():
         if r["excluded"]:
             findings["excluded-by-policy"].append(r)
@@ -721,6 +781,21 @@ def classify(records, config, sort_mode="newest"):
 
         if r["redirected"]:
             findings["stale-remote-url"].append(r)
+
+        # Private material with no repo behind it. Scope is decided by
+        # the material's EXISTENCE, never by who owns the repo: notes
+        # taken while reading someone else's code are real work, and
+        # often the only record of understanding it. A checkout with no
+        # private/ is never reported -- the tool does not propose that
+        # the convention be adopted, only that existing material be
+        # recoverable. `split` and `broken` are tags, not findings:
+        # separate private repos are a legitimate way to keep sensitive
+        # work apart.
+        if (private_on
+                and r.get("private_state") in (PRIVATE_UNVERSIONED,)
+                and r.get("private_content")
+                and not config.private_ignored(r.get("full_name"))):
+            findings["private-uninitialized"].append(r)
 
         # REPO-scoped: asked once, of the primary checkout.
         g = r["git"] or {}

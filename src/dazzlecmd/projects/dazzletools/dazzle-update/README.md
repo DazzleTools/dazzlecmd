@@ -118,6 +118,31 @@ The cache stores **observations, not verdicts**: findings are recomputed on repl
 
 `git` and `gh` (authenticated). Without `gh`, namespace listing is skipped and the tool says so — an unauthenticated run would silently omit private repos, which is a dangerous false negative for an inventory.
 
+## Setting it up on another machine
+
+```
+pip install dazzlecmd
+gh auth login
+dz dazzle-update --init-config
+```
+
+Nothing about *your* inventory needs describing: namespaces come from `gh api user/orgs` and your personal namespace from `gh api user`, both derived per run. A hand-written namespace list goes stale silently — that is why it is derived.
+
+The one setting that is genuinely machine-specific is **`roots`**, which defaults to `C:\code` on Windows and `~/code` elsewhere. If your code lives somewhere else, that is the only edit a new machine needs. When `roots` is wrong the tool says so directly rather than reporting an empty machine as a healthy one:
+
+```
+SETUP       no git repos found under D:\projects
+            but 125 repo(s) exist in your namespaces -- 'roots' is
+            probably pointing at the wrong place
+            set 'roots' in your config (dz dazzle-update --init-config)
+```
+
+Everything else in the config travels between machines unchanged — working sets, exclusion patterns, report ordering, membership rules, churn and private-axis settings, cache tuning. So keeping several machines aligned is: copy the config, change `roots`.
+
+There is currently no include/layering mechanism: config discovery picks a single winner (`--config`, then `./.dazzle-update.json`, then the user config directory) rather than merging files, so a shared base plus a machine-specific override is not yet expressible. Either keep the canonical config somewhere synced and point at it with `--config`, or copy and edit the one line.
+
+Once two machines are set up, `--json` on each gives comparable inventories: records are keyed by canonical repo identity, so a repo whose remote URL differs between boxes still lines up.
+
 ## Exit codes
 
 `0` report produced, `2` bad arguments or a refused cache.

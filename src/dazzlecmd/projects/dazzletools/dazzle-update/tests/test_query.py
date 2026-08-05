@@ -329,3 +329,66 @@ class TestNarrowedCacheGuards:
         rc = du.main(["--root", str(tmp_path), "--no-fetch", "--no-progress",
                       "--color", "never", "--config", str(cfgp)])
         assert rc == 0
+
+
+class TestJsonPurity:
+    """TESTER FINDING 2026-08-03: `--json > out.json` produced a file
+    that would not parse -- the provenance header and WARNING lines went
+    to stdout ahead of the document. The machine-readable mode was
+    emitting something no machine could read. stdout belongs to the
+    document; context travels inside meta.
+    """
+
+    def test_json_mode_prints_no_warnings_to_stdout(self, capsys):
+        meta = {"errors": ["a warning that must not pollute stdout"]}
+        du.render_query(POP, {}, ["dazzlesum"], meta, as_json=True)
+        out = capsys.readouterr().out
+        json.loads(out)                       # must parse
+        assert "WARNING" not in out
+
+    def test_json_payload_carries_meta_not_prose(self, capsys):
+        meta = {"errors": ["ctx"], "namespace_count": 11}
+        du.render_query(POP, {}, ["dazzlesum"], meta, as_json=True)
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["meta"]["errors"] == ["ctx"]
+        assert payload["meta"]["namespace_count"] == 11
+
+    def test_no_match_in_json_mode_still_parses(self, capsys):
+        rc = du.render_query(POP, {}, ["nope"], {"errors": []}, as_json=True)
+        payload = json.loads(capsys.readouterr().out)
+        assert rc == 2 and payload["matches"] == []
+
+    def test_fast_path_header_suppressed_under_json(self, tmp_path,
+                                                    monkeypatch, capsys):
+        rec = {"o/hit": _stale_record("o/hit", "C:/nonexistent/hit")}
+        meta = {"namespace_count": 11, "org_repo_count": 124,
+                "config": None, "errors": []}
+        monkeypatch.setattr(du.scancache, "load",
+                            lambda **k: (rec, meta, 60.0, None))
+        cfgp = tmp_path / "c.json"
+        cfgp.write_text("{}", encoding="utf-8")
+        du.main(["hit", "--json", "--config", str(cfgp), "--color", "never"])
+        out = capsys.readouterr().out
+        json.loads(out)                       # must parse
+        assert "population from cache" not in out
+
+
+class TestRemotelessRefresh:
+    def test_remoteless_checkout_is_not_a_fetch_failure(self, tmp_path,
+                                                        monkeypatch):
+        """TESTER FINDING 2026-08-03: a repo with no remote at all was
+        counted as a fetch FAILURE during live verification -- "nothing
+        to fetch from" rendered as "fetching went wrong"."""
+        repo = _real_repo(tmp_path)           # no remote added
+        called = {}
+
+        def _fetch_all(paths, *a, **k):
+            called["paths"] = paths
+            return []
+
+        monkeypatch.setattr(du, "fetch_all", _fetch_all)
+        rec = {"o/lonely": _stale_record("o/lonely", repo)}
+        info = du.refresh_matched(rec, dict(rec), EcosystemConfig(),
+                                  do_fetch=True)
+        assert info["fetch_failures"] == []
+        assert called.get("paths") in (None, [])

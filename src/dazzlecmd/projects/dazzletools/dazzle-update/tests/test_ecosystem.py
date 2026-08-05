@@ -692,3 +692,121 @@ class TestRedirectFromLiveCheckoutsOnly:
             [self._entry("C:/x/thing", "olduser/thing", True)],
             [], cfg)
         assert recs["org/thing"]["redirected"] is True
+
+
+class TestPrivateAxis:
+    """Gate, scope, and opt-out for the private/ convention axis.
+
+    The axis is convention-specific, so its central guarantee is
+    SILENCE: a machine that does not use private/ must never see a tag,
+    a finding, or a setting to discover. Scope is decided by evidence
+    (material exists here) and never by ownership -- notes on someone
+    else's codebase are real work.
+    """
+
+    def _rec(self, key, checkouts, full_name=None, foreign=False):
+        return {
+            "key": key, "full_name": full_name or key,
+            "configured_slugs": [], "redirected": False, "cloned": True,
+            "in_namespace": True, "installed": None, "source_version": None,
+            "published": None, "declared_dist": None, "pypi_owned": None,
+            "excluded": None, "excluded_paths": [], "errors": [],
+            "third_party": False, "foreign": foreign, "last_activity": None,
+            "paths": [c["path"] for c in checkouts],
+            "git": {"branch": "main", "upstream": "origin/main"},
+            "primary": checkouts[0]["path"], "primary_reason": "only",
+            "checkouts": checkouts,
+        }
+
+    def _co(self, path, shape="plain", versioned=False, storage=None,
+            content=True, excluded=False):
+        return {"path": path, "excluded": excluded,
+                "git": {"branch": "main", "upstream": "origin/main"},
+                "private": {"shape": shape, "linked": shape == "linked",
+                            "versioned": versioned,
+                            "storage": storage or path + "/private",
+                            "content": content, "claude": False}}
+
+    def test_axis_silent_when_convention_not_in_use(self):
+        """AC-4': no versioned private store anywhere -> total silence."""
+        recs = {"a": self._rec("o/a", [self._co("C:/x/a")])}
+        cfg = EcosystemConfig()
+        assert cfg.private_axis_enabled(recs) is False
+        f = classify(recs, cfg)
+        assert f["private-uninitialized"] == []
+        assert "private_state" not in recs["a"]
+
+    def test_axis_enables_when_any_repo_is_versioned(self):
+        recs = {"a": self._rec("o/a", [self._co("C:/x/a")]),
+                "b": self._rec("o/b", [self._co("C:/x/b", shape="repo",
+                                                versioned=True)])}
+        cfg = EcosystemConfig()
+        assert cfg.private_axis_enabled(recs) is True
+        f = classify(recs, cfg)
+        assert [r["key"] for r in f["private-uninitialized"]] == ["o/a"]
+
+    def test_private_check_false_silences_even_when_in_use(self):
+        recs = {"a": self._rec("o/a", [self._co("C:/x/a")]),
+                "b": self._rec("o/b", [self._co("C:/x/b", shape="repo",
+                                                versioned=True)])}
+        cfg = EcosystemConfig(private_check=False)
+        assert classify(recs, cfg)["private-uninitialized"] == []
+
+    def test_private_check_true_enables_without_evidence(self):
+        recs = {"a": self._rec("o/a", [self._co("C:/x/a")])}
+        cfg = EcosystemConfig(private_check=True)
+        assert len(classify(recs, cfg)["private-uninitialized"]) == 1
+
+    def test_foreign_repo_with_material_IS_reported(self):
+        """ADDENDUM 2: scope is evidence, not ownership. Notes taken
+        while reading someone else's code are real work -- and often the
+        only record of understanding it."""
+        recs = {"a": self._rec("them/theirs", [self._co("C:/x/theirs")],
+                               foreign=True),
+                "b": self._rec("o/b", [self._co("C:/x/b", shape="repo",
+                                                versioned=True)])}
+        got = classify(recs, EcosystemConfig())["private-uninitialized"]
+        assert [r["key"] for r in got] == ["them/theirs"]
+
+    def test_repo_without_private_is_never_reported(self):
+        """AC-12: the tool never proposes that the convention be adopted."""
+        none_co = {"path": "C:/x/n", "excluded": False,
+                   "git": {}, "private": {"shape": "none", "linked": False,
+                                          "versioned": False, "storage": None,
+                                          "content": False, "claude": False}}
+        recs = {"n": self._rec("o/n", [none_co]),
+                "b": self._rec("o/b", [self._co("C:/x/b", shape="repo",
+                                                versioned=True)])}
+        assert classify(recs, EcosystemConfig())["private-uninitialized"] == []
+
+    def test_empty_store_is_not_a_finding(self):
+        """AC-5': scaffolding is not material."""
+        recs = {"a": self._rec("o/a", [self._co("C:/x/a", content=False)]),
+                "b": self._rec("o/b", [self._co("C:/x/b", shape="repo",
+                                                versioned=True)])}
+        assert classify(recs, EcosystemConfig())["private-uninitialized"] == []
+
+    def test_split_is_a_tag_not_a_finding(self):
+        """AC-8': separate private repos can be deliberate protection."""
+        recs = {"a": self._rec("o/a", [
+            self._co("C:/x/a1", shape="repo", versioned=True, storage="s1"),
+            self._co("C:/x/a2", shape="repo", versioned=True, storage="s2")])}
+        f = classify(recs, EcosystemConfig())
+        assert f["private-uninitialized"] == []
+        assert recs["a"]["private_state"] == "split"
+
+    def test_private_ignore_globs_opt_a_project_out(self):
+        """AC-6'."""
+        recs = {"a": self._rec("djdarcy/secret-notes", [self._co("C:/x/a")]),
+                "b": self._rec("o/b", [self._co("C:/x/b", shape="repo",
+                                                versioned=True)])}
+        cfg = EcosystemConfig(private_ignore=["djdarcy/secret-*"])
+        assert classify(recs, cfg)["private-uninitialized"] == []
+
+    def test_excluded_checkouts_do_not_speak_for_the_repo(self):
+        """An archived snapshot keeps whatever it was frozen with."""
+        recs = {"a": self._rec("o/a", [
+            self._co("C:/x/a", shape="repo", versioned=True, storage="s1"),
+            self._co("C:/x/a/baks/old", storage="s2", excluded=True)])}
+        classify(recs, EcosystemConfig())
+        assert recs["a"]["private_state"] == "ok"

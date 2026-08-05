@@ -44,6 +44,15 @@ DEFAULTS = {
     # empty list disables churn filtering entirely.
     "churn_files": [],
     "churn_files_replace": False,
+    # The `private/` axis. "auto" enables it only when the convention is
+    # visibly in use -- at least one repo on this machine whose private
+    # store is a git repo. A user who does not keep private/ directories
+    # therefore never sees the axis at all, and never has to find a
+    # setting to turn it off. true/false force it either way.
+    # `private_ignore` names projects (owner/repo globs) that keep their
+    # private material unversioned or separated on purpose.
+    "private_check": "auto",
+    "private_ignore": [],
     # Working sets: named, OVERLAPPING lenses over the population.
     #   {"<name>": {"namespaces": [globs], "include": [exact owner/repo],
     #               "exclude": [globs], "declared": bool}}
