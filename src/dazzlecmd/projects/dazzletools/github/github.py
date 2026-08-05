@@ -4,6 +4,14 @@ Auto-detects the GitHub remote from the current git repo so you never
 need to run `gh repo set-default`. Wraps `gh` CLI where possible and
 fills gaps with direct URL construction.
 
+Resolving which project you mean:
+    1. the repo you are standing in, if it has a GitHub remote
+    2. otherwise the nearest enclosing repo that has one -- so commands
+       still work from inside a remote-less nested repo such as the
+       `private/` notes store, and the resolved project is announced
+    3. otherwise, when cwd is not a repo at all, immediate subdirectories
+       are scanned for one
+
 Subcommands / targets:
     (bare)      Open repo home page
     <number>    Open issue or PR by number
@@ -21,11 +29,17 @@ Subcommands / targets:
 import argparse
 import json
 import os
-import re
 import subprocess
 import sys
 import time
 import webbrowser
+from pathlib import Path
+
+# Add projects/dazzletools/ to sys.path so _repo_common (sibling dir) imports.
+_HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE.parent))
+
+from _repo_common.gh_identity import parse_slug  # noqa: E402
 
 
 # Cache settings
@@ -111,12 +125,7 @@ def get_repo_slug(remote="origin"):
     rc, out, err = git("remote", "get-url", remote)
     if rc != 0:
         return None
-
-    url = out.strip()
-    m = re.search(r'github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$', url)
-    if m:
-        return m.group(1)
-    return None
+    return parse_slug(out.strip())
 
 
 def get_base_url(slug):
@@ -187,10 +196,9 @@ def scan_subdirs_for_repo(remote="origin"):
         rc, out, _ = run_cmd("git", "remote", "get-url", remote, cwd=subdir)
         if rc != 0:
             continue
-        url = out.strip()
-        m = re.search(r'github\.com[:/]([^/]+/[^/]+?)(?:\.git)?$', url)
-        if m:
-            found.append((entry, m.group(1)))
+        slug = parse_slug(out.strip())
+        if slug:
+            found.append((entry, slug))
 
     if not found:
         print("Error: not inside a git repository.", file=sys.stderr)
@@ -227,6 +235,69 @@ def scan_subdirs_for_repo(remote="origin"):
 
     print("Cancelled.", file=sys.stderr)
     return None
+
+
+# -- ancestor scanning --
+
+def scan_ancestors_for_repo(start=None, remote="origin", max_levels=10):
+    """Walk UP for an enclosing git repo that has a GitHub remote.
+
+    The counterpart to scan_subdirs_for_repo(), which searches downward
+    when cwd is not a repo at all. This covers the mirror case: cwd IS
+    inside a repo, but that repo yields no GitHub slug. The common cause
+    is the `private/` convention -- a project's notes store is its own
+    repo with no remotes by design, so the answer lives one repo up.
+
+    Delegates the upward search to git itself (`rev-parse --show-toplevel`
+    from each parent) rather than looking for `.git` markers by hand, so
+    `.git`-as-a-file layouts (worktrees, submodules) resolve correctly and
+    non-repo directories in between are skipped in a single step.
+
+    A remote-less repo is not an error here -- it just means keep looking.
+
+    Returns (slug, repo_root) for the nearest qualifying ancestor, or
+    (None, None) when there is none.
+    """
+    rc, out, _ = run_cmd("git", "rev-parse", "--show-toplevel",
+                         cwd=start or os.getcwd())
+    if rc != 0 or not out.strip():
+        return None, None
+    current = os.path.abspath(out.strip())
+
+    for _ in range(max_levels):
+        parent = os.path.dirname(current)
+        if not parent or parent == current or not os.path.isdir(parent):
+            return None, None  # filesystem root, or nowhere left to go
+
+        rc, out, _ = run_cmd("git", "rev-parse", "--show-toplevel", cwd=parent)
+        if rc != 0 or not out.strip():
+            return None, None  # no enclosing repo above this one
+        ancestor = os.path.abspath(out.strip())
+        if ancestor == current:
+            return None, None  # no upward progress; refuse to spin
+
+        rc, out, _ = run_cmd("git", "remote", "get-url", remote, cwd=ancestor)
+        if rc == 0:
+            slug = parse_slug(out.strip())
+            if slug:
+                return slug, ancestor
+
+        current = ancestor
+
+    return None, None
+
+
+def resolve_via_ancestor(remote="origin"):
+    """Try the ancestor walk and announce the result. Returns a slug or None.
+
+    Announcing matters: the user asked about "here", and we answered about
+    a different directory, so the resolved project is named explicitly.
+    """
+    slug, root = scan_ancestors_for_repo(remote=remote)
+    if slug:
+        print(safe_stderr(f"  Resolved via parent repo: {slug} ({root})"),
+              file=sys.stderr)
+    return slug
 
 
 # -- issue resolution --
@@ -581,6 +652,22 @@ PAGE_COMMANDS = {
 }
 
 
+def _looks_like_repo_name(target):
+    """True when a bare target should be read as a repo name to look up.
+
+    `dz github <name>` is the implicit repo finder, so an unrecognized word
+    means "find that repo". Page keywords, `isu`, and `.` are commands, not
+    names. An all-digits target is an ISSUE NUMBER: searching GitHub for a
+    repo called "61" returns noise (b612, CS61A, ud615) and never what was
+    meant, so digits are never treated as a name.
+    """
+    if not target:
+        return False
+    if target in PAGE_COMMANDS or target in ("isu", "."):
+        return False
+    return not target.isdigit()
+
+
 # -- parser and main --
 
 def build_parser():
@@ -662,23 +749,38 @@ def main(argv=None):
         # Check if we're even in a git repo
         rc, _, _ = git("rev-parse", "--show-toplevel")
         if rc != 0:
-            # Not in a git repo -- if target looks like a repo name, treat it as one
-            if args.target and args.target not in PAGE_COMMANDS and args.target != "isu":
+            # Not in a git repo -- a bare name means "find that repo"
+            if _looks_like_repo_name(args.target):
                 return cmd_repo(args.target, args.no_browser, force_refresh=refresh)
             # Otherwise scan subdirectories for repos
             slug = scan_subdirs_for_repo(args.remote)
             if not slug:
                 return 1
         else:
-            # In a git repo but no GitHub remote -- if target looks like
-            # a repo name, treat it as a repo lookup
-            if args.target and args.target not in PAGE_COMMANDS and args.target != "isu":
-                return cmd_repo(args.target, args.no_browser, force_refresh=refresh)
-            print(f"Error: remote '{args.remote}' is not a GitHub URL "
-                  f"(or remote not found).", file=sys.stderr)
-            print("Tip: use --remote <name> to specify a different remote.",
-                  file=sys.stderr)
-            return 1
+            # The repo we are standing in has no GitHub identity of its own.
+            # Under the `private/` convention that is by design, and the
+            # project it belongs to is the next repo up.
+            #
+            # Resolve BEFORE classifying the target. Once a parent project is
+            # found we are, for every purpose, standing in it -- so a target
+            # has to mean there what it means at the project root. Deciding
+            # "this word looks like a repo name" first is what made
+            # `dz github roadmap` open issue #1 from the project root and run
+            # a GitHub-wide search for repositories called "roadmap" one
+            # directory down in private/.
+            slug = resolve_via_ancestor(args.remote)
+            if not slug:
+                # Nothing encloses us, so there is no project for a bare word
+                # to refer to -- fall back to reading it as a repo name.
+                if _looks_like_repo_name(args.target):
+                    return cmd_repo(args.target, args.no_browser,
+                                    force_refresh=refresh)
+                print(f"Error: remote '{args.remote}' is not a GitHub URL "
+                      f"(or remote not found), and no enclosing repo has one "
+                      f"either.", file=sys.stderr)
+                print("Tip: use --remote <name> to specify a different remote.",
+                      file=sys.stderr)
+                return 1
 
     no_browser = args.no_browser
     target = args.target

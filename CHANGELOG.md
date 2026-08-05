@@ -4,6 +4,15 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.12-alpha] - 2026-08-05
+
+### Fixed
+- `dz github` stopped working the moment you stepped into a project's `private/` directory -- which is where issue drafts get written, so it failed in the one place you are most likely to want it. `private/` is its own git repository with no remotes by design, and the tool read "no GitHub remote here" as "this must not be a repository at all", then guessed that whatever you typed was the name of a repository to go find. Asking for issue 61 produced a GitHub-wide search for projects called "61" (`b612`, `CS61A`, `ud615`) and a prompt to pick one. Resolution now continues upward to the nearest enclosing repository that does have a GitHub remote, so commands issued from inside `private/` reach the project that owns it. The resolved project is named on stderr when it came from a parent, so it is never a silent guess about which repository you just opened, and standard output still carries the URL alone for `-n`.
+- A bare number is now always an issue number. Previously any word the tool did not recognize became a repository search, and a number is a word -- which is how "61" turned into a search.
+- Everything you can type now means the same thing from inside `private/` as it does at the project root. That was the point of the fix, but the first cut only carried digits and page keywords upward: an ordinary word still became a repository search, so `dz github roadmap` opened the project's roadmap issue from the project root and listed strangers' repositories called "roadmap" from one directory down. Once a project has been resolved, a bare word is read as an issue keyword there, exactly as it would be at the root.
+- The consequence worth knowing: inside a project, a word is an issue keyword rather than a repository name, so `dz github preserve` from within a project searches that project's issues. Where there is no enclosing project -- an ordinary directory, or a repository with no GitHub remote anywhere above it -- a bare word still finds a repository by name, and `dz github repo <name>` looks one up explicitly from anywhere.
+- `dz github .` now opens the current project rather than being treated as a name to search for.
+
 ## [0.12.11-alpha] - 2026-08-04
 
 ### Added
@@ -4137,7 +4146,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.11a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.12a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
