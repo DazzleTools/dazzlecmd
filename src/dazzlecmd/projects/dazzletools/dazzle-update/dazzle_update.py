@@ -612,7 +612,18 @@ def render_text(records, findings, meta, pal=None):
             # a coloured string mis-aligns every column.
             name = pal(colour, f"{raw:<38}")
             if kind == "stale-remote-url":
-                cfg = r["configured_slugs"][0] if r["configured_slugs"] else "?"
+                # Show the slug that actually DIFFERS from canonical, not
+                # whichever checkout was walked first. On a repo with
+                # several checkouts where some have been repointed, [0]
+                # produced rows reading "X -> X" -- a redirect from a
+                # name to itself, which is nonsense on its face.
+                canon = (r["full_name"] or "").lower()
+                stale = [x for x in (r["configured_slugs"] or [])
+                         if x.lower() != canon]
+                cfg = (stale[0] if stale
+                       else (r["configured_slugs"] or ["?"])[0])
+                if len(stale) > 1:
+                    cfg += f" (+{len(stale) - 1} more)"
                 safe_print(f"    {name} {cfg} -> {r['full_name']}")
             elif kind == "stale-install-metadata":
                 inst = r["installed"] or {}

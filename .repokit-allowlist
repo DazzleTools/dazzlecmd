@@ -1,0 +1,20 @@
+# repokit private-content allowlist.
+#
+# Paths here bypass the pre-commit hook's private-content regex. One per
+# line; # comments and blank lines are ignored. Read by repokit-common
+# >= 0.2.6; this repo currently vendors 0.2.5, whose hook carries an
+# inline `case` allowlist instead. Both are populated so the inline
+# entries can simply be dropped when the subtree is updated.
+#
+# Everything below is legitimate public source whose FILENAME happens to
+# match a private-content pattern (`private_*`). None of it is private
+# content.
+
+# The private-init tool's own implementation.
+projects/dazzletools/private-init/private_init.py
+src/dazzlecmd/projects/dazzletools/private-init/private_init.py
+
+# Inspects the private/ convention for dz dazzle-update; it reports on
+# private stores, it does not contain any. Its absence from every commit
+# is what shipped 0.12.11 and 0.12.12 broken.
+src/dazzlecmd/projects/dazzletools/_repo_common/private_state.py

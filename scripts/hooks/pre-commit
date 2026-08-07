@@ -54,9 +54,14 @@ for file in $(git diff --cached --name-only); do
     # Allowlist: tool source whose name coincidentally matches a private-content
     # pattern but is legitimate public code (mirrors the .gitignore exception
     # for the same file -- the `private_*` guard collides with private-init).
+    # NOTE: repokit-common >= 0.2.6 reads these from .repokit-allowlist in
+    # the repo root, which this repo already populates. This vendored copy
+    # is 0.2.5 and predates that mechanism, so the entries are duplicated
+    # inline; drop this `case` when the subtree is updated.
     case "$file" in
         projects/dazzletools/private-init/private_init.py) continue ;;
         src/dazzlecmd/projects/dazzletools/private-init/private_init.py) continue ;;
+        src/dazzlecmd/projects/dazzletools/_repo_common/private_state.py) continue ;;
     esac
     # Check against private content patterns
     if echo "$file" | grep -q -E "^.*/__private__.*|^.*/private_.*|^.*~$|\.backup$|\.bak$|\.log$|\.tmp$|^\.env.*|^\.env\.local$|^\.env\.private$|^convos/|^credentials/|^logs/|^nul$|^private/|^revisions/|^secrets/|^test-runs/|^test_runs/"; then

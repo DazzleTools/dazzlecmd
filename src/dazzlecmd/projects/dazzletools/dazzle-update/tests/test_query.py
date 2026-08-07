@@ -392,3 +392,32 @@ class TestRemotelessRefresh:
                                   do_fetch=True)
         assert info["fetch_failures"] == []
         assert called.get("paths") in (None, [])
+
+
+class TestStaleUrlRowNamesTheStaleSlug:
+    def test_row_shows_the_differing_slug_not_the_first(self, capsys):
+        """A repo with several checkouts, some already repointed, showed
+        configured_slugs[0] -- which after a partial fix was the CANONICAL
+        name, rendering "X -> X": a redirect from a name to itself."""
+        r = dict(POP["dazzletools/dazzlesum"])
+        r["full_name"] = "DazzleTools/thing"
+        r["git"] = {"branch": "main", "upstream": "origin/main"}
+        r["configured_slugs"] = ["DazzleTools/thing", "olduser/thing"]
+        meta = {"namespace_count": 1, "org_repo_count": 1, "cloned_count": 1,
+                "install_count": 0, "gh_detail": "t", "roots": ["X"],
+                "published_detail": "skipped", "errors": [], "clean": 0}
+        du.render_text({}, {"stale-remote-url": [r]}, meta)
+        out = capsys.readouterr().out
+        assert "olduser/thing -> DazzleTools/thing" in out
+        assert "DazzleTools/thing -> DazzleTools/thing" not in out
+
+    def test_multiple_stale_slugs_are_counted(self, capsys):
+        r = dict(POP["dazzletools/dazzlesum"])
+        r["full_name"] = "DazzleTools/thing"
+        r["git"] = {"branch": "main", "upstream": "origin/main"}
+        r["configured_slugs"] = ["a/thing", "b/thing", "DazzleTools/thing"]
+        meta = {"namespace_count": 1, "org_repo_count": 1, "cloned_count": 1,
+                "install_count": 0, "gh_detail": "t", "roots": ["X"],
+                "published_detail": "skipped", "errors": [], "clean": 0}
+        du.render_text({}, {"stale-remote-url": [r]}, meta)
+        assert "a/thing (+1 more) ->" in capsys.readouterr().out

@@ -164,6 +164,11 @@ mode_local.json
 # Exception: the private-init tool's own source is a tracked tool file, not private content
 !/projects/dazzletools/private-init/private_init.py
 !/src/dazzlecmd/projects/dazzletools/private-init/private_init.py
+# Exception: this inspects the private/ convention; it is not private content.
+# Second time this pattern has eaten a source file whose name merely starts
+# with "private" -- v0.12.11 shipped its tests and both of its importers while
+# git silently dropped the module, and `git add -A` reported success.
+!/src/dazzlecmd/projects/dazzletools/_repo_common/private_state.py
 CLAUDE.md
 private/claude/
 private/temp/

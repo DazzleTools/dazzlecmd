@@ -4,6 +4,15 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.13-alpha] - 2026-08-07
+
+### Fixed
+- `dz dazzle-update` was unusable from a fresh clone of 0.12.11 and 0.12.12, failing immediately with `No module named '_repo_common.private_state'`. The module that implements the `private/` axis was written, imported by two other modules, and covered by its own test file -- but `.gitignore`'s `**/private_*` rule matched its filename and silently dropped it from every commit, while `git add -A` reported success and the full suite passed on the machine that had the file on disk. The module is now tracked via an explicit un-ignore, alongside the one already present for `private-init`'s own source, which was added for exactly this reason.
+- A repository whose remote had been partially repointed printed rows reading `Org/name -> Org/name` -- a redirect from a name to itself -- because the row showed the first configured slug rather than the one that actually differs from canonical. It now names the stale slug, and counts the rest when several checkouts disagree.
+
+### Added
+- A test asserting that every source file under `src/` is tracked by git, so a file that exists locally but was never committed fails the suite instead of shipping. It distinguishes this repository's files from those owned by registered submodules and by nested repositories such as materialized kits, since `git ls-files` here rightly does not know their contents.
+
 ## [0.12.12-alpha] - 2026-08-05
 
 ### Fixed
@@ -4146,7 +4155,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.12a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.13a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
