@@ -4,6 +4,17 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.15-alpha] - 2026-08-08
+
+### Fixed
+- `--fix` applied one round of work and stopped, which could not finish the job: pulling a repository rewrites its source tree, which leaves the editable install stale, which is a new finding. Reaching a settled state meant running the same command again until it went quiet. It now applies, re-reads the repository, and repeats until nothing is left -- bounded by a cap of three rounds, by stopping the moment a round changes nothing, and by deriving each round's findings from a fresh measurement rather than from a prediction of what the previous round should have produced. A dry run still shows a single round, and says so, because nothing has changed for a second round to observe.
+- Answering `q` at a confirmation prompt stopped the remaining actions but not the run: work already applied counted as progress, so the repository was re-read and the prompts began again. Declining to continue now ends the run, which is what declining meant.
+- A command that failed was counted among those applied, so a run could report work that had not happened -- and, once `--fix` repeated on progress, a failing action was retried up to the cap with each failure recorded as a success. Failures are now counted and reported separately, and do not qualify as progress.
+- The check that every source file is tracked by git ran one subprocess per file -- roughly five hundred of them, taking half a minute on a machine with real-time scanning. It now asks once. A check that is expensive to run is a check that gets skipped.
+
+### Added
+- `-v` reports the read and apply halves of a `--fix` run separately, so the time a run takes can be attributed to this tool or to pip rather than guessed at.
+
 ## [0.12.14-alpha] - 2026-08-07
 
 ### Fixed
@@ -4166,7 +4177,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.14a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.15a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

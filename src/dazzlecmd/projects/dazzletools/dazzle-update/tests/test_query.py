@@ -659,3 +659,259 @@ class TestTesterFindings0812614:
                            "installed": {"name": "dazzle-dz",
                                          "path": "C:/x/alias"}}}
         assert du.actionable_matches(m) == ["dazzle-dz"]
+
+
+class TestFixConverges:
+    """USER FINDING 2026-08-07: "The point of --fix is that it just keeps
+    fixing till there is nothing left to fix. Not multiple runs of the
+    same command which is tedious."
+
+    Fixes cascade: a pull rewrites the source tree, which makes the
+    editable install stale, which is a NEW finding. One pass could not
+    converge, so the user re-ran the same command until it went quiet.
+    """
+
+    def _rec(self, key, path="C:/x/a"):
+        return {"key": key, "full_name": key, "cloned": True,
+                "excluded": None, "installed": {"name": key, "path": path},
+                "checkouts": [{"path": path, "excluded": False,
+                               "git": {"branch": "main",
+                                       "upstream": "origin/main"}}],
+                # A record with checkouts MUST name its primary, or
+                # --fix refuses rather than guess which to touch. That
+                # rail is correct; the fixture was simply incomplete.
+                "primary": path, "primary_reason": "only checkout",
+                "sets": [], "git": {"branch": "main",
+                                    "upstream": "origin/main"}}
+
+    def test_reports_what_it_applied(self, monkeypatch, capsys):
+        """apply_fixes must tell the caller whether it made progress --
+        the loop stops on a pass that applies nothing."""
+        r = self._rec("o/a")
+
+        class _Res:
+            returncode = 0
+            stdout = stderr = ""
+
+        monkeypatch.setattr(du.subprocess, "run", lambda *a, **k: _Res())
+        tally = {}
+        du.apply_fixes({"stale-install-metadata": [r]}, dry_run=False,
+                       assume_yes=True, interactive=False,
+                       report_applied=tally)
+        assert tally["applied"] == 1
+
+    def test_dry_run_reports_zero_applied(self, capsys):
+        """A dry run applies nothing, and must say zero rather than
+        report the count it WOULD have done -- otherwise the loop would
+        read a preview as progress."""
+        r = self._rec("o/a")
+        tally = {}
+        du.apply_fixes({"stale-install-metadata": [r]}, dry_run=True,
+                       assume_yes=True, interactive=False,
+                       report_applied=tally)
+        assert tally["applied"] == 0
+
+    def test_dry_run_does_not_claim_convergence(self, capsys, monkeypatch):
+        """A dry run cannot iterate -- nothing changed for a second pass
+        to observe. It must say so rather than imply it finished."""
+        r = self._rec("o/a")
+        monkeypatch.setattr(du, "refresh_matched",
+                            lambda *a, **k: (_ for _ in ()).throw(
+                                AssertionError("re-measured during dry run")))
+        du.fix_scoped_to_query({"o/a": r}, {"stale-install-metadata": [r]},
+                               {"o/a": r}, _Args(dry_run=True))
+        out = capsys.readouterr().out
+        assert "dry run shows one pass" in out
+
+    def test_stops_when_a_pass_applies_nothing(self, capsys, monkeypatch):
+        calls = {"n": 0}
+
+        def _apply(findings, report_applied=None, **kw):
+            calls["n"] += 1
+            if report_applied is not None:
+                report_applied["applied"] = 0
+            return 0
+
+        monkeypatch.setattr(du, "apply_fixes", _apply)
+        monkeypatch.setattr(du, "refresh_matched",
+                            lambda *a, **k: (_ for _ in ()).throw(
+                                AssertionError("re-measured after no progress")))
+        r = self._rec("o/a")
+        du.fix_scoped_to_query({"o/a": r}, {"stale-install-metadata": [r]},
+                               {"o/a": r}, _Args(yes=True))
+        assert calls["n"] == 1
+
+    def test_pass_cap_is_bounded_and_says_so(self, capsys, monkeypatch):
+        """A repo that never converges must stop and report, not spin."""
+        r = self._rec("o/a")
+
+        def _apply(findings, report_applied=None, **kw):
+            if report_applied is not None:
+                report_applied["applied"] = 1      # always "progress"
+            return 0
+
+        monkeypatch.setattr(du, "apply_fixes", _apply)
+        monkeypatch.setattr(du, "refresh_matched", lambda *a, **k: None)
+        monkeypatch.setattr(du, "classify",
+                            lambda *a, **k: {"stale-install-metadata": [r]})
+        du.fix_scoped_to_query({"o/a": r}, {"stale-install-metadata": [r]},
+                               {"o/a": r}, _Args(yes=True))
+        out = capsys.readouterr().out
+        assert f"stopped after {du.MAX_FIX_PASSES} passes" in out
+
+    def test_reports_when_nothing_is_left(self, capsys, monkeypatch):
+        r = self._rec("o/a")
+        seq = [{"applied": 1}, {"applied": 0}]
+
+        def _apply(findings, report_applied=None, **kw):
+            if report_applied is not None:
+                report_applied.update(seq.pop(0))
+            return 0
+
+        monkeypatch.setattr(du, "apply_fixes", _apply)
+        monkeypatch.setattr(du, "refresh_matched", lambda *a, **k: None)
+        monkeypatch.setattr(du, "classify", lambda *a, **k: {})
+        du.fix_scoped_to_query({"o/a": r}, {"stale-install-metadata": [r]},
+                               {"o/a": r}, _Args(yes=True))
+        assert "nothing left to fix" in capsys.readouterr().out
+
+
+class TestFailureIsNotProgress:
+    """A command that FAILED is not work that was applied.
+
+    Found by reading the code against my own tester brief: `done += 1`
+    fired regardless of exit code. Two consequences -- the summary said
+    "1 applied" for a command that failed (pre-existing), and once
+    --fix began iterating on progress, a FAILING action counted as
+    progress and would be retried up to the pass cap (introduced by the
+    convergence loop).
+    """
+
+    def _rec(self):
+        return {"key": "o/a", "full_name": "o/a", "cloned": True,
+                "excluded": None, "declared_dist": None, "pypi_owned": None,
+                "installed": {"name": "o/a", "path": "C:/x/a"},
+                "checkouts": [], "sets": [], "git": {}}
+
+    def _run(self, monkeypatch, returncode):
+        class _Res:
+            pass
+        _Res.returncode = returncode
+        _Res.stdout = ""
+        _Res.stderr = "boom" if returncode else ""
+        monkeypatch.setattr(du.subprocess, "run", lambda *a, **k: _Res())
+        tally = {}
+        du.apply_fixes({"stale-install-metadata": [self._rec()]},
+                       dry_run=False, assume_yes=True, interactive=False,
+                       report_applied=tally)
+        return tally
+
+    def test_failure_is_not_counted_as_applied(self, monkeypatch, capsys):
+        tally = self._run(monkeypatch, returncode=1)
+        assert tally["applied"] == 0
+        assert tally["failed"] == 1
+
+    def test_failure_is_reported_in_the_summary(self, monkeypatch, capsys):
+        self._run(monkeypatch, returncode=1)
+        assert "1 failed" in capsys.readouterr().out
+
+    def test_success_still_counts(self, monkeypatch, capsys):
+        tally = self._run(monkeypatch, returncode=0)
+        assert tally["applied"] == 1 and tally["failed"] == 0
+
+    def test_success_summary_omits_the_failed_clause(self, monkeypatch,
+                                                     capsys):
+        self._run(monkeypatch, returncode=0)
+        assert "failed" not in capsys.readouterr().out
+
+    def test_a_failing_action_does_not_drive_another_pass(self, monkeypatch,
+                                                          capsys):
+        """The loop's stop condition depends on this: without it a repo
+        whose pull keeps failing would be retried MAX_FIX_PASSES times."""
+        calls = {"n": 0}
+
+        def _apply(findings, report_applied=None, **kw):
+            calls["n"] += 1
+            if report_applied is not None:
+                report_applied.update({"applied": 0, "failed": 1})
+            return 0
+
+        monkeypatch.setattr(du, "apply_fixes", _apply)
+        monkeypatch.setattr(du, "refresh_matched",
+                            lambda *a, **k: (_ for _ in ()).throw(
+                                AssertionError("re-measured after a failure")))
+        r = self._rec()
+        r["primary"] = "C:/x/a"
+        du.fix_scoped_to_query({"o/a": r}, {"stale-install-metadata": [r]},
+                               {"o/a": r}, _Args(yes=True))
+        assert calls["n"] == 1
+
+
+class TestQuitStopsTheLoop:
+    """'q' means stop asking, not stop this pass.
+
+    Found by an independent tester probing the convergence loop's
+    bounds. Actions applied BEFORE the quit counted as progress, so the
+    loop re-measured and prompted again -- declining to continue
+    produced another round of prompts, which is the opposite of what
+    the user asked for. On a write path that is a consent failure, not
+    a cosmetic one.
+    """
+
+    def _rec(self, k):
+        return {"key": k, "full_name": k, "cloned": True, "excluded": None,
+                "installed": {"name": k, "path": "C:/x/" + k},
+                "declared_dist": None, "pypi_owned": None, "checkouts": [],
+                "sets": [], "git": {}, "primary": "C:/x/" + k}
+
+    def test_quit_is_reported_even_when_work_was_applied(self, monkeypatch):
+        class _Res:
+            returncode = 0
+            stdout = stderr = ""
+        monkeypatch.setattr(du.subprocess, "run", lambda *a, **k: _Res())
+        answers = iter(["yes", "quit"])
+        monkeypatch.setattr(du, "_confirm", lambda *a, **k: next(answers))
+        tally = {}
+        du.apply_fixes(
+            {"stale-install-metadata": [self._rec("o/a"), self._rec("o/b")]},
+            dry_run=False, assume_yes=False, interactive=True,
+            report_applied=tally)
+        assert tally["applied"] == 1      # work DID happen
+        assert tally["quit"] is True      # and the user still said stop
+
+    def test_loop_stops_on_quit_despite_progress(self, monkeypatch, capsys):
+        calls = {"n": 0}
+
+        def _apply(findings, report_applied=None, **kw):
+            calls["n"] += 1
+            if report_applied is not None:
+                report_applied.update({"applied": 1, "quit": True})
+            return 0
+
+        monkeypatch.setattr(du, "apply_fixes", _apply)
+        monkeypatch.setattr(du, "refresh_matched",
+                            lambda *a, **k: (_ for _ in ()).throw(
+                                AssertionError("re-measured after quit")))
+        r = self._rec("o/a")
+        du.fix_scoped_to_query({"o/a": r}, {"stale-install-metadata": [r]},
+                               {"o/a": r}, _Args(yes=True))
+        assert calls["n"] == 1
+
+    def test_progress_without_quit_still_iterates(self, monkeypatch, capsys):
+        """The guard must not over-correct into never looping."""
+        calls = {"n": 0}
+
+        def _apply(findings, report_applied=None, **kw):
+            calls["n"] += 1
+            if report_applied is not None:
+                report_applied.update({"applied": 1, "quit": False})
+            return 0
+
+        monkeypatch.setattr(du, "apply_fixes", _apply)
+        monkeypatch.setattr(du, "refresh_matched", lambda *a, **k: None)
+        monkeypatch.setattr(du, "classify", lambda *a, **k: {})
+        r = self._rec("o/a")
+        du.fix_scoped_to_query({"o/a": r}, {"stale-install-metadata": [r]},
+                               {"o/a": r}, _Args(yes=True))
+        assert calls["n"] == 1
+        assert "nothing left to fix" in capsys.readouterr().out

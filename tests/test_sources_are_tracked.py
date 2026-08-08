@@ -72,17 +72,25 @@ def _source_files():
         yield p
 
 
-def _untracked(paths):
+def _tracked():
+    """Every path git has in its index, as posix-relative strings.
+
+    ONE subprocess. The first version ran `git ls-files --error-unmatch`
+    per file -- ~500 process spawns, which took 3s here and 28s on a
+    machine with Defender inspecting each one. A guard that is expensive
+    to run is a guard people skip.
+    """
+    out = subprocess.run(["git", "-C", str(REPO), "ls-files"],
+                         capture_output=True, text=True)
+    return {ln.strip().replace("\\", "/")
+            for ln in out.stdout.splitlines() if ln.strip()}
+
+
+def _untracked(paths, tracked=None):
     """Return the subset git does not have in its index."""
-    missing = []
-    for p in paths:
-        rel = p.relative_to(REPO).as_posix()
-        rc = subprocess.run(
-            ["git", "-C", str(REPO), "ls-files", "--error-unmatch", rel],
-            capture_output=True, text=True).returncode
-        if rc != 0:
-            missing.append(rel)
-    return missing
+    known = _tracked() if tracked is None else tracked
+    return [p.relative_to(REPO).as_posix() for p in paths
+            if p.relative_to(REPO).as_posix() not in known]
 
 
 def test_every_source_file_is_tracked():

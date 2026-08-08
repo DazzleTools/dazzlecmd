@@ -836,7 +836,8 @@ def _confirm(prompt, describe, assume_yes=False):
         safe_print("    unrecognized -- y, n, a, q, or ? for detail")
 
 
-def apply_fixes(findings, dry_run=False, assume_yes=False, interactive=True):
+def apply_fixes(findings, dry_run=False, assume_yes=False, interactive=True,
+                report_applied=None):
     """The two provably-safe operations. Everything else refuses.
 
     Refuses on any dirty tree rather than stashing: auto-stashing is a
@@ -909,7 +910,8 @@ def apply_fixes(findings, dry_run=False, assume_yes=False, interactive=True):
         return "dazzlecmd" in (rec["full_name"] or rec["key"]).lower()
     actions.sort(key=lambda a: is_self(a[1]))
 
-    done = skipped = 0
+    done = skipped = failed = 0
+    quit_requested = False
     for verb, r in actions:
         # Act ONLY on the primary checkout, never on paths[0]. paths[0]
         # is discovery order (alphabetical), which for dazzlecmd is
@@ -946,6 +948,7 @@ def apply_fixes(findings, dry_run=False, assume_yes=False, interactive=True):
                 safe_print("")
                 safe_print(f"  stopped -- {done} applied, "
                            f"{len(actions) - done - 1} not attempted")
+                quit_requested = True
                 break
             if choice == "no":
                 skipped += 1
@@ -957,14 +960,28 @@ def apply_fixes(findings, dry_run=False, assume_yes=False, interactive=True):
                              encoding="utf-8", errors="replace")
         status = "ok" if res.returncode == 0 else "FAILED"
         safe_print(f"    {label}: {verb} {status}")
-        done += 1
-        if res.returncode != 0:
+        # A command that FAILED is not something that was applied. The
+        # count used to include failures, which read as "1 applied" for
+        # work that did not happen -- and once --fix began iterating on
+        # progress, a failing action counted as progress and would be
+        # retried up to the pass cap.
+        if res.returncode == 0:
+            done += 1
+        else:
+            failed += 1
             safe_print(f"      {(res.stderr or '').strip().splitlines()[:1]}")
 
+    if report_applied is not None:
+        report_applied["applied"] = done
+        report_applied["failed"] = failed
+        report_applied["quit"] = quit_requested
+        report_applied["skipped"] = skipped
+        report_applied["refused"] = len(refused)
     if not dry_run:
         safe_print("")
+        tail = f", {failed} failed" if failed else ""
         safe_print(f"  {done} applied, {skipped} skipped, "
-                   f"{len(refused)} refused.")
+                   f"{len(refused)} refused{tail}.")
     if refused:
         safe_print("")
         safe_print("  BLOCKED -- would act, but something is in the way:")
@@ -983,6 +1000,15 @@ def apply_fixes(findings, dry_run=False, assume_yes=False, interactive=True):
         safe_print("    these need a decision from you; see the report above.")
     return 0
 
+
+#: Fixes cascade (a pull makes the install stale), so --fix re-measures
+#: and repeats. Capped: three passes covers pull -> reinstall -> verify,
+#: and a runaway loop on a repo that will not converge is worse than
+#: stopping and saying so.
+MAX_FIX_PASSES = 3
+
+#: Finding kinds --fix acts on; used to decide "is there anything left".
+FIXABLE_KINDS = ("behind-upstream", "stale-install-metadata")
 
 #: QF-1: at most this many matched records get live verification per
 #: query. Measured: `dazzle*` matches 68 records; uncapped that is a
@@ -1337,7 +1363,8 @@ def actionable_matches(matched):
     return out
 
 
-def fix_scoped_to_query(records, findings, matched, args, meta=None):
+def fix_scoped_to_query(records, findings, matched, args, meta=None,
+                        config=None):
     """Apply --fix to exactly the queried repo. Returns an exit code.
 
     The uniqueness gate is the whole safety story here: `--fix "dazzle*"
@@ -1350,6 +1377,7 @@ def fix_scoped_to_query(records, findings, matched, args, meta=None):
         # matching surfaces; adding "not cloned here" would assert
         # something about a repo that was never found.
         return 2
+    _fix_config = config or EcosystemConfig()
     act = actionable_matches(matched)
     if not act:
         safe_print("  nothing to act on -- the match is not cloned here, "
@@ -1386,8 +1414,56 @@ def fix_scoped_to_query(records, findings, matched, args, meta=None):
         safe_print("  Re-run with --dry-run to preview, or --yes to apply "
                    "without asking.")
         return 2
-    return apply_fixes(scoped, dry_run=args.dry_run,
-                       assume_yes=args.yes, interactive=interactive)
+
+    # Fixes CASCADE: a pull changes the source tree, which makes the
+    # editable install stale, which is a new finding the same run should
+    # handle. Applying one pass and stopping made the user re-run the
+    # same command until it went quiet -- "the point of --fix is that it
+    # just keeps fixing till there is nothing left to fix".
+    #
+    # So: apply, RE-MEASURE the repo, apply again. Bounded three ways --
+    # a hard pass cap, stopping the moment a pass applies nothing (no
+    # progress), and re-deriving findings from a fresh read each time
+    # rather than predicting what the next state will be. A dry run
+    # cannot iterate, because nothing changed for the second pass to
+    # observe; it says so instead of implying convergence.
+    key = act[0]
+    for attempt in range(1, MAX_FIX_PASSES + 1):
+        if attempt > 1:
+            safe_print("")
+            safe_print(f"  re-checking {only} after pass {attempt - 1}...")
+            refresh_matched(records, {key: records[key]}, _fix_config,
+                            do_fetch=not args.no_fetch)
+            findings = classify(records, _fix_config)
+            scoped = {k: [r for r in v if r["key"] == key]
+                      for k, v in findings.items()}
+            if args.no_fetch:
+                scoped["behind-upstream"] = []
+            if not any(scoped.get(k) for k in FIXABLE_KINDS):
+                safe_print(f"  nothing left to fix in {only}.")
+                break
+        tally = {}
+        rc = apply_fixes(scoped, dry_run=args.dry_run,
+                         assume_yes=args.yes, interactive=interactive,
+                         report_applied=tally)
+        if args.dry_run:
+            safe_print("")
+            safe_print("  (dry run shows one pass; applying may reveal "
+                       "follow-on work, e.g. a pull making the install "
+                       "stale)")
+            return rc
+        # "q" means stop asking -- not "stop this pass". Without this
+        # the loop saw the actions applied BEFORE the quit as progress,
+        # re-measured, and prompted again, so declining to continue
+        # produced another round of prompts.
+        if tally.get("quit"):
+            break
+        if not tally.get("applied"):
+            break
+    else:
+        safe_print(f"  stopped after {MAX_FIX_PASSES} passes -- "
+                   f"{only} still reports work; run again or inspect it")
+    return rc
 
 
 def build_parser():
@@ -1667,7 +1743,17 @@ def main(argv=None):
                     f"{cfg_note})")
             if args.fix:
                 render_query(rec, findings, args.query, meta, pal=pal)
-                return fix_scoped_to_query(rec, findings, matched, args, meta)
+                t_read = time.perf_counter() - t_start
+                rc = fix_scoped_to_query(rec, findings, matched, args, meta,
+                                         config=lite)
+                # The write half is dominated by pip, not by this tool.
+                # Without splitting them, "it took a minute" is
+                # unattributable -- so -v names both.
+                _print_timing(args.verbose, t_start,
+                              [("read", t_read),
+                               ("apply",
+                                time.perf_counter() - t_start - t_read)])
+                return rc
             rc = render_query(
                 rec, findings, args.query, meta, pal=pal,
                 as_json=args.json,
@@ -1861,7 +1947,8 @@ def main(argv=None):
                 render_query(records, findings, args.query, meta, pal=pal)
                 return fix_scoped_to_query(
                     records, findings,
-                    match_records(records, args.query), args, meta)
+                    match_records(records, args.query), args, meta,
+                    config=EcosystemConfig())
             rc = render_query(records, findings, args.query, meta,
                               pal=pal, as_json=args.json,
                               stats={"mode": "replay", "t_start": t_start})
@@ -2017,7 +2104,8 @@ def main(argv=None):
             render_query(records, findings, args.query, meta, pal=pal)
             return fix_scoped_to_query(
                 records, findings,
-                match_records(records, args.query), args, meta)
+                match_records(records, args.query), args, meta,
+                config=config)
         rc = render_query(records, findings, args.query, meta,
                           pal=pal, as_json=args.json,
                           stats={"mode": "fresh", "t_start": t_start})
