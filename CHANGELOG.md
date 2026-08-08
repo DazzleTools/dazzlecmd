@@ -4,6 +4,15 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.16-alpha] - 2026-08-08
+
+### Added
+- `dz dazzle-update .` now means "the project I am standing in". A path-shaped argument -- `.`, `..`, an absolute path, or a directory that holds a `.git` -- is resolved to the repository that owns it and matched by location. A bare name is still a name, and `owner/repo` is still a name, so naming a project keeps working even where a directory of the same name exists.
+- Resolution follows the chain a worktree records rather than only asking git. A worktree created inside WSL stores an absolute POSIX gitdir, which Windows git cannot follow: it reports the directory is not a repository, and the checkout is invisible to every scan. The pointer still names its owner, so asking about such a directory now answers with the project it belongs to, and says how it got there.
+
+### Fixed
+- `.` was previously matched as a substring, so a single dot matched every repository with a dot anywhere in its name or paths -- asking about the current project from within one listed a dozen unrelated repositories.
+
 ## [0.12.15-alpha] - 2026-08-08
 
 ### Fixed
@@ -4177,7 +4186,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.15a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.16a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

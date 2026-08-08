@@ -1119,6 +1119,116 @@ def refresh_matched(records, matched, config, do_fetch=True,
             "from_cache": from_cache, "fetch_failures": failures}
 
 
+def _wsl_to_windows(path):
+    r"""Translate /mnt/c/... to C:\... so a WSL-made pointer resolves.
+
+    Worktrees created inside WSL record an absolute POSIX gitdir. From
+    Windows that path does not exist, git reports "not a git
+    repository", and the checkout is invisible to discovery -- a real
+    worktree of a real project that no scan can see.
+    """
+    m = re.match(r"^/mnt/([a-zA-Z])/(.*)$", str(path).replace("\\", "/"))
+    if not m:
+        return None
+    return f"{m.group(1).upper()}:\\" + m.group(2).replace("/", "\\")
+
+
+def resolve_path_query(term, cwd=None):
+    """Resolve a PATH-shaped query to the repository root it belongs to.
+
+    Returns (root_or_None, note). `.` is the case that matters -- asking
+    about "the project I am standing in" -- and it previously went
+    through substring matching, where a single dot matched every record
+    whose name or path contained one.
+
+    Three ways to answer, in order of authority:
+      1. git itself (`rev-parse --show-toplevel`);
+      2. the `.git` FILE of a worktree whose pointer git cannot follow,
+         translating a WSL gitdir so the owning repo is still named;
+      3. walking up for a directory git does recognise.
+    """
+    base = os.path.abspath(os.path.join(cwd or os.getcwd(), str(term)))
+    if not os.path.isdir(base):
+        return None, f"{term}: not a directory"
+
+    res = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=base,
+                         capture_output=True, text=True,
+                         encoding="utf-8", errors="replace")
+    rc, out = res.returncode, res.stdout
+    if rc == 0 and out.strip():
+        return os.path.abspath(out.strip()), None
+
+    # git refused. A .git FILE still names its owner, even when the
+    # path it records is unreachable from this OS.
+    probe = base
+    while True:
+        gitfile = os.path.join(probe, ".git")
+        if os.path.isfile(gitfile):
+            try:
+                text = open(gitfile, encoding="utf-8",
+                            errors="replace").read().strip()
+            except OSError:
+                text = ""
+            if text.startswith("gitdir:"):
+                target = text.split(":", 1)[1].strip()
+                win = _wsl_to_windows(target)
+                if win:
+                    # .../<repo>/.git/worktrees/<name> -> <repo>
+                    marker = os.sep + '.git' + os.sep + 'worktrees' + os.sep
+                    if marker in win:
+                        return (win.split(marker)[0],
+                                f"{term}: worktree whose gitdir is a WSL "
+                                f"path ({target}); resolved via its owner")
+                    return None, (f"{term}: gitdir points into WSL "
+                                  f"({target}) and names no owning repo")
+                if not os.path.exists(target):
+                    return None, (f"{term}: .git points at {target}, which "
+                                  f"does not exist -- a dangling worktree")
+        parent = os.path.dirname(probe)
+        if parent == probe:
+            return None, f"{term}: not inside a git repository"
+        probe = parent
+
+
+def _looks_like_path(term):
+    """Is this term meant as a location rather than a name?
+
+    Deliberately narrow: `.`, `..`, anything with a separator, and
+    anything that names an existing directory. A bare repo name is
+    still a name, so `dz dazzle-update listall` keeps meaning the
+    project, not a folder that happens to share its name.
+    """
+    t = str(term)
+    if t in (".", ".."):
+        return True
+    # A separator alone is NOT enough: `owner/repo` is a NAME, and the
+    # first version of this check broke `dz dazzle-update
+    # DazzleTools/dazzlesum` by treating it as a directory. Require an
+    # explicit location: a relative prefix, an absolute path, or a
+    # directory that actually exists here and holds a .git.
+    if t.startswith(("./", "../", ".\\", "..\\", "/", "\\")):
+        return True
+    if re.match(r"^[A-Za-z]:[\\/]", t):
+        return True
+    return os.path.isdir(t) and os.path.exists(os.path.join(t, ".git"))
+
+
+def match_by_path(records, root):
+    """Records owning `root`, or owning a checkout that contains it."""
+    target = norm(root)
+    out = {}
+    for key, r in records.items():
+        for path in (r.get("paths") or []):
+            np = norm(path)
+            if np == target or target.startswith(np + os.sep):
+                out[key] = r
+                break
+    return out
+
+
+_PATH_NOTES_SAID = set()
+
+
 def match_records(records, queries):
     """Records matching any query term, case-insensitive.
 
@@ -1130,6 +1240,36 @@ def match_records(records, queries):
     """
     import fnmatch as _fn
     out = {}
+
+    # A path-shaped term asks "the project HERE", which name matching
+    # answers badly: `.` as a substring matched every record with a dot
+    # anywhere in its name or paths -- 12 unrelated repos from a repo
+    # directory. Resolve it to a repository root and match by location.
+    remaining = []
+    for q in queries:
+        if not _looks_like_path(q):
+            remaining.append(q)
+            continue
+        root, note = resolve_path_query(q)
+        # match_records runs more than once per invocation (card, then
+        # the fix path); a resolution note is a fact about the query,
+        # not about the call, so say it once.
+        if note and note not in _PATH_NOTES_SAID:
+            _PATH_NOTES_SAID.add(note)
+            safe_print(f"  {note}")
+        if root:
+            hits = match_by_path(records, root)
+            if hits:
+                out.update(hits)
+            else:
+                safe_print(f"  {q}: resolved to {root}, which is not in "
+                           f"this scan's population")
+        else:
+            safe_print(f"  {q}: no repository resolved here")
+    queries = remaining
+    if not queries:
+        return out
+
     for key, r in records.items():
         cands = {key.lower()}
         if r.get("full_name"):

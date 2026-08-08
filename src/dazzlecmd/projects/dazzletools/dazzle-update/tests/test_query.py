@@ -915,3 +915,106 @@ class TestQuitStopsTheLoop:
                                {"o/a": r}, _Args(yes=True))
         assert calls["n"] == 1
         assert "nothing left to fix" in capsys.readouterr().out
+
+
+class TestPathQueries:
+    """USER FINDING 2026-08-08: `dz dazzle-update .` from a project
+    directory listed 12 unrelated repos. `.` went through SUBSTRING
+    matching, so a single dot matched every record with a dot anywhere
+    in its name or paths.
+
+    A path-shaped term asks "the project HERE" and is now resolved to a
+    repository root, then matched by location.
+    """
+
+    def test_dot_and_dotdot_are_paths(self):
+        assert du._looks_like_path(".")
+        assert du._looks_like_path("..")
+
+    def test_explicit_locations_are_paths(self):
+        assert du._looks_like_path("C:/code/thing")
+        assert du._looks_like_path("./sub/dir")
+        assert du._looks_like_path("/abs/dir")
+
+    def test_a_bare_relative_pair_is_treated_as_a_NAME(self):
+        """`sub/dir` is ambiguous -- it could be a relative path or an
+        owner/repo. It is read as a name unless it actually exists as a
+        directory holding a .git, because guessing the other way broke
+        `dz dazzle-update DazzleTools/dazzlesum`."""
+        assert not du._looks_like_path("sub/dir")
+        assert not du._looks_like_path("DazzleTools/dazzlesum")
+
+    def test_a_bare_name_is_still_a_name(self):
+        """`dz dazzle-update listall` must keep meaning the project,
+        even when a folder of that name exists in the cwd."""
+        assert not du._looks_like_path("listall")
+        assert not du._looks_like_path("dazzle*")
+
+    def test_wsl_gitdir_is_translated(self):
+        got = du._wsl_to_windows("/mnt/c/code/x/.git/worktrees/y")
+        assert got == "C:" + "\\" + "code" + "\\" + "x" + "\\" + ".git" \
+            + "\\" + "worktrees" + "\\" + "y"
+        assert du._wsl_to_windows("/home/user/x") is None
+
+    def test_resolves_a_real_repo_to_its_root(self, tmp_path):
+        repo = _real_repo(tmp_path)
+        sub = repo / "nested"
+        sub.mkdir()
+        root, note = du.resolve_path_query(".", cwd=str(sub))
+        assert Path(root) == Path(repo)
+
+    def test_wsl_worktree_resolves_via_its_owner(self, tmp_path):
+        """The reported case: a worktree whose gitdir git cannot follow
+        still names the repository that owns it."""
+        wt = tmp_path / "github"
+        wt.mkdir()
+        (wt / ".git").write_text(
+            "gitdir: /mnt/c/code/proj/dazzlesum/.git/worktrees/github\n",
+            encoding="utf-8")
+        root, note = du.resolve_path_query(".", cwd=str(wt))
+        assert root == "C:" + "\\" + "code" + "\\" + "proj" + "\\" + "dazzlesum"
+        assert "WSL" in note
+
+    def test_dangling_pointer_says_why(self, tmp_path):
+        wt = tmp_path / "orphan"
+        wt.mkdir()
+        (wt / ".git").write_text(
+            "gitdir: " + str(tmp_path / "gone"), encoding="utf-8")
+        root, note = du.resolve_path_query(".", cwd=str(wt))
+        assert root is None
+        assert "does not exist" in note or "not inside a git" in note
+
+    def test_non_repo_directory_says_so(self, tmp_path, monkeypatch):
+        """GIT_CEILING_DIRECTORIES is required, not tidiness: pytest's
+        tmp_path lives under the user profile, and on this machine the
+        HOME DIRECTORY is itself a git repo (it tracks ~/.claude). git
+        walks up and finds it, so without a ceiling this test asserts
+        against the wrong repository -- and the resolver is right to
+        report what git reports."""
+        monkeypatch.setenv("GIT_CEILING_DIRECTORIES", str(tmp_path.parent))
+        root, note = du.resolve_path_query(".", cwd=str(tmp_path))
+        assert root is None
+        assert "not inside a git repository" in note
+
+    def test_missing_directory_is_reported(self):
+        root, note = du.resolve_path_query("definitely-not-here-xyz")
+        assert root is None and "not a directory" in note
+
+    def test_match_by_path_finds_the_owning_record(self):
+        a = "C:" + "\\" + "code" + "\\" + "a"
+        b = "C:" + "\\" + "code" + "\\" + "b"
+        recs = {"o/a": {"key": "o/a", "full_name": "o/a", "paths": [a]},
+                "o/b": {"key": "o/b", "full_name": "o/b", "paths": [b]}}
+        assert set(du.match_by_path(recs, a)) == {"o/a"}
+
+    def test_match_by_path_matches_a_directory_inside_a_checkout(self):
+        a = "C:" + "\\" + "code" + "\\" + "a"
+        recs = {"o/a": {"key": "o/a", "full_name": "o/a", "paths": [a]}}
+        deep = a + "\\" + "src" + "\\" + "deep"
+        assert set(du.match_by_path(recs, deep)) == {"o/a"}
+
+    def test_a_sibling_path_does_not_match(self):
+        """C:/code/ab must not match a checkout at C:/code/a."""
+        a = "C:" + "\\" + "code" + "\\" + "a"
+        recs = {"o/a": {"key": "o/a", "full_name": "o/a", "paths": [a]}}
+        assert du.match_by_path(recs, a + "b") == {}
