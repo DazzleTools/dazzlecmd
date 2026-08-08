@@ -415,6 +415,28 @@ def count_churn_repos(records):
                 for c in (r.get("checkouts") or [])))
 
 
+def apply_scope_lens(findings, scopes):
+    """Filter every findings bucket to records owned by a scoped namespace.
+
+    Same contract as apply_set_lens: what the lens hides is COUNTED,
+    never silent. Records with no resolvable owner (a local-only repo
+    with no remote) are outside every namespace by definition, so a
+    namespace scope hides them -- and counts them.
+    """
+    wanted = {s.lower() for s in scopes}
+    out, hidden = {}, set()
+    for kind, items in findings.items():
+        keep = []
+        for r in items:
+            owner = (r.get("full_name") or "").split("/")[0].lower()
+            if owner and owner in wanted:
+                keep.append(r)
+            elif kind not in ("clean", "excluded-by-policy"):
+                hidden.add(r["key"])
+        out[kind] = keep
+    return out, len(hidden)
+
+
 def apply_set_lens(findings, wanted_names):
     """Filter every findings bucket to records in the named set(s).
 
@@ -556,6 +578,12 @@ def render_text(records, findings, meta, pal=None):
         safe_print(f"  NOTE        auto-stamp churn in {meta['churn_repos']} "
                    f"repo(s) ({pats}) is not counted dirty; rows show it as "
                    "'N churn'")
+    if meta.get("scope_lens"):
+        hidden = meta.get("scope_hidden", 0)
+        tail = (f"; {hidden} repo(s) with findings outside hidden"
+                if hidden else "; nothing with findings falls outside")
+        safe_print("  SCOPE       showing only namespace(s) "
+                   f"'{', '.join(meta['scope_lens'])}'{tail}")
     if meta.get("set_lens"):
         hidden = meta.get("set_hidden", 0)
         tail = (f"; {hidden} repo(s) with findings outside the set hidden"
@@ -1284,6 +1312,84 @@ def _print_timing(verbose, t_start, phases=None):
     print(line, file=sys.stderr)
 
 
+def actionable_matches(matched):
+    """Matched records something could actually be DONE to.
+
+    A repo that is in a namespace but not cloned, or whose every
+    checkout is excluded, offers the write path nothing -- so it cannot
+    make a query ambiguous. Counting it would refuse `--fix listall`
+    because some archived copy also matched, which is refusing on a
+    technicality (AC-4c).
+    """
+    out = []
+    for key, r in matched.items():
+        if r.get("excluded"):
+            continue
+        live = [c for c in (r.get("checkouts") or []) if not c.get("excluded")]
+        # An install with a recorded path is actionable even with no
+        # checkout here -- a reinstall is a real operation, and bulk
+        # --fix already performs it. Gating on `cloned` made the query
+        # gate stricter than the bulk path it is meant to scope, so
+        # `--fix dazzle-dz` refused work that `--fix` would have done.
+        installed = (r.get("installed") or {}).get("path")
+        if live or installed:
+            out.append(key)
+    return out
+
+
+def fix_scoped_to_query(records, findings, matched, args, meta=None):
+    """Apply --fix to exactly the queried repo. Returns an exit code.
+
+    The uniqueness gate is the whole safety story here: `--fix "dazzle*"
+    --yes` would otherwise touch 68 repos, and per-action confirmation
+    at that scale is a fatigue attack on the rail rather than a use of
+    it. One actionable match acts; several refuse and list; none says so.
+    """
+    if not matched:
+        # render_query already said "no repo matches" and explained the
+        # matching surfaces; adding "not cloned here" would assert
+        # something about a repo that was never found.
+        return 2
+    act = actionable_matches(matched)
+    if not act:
+        safe_print("  nothing to act on -- the match is not cloned here, "
+                   "or every checkout is excluded")
+        return 2
+    if len(act) > 1:
+        names = [(matched[k].get("full_name") or k) for k in sorted(act)]
+        safe_print(f"  --fix needs ONE repo; this matched {len(names)}:")
+        for n in names:
+            safe_print(f"    {n}")
+        safe_print("  narrow the name, or drop it to fix in bulk with "
+                   "--only/--only-set")
+        return 2
+
+    scoped = {kind: [r for r in items if r["key"] in set(act)]
+              for kind, items in findings.items()}
+    only = matched[act[0]].get("full_name") or act[0]
+    safe_print("")
+    safe_print(f"  APPLYING FIXES to {only}"
+               + (" (dry run)" if args.dry_run
+                  else " (--yes)" if args.yes
+                  else " -- you will be asked per action"))
+    if args.no_fetch:
+        # AC-4f: behind-counts were not re-verified this run, so a pull
+        # would act on a number we did not measure. Reinstalls rest on
+        # local evidence only and stay eligible.
+        if scoped.get("behind-upstream"):
+            safe_print("  skipping pulls: --no-fetch means behind-counts "
+                       "were not verified this run")
+        scoped["behind-upstream"] = []
+    interactive = sys.stdin.isatty()
+    if not args.dry_run and not args.yes and not interactive:
+        safe_print("  --fix needs a terminal to confirm each action.")
+        safe_print("  Re-run with --dry-run to preview, or --yes to apply "
+                   "without asking.")
+        return 2
+    return apply_fixes(scoped, dry_run=args.dry_run,
+                       assume_yes=args.yes, interactive=interactive)
+
+
 def build_parser():
     p = argparse.ArgumentParser(
         prog="dz dazzle-update",
@@ -1297,6 +1403,7 @@ def build_parser():
             "  dz dazzle-update --published     Also compare against PyPI\n"
             "  dz dazzle-update --json          Machine-readable output\n"
             "  dz dazzle-update --fix --dry-run Show what --fix would do\n"
+            "  dz dazzle-update dazzlelink --fix  Fix one repo (unique match)\n"
             "  dz dazzle-update --scope DazzleLib\n"
             "\n"
             "first run on a new machine:\n"
@@ -1437,9 +1544,22 @@ def main(argv=None):
         safe_print("")
         return 0
 
-    if args.query and args.fix:
-        safe_print("  the detail view is read-only; drop the repo name to "
-                   "use --fix, or run --fix with --only/--only-set to scope it")
+    # --cached says "do not measure"; --fix says "act on measurements".
+    # Together they act on numbers the run explicitly declined to take.
+    # Previously --fix was accepted and silently ignored on this path --
+    # the report rendered, no plan appeared, and nothing said why.
+    if args.fix and args.cached:
+        safe_print("  --fix does not act on replayed data: --cached means "
+                   "the findings were not measured this run")
+        safe_print("  drop --cached to scan first, or name a repo to fix it "
+                   "against live-verified state")
+        return 2
+
+    # --fix prints an interactive plan and asks per action; that is not a
+    # document. It used to render TEXT to a caller who asked for JSON.
+    if args.fix and args.json:
+        safe_print("  --fix is not available in --json mode; run it "
+                   "interactively, or use --dry-run to see the plan")
         return 2
 
     if args.only_set:
@@ -1545,6 +1665,9 @@ def main(argv=None):
                     f"{meta.get('namespace_count', '?')} namespace(s), "
                     f"{meta.get('org_repo_count', '?')} namespace repos"
                     f"{cfg_note})")
+            if args.fix:
+                render_query(rec, findings, args.query, meta, pal=pal)
+                return fix_scoped_to_query(rec, findings, matched, args, meta)
             rc = render_query(
                 rec, findings, args.query, meta, pal=pal,
                 as_json=args.json,
@@ -1585,11 +1708,24 @@ def main(argv=None):
             errors.append(ns_err)
     else:
         errors.append(f"namespace listing skipped: {gh_detail}")
+    # --scope narrows what is ENUMERATED and what is REPORTED -- never
+    # what is OWNED. The old code filtered `namespaces` itself, which
+    # feeds owns(): under --scope DazzleLib this repo's own
+    # DazzleTools/dazzlecmd rendered "not ours" and would have been
+    # refused by --fix. Identity is not a function of the current lens.
+    scan_namespaces = namespaces
     if args.scope:
         wanted = {s.lower() for s in args.scope}
-        namespaces = [n for n in namespaces if n.lower() in wanted]
+        scan_namespaces = [n for n in namespaces if n.lower() in wanted]
 
     personal = cfg.get("personal_namespace") or (gh_login() if gh_ok else None)
+    if args.scope:
+        known = {n.lower() for n in namespaces} | (
+            {personal.lower()} if personal else set())
+        for s_ in args.scope:
+            if s_.lower() not in known:
+                errors.append(f"--scope {s_}: no such namespace in this "
+                              f"scan (known: {', '.join(sorted(known))})")
     excludes = (list(cfg["exclude"]) if cfg.get("exclude_replace")
                 else DEFAULT_EXCLUDES + list(cfg.get("exclude") or []))
     config = EcosystemConfig(
@@ -1611,7 +1747,10 @@ def main(argv=None):
     # bulk of the wait before scanning starts, with nothing on screen.
     # Reuse it within namespace_ttl (org membership moves in days, not
     # seconds) and narrate it either way so the tool never looks hung.
-    want = namespaces + ([personal] if personal else [])
+    want = scan_namespaces + (
+        [personal] if personal and (
+            not args.scope or personal.lower() in
+            {x.lower() for x in args.scope}) else [])
     ns_ttl = cfg.get("namespace_ttl", 86400)
     cached_ns, ns_age, ns_cache_err = ({}, None, "caching disabled")
     if ns_ttl and not args.no_cache:
@@ -1655,6 +1794,17 @@ def main(argv=None):
             return 2
         records = rec
         meta = dict(cmeta)
+        # Meta from a cache describes the scan that WROTE it. Fields that
+        # describe THIS invocation must be reset, or the replay inherits
+        # the previous run's lenses: a plain `--cached` printed
+        # "SCOPE showing only 'DazzleLib'" while listing 69 rows from
+        # other namespaces, because a --scope run had written that lens
+        # into the cache hours earlier. The report was describing a
+        # question nobody had asked this time.
+        for run_scoped in ("scope_lens", "scope_hidden", "set_lens",
+                           "set_hidden", "stale_behind"):
+            meta.pop(run_scoped, None)
+        meta["stale_behind"] = bool(args.no_fetch)
         # Cached errors describe the replayed DATA; current-run errors
         # (config problems, set-definition warnings) describe THIS run
         # and were silently dropped here -- a malformed set warned on a
@@ -1680,6 +1830,10 @@ def main(argv=None):
         declared = (declared_members()
                     if any(s.declared for s in set_defs) else None)
         annotate_sets(records, set_defs, declared)
+        if args.scope:
+            findings, sh = apply_scope_lens(findings, args.scope)
+            meta["scope_lens"] = list(args.scope)
+            meta["scope_hidden"] = sh
         if args.only_set:
             findings, hidden = apply_set_lens(findings, args.only_set)
             meta["set_lens"] = list(args.only_set)
@@ -1703,6 +1857,11 @@ def main(argv=None):
                        f"namespace repos"
                        + (f"; config {meta.get('config')}"
                           if meta.get("config") else "") + ")")
+            if args.fix:
+                render_query(records, findings, args.query, meta, pal=pal)
+                return fix_scoped_to_query(
+                    records, findings,
+                    match_records(records, args.query), args, meta)
             rc = render_query(records, findings, args.query, meta,
                               pal=pal, as_json=args.json,
                               stats={"mode": "replay", "t_start": t_start})
@@ -1790,6 +1949,10 @@ def main(argv=None):
     set_declared = (declared_members()
                     if any(s.declared for s in set_defs) else None)
     annotate_sets(records, set_defs, set_declared)
+    scope_lens, scope_hidden = None, 0
+    if args.scope:
+        findings, scope_hidden = apply_scope_lens(findings, args.scope)
+        scope_lens = list(args.scope)
     set_lens, set_hidden = None, 0
     if args.only_set:
         findings, set_hidden = apply_set_lens(findings, args.only_set)
@@ -1824,29 +1987,37 @@ def main(argv=None):
         "narrowed": narrowed,
         "set_lens": set_lens,
         "set_hidden": set_hidden,
+        "scope_lens": scope_lens,
+        "scope_hidden": scope_hidden,
         "churn_repos": count_churn_repos(records),
         "churn_files": config.churn_files,
         "stale_behind": bool(args.no_fetch) or not cfg.get("fetch", True),
     }
 
     ok, cache_err = (True, None)
-    if cfg.get("cache_write", True) and not narrowed:
+    scoped = bool(args.scope)
+    if cfg.get("cache_write", True) and not narrowed and not scoped:
         ok, cache_err = scancache.save(records, meta,
                                        path=cfg.get("cache_path"))
-    elif narrowed and args.verbose:
+    elif (narrowed or scoped) and args.verbose:
         # A --root run answers a narrower question than the cache exists
         # to answer. Overwriting the shared index with it silently
         # replaced a 184-repo population with 124 and made later queries
         # report against a partial world -- caught only because a repo
         # count moved. Narrowed scans are complete for their root and
         # wrong as an index, so they are not written.
-        safe_print("  (--root narrows the scan; not overwriting the "
-                   "shared scan cache)")
+        safe_print("  (a narrowed scan (--root/--scope) is not written to "
+                   "the shared scan cache)")
     if not ok and args.verbose:
         errors.append(f"could not cache scan: {cache_err}")
 
     pal = make_palette(args.color)
     if args.query:
+        if args.fix:
+            render_query(records, findings, args.query, meta, pal=pal)
+            return fix_scoped_to_query(
+                records, findings,
+                match_records(records, args.query), args, meta)
         rc = render_query(records, findings, args.query, meta,
                           pal=pal, as_json=args.json,
                           stats={"mode": "fresh", "t_start": t_start})

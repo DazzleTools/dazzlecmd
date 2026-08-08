@@ -119,13 +119,27 @@ class TestRenderQuery:
 
 
 class TestCliGuards:
-    def test_query_plus_fix_refuses(self, tmp_path, capsys):
+    def test_query_plus_fix_no_longer_refuses_outright(self, tmp_path,
+                                                       capsys):
+        """CONTRACT AMENDED (Addendum 3 / #114). This test previously
+        asserted the card was read-only, which was AC-4 as adjudicated
+        on 2026-08-02. Two facts outgrew it: the freshness architecture
+        made the card the best-verified state in the tool, and the only
+        way to scope a fix was an undocumented, name-blind `--root`.
+
+        --fix now composes with a query, gated on the match being
+        unambiguous. What must NOT happen is a blind write: with no
+        cache and no match the run still refuses rather than acting.
+        """
         cfg = tmp_path / "cfg.json"
         cfg.write_text("{}", encoding="utf-8")
-        rc = du.main(["dazzlesum", "--fix", "--config", str(cfg)])
+        rc = du.main(["definitely-no-such-repo-xyz", "--fix", "--dry-run",
+                      "--no-fetch", "--no-progress", "--color", "never",
+                      "--config", str(cfg)])
         out = capsys.readouterr().out
         assert rc == 2
-        assert "read-only" in out
+        assert "read-only" not in out          # the old contract is gone
+        assert "no repo matches" in out        # and it refused anyway
 
 
 # -- QF: the freshness architecture (cache-index + live-verified matches) --
@@ -421,3 +435,227 @@ class TestStaleUrlRowNamesTheStaleSlug:
                 "published_detail": "skipped", "errors": [], "clean": 0}
         du.render_text({}, {"stale-remote-url": [r]}, meta)
         assert "a/thing (+1 more) ->" in capsys.readouterr().out
+
+
+class TestScopeLens:
+    """#115: --scope claimed to 'limit to a namespace' but only narrowed
+    ENUMERATION; every on-disk repo still rendered, and worse, filtering
+    the namespace list corrupted owns() so in-scope-config repos read
+    'not ours'."""
+
+    def _rec(self, key, fn):
+        return {"key": key, "full_name": fn, "sets": []}
+
+    def test_filters_by_owning_namespace(self):
+        a = self._rec("dazzlelib/x", "DazzleLib/x")
+        b = self._rec("dazzletools/y", "DazzleTools/y")
+        findings = {"dirty": [a, b], "clean": [a]}
+        got, hidden = du.apply_scope_lens(findings, ["DazzleLib"])
+        assert got["dirty"] == [a]
+        assert hidden == 1
+
+    def test_case_insensitive_multi_scope(self):
+        a = self._rec("dazzlelib/x", "DazzleLib/x")
+        b = self._rec("dazzleml/y", "DazzleML/y")
+        got, _ = du.apply_scope_lens({"dirty": [a, b]},
+                                     ["dazzlelib", "DAZZLEML"])
+        assert got["dirty"] == [a, b]
+
+    def test_clean_and_excluded_do_not_count_as_hidden(self):
+        b = self._rec("dazzleml/y", "DazzleML/y")
+        _, hidden = du.apply_scope_lens(
+            {"clean": [b], "excluded-by-policy": [b]}, ["DazzleLib"])
+        assert hidden == 0
+
+    def test_remoteless_repo_is_outside_any_namespace_scope(self):
+        r = {"key": "loglib", "full_name": None, "sets": []}
+        got, hidden = du.apply_scope_lens({"no-upstream": [r]}, ["DazzleLib"])
+        assert got["no-upstream"] == [] and hidden == 1
+
+
+class TestScopedFix:
+    """#114 / Addendum 3: --fix composes with a query, gated on the match
+    being unambiguous. AC-4' .. AC-4g."""
+
+    def _rec(self, key, cloned=True, excluded=None, live=1, installed=None):
+        cos = [{"path": f"C:/x/{key}/{i}", "excluded": False,
+                "git": {"branch": "main", "upstream": "origin/main"}}
+               for i in range(live)]
+        return {"key": key, "full_name": key, "cloned": cloned,
+                "excluded": excluded, "installed": installed,
+                "checkouts": cos, "sets": [],
+                "git": {"branch": "main", "upstream": "origin/main"}}
+
+    # -- the uniqueness gate (AC-4b, AC-4c) --
+
+    def test_actionable_skips_not_cloned(self):
+        m = {"a": self._rec("a", cloned=False, live=0)}
+        assert du.actionable_matches(m) == []
+
+    def test_actionable_skips_fully_excluded(self):
+        m = {"a": self._rec("a", excluded="path excluded by policy")}
+        assert du.actionable_matches(m) == []
+
+    def test_install_only_record_is_actionable(self):
+        """No live checkout but a pip install WITH A PATH -- a reinstall
+        is a real action, so it counts. The path matters: `pip install
+        -e` needs somewhere to point, so an install record without one
+        is not actionable (tightened after the tester's C2 finding)."""
+        m = {"a": self._rec("a", live=0,
+                            installed={"name": "a", "path": "C:/x/a"})}
+        assert du.actionable_matches(m) == ["a"]
+
+    def test_install_record_without_a_path_is_not_actionable(self):
+        m = {"a": self._rec("a", live=0, installed={"name": "a"})}
+        assert du.actionable_matches(m) == []
+
+    def test_multi_actionable_refuses_and_lists(self, capsys):
+        m = {"a": self._rec("a"), "b": self._rec("b")}
+        rc = du.fix_scoped_to_query({}, {}, m, _Args())
+        out = capsys.readouterr().out
+        assert rc == 2
+        assert "--fix needs ONE repo; this matched 2" in out
+        assert "  a" in out and "  b" in out
+        assert "narrow the name" in out
+
+    def test_uncloned_sibling_does_not_create_ambiguity(self, capsys):
+        """AC-4c: one real repo plus an uncloned namesake still acts."""
+        m = {"a": self._rec("a"), "b": self._rec("b", cloned=False, live=0)}
+        du.fix_scoped_to_query({}, {"behind-upstream": []}, m,
+                               _Args(dry_run=True))
+        assert "APPLYING FIXES to a" in capsys.readouterr().out
+
+    def test_no_match_says_nothing_extra(self, capsys):
+        """The 'not cloned here' line must not be asserted about a repo
+        that was never found -- render_query already explained."""
+        rc = du.fix_scoped_to_query({}, {}, {}, _Args())
+        assert rc == 2
+        assert "nothing to act on" not in capsys.readouterr().out
+
+    def test_matched_but_nothing_actionable_says_so(self, capsys):
+        m = {"a": self._rec("a", cloned=False, live=0)}
+        rc = du.fix_scoped_to_query({}, {}, m, _Args())
+        assert rc == 2
+        assert "nothing to act on" in capsys.readouterr().out
+
+    # -- scoping + flag composition (AC-4', AC-4f) --
+
+    def test_only_the_matched_repo_is_acted_on(self, capsys):
+        a, b = self._rec("a"), self._rec("b")
+        findings = {"behind-upstream": [a, b]}
+        du.fix_scoped_to_query({}, findings, {"a": a}, _Args(dry_run=True))
+        out = capsys.readouterr().out
+        assert "APPLYING FIXES to a" in out
+        assert '"b"' not in out and " b " not in out
+
+    def test_no_fetch_skips_pulls_but_keeps_reinstalls(self, capsys):
+        a = self._rec("a")
+        findings = {"behind-upstream": [a], "stale-install-metadata": []}
+        du.fix_scoped_to_query({}, findings, {"a": a},
+                               _Args(dry_run=True, no_fetch=True))
+        out = capsys.readouterr().out
+        assert "skipping pulls" in out
+        assert "behind-counts" in out
+
+
+class _Args:
+    """Minimal args stand-in; the real parser is exercised by the CLI."""
+
+    def __init__(self, dry_run=False, yes=False, no_fetch=False, json=False):
+        self.dry_run = dry_run
+        self.yes = yes
+        self.no_fetch = no_fetch
+        self.json = json
+
+
+class TestScopedFixCli:
+    def test_json_plus_fix_still_refuses(self, tmp_path, capsys):
+        """AC-4e."""
+        cfg = tmp_path / "c.json"
+        cfg.write_text("{}", encoding="utf-8")
+        rc = du.main(["anything", "--fix", "--json", "--config", str(cfg)])
+        out = capsys.readouterr().out
+        assert rc == 2
+        assert "not available in --json mode" in out
+
+
+class TestTesterFindings0812614:
+    """Four defects found by an independent tester against the #114/#115
+    work, all in the same two paths, all variations of one theme: state
+    or intent asserted without being measured."""
+
+    def _cached_meta(self, **kw):
+        m = {"namespace_count": 11, "org_repo_count": 124,
+             "cloned_count": 5, "install_count": 0, "gh_detail": "t",
+             "published_detail": "skipped", "roots": ["X"], "errors": [],
+             "clean": 0, "config": None}
+        m.update(kw)
+        return m
+
+    def test_A_cached_replay_drops_the_previous_runs_scope_lens(
+            self, tmp_path, monkeypatch, capsys):
+        """FINDING A: a --scope run wrote its lens into the cache, so
+        every later plain --cached printed 'SCOPE showing only DazzleLib'
+        above 69 rows from other namespaces. Live on the real cache."""
+        rec = {"o/hit": _stale_record("o/hit", "C:/nonexistent/hit")}
+        meta = self._cached_meta(scope_lens=["DazzleLib"], scope_hidden=91,
+                                 set_lens=["dazzle"], set_hidden=7)
+        monkeypatch.setattr(du.scancache, "load",
+                            lambda **k: (rec, meta, 60.0, None))
+        monkeypatch.setattr(du, "gh_status", lambda: (False, "test"))
+        cfgp = tmp_path / "c.json"
+        cfgp.write_text("{}", encoding="utf-8")
+        du.main(["--cached", "--max-age", "999999", "--no-progress",
+                 "--color", "never", "--config", str(cfgp)])
+        out = capsys.readouterr().out
+        assert "SCOPE" not in out
+        assert "SET LENS" not in out
+
+    def test_D_stale_no_fetch_warning_does_not_bleed_into_replay(
+            self, tmp_path, monkeypatch, capsys):
+        """FINDING D: same root cause -- stale_behind described the run
+        that WROTE the cache, not this one."""
+        rec = {"o/hit": _stale_record("o/hit", "C:/nonexistent/hit")}
+        meta = self._cached_meta(stale_behind=True)
+        monkeypatch.setattr(du.scancache, "load",
+                            lambda **k: (rec, meta, 60.0, None))
+        monkeypatch.setattr(du, "gh_status", lambda: (False, "test"))
+        cfgp = tmp_path / "c.json"
+        cfgp.write_text("{}", encoding="utf-8")
+        du.main(["--cached", "--max-age", "999999", "--no-progress",
+                 "--color", "never", "--config", str(cfgp)])
+        out = capsys.readouterr().out
+        assert "pull status unknown" not in out
+
+    def test_B_cached_plus_fix_refuses_instead_of_no_op(self, tmp_path,
+                                                        capsys):
+        """FINDING B: --fix was accepted and silently ignored on the
+        cached path -- no plan, no error, no reason."""
+        cfgp = tmp_path / "c.json"
+        cfgp.write_text("{}", encoding="utf-8")
+        rc = du.main(["--cached", "--fix", "--dry-run", "--config",
+                      str(cfgp), "--color", "never"])
+        out = capsys.readouterr().out
+        assert rc == 2
+        assert "does not act on replayed data" in out
+
+    def test_C_bulk_fix_plus_json_refuses(self, tmp_path, capsys):
+        """FINDING C: bulk --fix --json rendered TEXT to a caller that
+        asked for a document."""
+        cfgp = tmp_path / "c.json"
+        cfgp.write_text("{}", encoding="utf-8")
+        rc = du.main(["--fix", "--json", "--config", str(cfgp)])
+        out = capsys.readouterr().out
+        assert rc == 2
+        assert "not available in --json mode" in out
+
+    def test_C2_install_only_record_is_actionable(self):
+        """FINDING C2: the query gate was STRICTER than the bulk path it
+        scopes -- an installed-but-uncloned dist (dazzle-dz) was refused
+        by `--fix <name>` while bulk --fix would reinstall it."""
+        m = {"dazzle-dz": {"key": "dazzle-dz", "full_name": None,
+                           "cloned": False, "excluded": None,
+                           "checkouts": [],
+                           "installed": {"name": "dazzle-dz",
+                                         "path": "C:/x/alias"}}}
+        assert du.actionable_matches(m) == ["dazzle-dz"]

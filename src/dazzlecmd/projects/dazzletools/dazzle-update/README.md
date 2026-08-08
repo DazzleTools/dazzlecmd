@@ -27,6 +27,7 @@ dz dazzle-update --published        Also compare against PyPI (network)
 dz dazzle-update --json             Machine-readable, for cross-box diffing
 dz dazzle-update --fix --dry-run    Show what --fix would do
 dz dazzle-update --fix              Apply ff-only pulls + editable reinstalls
+dz dazzle-update dazzlelink --fix   Fix exactly one repo (must match one)
 ```
 
 Bare positional arguments are always repo queries -- a name or glob,

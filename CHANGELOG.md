@@ -4,6 +4,17 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.14-alpha] - 2026-08-07
+
+### Fixed
+- `--scope` did not filter the report. It narrowed only the GitHub namespace enumeration, so every repository on disk still rendered -- a flag that accepted its value, exited cleanly, and appeared to work while quietly showing everything. It now filters, states how many repositories with findings it hid, applies on replayed scans as well as fresh ones, and warns when given a namespace that does not exist rather than returning an empty report that reads as a clean machine.
+- Scoping also corrupted ownership, because the same namespace list decided what counted as ours. Under `--scope DazzleLib`, this project's own repositories rendered as "not ours" and would have been refused by `--fix`. What is enumerated and what is owned are now separate questions: a lens changes the view, never the facts.
+- `--cached` replays inherited the lens of whichever run had written the cache, so a plain replay could announce it was showing one namespace while listing dozens of others. Metadata that describes an invocation is now reset on replay, and a scan narrowed by `--scope` no longer writes the shared cache at all -- like `--root`, it enumerates less than the whole, and a partial population must not become the index.
+- `--fix` was accepted and silently ignored when combined with `--cached`, and rendered human text when combined with `--json`. Both now refuse with the reason and the alternatives, because a write flag that appears to have been honoured and did nothing is worse than one that declines.
+
+### Added
+- `--fix` can be scoped to a single repository by naming it: `dz dazzle-update dazzlelink --fix`. The detail view previously refused all writes; it now applies exactly the actions its own card just reported, which is the read-fix-verify loop the view was built for. A name matching several repositories refuses and lists them rather than acting broadly, since applying to everything a glob matched would make per-action confirmation a formality rather than a safeguard. Repositories that are not cloned, or whose every checkout is excluded, cannot create that ambiguity. Under `--no-fetch` the pull half declines because the counts behind it were never verified, while reinstalls, which rest on local evidence, remain available.
+
 ## [0.12.13-alpha] - 2026-08-07
 
 ### Fixed
@@ -4155,7 +4166,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.13a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.14a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
