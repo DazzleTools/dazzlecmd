@@ -830,19 +830,102 @@ def _confirm(prompt, describe, assume_yes=False):
         if answer in ("?", "h", "help"):
             safe_print(describe)
             safe_print("    y = do this one   n = skip (default)")
-            safe_print("    a = do this and all remaining without asking")
+            safe_print("    a = do this and all remaining without asking,")
+            safe_print("        including follow-on work a fix reveals")
             safe_print("    q = stop; nothing further is done")
             continue
         safe_print("    unrecognized -- y, n, a, q, or ? for detail")
+
+
+def _target_checkout(r):
+    """The one checkout an action may touch, or None.
+
+    Never paths[0]: that is discovery order (alphabetical), which for
+    dazzlecmd is `fiber-work` -- a feature branch. An install-only
+    record has no checkouts to choose between, so its install path is
+    unambiguous.
+    """
+    target = r.get("primary")
+    if not target and not (r.get("checkouts") or []):
+        target = (r.get("installed") or {}).get("path")
+    return target
+
+
+def _git_paths(path, *args):
+    """A list of paths from git, or None if git could not answer.
+
+    -z because git QUOTES non-ASCII paths in its normal output --
+    `"docs/caf\\303\\251.md"` -- and that escaped literal never matches
+    the real filename, so the comparison would be against git's display
+    format rather than against the tree. Spaces, which look like they
+    need escaping, are NOT quoted; the non-ASCII case is the one that
+    bites.
+    """
+    res = subprocess.run(["git", "-C", str(path)] + list(args),
+                         capture_output=True, text=True,
+                         encoding="utf-8", errors="replace")
+    if res.returncode != 0:
+        return None
+    return [p for p in res.stdout.split("\0") if p]
+
+
+def _path_key(p):
+    """Comparison key. Windows filesystems are case-insensitive, so
+    `docs/Platforms.md` and `docs/platforms.md` are ONE file and do
+    collide; folding can only widen the intersection, which is the
+    cautious direction. Used for MATCHING only -- never for display."""
+    return p.casefold() if os.name == "nt" else p
+
+
+def _fold_paths(paths):
+    return {_path_key(p) for p in paths}
+
+
+def pull_collisions(path):
+    """Paths where an incoming fast-forward would touch uncommitted work.
+
+    Returns (paths, measured). `measured` is False when git could not
+    answer; a failed measurement must never read as permission.
+
+    This replaces asking "is the tree dirty?" -- a proxy that refused
+    five of twelve real scenarios git completes cleanly, including the
+    reported one (an untracked `.vscode/settings.json` against incoming
+    commits that added different files entirely). The question git
+    actually answers is whether what is coming in touches what you have.
+    See tests/one-offs/thinking/pulllab.py.
+    """
+    dirty = _git_paths(path, "diff", "--name-only", "-z", "HEAD")
+    untracked = _git_paths(path, "ls-files", "--others",
+                           "--exclude-standard", "-z")
+    incoming = _git_paths(path, "diff", "--name-only", "-z", "HEAD..@{u}")
+    adds = _git_paths(path, "diff", "--name-only", "-z",
+                      "--diff-filter=A", "HEAD..@{u}")
+    if any(x is None for x in (dirty, untracked, incoming, adds)):
+        return [], False
+    # An untracked file can only be hit by an incoming ADD: a path that
+    # upstream MODIFIES exists in HEAD, so it is tracked here too and
+    # belongs to the other half of this union.
+    hit = ((_fold_paths(adds) & _fold_paths(untracked))
+           | (_fold_paths(incoming) & _fold_paths(dirty)))
+    # Report the LOCAL spelling, not the comparison key. The key is
+    # casefolded on Windows, so returning it would name `changelog.md`
+    # for a file called CHANGELOG.md and send the reader looking for
+    # something that does not exist. Local rather than incoming because
+    # these are the user's own files, sitting in their tree right now.
+    local = {}
+    for p in list(untracked) + list(dirty):
+        local.setdefault(_path_key(p), p)
+    return sorted(local.get(k, k) for k in hit), True
 
 
 def apply_fixes(findings, dry_run=False, assume_yes=False, interactive=True,
                 report_applied=None):
     """The two provably-safe operations. Everything else refuses.
 
-    Refuses on any dirty tree rather than stashing: auto-stashing is a
-    well-known way to lose work, and the judgment of what to do with
-    in-progress changes belongs to a human.
+    Never stashes: auto-stashing is a well-known way to lose work, and
+    the judgment of what to do with in-progress changes belongs to a
+    human. What it refuses on is measured rather than assumed -- see
+    pull_collisions.
     """
     actions, refused = [], []
 
@@ -855,22 +938,41 @@ def apply_fixes(findings, dry_run=False, assume_yes=False, interactive=True,
             refused.append((r, "primary checkout has no upstream -- "
                                "nothing to fast-forward from"))
             continue
-        if (g.get("dirty_count") or 0) > 0 or (g.get("untracked_count") or 0) > 0:
-            refused.append((r, "dirty tree -- refusing to pull (will not stash)"))
-            continue
-        if (g.get("churn_count") or 0) > 0:
-            # Churn is not counted dirty for REPORTING, but the write
-            # path stays conservative: a pull often touches the very
-            # file the hook restamps, and git would refuse mid-fix.
-            refused.append((r, "auto-stamp churn present -- refusing to "
-                               "pull (will not stash)"))
-            continue
         if (g.get("ahead") or 0) > 0:
             refused.append((r, "diverged -- needs a merge, not a fast-forward"))
             continue
         if r.get("foreign"):
             refused.append((r, "not ours -- refusing to pull an upstream you "
                                "only track"))
+            continue
+        # Ask whether the incoming work touches uncommitted work, rather
+        # than whether uncommitted work merely EXISTS. Churn needs no
+        # case of its own here: git does not know the concept, so a
+        # restamped file is simply a modified tracked file and the probe
+        # sees it -- catching the bump that touches it and permitting the
+        # pull that does not.
+        target = _target_checkout(r)
+        if not target:
+            # Nowhere to measure. The action loop refuses this record by
+            # name; keep the conservative answer until then.
+            if ((g.get("dirty_count") or 0) or (g.get("untracked_count") or 0)
+                    or (g.get("churn_count") or 0)):
+                refused.append((r, "uncommitted changes, and no primary "
+                                   "checkout to measure them against -- "
+                                   "refusing to pull"))
+                continue
+            actions.append(("pull", r))
+            continue
+        hits, measured = pull_collisions(target)
+        if not measured:
+            refused.append((r, "could not determine whether a pull would "
+                               "collide with local work -- refusing"))
+            continue
+        if hits:
+            shown = ", ".join(hits[:3])
+            more = f" (+{len(hits) - 3} more)" if len(hits) > 3 else ""
+            refused.append((r, f"would overwrite uncommitted work: {shown}"
+                               f"{more} -- refusing to pull (will not stash)"))
             continue
         actions.append(("pull", r))
 
@@ -913,18 +1015,11 @@ def apply_fixes(findings, dry_run=False, assume_yes=False, interactive=True,
     done = skipped = failed = 0
     quit_requested = False
     for verb, r in actions:
-        # Act ONLY on the primary checkout, never on paths[0]. paths[0]
-        # is discovery order (alphabetical), which for dazzlecmd is
-        # `fiber-work` -- a feature branch. Reinstalling or fast-
-        # forwarding there would put main's material into someone's
+        # Act ONLY on the primary checkout. Reinstalling or fast-
+        # forwarding elsewhere would put main's material into someone's
         # in-progress work. Where no primary could be chosen, refuse:
         # guessing is exactly what this must not do.
-        target = r.get("primary")
-        if not target and not (r.get("checkouts") or []):
-            # An install-only record (a subpackage, or a package whose
-            # source is outside any scanned repo) has no checkouts to
-            # choose between -- its single install path is unambiguous.
-            target = (r.get("installed") or {}).get("path")
+        target = _target_checkout(r)
         if not target:
             refused.append((r, f"no primary checkout ({r.get('primary_reason')})"
                                " -- refusing to guess which one to touch"))
@@ -977,6 +1072,12 @@ def apply_fixes(findings, dry_run=False, assume_yes=False, interactive=True,
         report_applied["quit"] = quit_requested
         report_applied["skipped"] = skipped
         report_applied["refused"] = len(refused)
+        # Consent given DURING this pass, not just the flag it began
+        # with. `a` upgrades assume_yes locally, and a caller that loops
+        # has to carry that forward or it re-asks for permission the
+        # user has already granted -- the same escape the `q` signal
+        # made before it was reported out.
+        report_applied["assume_yes"] = assume_yes
     if not dry_run:
         safe_print("")
         tail = f", {failed} failed" if failed else ""
@@ -1228,6 +1329,12 @@ def match_by_path(records, root):
 
 _PATH_NOTES_SAID = set()
 
+#: Directories asked about that are absent from the record they resolved
+#: to, stored as the user would recognise them rather than normalised --
+#: they are shown back verbatim. The write path must not act elsewhere on
+#: the strength of one.
+_UNCOVERED_PATH_QUERY = set()
+
 
 def match_records(records, queries):
     """Records matching any query term, case-insensitive.
@@ -1251,6 +1358,7 @@ def match_records(records, queries):
             remaining.append(q)
             continue
         root, note = resolve_path_query(q)
+        here = os.path.abspath(os.path.join(os.getcwd(), str(q)))
         # match_records runs more than once per invocation (card, then
         # the fix path); a resolution note is a fact about the query,
         # not about the call, so say it once.
@@ -1261,6 +1369,26 @@ def match_records(records, queries):
             hits = match_by_path(records, root)
             if hits:
                 out.update(hits)
+                # The resolved OWNER is not necessarily the directory
+                # asked about. A worktree git cannot open resolves to
+                # its owner, and the answer then describes checkouts
+                # that do not include where the user is standing -- and
+                # --fix would act THERE, not here. Say so; presenting a
+                # sibling's state as "the project here" is precisely
+                # the substitution this tool exists to refuse.
+                covered = any(norm(here) == norm(pth)
+                              or norm(here).startswith(norm(pth) + os.sep)
+                              for r in hits.values()
+                              for pth in (r.get("paths") or []))
+                if not covered:
+                    warn = (f"  NOTE        {here} is NOT among the "
+                            f"checkouts below -- it is invisible to the "
+                            f"scan, so what follows describes the owning "
+                            f"repository, not this directory")
+                    if warn not in _PATH_NOTES_SAID:
+                        _PATH_NOTES_SAID.add(warn)
+                        safe_print(warn)
+                    _UNCOVERED_PATH_QUERY.add(here)
             else:
                 safe_print(f"  {q}: resolved to {root}, which is not in "
                            f"this scan's population")
@@ -1518,6 +1646,23 @@ def fix_scoped_to_query(records, findings, matched, args, meta=None,
         # something about a repo that was never found.
         return 2
     _fix_config = config or EcosystemConfig()
+
+    # Refuse to act elsewhere on the strength of "here". If the query
+    # was a PATH whose directory is absent from the record it resolved
+    # to, then every action would run against a checkout the user is
+    # not in -- silently, and reported as though it were theirs.
+    if _UNCOVERED_PATH_QUERY:
+        where = sorted(_UNCOVERED_PATH_QUERY)[0]
+        safe_print("")
+        safe_print("  refusing to --fix from here: this directory is not "
+                   "one of the repository's known checkouts")
+        safe_print(f"    you are in : {where}")
+        safe_print("    actions would run against the checkouts listed "
+                   "above instead")
+        safe_print("  name the repository explicitly to act on it, or "
+                   "repair this worktree first")
+        return 2
+
     act = actionable_matches(matched)
     if not act:
         safe_print("  nothing to act on -- the match is not cloned here, "
@@ -1568,6 +1713,10 @@ def fix_scoped_to_query(records, findings, matched, args, meta=None,
     # cannot iterate, because nothing changed for the second pass to
     # observe; it says so instead of implying convergence.
     key = act[0]
+    # Consent is a property of the RUN, not of a pass. `a` means "and
+    # all remaining without asking", and follow-on work a pull creates
+    # is remaining work of the same run -- so once given it carries.
+    consent = args.yes
     for attempt in range(1, MAX_FIX_PASSES + 1):
         if attempt > 1:
             safe_print("")
@@ -1584,8 +1733,9 @@ def fix_scoped_to_query(records, findings, matched, args, meta=None,
                 break
         tally = {}
         rc = apply_fixes(scoped, dry_run=args.dry_run,
-                         assume_yes=args.yes, interactive=interactive,
+                         assume_yes=consent, interactive=interactive,
                          report_applied=tally)
+        consent = consent or bool(tally.get("assume_yes"))
         if args.dry_run:
             safe_print("")
             safe_print("  (dry run shows one pass; applying may reveal "
@@ -1697,6 +1847,13 @@ def build_parser():
 
 def main(argv=None):
     t_start = time.perf_counter()
+    # Both describe THIS invocation -- which notes have been said, and
+    # which directory the answer is not about. main() is importable and
+    # re-callable, so leaving them to accumulate is the same defect that
+    # let a --scope lens from one run narrate the next one: state that
+    # describes a run, kept as though it described the data.
+    _PATH_NOTES_SAID.clear()
+    _UNCOVERED_PATH_QUERY.clear()
     args = build_parser().parse_args(argv if argv is not None else sys.argv[1:])
     set_verbosity(args.verbose)
 

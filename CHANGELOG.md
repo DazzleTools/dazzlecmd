@@ -4,6 +4,17 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.17-alpha] - 2026-08-08
+
+### Fixed
+- Asking about a directory that the scan cannot see answered as though it could. A worktree whose gitdir points somewhere Windows git cannot follow resolves to the project that owns it -- correctly, since that is the only true thing available about it -- but the report then listed that project's checkouts without mentioning that the directory asked about was not among them. `dz dazzle-update .` described a sibling checkout's branch, counts, and cleanliness as the state here, while `git pull` in this directory failed outright. The answer still resolves to the owning project; it now says plainly that the directory is absent from the scan and that what follows describes the repository rather than this location.
+- `--fix` would have acted on a different checkout than the one it was invoked from, in exactly that case, and reported the result as though it were this directory's. It now declines when the directory asked about is not one of the repository's known checkouts, names where you are, and says that naming the repository explicitly is how to act on it deliberately. Whether the other checkout happened to be dirty is not what should have stopped it.
+- `--fix` refused to pull any repository with uncommitted changes, calling it a "dirty tree" -- including trees that were not dirty at all. A repository holding one untracked editor setting file, against incoming commits that added entirely different files, was blocked from a fast-forward that would have applied cleanly. Whether a pull is safe now depends on whether the incoming changes touch uncommitted work, which is the question git itself answers, rather than on whether uncommitted work merely exists. Refusals name the files in the way instead of describing the tree, and a repository whose state cannot be determined is still refused, because a measurement that failed is not permission.
+- The same blanket refusal applied to auto-stamp churn, on the reasoning that a pull usually touches the file the commit hook rewrites. Usually is now measured: git treats a restamped file as an ordinary modified file, so the same check catches the version bump that genuinely collides and permits the pull that does not.
+- Files named in a refusal keep the capitalisation they have on disk. Matching has to ignore case on Windows, where `CHANGELOG.md` and `changelog.md` are one file, but the comparison form was being printed as well -- so a refusal pointed at `changelog.md`, a file the reader would not find.
+- Running the tool more than once inside a single process carried the first run's answers into the second, so a later run could decline to act on a directory it had never been asked about.
+- Answering `a` at a confirmation prompt stopped asking only until the current round finished. Because a pull creates follow-on work, the next round began asking again -- so "do this and all remaining without asking" held for one pull and then asked about the reinstall that pull had just made necessary. Permission granted during a run now lasts for that run, which is what the prompt offered.
+
 ## [0.12.16-alpha] - 2026-08-08
 
 ### Added
@@ -4186,7 +4197,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.16a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.17a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

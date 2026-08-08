@@ -917,6 +917,108 @@ class TestQuitStopsTheLoop:
         assert "nothing left to fix" in capsys.readouterr().out
 
 
+class TestConsentCarriesAcrossPasses:
+    """USER FINDING 2026-08-08, verbatim: "Shouldn't the 'a' (for all)
+    apply to all fixes?"
+
+        apply? [y/N/a/q/?] a
+          Claude-Session-Backup: pull ok
+        re-checking Claude-Session-Backup after pass 1...
+        REINSTALL  Claude-Session-Backup
+        apply? [y/N/a/q/?]          <-- asked again
+
+    `a` upgraded assume_yes on a LOCAL inside apply_fixes, which died
+    with the call; the next pass began from args.yes again. Exactly the
+    escape `q` made before it was reported out -- the loop wraps code
+    that owns its own consent semantics, and every internal signal is
+    invisible to the outer layer unless deliberately surfaced. `q` was
+    fixed in 0.12.15 and this one was not noticed at the same time.
+
+    Consent is a property of the RUN: follow-on work a pull creates is
+    remaining work of the same run, which is what "all remaining" said.
+    """
+
+    def _rec(self, k):
+        return {"key": k, "full_name": k, "cloned": True, "excluded": None,
+                "installed": {"name": k, "path": "C:/x/" + k},
+                "declared_dist": None, "pypi_owned": None, "checkouts": [],
+                "sets": [], "git": {}, "primary": "C:/x/" + k}
+
+    def test_all_is_reported_out_of_the_pass(self, monkeypatch):
+        """apply_fixes must SAY that consent was granted mid-pass."""
+        class _Res:
+            returncode = 0
+            stdout = stderr = ""
+        monkeypatch.setattr(du.subprocess, "run", lambda *a, **k: _Res())
+        monkeypatch.setattr(du, "_confirm", lambda *a, **k: "all")
+        tally = {}
+        du.apply_fixes({"stale-install-metadata": [self._rec("o/a")]},
+                       dry_run=False, assume_yes=False, interactive=True,
+                       report_applied=tally)
+        assert tally["assume_yes"] is True
+
+    def test_answering_n_does_not_grant_consent(self, monkeypatch):
+        """The counterpart -- reporting it out must not report it ON."""
+        monkeypatch.setattr(du, "_confirm", lambda *a, **k: "no")
+        tally = {}
+        du.apply_fixes({"stale-install-metadata": [self._rec("o/a")]},
+                       dry_run=False, assume_yes=False, interactive=True,
+                       report_applied=tally)
+        assert tally["assume_yes"] is False
+
+    def test_the_loop_stops_asking_after_all(self, monkeypatch):
+        """THE REPORTED CASE: pass 2 must not re-prompt."""
+        seen = []
+
+        def _apply(findings, report_applied=None, **kw):
+            seen.append(kw.get("assume_yes"))
+            if report_applied is not None:
+                report_applied.update({"applied": 1, "quit": False,
+                                       "assume_yes": True})
+            return 0
+
+        monkeypatch.setattr(du, "apply_fixes", _apply)
+        monkeypatch.setattr(du, "refresh_matched", lambda *a, **k: None)
+        # Without --yes the scoped path requires a terminal to confirm
+        # in; pytest has none, so without this the loop never runs and
+        # the test passes by asserting nothing.
+        monkeypatch.setattr(du.sys.stdin, "isatty", lambda: True)
+        r = self._rec("o/a")
+        monkeypatch.setattr(du, "classify",
+                            lambda *a, **k: {"stale-install-metadata": [r]})
+        du.fix_scoped_to_query({"o/a": r}, {"stale-install-metadata": [r]},
+                               {"o/a": r}, _Args())
+        assert seen[0] is False, "first pass should honour args.yes"
+        assert all(s is True for s in seen[1:]), (
+            f"re-asked after 'all' was granted: {seen}")
+        assert len(seen) > 1, "loop did not iterate; test proves nothing"
+
+    def test_consent_is_not_invented_when_never_granted(self, monkeypatch):
+        """Carrying consent must not manufacture it."""
+        seen = []
+
+        def _apply(findings, report_applied=None, **kw):
+            seen.append(kw.get("assume_yes"))
+            if report_applied is not None:
+                report_applied.update({"applied": 1, "quit": False,
+                                       "assume_yes": False})
+            return 0
+
+        monkeypatch.setattr(du, "apply_fixes", _apply)
+        monkeypatch.setattr(du, "refresh_matched", lambda *a, **k: None)
+        # Without --yes the scoped path requires a terminal to confirm
+        # in; pytest has none, so without this the loop never runs and
+        # the test passes by asserting nothing.
+        monkeypatch.setattr(du.sys.stdin, "isatty", lambda: True)
+        r = self._rec("o/a")
+        monkeypatch.setattr(du, "classify",
+                            lambda *a, **k: {"stale-install-metadata": [r]})
+        du.fix_scoped_to_query({"o/a": r}, {"stale-install-metadata": [r]},
+                               {"o/a": r}, _Args())
+        assert all(s is False for s in seen), (
+            f"consent appeared without being given: {seen}")
+
+
 class TestPathQueries:
     """USER FINDING 2026-08-08: `dz dazzle-update .` from a project
     directory listed 12 unrelated repos. `.` went through SUBSTRING
@@ -1018,3 +1120,141 @@ class TestPathQueries:
         a = "C:" + "\\" + "code" + "\\" + "a"
         recs = {"o/a": {"key": "o/a", "full_name": "o/a", "paths": [a]}}
         assert du.match_by_path(recs, a + "b") == {}
+
+
+class TestUncoveredPathQuery:
+    """USER FINDING 2026-08-08, the second half. Standing in the broken
+    dazzlesum worktree, `dz dazzle-update .` answered with THREE
+    checkouts, none of them the directory the user was in, while `git
+    pull` there failed outright -- and `--fix` would have acted on a
+    SIBLING checkout, refusing only because that other tree happened to
+    be dirty.
+
+    Resolving to the owner is right: it is the only true answer git can
+    give about that directory. Presenting the owner's state as "the
+    project HERE" without saying so is the substitution this tool exists
+    to refuse, and acting elsewhere on the strength of "here" is that
+    same substitution with write access.
+    """
+
+    def setup_method(self):
+        du._PATH_NOTES_SAID.clear()
+        du._UNCOVERED_PATH_QUERY.clear()
+
+    teardown_method = setup_method
+
+    def _rec(self, key, paths, installed=None):
+        cos = [{"path": p, "excluded": False,
+                "git": {"branch": "main", "upstream": "origin/main"}}
+               for p in paths]
+        return {"key": key, "full_name": key, "cloned": True,
+                "excluded": None, "installed": installed, "paths": list(paths),
+                "checkouts": cos, "sets": [], "primary": (paths or [None])[0],
+                "git": {"branch": "main", "upstream": "origin/main"}}
+
+    # -- the disclosure --
+
+    def test_a_directory_absent_from_the_record_is_disclosed(
+            self, tmp_path, monkeypatch, capsys):
+        owner = tmp_path / "owner"
+        owner.mkdir()
+        elsewhere = tmp_path / "wt"
+        elsewhere.mkdir()
+        monkeypatch.setattr(du, "resolve_path_query",
+                            lambda q, cwd=None: (str(owner), None))
+        monkeypatch.chdir(elsewhere)
+        recs = {"o/a": self._rec("o/a", [str(owner)])}
+
+        got = du.match_records(recs, ["."])
+        out = capsys.readouterr().out
+
+        # The owner is still the answer -- the note qualifies it, it
+        # does not withhold it.
+        assert set(got) == {"o/a"}
+        assert "NOT among the checkouts below" in out
+        assert str(elsewhere) in out
+        assert du._UNCOVERED_PATH_QUERY
+
+    def test_no_disclosure_when_the_directory_IS_the_checkout(
+            self, tmp_path, monkeypatch, capsys):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        monkeypatch.setattr(du, "resolve_path_query",
+                            lambda q, cwd=None: (str(repo), None))
+        monkeypatch.chdir(repo)
+        recs = {"o/a": self._rec("o/a", [str(repo)])}
+
+        du.match_records(recs, ["."])
+
+        assert "NOT among the checkouts" not in capsys.readouterr().out
+        assert not du._UNCOVERED_PATH_QUERY
+
+    def test_a_subdirectory_of_a_checkout_is_covered(
+            self, tmp_path, monkeypatch, capsys):
+        """Standing in `src/` of a checkout is standing IN it."""
+        repo = tmp_path / "repo"
+        deep = repo / "src" / "pkg"
+        deep.mkdir(parents=True)
+        monkeypatch.setattr(du, "resolve_path_query",
+                            lambda q, cwd=None: (str(repo), None))
+        monkeypatch.chdir(deep)
+        recs = {"o/a": self._rec("o/a", [str(repo)])}
+
+        du.match_records(recs, ["."])
+
+        assert "NOT among the checkouts" not in capsys.readouterr().out
+        assert not du._UNCOVERED_PATH_QUERY
+
+    def test_a_name_query_never_sets_the_flag(self, capsys):
+        """`dz dazzle-update dazzlesum` from anywhere is a question
+        about a NAME; where the user is standing is irrelevant to it."""
+        du.match_records(POP, ["dazzlesum"])
+        assert not du._UNCOVERED_PATH_QUERY
+
+    # -- the write guard --
+
+    def test_fix_refuses_when_the_cwd_is_not_a_known_checkout(self, capsys):
+        du._UNCOVERED_PATH_QUERY.add(
+            "C:" + "\\" + "code" + "\\" + "proj" + "\\" + "github")
+        r = self._rec("o/a", ["C:/code/proj/other"])
+        rc = du.fix_scoped_to_query({"o/a": r}, {"behind-upstream": [r]},
+                                    {"o/a": r}, _Args(dry_run=True))
+        out = capsys.readouterr().out
+        assert rc == 2
+        assert "refusing to --fix from here" in out
+        assert "C:" + "\\" + "code" + "\\" + "proj" + "\\" + "github" in out
+        assert "APPLYING FIXES" not in out
+
+    def test_the_refusal_names_the_way_out(self, capsys):
+        du._UNCOVERED_PATH_QUERY.add(
+            "C:" + "\\" + "code" + "\\" + "proj" + "\\" + "github")
+        r = self._rec("o/a", ["C:/code/proj/other"])
+        du.fix_scoped_to_query({"o/a": r}, {"behind-upstream": [r]},
+                               {"o/a": r}, _Args(dry_run=True))
+        out = capsys.readouterr().out
+        assert "name the repository explicitly" in out
+
+    def test_fix_proceeds_normally_when_the_cwd_is_covered(self, capsys):
+        r = self._rec("o/a", ["C:/code/proj"],
+                      installed={"name": "a", "path": "C:/code/proj"})
+        du.fix_scoped_to_query({"o/a": r}, {"stale-install-metadata": [r]},
+                               {"o/a": r}, _Args(dry_run=True))
+        out = capsys.readouterr().out
+        assert "refusing to --fix from here" not in out
+        assert "APPLYING FIXES to o/a" in out
+
+    def test_a_new_run_does_not_inherit_the_previous_run_s_guard(
+            self, tmp_path, capsys):
+        """main() is importable and re-callable, so a set that describes
+        THIS invocation must be cleared by it. Otherwise one path query
+        arms the guard and every later call in the process refuses to
+        --fix a directory it was never asked about -- the same shape as
+        a --scope lens narrating the run after it."""
+        du._UNCOVERED_PATH_QUERY.add(r"C:\somewhere\else")
+        cfg = tmp_path / "c.json"
+        cfg.write_text("{}", encoding="utf-8")
+
+        du.main(["--list-kinds", "--config", str(cfg)])
+
+        assert not du._UNCOVERED_PATH_QUERY, (
+            "a stale guard survived into a new invocation")

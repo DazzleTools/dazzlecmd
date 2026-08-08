@@ -8,9 +8,17 @@ stamps as dirt trains the reader to ignore the dirty section.
 
 Design: reclassify, never hide. Churn moves out of dirty_count into its
 own count, rows show it as 'N churn', a NOTE names how many repos were
-affected, a repo with churn AND a real edit stays dirty, and --fix
-still refuses to pull over churn (the pull usually touches the very
-file the hook restamps).
+affected, and a repo with churn AND a real edit stays dirty.
+
+The --fix side of this changed on 2026-08-08. It used to refuse any
+pull over churn, on the reasoning that "the pull usually touches the
+very file the hook restamps" -- USUALLY being the tell. git knows
+nothing about churn: a restamped file is simply a modified tracked
+file, so the collision probe sees it without being told, and answers
+the specific question instead of the general one. Measured across real
+repos in tests/one-offs/thinking/pulllab.py: the blanket churn refusal
+blocked a pull git completes cleanly, and the probe catches the version
+bump that genuinely collides.
 """
 
 from __future__ import annotations
@@ -136,27 +144,88 @@ class TestRendering:
         assert du.count_churn_repos(records) == 1
 
 
+class _Probe:
+    """Answers the collision probe; refuses to run anything else.
+
+    Deliberately isolated from the payload, per test_apply_fixes: a fake
+    that let a `git pull` through would write to a real repository the
+    moment a guard regressed.
+    """
+
+    def __init__(self, dirty=(), untracked=(), incoming=(), adds=()):
+        self.answers = {"dirty": list(dirty), "untracked": list(untracked),
+                        "incoming": list(incoming), "adds": list(adds)}
+        self.acted = []
+
+    def __call__(self, cmd, **kw):
+        cmd = list(cmd)
+
+        class R:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+        r = R()
+        if "ls-files" in cmd:
+            key = "untracked"
+        elif "--diff-filter=A" in cmd:
+            key = "adds"
+        elif "HEAD..@{u}" in cmd:
+            key = "incoming"
+        elif "diff" in cmd:
+            key = "dirty"
+        else:
+            self.acted.append(cmd)
+            return r
+        r.stdout = "\0".join(self.answers[key])
+        return r
+
+
 class TestFixGate:
-    def test_fix_refuses_pull_over_churn(self, capsys):
+    """Churn needs no case of its own in the write path: it is a modified
+    tracked file, which is what the probe already measures."""
+
+    def test_churn_the_pull_touches_is_refused_by_name(self, monkeypatch,
+                                                       capsys):
+        """The common half -- nearly every version bump edits the very
+        file the hook restamps."""
+        probe = _Probe(dirty=["src/pkg/_version.py"],
+                       incoming=["src/pkg/_version.py", "CHANGELOG.md"])
+        monkeypatch.setattr(du.subprocess, "run", probe)
         r = _record("o/a", churn=1, behind=2)
-        rc = du.apply_fixes({"behind-upstream": [r]}, dry_run=True,
-                            assume_yes=True, interactive=False)
+        rc = du.apply_fixes({"behind-upstream": [r]}, assume_yes=True,
+                            interactive=False)
         out = capsys.readouterr().out
-        assert "auto-stamp churn present" in out
+        assert probe.acted == []
+        assert "src/pkg/_version.py" in out
+        assert "would overwrite uncommitted work" in out
         assert rc == 0
 
-    def test_fix_still_refuses_plain_dirty_without_falling_through(self,
-                                                                   capsys):
-        """REGRESSION: adding the churn branch briefly swallowed the
-        dirty branch's `continue`, so a dirty repo was refused AND then
-        re-evaluated -- one condition away from being pulled anyway."""
+    def test_churn_the_pull_does_not_touch_no_longer_blocks(self, monkeypatch,
+                                                            capsys):
+        """The old blanket guard refused this; git completes it."""
+        probe = _Probe(dirty=["src/pkg/_version.py"],
+                       incoming=["docs/guide.md"])
+        monkeypatch.setattr(du.subprocess, "run", probe)
+        r = _record("o/a", churn=1, behind=2)
+        du.apply_fixes({"behind-upstream": [r]}, assume_yes=True,
+                       interactive=False)
+        assert [c for c in probe.acted if "pull" in c], "refused a clean pull"
+        assert "auto-stamp churn present" not in capsys.readouterr().out
+
+    def test_a_refused_record_is_reported_once_and_not_re_evaluated(
+            self, monkeypatch, capsys):
+        """REGRESSION, carried forward: the churn branch once swallowed
+        the dirty branch's `continue`, so a record was refused AND then
+        fell through -- one condition away from being pulled anyway.
+        Those branches are gone, but the property they broke is not."""
+        probe = _Probe(dirty=["src/app.py"], incoming=["src/app.py"])
+        monkeypatch.setattr(du.subprocess, "run", probe)
         r = _record("o/a", dirty=1, behind=2)
-        du.apply_fixes({"behind-upstream": [r]}, dry_run=True,
-                       assume_yes=True, interactive=False)
+        du.apply_fixes({"behind-upstream": [r]}, assume_yes=True,
+                       interactive=False)
         out = capsys.readouterr().out
+        assert probe.acted == []
         assert out.count("o/a") == 1
-        assert "dirty tree" in out
-        assert "Would pull" not in out and "pulled" not in out
 
 
 class TestSetupGuard:
