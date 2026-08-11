@@ -1,0 +1,49 @@
+{
+  "harness": {
+    "name": "mutation_sweep.py",
+    "version": "0.1.0"
+  },
+  "environment": {
+    "python": "3.12.0",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "root": ".",
+    "test_command": [
+      "python",
+      "-m",
+      "pytest",
+      "-q",
+      "src/dazzlecmd/projects/dazzletools/github/tests/test_github_resolution.py"
+    ],
+    "timestamp": "2026-08-11T00:43:46-04:00"
+  },
+  "results": [
+    {
+      "id": "F1",
+      "file": "src/dazzlecmd/projects/dazzletools/github/github.py",
+      "note": "Red-green audit: revert the #119 fix in _pick_candidate (prompt back onto stdout).",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "F1b",
+      "file": "src/dazzlecmd/projects/dazzletools/github/github.py",
+      "note": "Red-green audit: revert the #119 fix in scan_subdirs_for_repo.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "F2",
+      "file": "src/dazzlecmd/projects/dazzletools/github/github.py",
+      "note": "Red-green audit: revert the #120 fix (shape guard removed).",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    }
+  ],
+  "summary": {
+    "killed": 3
+  },
+  "anomalies": []
+}

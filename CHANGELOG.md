@@ -4,6 +4,12 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.19-alpha] - 2026-08-11
+
+### Fixed
+- `dz github`'s repo-selection prompt no longer prints to stdout. The candidate list always went to stderr, but the prompt line itself rode on `input()`'s stdout -- so a script capturing `dz github -n ...` got `Which repo? [1-5]:` glued onto the front of the URL whenever resolution happened to prompt. Both prompts (the ambiguity picker and the subdirectory scan) now write to stderr, and stdout carries the URL alone, which was always the contract.
+- A malformed reference like `owner/repo/extra#1` now fails with the tool's own message naming the reference, instead of being forwarded to `gh` -- which read the three segments as `HOST/OWNER/REPO` and reported a network problem for what was actually a typo. Structure is all that is checked (two non-empty segments): a wrong-but-well-shaped name still fails downstream with an honest 404, because over-validating GitHub's name rules would reject legal names.
+
 ## [0.12.18-alpha] - 2026-08-10
 
 ### Added
@@ -4203,7 +4209,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.18a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.19a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

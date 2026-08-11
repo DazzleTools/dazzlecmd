@@ -216,3 +216,35 @@ def test_empty_slug_is_handled():
     info = r.resolve("")
     assert info["full_name"] is None
     assert info["error"] == "empty slug"
+
+
+# -- is_repo_slug (bare-slug shape; added for dazzlecmd#120) --
+
+from _repo_common.gh_identity import is_repo_slug  # noqa: E402
+
+
+@pytest.mark.parametrize("good", [
+    "owner/repo", "DazzleTools/dazzlecmd", "a/b",
+    "owner/repo.with.dots", "owner/repo-with-dashes",
+])
+def test_is_repo_slug_accepts_two_segments(good):
+    assert is_repo_slug(good) is True
+
+
+@pytest.mark.parametrize("bad", [
+    None, "", "owner", "owner/repo/extra", "a/", "/b", "/",
+    "a b/c", "a/b c", "a\tb/c",
+    "https://github.com/owner/repo",   # a URL is parse_slug's job
+])
+def test_is_repo_slug_rejects_everything_else(bad):
+    assert is_repo_slug(bad) is False
+
+
+def test_parse_slug_and_is_repo_slug_divide_the_labor():
+    """A bare slug is not a URL and a URL is not a bare slug -- each
+    function owns exactly one side (the dazzlecmd#120 fix sketch
+    originally confused them)."""
+    assert parse_slug("owner/repo") is None
+    assert is_repo_slug("owner/repo") is True
+    assert parse_slug("https://github.com/owner/repo.git") == "owner/repo"
+    assert is_repo_slug("https://github.com/owner/repo.git") is False

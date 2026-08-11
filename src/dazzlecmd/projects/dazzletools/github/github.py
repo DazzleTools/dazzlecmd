@@ -45,7 +45,7 @@ from pathlib import Path
 _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE.parent))
 
-from _repo_common.gh_identity import parse_slug  # noqa: E402
+from _repo_common.gh_identity import is_repo_slug, parse_slug  # noqa: E402
 
 
 # Cache settings
@@ -232,7 +232,10 @@ def scan_subdirs_for_repo(remote="origin"):
         print(f"  {i}) {slug}  (./{dirname}/)", file=sys.stderr)
 
     try:
-        choice = input("Which repo? [1-{}]: ".format(len(found)))
+        # Prompt to stderr, not via input()'s stdout-bound argument (#119)
+        print("Which repo? [1-{}]: ".format(len(found)), end="",
+              file=sys.stderr, flush=True)
+        choice = input()
         idx = int(choice) - 1
         if 0 <= idx < len(found):
             return found[idx][1]
@@ -573,7 +576,13 @@ def _pick_candidate(name, found):
               file=sys.stderr)
 
     try:
-        choice = input(f"Which repo? [1-{len(candidates)}]: ")
+        # The prompt goes to stderr explicitly: input()'s own prompt
+        # argument prints to STDOUT, which is the one stream this tool
+        # keeps pure for -n piping -- a prompted resolution was gluing
+        # "Which repo? [1-N]:" onto the front of the captured URL (#119).
+        print(f"Which repo? [1-{len(candidates)}]: ", end="",
+              file=sys.stderr, flush=True)
+        choice = input()
         idx = int(choice) - 1
         if 0 <= idx < len(candidates):
             return candidates[idx]
@@ -613,9 +622,15 @@ def resolve_repo_name(name, refresh=False):
     if not name:
         return None
 
-    # Already OWNER/REPO -- nothing to resolve
+    # Already OWNER/REPO -- nothing to resolve. Shape-checked first:
+    # gh reads a three-segment "a/b/c" as HOST/OWNER/REPO and blames
+    # the network for what is actually a malformed reference (#120).
     if "/" in name:
-        return name.strip()
+        candidate = name.strip()
+        if is_repo_slug(candidate):
+            return candidate
+        print(f"'{name}' is not an OWNER/REPO reference.", file=sys.stderr)
+        return None
 
     cached_repos, is_fresh = _load_cache()
     if cached_repos and not refresh:

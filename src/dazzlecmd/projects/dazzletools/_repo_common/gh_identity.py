@@ -37,11 +37,35 @@ class GhUnavailable(Exception):
 
 
 def parse_slug(url):
-    """Extract OWNER/REPO from a GitHub remote URL, or None."""
+    """Extract OWNER/REPO from a GitHub remote URL, or None.
+
+    A URL parser, not a slug validator: a bare "owner/repo" returns
+    None here, because nothing anchors it to github.com. For validating
+    an already-bare slug, use is_repo_slug().
+    """
     if not url:
         return None
     m = _SLUG_RE.search(url.strip())
     return m.group(1) if m else None
+
+
+def is_repo_slug(text):
+    """True when text is shaped like a bare OWNER/REPO slug.
+
+    Structure only -- exactly two non-empty, whitespace-free segments.
+    Deliberately no attempt to police GitHub's name charset: over-
+    validation rejects legal names, and a wrong-but-well-shaped slug
+    fails downstream with an honest 404. What this guards against is
+    the OTHER failure: gh parses a three-segment "a/b/c" as
+    HOST/OWNER/REPO and reports a network error for what is actually a
+    malformed reference.
+    """
+    if not text:
+        return False
+    parts = text.split("/")
+    return (len(parts) == 2
+            and all(parts)
+            and not any(ch.isspace() for ch in text))
 
 
 def _run_gh(args, timeout=30):

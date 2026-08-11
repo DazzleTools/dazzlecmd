@@ -1,0 +1,18 @@
+{
+  "test_command": ["python", "-m", "pytest", "-q",
+                   "src/dazzlecmd/projects/dazzletools/github/tests/test_github_resolution.py"],
+  "mutations": [
+    {"id": "F1", "file": "src/dazzlecmd/projects/dazzletools/github/github.py",
+     "original": "        # The prompt goes to stderr explicitly: input()'s own prompt\n        # argument prints to STDOUT, which is the one stream this tool\n        # keeps pure for -n piping -- a prompted resolution was gluing\n        # \"Which repo? [1-N]:\" onto the front of the captured URL (#119).\n        print(f\"Which repo? [1-{len(candidates)}]: \", end=\"\",\n              file=sys.stderr, flush=True)\n        choice = input()",
+     "mutated": "        choice = input(f\"Which repo? [1-{len(candidates)}]: \")",
+     "note": "Red-green audit: revert the #119 fix in _pick_candidate (prompt back onto stdout)."},
+    {"id": "F1b", "file": "src/dazzlecmd/projects/dazzletools/github/github.py",
+     "original": "        # Prompt to stderr, not via input()'s stdout-bound argument (#119)\n        print(\"Which repo? [1-{}]: \".format(len(found)), end=\"\",\n              file=sys.stderr, flush=True)\n        choice = input()",
+     "mutated": "        choice = input(\"Which repo? [1-{}]: \".format(len(found)))",
+     "note": "Red-green audit: revert the #119 fix in scan_subdirs_for_repo."},
+    {"id": "F2", "file": "src/dazzlecmd/projects/dazzletools/github/github.py",
+     "original": "    if \"/\" in name:\n        candidate = name.strip()\n        if is_repo_slug(candidate):\n            return candidate\n        print(f\"'{name}' is not an OWNER/REPO reference.\", file=sys.stderr)\n        return None",
+     "mutated": "    if \"/\" in name:\n        return name.strip()",
+     "note": "Red-green audit: revert the #120 fix (shape guard removed)."}
+  ]
+}

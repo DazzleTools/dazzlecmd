@@ -658,6 +658,54 @@ def test_bare_hash_with_refresh_still_opens_issues_tab(nested, calls,
 
 
 # ---------------------------------------------------------------------------
+# v0.12.19 anchors -- #119 (prompt stream) and #120 (slug shape)
+# ---------------------------------------------------------------------------
+
+def test_prompt_writes_to_stderr_not_stdout(org_cache, monkeypatch, capsys):
+    """#119 anchor: input()'s prompt argument prints to STDOUT, the one
+    stream kept pure for -n piping -- a prompted resolution glued
+    'Which repo? [1-N]:' onto the captured URL. The prompt now goes to
+    stderr explicitly and the resolver writes nothing to stdout."""
+    monkeypatch.setattr("builtins.input", lambda *a: "1")
+    assert ghtool.resolve_repo_name("dazzle") == "DazzleTools/dazzlecmd"
+    out, err = capsys.readouterr()
+    assert out == "", f"resolver leaked to stdout: {out!r}"
+    assert "Which repo?" in err
+
+
+def test_subdir_scan_prompt_also_stays_off_stdout(tmp_path, calls,
+                                                  monkeypatch, capsys):
+    """#119 anchor for the OTHER prompt: the downward subdirectory scan
+    has its own 'Which repo?' input(), fixed the same way."""
+    parent = tmp_path / "workspace"
+    parent.mkdir()
+    _init_repo(parent / "alpha", origin="https://github.com/Org-A/alpha.git")
+    _init_repo(parent / "beta", origin="https://github.com/Org-B/beta.git")
+    monkeypatch.setattr("builtins.input", lambda *a: "1")
+    monkeypatch.chdir(parent)
+
+    assert ghtool.main(["-n"]) == 0
+    out, err = capsys.readouterr()
+    assert "Which repo?" not in out
+    assert "Which repo?" in err
+    assert calls == [("Org-A/alpha", ())]
+
+
+@pytest.mark.parametrize("bad", ["a/b/c", "a/", "/b", "a b/c", "a/b c", "/"])
+def test_malformed_slug_ref_fails_before_gh(bad, calls, monkeypatch, capsys,
+                                            tmp_path):
+    """#120 anchor: a malformed slug ref must die with the tool's own
+    message, not reach gh -- which parses 'a/b/c' as HOST/OWNER/REPO
+    and blames the network for a malformed reference."""
+    monkeypatch.chdir(tmp_path)
+    rc = ghtool.main(["-n", f"{bad}#1"])
+    assert rc == 1
+    assert calls == [], f"malformed ref reached gh_browse: {calls}"
+    err = capsys.readouterr().err
+    assert "OWNER/REPO" in err
+
+
+# ---------------------------------------------------------------------------
 # Real CLI invocation -- no mocks in the path
 # ---------------------------------------------------------------------------
 
