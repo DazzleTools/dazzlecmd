@@ -1,0 +1,105 @@
+{
+  "harness": {
+    "name": "mutation_sweep.py",
+    "version": "0.1.0"
+  },
+  "environment": {
+    "python": "3.12.0",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "root": ".",
+    "test_command": [
+      "python",
+      "-m",
+      "pytest",
+      "-q",
+      "src/dazzlecmd/projects/dazzletools/github/tests/test_github_resolution.py"
+    ],
+    "timestamp": "2026-08-10T23:28:56-04:00"
+  },
+  "results": [
+    {
+      "id": "R1",
+      "file": "src/dazzlecmd/projects/dazzletools/github/github.py",
+      "note": "Wrong variable in scope: compare lowered repo name against raw `name` instead of `name_lower`.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "R2",
+      "file": "src/dazzlecmd/projects/dazzletools/github/github.py",
+      "note": "Wrong variable: auto-select takes the first UNSORTED search result instead of exact-first ordering.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "R3",
+      "file": "src/dazzlecmd/projects/dazzletools/github/github.py",
+      "note": "Dropped early return: a fresh-cache miss falls through to an API refetch instead of stopping at None.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "R4",
+      "file": "src/dazzlecmd/projects/dazzletools/github/github.py",
+      "note": "Flag propagation: resolve_repo_name ignores refresh=True and answers from the existing cache anyway.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "R5",
+      "file": "src/dazzlecmd/projects/dazzletools/github/github.py",
+      "note": "Wrong variable after refetch: searches the stale cached_repos instead of the freshly fetched all_repos.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "R6",
+      "file": "src/dazzlecmd/projects/dazzletools/github/github.py",
+      "note": "Returned-tuple swap (repeat of round-1 M9, already anchored).",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "R7",
+      "file": "src/dazzlecmd/projects/dazzletools/github/github.py",
+      "note": "Dropped disjunct: 'isu' and '.' classify as repo names to search for.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "R8",
+      "file": "src/dazzlecmd/projects/dazzletools/github/github.py",
+      "note": "Flag propagation: the not-in-a-repo fallback drops force_refresh.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "R9",
+      "file": "src/dazzlecmd/projects/dazzletools/github/github.py",
+      "note": "Call-site swap: dispatches the unresolved repo_part instead of the resolved ref_slug.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "R10",
+      "file": "src/dazzlecmd/projects/dazzletools/github/github.py",
+      "note": "Flag not recorded: a bare '#...' loses its issue declaration.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    }
+  ],
+  "summary": {
+    "killed": 10
+  },
+  "anomalies": []
+}

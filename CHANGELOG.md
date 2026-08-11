@@ -4,6 +4,12 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.18-alpha] - 2026-08-10
+
+### Added
+- `dz github` understands cross-repo issue references, in the notation GitHub itself taught everyone: `dz github dazzlecmd#112` opens issue 112 of that project from wherever you happen to be standing -- no cwd requirement, no owner needed when the name is unambiguous in your orgs, `OWNER/REPO#7` when it is not. The part after `#` accepts the whole issue grammar, so `dazzlecmd#roadmap` does a semantic lookup (label, then title) in that repo and `dazzlecmd#` opens its issues tab. A bare `#112` means the current project's issue 112 -- quote it outside cmd.exe, where `#` starts a shell comment -- and resolves through the same upward walk as everything else, so it works from inside `private/`.
+- Resolution for an issue jump deliberately searches only your own orgs, never GitHub at large: a typo'd name resolving to a stranger's repo would open *their* issue 112, an answer that looks exactly like a real one. A miss says so and names the `OWNER/REPO#N` escape. (`dz github repo <name>` keeps its global fallback -- browsing a wrong repo home is cheap; landing on a wrong issue is not.)
+
 ## [0.12.17-alpha] - 2026-08-08
 
 ### Fixed
@@ -4197,7 +4203,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.17a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.18a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

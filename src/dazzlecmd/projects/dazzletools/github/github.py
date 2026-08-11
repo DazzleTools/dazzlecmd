@@ -15,6 +15,12 @@ Resolving which project you mean:
 Subcommands / targets:
     (bare)      Open repo home page
     <number>    Open issue or PR by number
+    <repo>#<N>  Issue N in another repo -- GitHub's cross-reference
+                notation, made typeable. The repo part is a bare name
+                resolved through your orgs, or OWNER/REPO verbatim; the
+                part after '#' takes the whole issue grammar (a number,
+                a keyword like 'roadmap', or nothing for the issues
+                tab). Bare '#N' means this project's issue N.
     isu         Issue lookup (by number, label, or title search)
     issues      Open issues tab
     pr          Open pull requests tab
@@ -534,8 +540,14 @@ def _global_search_fallback(name, no_browser):
     return 1
 
 
-def _pick_repo(name, found, no_browser):
-    """Given a list of matching repos, pick one and open it."""
+def _pick_candidate(name, found):
+    """Select one repo from matches: exact-first auto-select, else prompt.
+
+    Returns the chosen repo dict, or None on cancel. The selection rules
+    are the ones the repo finder has always used; they live here so that
+    resolution-to-a-slug (issue refs) and resolution-to-an-open (cmd_repo)
+    share one behavior instead of drifting apart.
+    """
     name_lower = name.lower()
 
     # Sort: exact name matches first, then by name length
@@ -548,7 +560,7 @@ def _pick_repo(name, found, no_browser):
     if len(candidates) == 1 or len(exact) == 1:
         repo = candidates[0]
         print(safe_stderr(f"  {repo['fullName']}"), file=sys.stderr)
-        return open_url(repo["url"], no_browser)
+        return repo
 
     # Multiple results -- prompt
     print(f"Found {len(candidates)} repos matching '{name}':",
@@ -564,12 +576,67 @@ def _pick_repo(name, found, no_browser):
         choice = input(f"Which repo? [1-{len(candidates)}]: ")
         idx = int(choice) - 1
         if 0 <= idx < len(candidates):
-            return open_url(candidates[idx]["url"], no_browser)
-    except (ValueError, EOFError, KeyboardInterrupt):
+            return candidates[idx]
+    except (ValueError, EOFError, KeyboardInterrupt, OSError):
+        # OSError: stdin closed or captured (pipes, test harnesses) --
+        # the same "cannot ask" condition as EOF.
         pass
 
     print("Cancelled.", file=sys.stderr)
-    return 1
+    return None
+
+
+def _pick_repo(name, found, no_browser):
+    """Given a list of matching repos, pick one and open it."""
+    repo = _pick_candidate(name, found)
+    if repo is None:
+        return 1
+    return open_url(repo["url"], no_browser)
+
+
+def resolve_repo_name(name, refresh=False):
+    """Resolve a bare repo name to an OWNER/REPO slug via the user's orgs.
+
+    The resolution half of cmd_repo(), without the open: cache first,
+    refresh on staleness, exact-match auto-select, prompt on ambiguity.
+
+    Deliberately NO global-GitHub fallback, unlike cmd_repo(): this
+    exists for issue jumps, where a typo'd name resolving to a
+    stranger's repo would open THEIR issue N -- an answer that looks
+    legitimate. Wrong-but-plausible is worse than no-answer here, so a
+    miss returns None and the caller points at OWNER/REPO as the
+    explicit escape.
+
+    Returns a slug, or None (not found in your orgs, or prompt
+    cancelled).
+    """
+    if not name:
+        return None
+
+    # Already OWNER/REPO -- nothing to resolve
+    if "/" in name:
+        return name.strip()
+
+    cached_repos, is_fresh = _load_cache()
+    if cached_repos and not refresh:
+        found = _search_cache(name, cached_repos)
+        if found:
+            repo = _pick_candidate(name, found)
+            return repo["fullName"] if repo else None
+        if is_fresh:
+            print(f"No repo matching '{name}' in your orgs.", file=sys.stderr)
+            return None
+
+    # Cache miss or stale -- refresh from API
+    print("  Updating repo cache...", file=sys.stderr)
+    all_repos = _fetch_all_repos()
+    found = _search_cache(name, all_repos)
+    if found:
+        repo = _pick_candidate(name, found)
+        return repo["fullName"] if repo else None
+
+    print(f"No repo matching '{name}' in your orgs.", file=sys.stderr)
+    return None
 
 
 def _get_user_owners():
@@ -652,6 +719,25 @@ PAGE_COMMANDS = {
 }
 
 
+def _split_issue_ref(target):
+    """Split a '<repo>#<issue>' reference. Returns (repo_part, issue_part).
+
+    GitHub's own cross-reference notation, made typeable: the part before
+    the first '#' names a repository (bare name, or OWNER/REPO), the part
+    after is anything the issue grammar accepts -- a number, a semantic
+    keyword like 'roadmap', or nothing (that repo's issues tab). Either
+    side may be empty: '#112' means "issue 112 of the project I'm
+    standing in".
+
+    Returns None when target carries no '#' at all -- i.e. this is not
+    an issue reference and the ordinary target grammar applies.
+    """
+    if not target or "#" not in target:
+        return None
+    repo_part, issue_part = target.split("#", 1)
+    return repo_part.strip(), issue_part.strip()
+
+
 def _looks_like_repo_name(target):
     """True when a bare target should be read as a repo name to look up.
 
@@ -659,11 +745,15 @@ def _looks_like_repo_name(target):
     means "find that repo". Page keywords, `isu`, and `.` are commands, not
     names. An all-digits target is an ISSUE NUMBER: searching GitHub for a
     repo called "61" returns noise (b612, CS61A, ud615) and never what was
-    meant, so digits are never treated as a name.
+    meant, so digits are never treated as a name. A target containing '#'
+    is an issue REFERENCE -- GitHub forbids '#' in repository names, so it
+    cannot be one.
     """
     if not target:
         return False
     if target in PAGE_COMMANDS or target in ("isu", "."):
+        return False
+    if "#" in target:
         return False
     return not target.isdigit()
 
@@ -684,6 +774,11 @@ def build_parser():
             "  dz github pr                     Open pull requests tab\n"
             "  dz github release                Open releases page\n"
             "  dz github repo git-repokit       Find and open a repo by name\n"
+            "  dz github dazzlecmd#112          Issue 112 in ANOTHER repo, from anywhere\n"
+            "  dz github OWNER/REPO#7           Same, naming the owner exactly\n"
+            "  dz github dazzlecmd#roadmap      Semantic issue lookup in another repo\n"
+            "  dz github \"#112\"                 This project's issue 112 (quote it --\n"
+            "                                   bare '#' starts a shell comment)\n"
             "  dz github -n isu 3               Print issue URL without opening\n"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -736,6 +831,31 @@ def main(argv=None):
         repo_name = args.target_args[0] if args.target_args else None
         return cmd_repo(repo_name, args.no_browser, force_refresh=refresh)
 
+    # '<repo>#<issue>' -- a cross-repo issue reference. Claimed before cwd
+    # detection for the same reason 'repo' is: a target that names its own
+    # repository needs no cwd, and the whole point is jumping to another
+    # project's issue from wherever you happen to be standing.
+    from_issue_ref = False
+    issue_ref = _split_issue_ref(args.target)
+    if issue_ref:
+        repo_part, issue_part = issue_ref
+        if repo_part:
+            ref_slug = resolve_repo_name(repo_part, refresh=refresh)
+            if not ref_slug:
+                print(f"Tip: use OWNER/REPO#{issue_part or 'N'} to name "
+                      f"the repository exactly.", file=sys.stderr)
+                return 1
+            # Everything after '#' is the existing issue grammar: a
+            # number, a semantic keyword, or nothing (issues tab).
+            return cmd_isu(ref_slug, issue_part or None, args.no_browser)
+        # Bare '#N' -- the current project's issue. Fall through to the
+        # normal slug resolution (cwd -> ancestor -> subdir scan) with
+        # just the issue part; the flag records that '#' already declared
+        # this an issue, so nothing downstream may re-read it as a page
+        # or a repo name.
+        from_issue_ref = True
+        args.target = issue_part
+
     # --refresh with no target: just refresh the cache
     if refresh and args.target is None:
         print("  Refreshing repo cache...", file=sys.stderr)
@@ -750,7 +870,8 @@ def main(argv=None):
         rc, _, _ = git("rev-parse", "--show-toplevel")
         if rc != 0:
             # Not in a git repo -- a bare name means "find that repo"
-            if _looks_like_repo_name(args.target):
+            # (unless '#' already declared the target an issue)
+            if not from_issue_ref and _looks_like_repo_name(args.target):
                 return cmd_repo(args.target, args.no_browser, force_refresh=refresh)
             # Otherwise scan subdirectories for repos
             slug = scan_subdirs_for_repo(args.remote)
@@ -771,8 +892,9 @@ def main(argv=None):
             slug = resolve_via_ancestor(args.remote)
             if not slug:
                 # Nothing encloses us, so there is no project for a bare word
-                # to refer to -- fall back to reading it as a repo name.
-                if _looks_like_repo_name(args.target):
+                # to refer to -- fall back to reading it as a repo name
+                # (unless '#' already declared the target an issue).
+                if not from_issue_ref and _looks_like_repo_name(args.target):
                     return cmd_repo(args.target, args.no_browser,
                                     force_refresh=refresh)
                 print(f"Error: remote '{args.remote}' is not a GitHub URL "
@@ -784,6 +906,12 @@ def main(argv=None):
 
     no_browser = args.no_browser
     target = args.target
+
+    # A bare '#...' said "issue" -- dispatch the remainder through the
+    # issue grammar and nothing else. Placed first so an empty remainder
+    # ('#' alone -> this repo's issues tab) is not mistaken for no target.
+    if from_issue_ref:
+        return cmd_isu(slug, target or None, no_browser)
 
     # No target, or '.' (explicit "this repo") -> open repo home
     if target is None or target == ".":
