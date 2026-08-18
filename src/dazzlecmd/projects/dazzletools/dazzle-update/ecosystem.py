@@ -129,7 +129,7 @@ def resolve_kinds(names):
 
 FINDING_LABELS = {
     "unpushed": "NEEDS PUSH -- work that exists only on this box",
-    "no-upstream": "NO UPSTREAM -- not backed up anywhere",
+    "no-upstream": "NO UPSTREAM -- branch has no remote tracking",
     "source-missing": "BROKEN INSTALL -- editable path does not exist",
     "stale-dist-name": ("DIST NAME MISMATCH -- installed under a name the "
                         "repo does not declare"),

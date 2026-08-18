@@ -612,7 +612,7 @@ def render_text(records, findings, meta, pal=None):
     for kind, label in (("unpushed", "to push"),
                         ("stale-install-metadata", "to reinstall"),
                         ("dirty", "dirty"),
-                        ("no-upstream", "unbacked")):
+                        ("no-upstream", "untracked")):
         if counts.get(kind):
             parts.append(pal(FINDING_COLOURS[kind],
                              f"{counts[kind]} {label}"))
