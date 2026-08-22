@@ -30,6 +30,7 @@ answer what SHOULD be:
     distinction would read as a portability warning that is not there.
 """
 
+import io
 import os
 
 
@@ -71,6 +72,69 @@ def _has_content(path, ignore=(".git",)):
     return False
 
 
+def _git_dir(store_path):
+    """Resolve a store's git directory, following a gitfile pointer.
+
+    `.git` is a directory for an ordinary repo and a FILE holding
+    `gitdir: <path>` for a worktree or submodule. Returns the resolved
+    directory, or None when there is no repository or the pointer does
+    not resolve -- an unresolvable pointer is not evidence of anything.
+    """
+    entry = os.path.join(store_path, ".git")
+    if os.path.isdir(entry):
+        return entry
+    if not os.path.isfile(entry):
+        return None
+    try:
+        with io.open(entry, "r", encoding="utf-8", errors="replace") as fh:
+            first = fh.readline().strip()
+    except OSError:
+        return None
+    if not first.lower().startswith("gitdir:"):
+        return None
+    target = first.split(":", 1)[1].strip()
+    if not target:
+        return None
+    resolved = target if os.path.isabs(target) else os.path.join(store_path, target)
+    resolved = os.path.normpath(resolved)
+    return resolved if os.path.isdir(resolved) else None
+
+
+def _has_history(store_path):
+    """True only if the store's repository holds at least one commit.
+
+    A repository can exist and hold nothing: `git init` in a notes
+    directory creates `.git` before anything is committed, and the store
+    then reads as versioned while holding no recoverable history at all.
+    That is precisely the state this axis exists to notice -- docs living
+    in one place with no recovery point -- so the presence of `.git` is
+    not, by itself, evidence of a backup.
+
+    Read from disk rather than by subprocess: this runs once per checkout
+    on a scan of hundreds, and this module's cost is stat-only by design.
+    A repository with loose heads answers on the first entry; one whose
+    refs have been packed is answered from packed-refs.
+    """
+    git_dir = _git_dir(store_path)
+    if git_dir is None:
+        return False
+    try:
+        with os.scandir(os.path.join(git_dir, "refs", "heads")) as it:
+            for _ in it:
+                return True
+    except OSError:
+        pass
+    try:
+        with io.open(os.path.join(git_dir, "packed-refs"),
+                     encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if "refs/heads/" in line:
+                    return True
+    except OSError:
+        pass
+    return False
+
+
 def private_state(checkout_path, dirname="private"):
     """Inspect one checkout's private store.
 
@@ -78,7 +142,9 @@ def private_state(checkout_path, dirname="private"):
 
         shape      none | plain | repo | linked | broken
         linked     bool -- reached through a junction or symlink
-        versioned  bool -- the resolved store is a git repository
+        versioned  bool -- the store's repository holds at least one
+                   commit; a `git init` with nothing committed is NOT
+                   versioned, because nothing is recoverable from it
         storage    normalized real path of the store, or None
         content    bool -- the store holds at least one file
         claude     bool -- a `claude/` subdirectory exists (the docs
@@ -108,7 +174,7 @@ def private_state(checkout_path, dirname="private"):
         storage = os.path.normcase(os.path.realpath(path))
     except OSError:
         storage = os.path.normcase(os.path.abspath(path))
-    versioned = os.path.exists(os.path.join(storage, ".git"))
+    versioned = _has_history(storage)
     return {
         "shape": "linked" if linked else ("repo" if versioned else "plain"),
         "linked": linked,

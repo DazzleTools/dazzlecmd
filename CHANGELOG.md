@@ -4,6 +4,12 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.20-alpha] - 2026-08-22
+
+### Fixed
+- `dz dazzle-update` reported a project's private notes as versioned whenever a `private/.git` existed, without ever checking that anything had been committed. A store created but never committed to -- holding design documents and no history at all -- was described as safely backed up. That is the one direction of error this axis must not make: the axis exists to find notes living in one place with no recovery point, and it was reporting exactly that state as safe. `versioned` now means the repository holds at least one commit. The check reads refs from disk rather than asking git, so a scan of hundreds of checkouts pays no additional subprocess, and a repository whose refs have been packed still answers correctly.
+- The path into that state is reachable rather than theoretical: `dz private-init` creates the repository before committing, prints "Nothing to commit (empty repo)" when there is nothing to stage, and continues after a failed initial commit with a warning. Either outcome leaves a repository with no history, which later acquires notes.
+
 ## [0.12.19-alpha] - 2026-08-11
 
 ### Fixed
@@ -4209,7 +4215,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.19a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.20a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
