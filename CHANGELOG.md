@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.21-alpha] - 2026-08-26
+
+### Added
+- `dz private-init` now treats its `.gitignore` template as a *definition* rather than a one-time write. The same declaration serves three jobs: `--status` compares an existing vault against it and reports which patterns that vault predates, `--fix` appends the missing ones, and creation renders it as before. A vault made a year ago cannot learn about a tool written last week on its own, and until now nothing told anyone it had fallen behind -- the drift was real, silent, and spread across every checkout ever initialised.
+- The definition gains what our own tooling writes into vaults: `.vscode/`, which appears the moment the folder is opened in an editor, and `.gauntlet/`, an agent run's on-disk ledger. A companion definition covers what the *project* must ignore rather than the vault -- currently `CLAUDE.local.md` -- because a file living beside the vault cannot be covered by rules inside it.
+- `--fix` is append-only and idempotent. It never rewrites or reorders what it finds: a vault may hold a project's own exclusions, another tool's block, or a `!` re-inclusion whose position determines what it re-includes, and none of that is the tool's to move. Running it twice writes nothing the second time, so repairing a fleet of checkouts converges instead of accumulating. `--fix --dry-run` reports what would be added and touches nothing.
+
+### Fixed
+- Running `dz private-init` from *inside* a vault reported that `private/` did not exist -- at `<vault>/private`, a path that never exists by construction. The command resolves `private/` relative to where it is told to look, so standing in a vault asks about a vault nested in a vault. It now recognises the situation and says so, naming the vault, its parent, and the exact command for the parent with the flags the caller actually used. Git works from any subdirectory; this at least explains itself.
+
 ## [0.12.20-alpha] - 2026-08-22
 
 ### Fixed
@@ -4215,7 +4225,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.20a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.21a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

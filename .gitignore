@@ -188,3 +188,6 @@ private/docs/
 # dz dazzle-update playground cache (machine-specific scan data)
 src/dazzlecmd/projects/dazzletools/dazzle-update/tests/one-offs/du-scan.json
 src/dazzlecmd/projects/dazzletools/dazzle-update/tests/one-offs/du-namespaces.json
+
+# Agent working state -- written by tools, never versioned
+CLAUDE.local.md

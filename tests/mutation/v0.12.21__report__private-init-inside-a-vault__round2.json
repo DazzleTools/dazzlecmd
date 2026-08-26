@@ -1,0 +1,106 @@
+{
+  "harness": {
+    "name": "mutation_sweep.py",
+    "version": "0.1.0"
+  },
+  "environment": {
+    "python": "3.12.0",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "root": ".",
+    "test_command": [
+      "python",
+      "-m",
+      "pytest",
+      "-q",
+      "tests/test_private_init_gitignore_definition.py"
+    ],
+    "timestamp": "2026-08-26T11:41:58-04:00"
+  },
+  "results": [
+    {
+      "id": "m1",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "or -> and in the guard: a falsy target no longer short-circuits.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m2",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Removed the is_git_repo half: any directory named private/ under a parent that lists it is called a vault.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m3",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Dropped normalization: a trailing-separator path yields an empty basename, so a genuine vault stops being recognized.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m4",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Inverted the name comparison: only directories NOT named private/ are accepted.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m5",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "dirname -> basename: parent becomes the leaf name rather than the containing project path.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m6",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "None-vs-truthiness: an empty-string parent is no longer rejected.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m7",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Removed the parent-lists-it confirmation: any git repo named private/ is called a vault.",
+      "verdict": "survived",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m8",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Swapped join arguments: probes the wrong path entirely.",
+      "verdict": "survived",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m9",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Inverted the report condition: the hint prints only when the caller is NOT inside a vault.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m10",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "The suggested command repeats the vault path the caller already used instead of the parent project path.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    }
+  ],
+  "summary": {
+    "killed": 8,
+    "survived": 2
+  },
+  "anomalies": []
+}

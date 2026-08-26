@@ -1,0 +1,95 @@
+{
+  "test_command": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "tests/test_private_init_gitignore_definition.py"
+  ],
+  "mutations": [
+    {
+      "id": "m1",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "blocks.append(\"# \" + title + \"\\n\" + \"\\n\".join(patterns) + \"\\n\")",
+      "mutated": "blocks.append(\"# \" + title + \"\\n\" + \" \".join(patterns) + \"\\n\")",
+      "note": "Changed pattern separator from newline to space -- each section becomes one line of space-joined patterns, which git would read as a single bogus pattern."
+    },
+    {
+      "id": "m2",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    return \"\\n\".join(blocks)",
+      "mutated": "    return \"\".join(blocks)",
+      "note": "Dropped the blank line between rendered sections -- a plausible 'tidy up whitespace' refactor that changes the rendered .gitignore text."
+    },
+    {
+      "id": "m3",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "blocks.append(\"# \" + title + \"\\n\"",
+      "mutated": "blocks.append(\"#\" + title + \"\\n\"",
+      "note": "Dropped the space after the comment marker -- header normalization lost, so section titles render as '#Python' instead of '# Python'."
+    },
+    {
+      "id": "m4",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "return [pattern for _title, patterns in sections for pattern in patterns]",
+      "mutated": "return [pattern for _title, patterns in sections for pattern in patterns[:-1]]",
+      "note": "Off-by-one boundary: the last pattern of every section silently drops out of the flattened list, so drift detection misses it."
+    },
+    {
+      "id": "m5",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    return [pattern for _title, patterns in sections for pattern in patterns]",
+      "mutated": "    return [patterns for _title, patterns in sections]",
+      "note": "Returns a list of pattern lists instead of a flattened list -- the 'flattened' contract in the docstring is broken while the function still returns something list-shaped."
+    },
+    {
+      "id": "m6",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "for pattern in patterns]",
+      "mutated": "for pattern in sorted(patterns)]",
+      "note": "Declaration order lost -- patterns come back sorted, so any order-sensitive comparison or rendering check sees a reordered collection."
+    },
+    {
+      "id": "m7",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    (\"Python\", [\"__pycache__/\", \"*.py[cod]\", \"*.so\"]),",
+      "mutated": "    (\"Python\", [\"__pycache__/\", \"*.so\", \"*.py[cod]\"]),",
+      "note": "Reordered elements within the Python section -- rendered text and flattened order both shift while the set of patterns stays identical."
+    },
+    {
+      "id": "m8",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    (\"Editors\", [\"*.swp\", \"*~\", \"*.*~\", \".*.swp\", \".vscode/\"]),",
+      "mutated": "    (\"Editors\", [\"*.swp\", \"*~\", \"*.*~\", \".vscode/\"]),",
+      "note": "Dropped the '.*.swp' pattern -- a plausible 'looks like a duplicate of *.swp' cleanup that actually loses coverage for dotfile swap files."
+    },
+    {
+      "id": "m9",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    (\"Temp files\", [\"*.tmp\", \"*.bak\"]),",
+      "mutated": "    (\"Temp files\", [\"*.tmp\"]),",
+      "note": "Dropped '*.bak' from the vault definition -- new vaults stop ignoring backups and existing vaults stop being reported as drifted on it."
+    },
+    {
+      "id": "m10",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    (\"Agent working state -- written by tools, never versioned\", [\".gauntlet/\"]),\n]",
+      "mutated": "]",
+      "note": "Removed the agent-working-state section from the VAULT definition -- '.gauntlet/' is no longer ignored or drift-checked, though the identically titled parent section still exists to mask the loss."
+    },
+    {
+      "id": "m11",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "PARENT_GITIGNORE_SECTIONS = [\n    (\"Agent working state -- written by tools, never versioned\", [\"CLAUDE.local.md\"]),\n]",
+      "mutated": "PARENT_GITIGNORE_SECTIONS = [\n    (\"Agent working state -- written by tools, never versioned\", [\".gauntlet/\"]),\n]",
+      "note": "Swapped the parent's pattern for the vault's -- the parent project stops ignoring CLAUDE.local.md, the one thing only the parent definition can cover."
+    },
+    {
+      "id": "m12",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "PRIVATE_GITIGNORE = render_gitignore(PRIVATE_GITIGNORE_SECTIONS)",
+      "mutated": "PRIVATE_GITIGNORE = render_gitignore(PARENT_GITIGNORE_SECTIONS)",
+      "note": "Swapped argument at the module-level render call -- a new vault's .gitignore gets the parent's definition instead of its own."
+    }
+  ]
+}

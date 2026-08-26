@@ -1,0 +1,89 @@
+{
+  "test_command": ["python", "-m", "pytest", "-q", "tests/test_private_init_gitignore_definition.py"],
+  "mutations": [
+    {
+      "id": "m01",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    if not missing or dry_run:\n        return missing",
+      "mutated": "    if not missing and dry_run:\n        return missing",
+      "note": "or -> and in the short-circuit guard; dry_run would now write the file when drift exists."
+    },
+    {
+      "id": "m02",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "        absent = [p for p in patterns if p in missing]",
+      "mutated": "        absent = [p for p in patterns if p not in missing]",
+      "note": "Inverted membership test: writes the patterns already present instead of the missing ones."
+    },
+    {
+      "id": "m03",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "        if absent:\n            blocks.append",
+      "mutated": "        if absent is not None:\n            blocks.append",
+      "note": "Truthiness -> None check: empty sections emit a bare heading with no patterns."
+    },
+    {
+      "id": "m04",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "            blocks.append(\"# \" + title + \"\\n\" + \"\\n\".join(absent) + \"\\n\")",
+      "mutated": "            blocks.append(\"# \" + title + \"\\n\" + \"\\n\".join(absent))",
+      "note": "Dropped trailing newline inside each block; last pattern of a block runs into the next heading."
+    },
+    {
+      "id": "m05",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    addition = \"\\n\".join(blocks)",
+      "mutated": "    addition = \"\".join(blocks)",
+      "note": "Dropped blank-line separator between section blocks."
+    },
+    {
+      "id": "m06",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    if existing and not existing.endswith(\"\\n\"):\n        prefix = \"\\n\"",
+      "mutated": "    if existing and existing.endswith(\"\\n\"):\n        prefix = \"\\n\"",
+      "note": "Inverted newline-termination check: an unterminated last line gets concatenated with the new heading."
+    },
+    {
+      "id": "m07",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    if existing:\n        prefix += \"\\n\"",
+      "mutated": "    if existing:\n        prefix = \"\\n\"",
+      "note": "Assignment instead of accumulation: loses the terminator for a file not ending in a newline."
+    },
+    {
+      "id": "m08",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    if parent and not os.path.isdir(parent):",
+      "mutated": "    if parent and os.path.isdir(parent):",
+      "note": "Inverted directory guard: the missing parent is never created, so open() fails."
+    },
+    {
+      "id": "m09",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    with open(gitignore_path, \"a\", encoding=\"utf-8\") as handle:",
+      "mutated": "    with open(gitignore_path, \"w\", encoding=\"utf-8\") as handle:",
+      "note": "Append mode -> write mode: destroys the file's pre-existing rules, breaking the append-only contract."
+    },
+    {
+      "id": "m10",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "        handle.write(prefix + addition)",
+      "mutated": "        handle.write(addition)",
+      "note": "Dropped the computed prefix separator entirely."
+    },
+    {
+      "id": "m11",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    added = apply_gitignore_drift(gitignore_path, sections, dry_run=dry_run)",
+      "mutated": "    added = apply_gitignore_drift(sections, gitignore_path, dry_run=dry_run)",
+      "note": "Swapped positional arguments in the call."
+    },
+    {
+      "id": "m12",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    verb = \"would add\" if dry_run else \"added\"",
+      "mutated": "    verb = \"added\" if dry_run else \"would add\"",
+      "note": "Flipped the dry-run reporting verb: a real write reports as hypothetical and vice versa."
+    }
+  ]
+}

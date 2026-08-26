@@ -14,6 +14,8 @@ Usage:
     dz private-init --remote <url>       # init with remote for backup
     dz private-init --adopt              # convert existing private/ content
     dz private-init --status             # check if private/ is a git repo
+    dz private-init --fix                # add the .gitignore patterns it is missing
+    dz private-init --fix --dry-run      # show what --fix would add
 """
 
 import argparse
@@ -31,28 +33,44 @@ PRIVATE_STRUCTURE = [
     "notes",
 ]
 
-# Default .gitignore for the private repo itself
-PRIVATE_GITIGNORE = """\
-# Python
-__pycache__/
-*.py[cod]
-*.so
+# What a correct private repo ignores, as (section, patterns) pairs.
+#
+# This is the definition, not just a template: `cmd_init` renders it into a new
+# vault's .gitignore, and `cmd_status` compares an existing vault against it and
+# reports what has drifted. Adding a pattern here therefore fixes new vaults and
+# makes old ones report as out of date -- which is the point, since a vault
+# created a year ago cannot learn about a tool written last week on its own.
+PRIVATE_GITIGNORE_SECTIONS = [
+    ("Python", ["__pycache__/", "*.py[cod]", "*.so"]),
+    ("Editors", ["*.swp", "*~", "*.*~", ".*.swp", ".vscode/"]),
+    ("OS", [".DS_Store", "Thumbs.db", "desktop.ini"]),
+    ("Temp files", ["*.tmp", "*.bak"]),
+    ("Agent working state -- written by tools, never versioned", [".gauntlet/"]),
+]
 
-# Editors
-*.swp
-*~
-*.*~
-.*.swp
+# What the PARENT project must ignore so agent scratch state stays out of its
+# history. The vault's own .gitignore cannot cover these: they live beside the
+# vault, in the project, one level up.
+PARENT_GITIGNORE_SECTIONS = [
+    ("Agent working state -- written by tools, never versioned", ["CLAUDE.local.md"]),
+]
 
-# OS
-.DS_Store
-Thumbs.db
-desktop.ini
 
-# Temp files
-*.tmp
-*.bak
-"""
+def render_gitignore(sections):
+    """Render (section, patterns) pairs into .gitignore text."""
+    blocks = []
+    for title, patterns in sections:
+        blocks.append("# " + title + "\n" + "\n".join(patterns) + "\n")
+    return "\n".join(blocks)
+
+
+def gitignore_patterns(sections):
+    """Every pattern in a definition, flattened, in declaration order."""
+    return [pattern for _title, patterns in sections for pattern in patterns]
+
+
+# Rendered form of the vault definition, for writing a new vault's .gitignore.
+PRIVATE_GITIGNORE = render_gitignore(PRIVATE_GITIGNORE_SECTIONS)
 
 
 def run_git(args, cwd=None, capture=True):
@@ -147,11 +165,167 @@ def ensure_private_ignored(target, private_dir_name, private_path, git_root):
         print(f"    Or in {target}/.gitignore: /{private_dir_name}/")
 
 
+def _declared_lines(gitignore_path):
+    """The non-comment, non-blank lines of a .gitignore, as a set."""
+    if not os.path.isfile(gitignore_path):
+        return None
+    lines = set()
+    with open(gitignore_path, encoding="utf-8", errors="replace") as handle:
+        for raw in handle:
+            line = raw.strip()
+            if line and not line.startswith("#"):
+                lines.add(line)
+    return lines
+
+
+def gitignore_drift(gitignore_path, sections):
+    """Declared patterns a .gitignore does not carry, in declaration order.
+
+    The comparison is textual on purpose. The question a drift report answers is
+    "does this file carry the current definition?", and the definition is also
+    how future entries reach vaults that already exist -- so a file that ignores
+    the same thing by a differently-spelled pattern is reported as drifted, and
+    that is the intended answer rather than a false positive. A file that does
+    not exist at all has drifted from every pattern.
+    """
+    present = _declared_lines(gitignore_path)
+    if present is None:
+        return list(gitignore_patterns(sections))
+    return [p for p in gitignore_patterns(sections) if p not in present]
+
+
+def report_gitignore_drift(gitignore_path, sections, label, fix_hint):
+    """Print drift for one file. Returns the missing patterns."""
+    missing = gitignore_drift(gitignore_path, sections)
+    if not missing:
+        print(f"  {label}: up to date with the current definition [OK]")
+        return missing
+    print(f"  {label}: {len(missing)} pattern(s) missing -- this file predates them")
+    for pattern in missing:
+        print(f"    {pattern}")
+    print(f"  {fix_hint}")
+    return missing
+
+
+def apply_gitignore_drift(gitignore_path, sections, dry_run=False):
+    """Append the declared patterns a file lacks, under their own section headings.
+
+    Append-only by construction. The file may carry rules this definition knows
+    nothing about -- a project's own exclusions, another tool's block, a `!`
+    re-inclusion whose position matters -- and none of that is ours to rewrite.
+    Idempotent: a second call finds no drift and writes nothing, so running it
+    on a whole fleet of checkouts converges instead of accumulating.
+
+    Returns the patterns added (or, under dry_run, the ones that would be).
+    """
+    missing = gitignore_drift(gitignore_path, sections)
+    if not missing or dry_run:
+        return missing
+
+    blocks = []
+    for title, patterns in sections:
+        absent = [p for p in patterns if p in missing]
+        if absent:
+            blocks.append("# " + title + "\n" + "\n".join(absent) + "\n")
+    addition = "\n".join(blocks)
+
+    existing = ""
+    if os.path.isfile(gitignore_path):
+        with open(gitignore_path, encoding="utf-8", errors="replace") as handle:
+            existing = handle.read()
+    prefix = ""
+    if existing and not existing.endswith("\n"):
+        prefix = "\n"
+    if existing:
+        prefix += "\n"
+
+    parent = os.path.dirname(gitignore_path)
+    if parent and not os.path.isdir(parent):
+        os.makedirs(parent, exist_ok=True)
+    with open(gitignore_path, "a", encoding="utf-8") as handle:
+        handle.write(prefix + addition)
+    return missing
+
+
+def fix_gitignore(gitignore_path, sections, label, dry_run=False):
+    """Apply drift to one file and say what happened."""
+    added = apply_gitignore_drift(gitignore_path, sections, dry_run=dry_run)
+    if not added:
+        print(f"  {label}: nothing to fix [OK]")
+        return added
+    verb = "would add" if dry_run else "added"
+    print(f"  {label}: {verb} {len(added)} pattern(s) to {gitignore_path}")
+    for pattern in added:
+        print(f"    {pattern}")
+    return added
+
+
+def looks_like_a_vault(target, private_dir_name="private"):
+    """Is `target` itself a private vault rather than a project containing one?
+
+    True when the directory is its own git repository, is named as the private
+    directory, and its parent holds it under that name. Every tool in this family
+    resolves `private/` relative to where it was told to look, so a person standing
+    inside a vault asks about a vault nested inside a vault -- which never exists.
+    Git works from any subdirectory; this reports the mismatch instead of guessing,
+    because silently operating on a directory other than the one named is its own
+    surprise.
+
+    Returns the parent project path, or None.
+    """
+    if not target or not is_git_repo(target):
+        return None
+    if os.path.basename(os.path.normpath(target)) != private_dir_name:
+        return None
+    # No "does the parent really hold it?" check here on purpose: given the two
+    # conditions above, os.path.join(parent, private_dir_name) IS normpath(target),
+    # and target is already known to be a directory -- so such a check can never
+    # fail. A mutation sweep found it: two mutants that broke it survived, because
+    # there was nothing to break. Dead code that reads as a guard is worse than no
+    # guard, because the next reader believes something is being verified.
+    parent = os.path.dirname(os.path.normpath(target))
+    return parent or None
+
+
+def report_missing_private(private_path, target, private_dir_name, verb):
+    """Say `private/` is absent -- and, when the caller is standing in a vault, say that instead."""
+    print(f"  {private_dir_name}/ does not exist at {private_path}")
+    parent = looks_like_a_vault(target, private_dir_name)
+    if parent:
+        print(f"  You appear to be inside a vault already: {target} is its own git repo")
+        print(f"  and its parent lists it as {private_dir_name}/.")
+        print(f'  Did you mean:  dz private-init {verb} "{parent}"')
+    return 1
+
+
+def cmd_fix(private_path, project_root, target=None, private_dir_name="private", dry_run=False):
+    """Bring a vault's and its project's .gitignore up to the current definition."""
+    if not os.path.isdir(private_path):
+        verb = "--fix --dry-run" if dry_run else "--fix"
+        return report_missing_private(private_path, target, private_dir_name, verb)
+
+    fix_gitignore(
+        os.path.join(private_path, ".gitignore"),
+        PRIVATE_GITIGNORE_SECTIONS,
+        "Vault ignores",
+        dry_run=dry_run,
+    )
+    if project_root:
+        fix_gitignore(
+            os.path.join(project_root, ".gitignore"),
+            PARENT_GITIGNORE_SECTIONS,
+            "Project ignores",
+            dry_run=dry_run,
+        )
+    else:
+        print("  Project ignores: no parent git repo found -- skipped")
+    return 0
+
+
 def cmd_status(private_path, project_root, target=None, private_dir_name="private"):
     """Check and report the status of private/."""
     if not os.path.isdir(private_path):
-        print(f"  private/ does not exist at {private_path}")
-        return 1
+        return report_missing_private(private_path, target, private_dir_name, "--status")
 
     if not is_git_repo(private_path):
         # Count files to show what's there
@@ -185,6 +359,25 @@ def cmd_status(private_path, project_root, target=None, private_dir_name="privat
         print(f"  Gitignore: {private_dir_name}/ is excluded [OK]")
     elif project_root:
         print(f"  Gitignore: WARNING - {private_dir_name}/ may not be ignored by parent repo!")
+
+    # Compare both .gitignore files against the current definition. A vault created
+    # before a tool existed cannot learn about it on its own, so drift is reported
+    # rather than assumed absent.
+    report_gitignore_drift(
+        os.path.join(private_path, ".gitignore"),
+        PRIVATE_GITIGNORE_SECTIONS,
+        "Vault ignores",
+        "To fix, run 'dz private-init --fix' or add the lines above to "
+        + os.path.join(private_path, ".gitignore"),
+    )
+    if project_root:
+        report_gitignore_drift(
+            os.path.join(project_root, ".gitignore"),
+            PARENT_GITIGNORE_SECTIONS,
+            "Project ignores",
+            "To fix, run 'dz private-init --fix' or add the lines above to "
+            + os.path.join(project_root, ".gitignore"),
+        )
 
     return 0
 
@@ -304,6 +497,16 @@ def main(argv=None):
         default="private",
         help="Name of the private directory (default: private)",
     )
+    parser.add_argument(
+        "--fix", "-f",
+        action="store_true",
+        help="Add the .gitignore patterns this vault and its project are missing",
+    )
+    parser.add_argument(
+        "--dry-run", "-n",
+        action="store_true",
+        help="With --fix, show what would be added and change nothing",
+    )
 
     args = parser.parse_args(argv)
 
@@ -330,6 +533,9 @@ def main(argv=None):
 
     if args.status:
         return cmd_status(private_path, project_root, target, args.dir)
+
+    if args.fix:
+        return cmd_fix(private_path, project_root, target, args.dir, dry_run=args.dry_run)
 
     # Default behavior: --adopt if content already exists, plain init otherwise
     adopt = args.adopt

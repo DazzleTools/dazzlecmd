@@ -1,0 +1,89 @@
+{
+  "test_command": ["python", "-m", "pytest", "-q", "tests/test_private_init_gitignore_definition.py"],
+  "mutations": [
+    {
+      "id": "m01",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    if not os.path.isfile(gitignore_path):\n        return None",
+      "mutated": "    if not os.path.exists(gitignore_path):\n        return None",
+      "note": "isfile -> exists: a directory at that path now falls through to open() instead of reporting absent."
+    },
+    {
+      "id": "m02",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "        return None\n    lines = set()",
+      "mutated": "        return set()\n    lines = set()",
+      "note": "Missing file returns an empty set instead of None, so gitignore_drift's None branch never fires."
+    },
+    {
+      "id": "m03",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    lines = set()",
+      "mutated": "    lines = []",
+      "note": "Container swap: set -> list. Membership still works but duplicates accumulate."
+    },
+    {
+      "id": "m04",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "            line = raw.strip()",
+      "mutated": "            line = raw",
+      "note": "Dropped normalization: trailing newline left on declared lines, so nothing matches the declared patterns."
+    },
+    {
+      "id": "m05",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "            if line and not line.startswith(\"#\"):",
+      "mutated": "            if line or not line.startswith(\"#\"):",
+      "note": "and -> or: blank lines are now recorded as declared patterns."
+    },
+    {
+      "id": "m06",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "not line.startswith(\"#\")",
+      "mutated": "not line.endswith(\"#\")",
+      "note": "Comment detection flipped to a suffix test: comment lines are treated as declared patterns."
+    },
+    {
+      "id": "m07",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    if present is None:\n        return list(gitignore_patterns(sections))",
+      "mutated": "    if not present:\n        return list(gitignore_patterns(sections))",
+      "note": "None-vs-truthiness: a comment-only .gitignore and an absent one become indistinguishable."
+    },
+    {
+      "id": "m08",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    return [p for p in gitignore_patterns(sections) if p not in present]",
+      "mutated": "    return [p for p in gitignore_patterns(sections) if p in present]",
+      "note": "Inverted membership: reports the patterns the file already carries instead of the ones it lacks."
+    },
+    {
+      "id": "m09",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "if p not in present]",
+      "mutated": "if present not in p]",
+      "note": "Swapped operands of the membership test."
+    },
+    {
+      "id": "m10",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    return [p for p in gitignore_patterns(sections)",
+      "mutated": "    return [p for p in sorted(gitignore_patterns(sections))",
+      "note": "Declaration order dropped: drift is reported alphabetically rather than in definition order."
+    },
+    {
+      "id": "m11",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    if not missing:\n        print(f\"  {label}: up to date with the current definition [OK]\")\n        return missing",
+      "mutated": "    if not missing:\n        print(f\"  {label}: up to date with the current definition [OK]\")",
+      "note": "Removed early return: the up-to-date path also prints the drift block and the fix hint."
+    },
+    {
+      "id": "m12",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    missing = gitignore_drift(gitignore_path, sections)",
+      "mutated": "    missing = gitignore_drift(sections, gitignore_path)",
+      "note": "Swapped arguments at the call site."
+    }
+  ]
+}

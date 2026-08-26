@@ -1,0 +1,122 @@
+{
+  "harness": {
+    "name": "mutation_sweep.py",
+    "version": "0.1.0"
+  },
+  "environment": {
+    "python": "3.12.0",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "root": ".",
+    "test_command": [
+      "python",
+      "-m",
+      "pytest",
+      "-q",
+      "tests/test_private_init_gitignore_definition.py"
+    ],
+    "timestamp": "2026-08-26T03:29:15-04:00"
+  },
+  "results": [
+    {
+      "id": "m1",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Changed pattern separator from newline to space -- each section becomes one line of space-joined patterns, which git would read as a single bogus pattern.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m2",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Dropped the blank line between rendered sections -- a plausible 'tidy up whitespace' refactor that changes the rendered .gitignore text.",
+      "verdict": "survived",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m3",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Dropped the space after the comment marker -- header normalization lost, so section titles render as '#Python' instead of '# Python'.",
+      "verdict": "survived",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m4",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Off-by-one boundary: the last pattern of every section silently drops out of the flattened list, so drift detection misses it.",
+      "verdict": "survived",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m5",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Returns a list of pattern lists instead of a flattened list -- the 'flattened' contract in the docstring is broken while the function still returns something list-shaped.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m6",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Declaration order lost -- patterns come back sorted, so any order-sensitive comparison or rendering check sees a reordered collection.",
+      "verdict": "survived",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m7",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Reordered elements within the Python section -- rendered text and flattened order both shift while the set of patterns stays identical.",
+      "verdict": "survived",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m8",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Dropped the '.*.swp' pattern -- a plausible 'looks like a duplicate of *.swp' cleanup that actually loses coverage for dotfile swap files.",
+      "verdict": "survived",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m9",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Dropped '*.bak' from the vault definition -- new vaults stop ignoring backups and existing vaults stop being reported as drifted on it.",
+      "verdict": "survived",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m10",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Removed the agent-working-state section from the VAULT definition -- '.gauntlet/' is no longer ignored or drift-checked, though the identically titled parent section still exists to mask the loss.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m11",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Swapped the parent's pattern for the vault's -- the parent project stops ignoring CLAUDE.local.md, the one thing only the parent definition can cover.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    },
+    {
+      "id": "m12",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "note": "Swapped argument at the module-level render call -- a new vault's .gitignore gets the parent's definition instead of its own.",
+      "verdict": "killed",
+      "restore_ok": true,
+      "output_tail": ""
+    }
+  ],
+  "summary": {
+    "killed": 5,
+    "survived": 7
+  },
+  "anomalies": []
+}

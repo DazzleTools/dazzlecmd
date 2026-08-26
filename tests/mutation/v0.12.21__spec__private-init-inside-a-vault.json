@@ -1,0 +1,75 @@
+{
+  "test_command": ["python", "-m", "pytest", "-q", "tests/test_private_init_gitignore_definition.py"],
+  "mutations": [
+    {
+      "id": "m1",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    if not target or not is_git_repo(target):",
+      "mutated": "    if not target and not is_git_repo(target):",
+      "note": "or -> and in the guard: a falsy target no longer short-circuits."
+    },
+    {
+      "id": "m2",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    if not target or not is_git_repo(target):\n        return None",
+      "mutated": "    if not target:\n        return None",
+      "note": "Removed the is_git_repo half: any directory named private/ under a parent that lists it is called a vault."
+    },
+    {
+      "id": "m3",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    if os.path.basename(os.path.normpath(target)) != private_dir_name:",
+      "mutated": "    if os.path.basename(target) != private_dir_name:",
+      "note": "Dropped normalization: a trailing-separator path yields an empty basename, so a genuine vault stops being recognized."
+    },
+    {
+      "id": "m4",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    if os.path.basename(os.path.normpath(target)) != private_dir_name:\n        return None",
+      "mutated": "    if os.path.basename(os.path.normpath(target)) == private_dir_name:\n        return None",
+      "note": "Inverted the name comparison: only directories NOT named private/ are accepted."
+    },
+    {
+      "id": "m5",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    parent = os.path.dirname(os.path.normpath(target))",
+      "mutated": "    parent = os.path.basename(os.path.normpath(target))",
+      "note": "dirname -> basename: parent becomes the leaf name rather than the containing project path."
+    },
+    {
+      "id": "m6",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    if parent and os.path.isdir(os.path.join(parent, private_dir_name)):",
+      "mutated": "    if parent is not None and os.path.isdir(os.path.join(parent, private_dir_name)):",
+      "note": "None-vs-truthiness: an empty-string parent is no longer rejected."
+    },
+    {
+      "id": "m7",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    if parent and os.path.isdir(os.path.join(parent, private_dir_name)):\n        return parent\n    return None",
+      "mutated": "    if parent:\n        return parent\n    return None",
+      "note": "Removed the parent-lists-it confirmation: any git repo named private/ is called a vault."
+    },
+    {
+      "id": "m8",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "os.path.isdir(os.path.join(parent, private_dir_name))",
+      "mutated": "os.path.isdir(os.path.join(private_dir_name, parent))",
+      "note": "Swapped join arguments: probes the wrong path entirely."
+    },
+    {
+      "id": "m9",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "    parent = looks_like_a_vault(target, private_dir_name)\n    if parent:",
+      "mutated": "    parent = looks_like_a_vault(target, private_dir_name)\n    if not parent:",
+      "note": "Inverted the report condition: the hint prints only when the caller is NOT inside a vault."
+    },
+    {
+      "id": "m10",
+      "file": "src/dazzlecmd/projects/dazzletools/private-init/private_init.py",
+      "original": "        print(f'  Did you mean:  dz private-init {verb} \"{parent}\"')\n    return 1",
+      "mutated": "        print(f'  Did you mean:  dz private-init {verb} \"{target}\"')\n    return 1",
+      "note": "The suggested command repeats the vault path the caller already used instead of the parent project path."
+    }
+  ]
+}
