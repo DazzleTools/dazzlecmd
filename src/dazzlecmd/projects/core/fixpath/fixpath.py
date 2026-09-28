@@ -222,7 +222,35 @@ def fix_path(raw_path):
             if os.path.exists(candidate):
                 path = candidate
 
+    if os.path.exists(path):
+        path = _true_case(path)
+
     return path
+
+
+def _true_case(path):
+    """Return ``path`` with each component spelled as it is on disk.
+
+    On a case-insensitive filesystem a typed path can exist while spelled
+    differently from the real file (``active-work.md`` vs ``ACTIVE-WORK.md``).
+    Walks the components with listdir rather than realpath, so junctions and
+    symlinks are not resolved. Returns ``path`` unchanged when any component
+    cannot be matched unambiguously.
+    """
+    drive, rest = os.path.splitdrive(os.path.abspath(path))
+    current = drive + os.sep
+    for part in [p for p in rest.split(os.sep) if p]:
+        try:
+            names = os.listdir(current)
+        except OSError:
+            return path
+        if part not in names:
+            matches = [n for n in names if n.lower() == part.lower()]
+            if len(matches) != 1:
+                return path
+            part = matches[0]
+        current = os.path.join(current, part)
+    return current
 
 
 def _fix_unc_path(path):
@@ -322,7 +350,7 @@ def _is_bare_filename(path):
 
 
 def _search_for_file(pattern, search_dirs, config, max_results=None,
-                     search_on=None, broaden_levels=None):
+                     search_on=None, broaden_levels=None, quiet=False):
     """Search for a file or directory using a graduated pipeline.
 
     Algorithm:
@@ -337,9 +365,13 @@ def _search_for_file(pattern, search_dirs, config, max_results=None,
       base-path    Search ONLY from CWD / --dir roots, no broadening
       broaden      Vicinity only: search around the resolved subpath,
                    walk up N levels (--broaden), skip CWD fallback
-      local        Vicinity + CWD + walk up ~4 levels (default)
+      local        Vicinity + CWD + walk up ~4 levels
       drive        Search the full CWD drive
       anywhere     Search all drives
+
+    With no --search-on and no --dir, the default is local followed by a
+    drive-wide Everything search as a last resort (announced on stderr), so
+    a nearby match always wins over a same-named file elsewhere.
 
     Trailing slashes signal directory intent -- uses --type d with fd or
     folder: prefix with Everything.
@@ -467,16 +499,38 @@ def _search_for_file(pattern, search_dirs, config, max_results=None,
             if drive_root and os.path.normpath(current) == os.path.normpath(drive_root):
                 break
             tried.add(current.lower())
-            broader = _run_fd_search(leaf, [current],
-                                     max_results=max_results, dir_only=dir_only)
+            # On an indexed drive, walk up with Everything scoped to each
+            # level: an fd crawl of a high ancestor (C:\code, C:\Users) takes
+            # tens of seconds. The CWD tier above already gave fd its pass.
+            if drive_indexed:
+                broader = _run_everything_search(leaf, [current],
+                                                 max_results=max_results,
+                                                 dir_only=dir_only)
+            else:
+                broader = _run_fd_search(leaf, [current],
+                                         max_results=max_results, dir_only=dir_only)
             if broader:
                 results = broader
                 break
             current = os.path.dirname(current)
 
+    # Last resort when no scope was requested: drive-wide Everything. Only
+    # after every local tier came up empty, so a nearby match always wins,
+    # and announced so a far-away hit is not mistaken for a local one.
+    if not results and not search_on and not search_dirs \
+            and drive_indexed and cwd_drive:
+        es_results = _run_everything_search(leaf, [cwd_drive + os.sep],
+                                            max_results=max_results,
+                                            dir_only=dir_only)
+        if es_results:
+            results = es_results
+            if not quiet:
+                print("  (nothing under the current directory or 4 levels up; "
+                      f"showing matches elsewhere on {cwd_drive})", file=sys.stderr)
+
     # If still nothing and --search-on anywhere, try Everything unscoped
     if not results and "anywhere" in search_on:
-        es_results = _run_everything_search(leaf, ["."],
+        es_results = _run_everything_search(leaf, None,
                                             max_results=max_results,
                                             dir_only=dir_only)
         if es_results:
@@ -648,40 +702,33 @@ def _run_everything_search(pattern, dirs, max_results=None, dir_only=False):
     else:
         query = es_pattern
 
-    cmd = [es_path, "-n", str(max_results or 20), query]
+    # Everything searches its full index (all configured drives), and -n caps
+    # the result count BEFORE any filtering we could do afterwards. So scope
+    # each query server-side with -path; filtering a capped global list would
+    # drop local matches that rank past the cap. dirs=None means unscoped.
+    scopes = [os.path.abspath(d) for d in dirs] if dirs else [None]
 
-    # Everything searches its full index (all configured drives).
-    # When search dirs are explicitly specified, filter results to those dirs.
-    # When search dirs is just CWD ("."), prefer results under CWD but
-    # return all results if nothing local matches -- the indexed search
-    # is fast so broader results are free.
-
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True,
-                                encoding="utf-8", errors="replace", timeout=10)
+    all_results = []
+    seen = set()
+    for scope in scopes:
+        cmd = [es_path, "-n", str(max_results or 20)]
+        if scope:
+            cmd.extend(["-path", scope])
+        cmd.append(query)
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True,
+                                    encoding="utf-8", errors="replace", timeout=10)
+        except (subprocess.TimeoutExpired, OSError):
+            return None  # Fall back to fd
         if result.returncode != 0:
             return None  # Everything query failed, fall back to fd
+        for line in result.stdout.splitlines():
+            path = line.strip()
+            if path and path.lower() not in seen:
+                seen.add(path.lower())
+                all_results.append(path)
 
-        all_results = [l.strip() for l in result.stdout.splitlines() if l.strip()]
-        if not all_results:
-            return None  # No results from Everything, let fd try
-
-        # Filter to search directories if explicitly specified
-        if dirs and not (len(dirs) == 1 and dirs[0] == "."):
-            abs_dirs = [os.path.abspath(d).lower().replace("/", "\\")
-                        for d in dirs]
-            filtered = [r for r in all_results
-                        if any(r.lower().replace("/", "\\").startswith(d)
-                               for d in abs_dirs)]
-            return filtered if filtered else all_results
-
-        # CWD-only scope: prefer local results, but return all if none local
-        cwd = os.getcwd().lower().replace("/", "\\")
-        local = [r for r in all_results
-                 if r.lower().replace("/", "\\").startswith(cwd)]
-        return local if local else all_results
-    except (subprocess.TimeoutExpired, OSError):
-        return None  # Fall back to fd
+    return all_results or None  # None lets the caller try fd
 
 
 def _run_fd_search(pattern, dirs, max_results=None, dir_only=False):
@@ -789,7 +836,7 @@ def _search_and_select(raw_path, args, config):
     broaden = getattr(args, "broaden", None)
     results = _search_for_file(raw_path, args.search_dirs, config,
                                max_results=max_results, search_on=search_on,
-                               broaden_levels=broaden)
+                               broaden_levels=broaden, quiet=args.quiet)
     if not results:
         if not args.quiet:
             print(f"  No matches for: {raw_path}", file=sys.stderr)

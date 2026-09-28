@@ -4,6 +4,15 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.22-alpha] - 2026-09-27
+
+### Fixed
+- `dz fixpath` could return a file from a different project when the one you meant was right under the current directory. On a drive indexed by Everything, the search asked Everything for its top 20 matches across the whole index and only then kept the ones under the current directory. When more than 20 files elsewhere matched -- and a name like `active-work.md` matches every `...active-work...md` on the drive -- the local file was cut before the filter ever saw it, and fixpath answered with the best of 20 unrelated files. Everything is now asked about the current directory directly, so the cap cannot hide a local match.
+- With nothing under the current directory, fixpath substituted results from the whole drive, which also skipped fd and the walk up the parent directories. The search now goes local-first, in order: the current directory, then up to 4 parent levels, and only then the rest of the drive -- and a drive-wide answer says so on stderr (`nothing under the current directory or 4 levels up; showing matches elsewhere on C:`) rather than passing as the nearby file. `-q` hides the note.
+- `--search-on local` and `--dir` now stay where they are told to look instead of falling back to the whole drive. This matters to tools that call fixpath to relink files: `md-rm-img` asks for local results so an image reference never binds to a same-named image across the drive.
+- An existing path typed in the wrong case now prints as it is spelled on disk: `claude/_todo/active-work.md` resolves to `...\_todo\ACTIVE-WORK.md`. Windows accepts either spelling, but a path copied into git, a URL, or a case-sensitive share needs the real one. Junctions and symlinks are left unresolved.
+- On an indexed drive the walk up the parent directories uses Everything rather than an fd crawl, so a lookup with no nearby match no longer spends tens of seconds walking a directory like `C:\code` or `C:\Users` before reaching the drive-wide answer.
+
 ## [0.12.21-alpha] - 2026-08-26
 
 ### Added
@@ -4225,7 +4234,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.21a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.22a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
