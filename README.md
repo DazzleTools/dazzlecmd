@@ -181,11 +181,11 @@ dazzlecmd/
 │   ├── core/                 # Core tools (always active)
 │   │   ├── f-cp/  f-mv/  find/  fixpath/  links/  listall/  rn/  safedel/
 │   │   └── _f_common/        # shared metadata-preserving adapter for f-cp/f-mv
-│   ├── dazzletools/          # DazzleTools collection (always active, 19 tools)
+│   ├── dazzletools/          # DazzleTools collection (always active, 22 tools)
 │   │   ├── dos2unix/  split/  srch-path/  delete-nul/  md-rm-img/  md-unwrap/
 │   │   ├── git/  git-snapshot/  github/  private-init/
 │   │   ├── claude-cleanup/  claude-session-metadata/  claudeview/  ...
-│   │   ├── safe-icacls/  fixuser/  redact-msinfo/  extract-all/
+│   │   ├── safe-icacls/  fixuser/  redact-msinfo/  unlockit/  extract-all/
 │   │   └── .kit.json         # in-repo kit manifest (the tool list)
 │   └── media/                # Media kit (opt-in: dz kit enable media, 7 tools)
 │       ├── vid2gif/  vidresize/  img2vid/  crossfade/  song-to-vid/  ...

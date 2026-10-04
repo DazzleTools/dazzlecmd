@@ -22,7 +22,7 @@ Virtual kits don't add new tools -- they expose **alias names** for existing can
 | | `f:ls` / `f:rm` | `core:listall` / `core:safedel` |
 | **md** (markdown) | `md:unwrap` / `md:rm-img` | `dazzletools:md-unwrap` / `dazzletools:md-rm-img` |
 | **windows** | `windows:sicacls` / `windows:fixusr` | `dazzletools:safe-icacls` / `dazzletools:fixuser` |
-| | `windows:redact-msinfo` | `dazzletools:redact-msinfo` |
+| | `windows:redact-msinfo` / `windows:unlockit` | `dazzletools:redact-msinfo` / `dazzletools:unlockit` |
 | **claude** | `claude:cleanup` / `claude:session-metadata` | `dazzletools:claude-cleanup` / `...-session-metadata` |
 | | `claude:recover-sesslogs` / `claude:sesslog-datefix` / `claude:view` | `...-recover-sesslogs` / `...-sesslog-datefix` / `claudeview` |
 

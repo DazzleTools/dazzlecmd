@@ -1,0 +1,26 @@
+{
+    "name": "unlockit",
+    "version": "0.1.0",
+    "description": "Show which processes hold a locked file or folder (open handles, working directories) and the window each belongs to -- the 'who has this in use?' Windows never answers",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "windows",
+    "platforms": ["windows"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "unlockit.py"
+    },
+    "pass_through": false,
+    "dependencies": {
+        "python": ["psutil"],
+        "note": "psutil is optional -- without it the working-directory check (processes whose current directory is inside a folder) is skipped and reported as unavailable. Open-file detection uses the Windows Restart Manager via ctypes and needs nothing extra. Sysinternals handle.exe is used only with --handle."
+    },
+    "taxonomy": {
+        "category": "system-tools",
+        "tags": ["windows", "lock", "unlock", "in-use", "sharing-violation", "handle", "process", "window", "restart-manager"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

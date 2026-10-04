@@ -4,6 +4,15 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.23-alpha] - 2026-10-04
+
+### Added
+- `dz unlockit <path>` (Windows): when a file or folder cannot be deleted, renamed or moved because something has it in use, unlockit names what holds it and the window each holder belongs to. Windows only says "in use"; unlockit says, for example, that the VS Code window titled `... - my-folder - Visual Studio Code` has the folder open through seven processes whose working directory is inside it. It needs no administrator rights for the common cases and answers in about a second.
+- It looks in three places: whether deleting would fail right now (checked without changing anything), which processes have the file or a file inside the folder open (the same Restart Manager that Explorer's "file in use" dialog asks), and which processes have their working directory inside a folder. That last kind of lock is the one Sysinternals handle.exe missed in testing. `--handle` adds handle.exe's answer when you have it, and gives up after 20 seconds instead of hanging, which older builds do when not elevated.
+- Holders are grouped by window. When one program runs many windows under a single process, as VS Code and Typora do, the window whose title names the path is chosen. When no title names it, the report says so instead of guessing.
+- `--focus N` restores holder N's window and brings it to the front, so you can see what it is doing and close it yourself. `--focus` alone works when only one holder has a window. `--json` gives the report in machine-readable form. unlockit never closes a window or ends a process.
+- unlockit is also reachable as `dz windows:unlockit`.
+
 ## [0.12.22-alpha] - 2026-09-27
 
 ### Fixed
@@ -4234,7 +4243,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.22a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.23a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -41,6 +41,7 @@ The DazzleTools kit contains cross-platform utilities from the [DazzleTools](htt
 | `safe-icacls` | Loop-safe passthrough wrapper around Windows `icacls` (prunes reparse points on `/T`) | Windows |
 | `fixuser` | Diagnose and repair a broken Windows user profile (the temp-profile / `C:\Users\TEMP` state) | Windows |
 | `redact-msinfo` | Redact a Windows `msinfo32` export for safe sharing (PII scrub + section selection) | Cross-platform |
+| `unlockit` | Show which processes hold a locked file or folder and the window each belongs to; `--focus` brings that window to the front | Windows |
 
 ### Archives
 

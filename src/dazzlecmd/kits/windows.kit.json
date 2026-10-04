@@ -7,7 +7,8 @@
     "tools": [
         "dazzletools:safe-icacls",
         "dazzletools:redact-msinfo",
-        "dazzletools:fixuser"
+        "dazzletools:fixuser",
+        "dazzletools:unlockit"
     ],
     "name_rewrite": {
         "dazzletools:safe-icacls": "sicacls",
