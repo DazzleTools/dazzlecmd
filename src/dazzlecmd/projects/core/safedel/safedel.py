@@ -63,23 +63,16 @@ from dazzlecmd_lib.core.safedel import (
 # packages and can be at different versions on one machine -- above all on a
 # development box, where the dazzlecmd checkout is installed in editable mode
 # (every saved edit is live) while dazzlecmd-lib is an ordinary installed
-# copy. When the engine is older, this file must not turn `dz safedel` into
-# an import error for every session on the machine: see `_engine_too_old`
-# and `main`.
+# copy. A released install cannot be in that state (the dependency floor
+# requires the newer library). When it does happen, the command says what is
+# wrong and changes nothing, instead of failing as an import error inside the
+# dispatcher: see `_engine_too_old` and `main`.
 #
-# COMPATIBILITY PATH -- counted, with an exit (2026-11-18):
-#   who needs it:  one machine, the maintainer's dev box (plzwork), from the
-#                  moment this file was saved until dazzlecmd-lib 0.10.37 is
-#                  installed there. Counted by observation: `dz safedel
-#                  --help` failed with "cannot import name
-#                  'stdin_is_interactive'" against the installed 0.10.36.
-#   who cannot:    anyone installing a released dazzlecmd 0.12.25 -- its
-#                  dependency floor is dazzlecmd-lib>=0.10.37a0.
-#   by hand instead: installing the lib is the maintainer's act.
-#   exit:          delete this block, `_engine_too_old`, the branch in
-#                  `main`, and `_cli_0_12_24.py` in the first commit after
-#                  dazzlecmd-lib 0.10.37 is installed on that machine --
-#                  before dazzlecmd 0.12.25 is released.
+# (From 0.12.25 to 0.12.26 an older engine ran the 0.12.24 command instead,
+# kept as `_cli_0_12_24.py`. That path was counted when it was written -- one
+# machine needed it, until the library was installed there -- and was removed
+# in 0.12.27 once it was: 2026-11-18, dazzlecmd-lib 0.10.38a0. The old
+# command is in git history at v0.12.24.)
 try:
     from dazzlecmd_lib.core.safedel import (
         stdin_is_interactive,
@@ -111,16 +104,6 @@ def _engine_too_old() -> Optional[str]:
         found = "unknown version"
     return (f"dazzlecmd-lib {found} is older than this safedel command "
             f"needs (0.10.37 or later)")
-
-
-def _run_previous_cli(argv: List[str]) -> int:
-    """Run the 0.12.24 command, unchanged, against the older engine."""
-    import importlib.util
-    path = Path(__file__).parent / "_cli_0_12_24.py"
-    spec = importlib.util.spec_from_file_location("_safedel_cli_0_12_24", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.main(argv)
 
 # Initialize log_lib from _lib/
 _lib_dir = str(Path(__file__).parent / "_lib")
@@ -275,14 +258,12 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     too_old = _engine_too_old()
     if too_old:
-        # Keep working exactly as before rather than fail for every session
-        # on the machine (see the note at the imports). Said on stderr every
-        # time, so nobody mistakes this for the new behaviour: with the older
-        # engine, a delete WITHOUT --yes still exits 0 when it aborts.
-        print(f"  [safedel: {too_old}; running the previous command. "
-              f"Its exit codes are not graded: pass --yes, and check the "
-              f"result by looking.]", file=sys.stderr)
-        return _run_previous_cli(argv)
+        # Say what is wrong and change nothing (see the note at the imports).
+        print(f"  safedel: {too_old}. Nothing was changed. Install the "
+              f"matching library: pip install -U dazzlecmd-lib",
+              file=sys.stderr)
+        print("safedel: ERROR dazzlecmd-lib is too old")
+        return 1
 
     if not argv:
         _build_delete_parser().print_help()

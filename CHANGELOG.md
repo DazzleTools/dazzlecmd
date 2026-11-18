@@ -4,6 +4,14 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.27-alpha] - 2026-11-18
+
+### Removed
+- The fallback added in 0.12.25 that ran the 0.12.24 `dz safedel` command when the installed dazzlecmd-lib was older than 0.10.37. It existed for one development machine until its library was updated, and that is done. If the library is ever older than the command needs (possible only with a development checkout beside an installed library, never from a released install), `dz safedel` now says so, changes nothing, and exits 1.
+
+### Versions
+- dazzlecmd 0.12.26 -> 0.12.27 (PATCH); dazzle-dz -> 0.12.27a0.
+
 ## [0.12.26-alpha] - 2026-11-18
 
 ### Added
@@ -4308,7 +4316,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.26a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.27a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -383,51 +383,36 @@ def test_a_failed_post_condition_is_code_6(cli, tmp_path, monkeypatch):
 # -- an engine older than this command ---------------------------------------
 
 
-def test_an_older_engine_runs_the_previous_command_and_says_so(
-        monkeypatch, capsys):
+def test_an_older_engine_is_reported_and_nothing_is_changed(
+        tmp_path, monkeypatch, capsys):
     """dazzlecmd and dazzlecmd-lib can be at different versions on one
-    machine (a dev box with an editable dazzlecmd and an installed lib). The
-    command must keep working there, not become an import error for every
-    session. The previous command is stubbed: nothing real is run."""
+    machine (a development checkout beside an installed library). The command
+    must say what is wrong and touch nothing -- not surface as an import
+    error, and not act."""
+    f = _write(tmp_path / "src" / "a.txt", b"A")
     monkeypatch.setattr(safedel, "_ENGINE_IMPORT_ERROR",
                         ImportError("cannot import name 'stdin_is_interactive'"))
-    seen = []
-    monkeypatch.setattr(safedel, "_run_previous_cli",
-                        lambda argv: seen.append(list(argv)) or 0)
 
-    rc = safedel.main(["--yes", "some-path"])
+    def _boom(*a, **k):
+        raise AssertionError("the store was opened with an engine too old")
+    monkeypatch.setattr(safedel, "TrashStore", _boom)
 
-    err = capsys.readouterr().err
-    assert rc == 0 and seen == [["--yes", "some-path"]]
-    assert "older than this safedel command needs" in err
-    assert "running the previous command" in err
+    rc = safedel.main(["--yes", str(f)])
+
+    out = capsys.readouterr()
+    assert rc == 1 and f.read_bytes() == b"A"
+    assert "older than this safedel command needs" in out.err
+    assert "Nothing was changed" in out.err
+    assert _last_line(out.out) == "safedel: ERROR dazzlecmd-lib is too old"
 
 
-def test_a_current_engine_never_takes_the_older_engine_path(cli, tmp_path,
-                                                            monkeypatch):
-    def _boom(argv):
-        raise AssertionError("the previous command ran against a current engine")
-    monkeypatch.setattr(safedel, "_run_previous_cli", _boom)
+def test_a_current_engine_is_not_reported_as_too_old(cli, tmp_path):
     f = _write(tmp_path / "src" / "a.txt", b"A")
 
     rc, out, err = cli(["--yes", f])
 
     assert rc == 0 and safedel._engine_too_old() is None
-    assert "previous command" not in err
-
-
-def test_the_previous_command_file_is_the_0_12_24_cli():
-    """The file the older-engine path runs is present and is a CLI: it has a
-    ``main`` and still has the 0.12.24 delete flow (its own ``_do_delete``
-    taking two arguments). Loaded as a module; nothing is executed."""
-    import importlib.util
-    import inspect
-    path = os.path.join(os.path.dirname(safedel.__file__), "_cli_0_12_24.py")
-    spec = importlib.util.spec_from_file_location("_prev_cli_under_test", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    assert callable(module.main)
-    assert list(inspect.signature(module._do_delete).parameters) == ["store", "args"]
+    assert "too old" not in out and "older than" not in err
 
 
 def test_the_report_names_this_batch_not_last(cli, tmp_path):
