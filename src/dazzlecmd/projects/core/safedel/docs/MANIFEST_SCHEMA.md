@@ -47,6 +47,12 @@ glob patterns. Collisions get a `_001`, `_002` suffix.
 | `folder_name` | string | The timestamped folder name. Redundant with the parent directory name but useful for orphan detection. |
 | `platform` | object | Platform info (see below). |
 | `entries` | array | List of deleted items (see below). |
+| `state` | string | `"staging"` while a delete is in progress, `"complete"` once it has finished. The manifest is written before anything moves and rewritten after each item, so a manifest that still says `"staging"` belongs to a run that was interrupted: its entries are the items that had been handled so far. `recover last` skips such a batch; naming the batch recovers what it holds. Absent in manifests written before dazzlecmd-lib 0.10.37, which are treated as complete. |
+| `scopes` | array of strings | The `--yes` scopes in force for the delete (for example `["noninteractive"]`, or `["delete-through-junction"]`). Empty when the caller gave none. Added in dazzlecmd-lib 0.10.37. |
+
+A batch folder with no readable `manifest.json` is not an empty batch: its `content/` may hold the only copy of something. `recover` reports it as an error and keeps the folder.
+
+Besides `manifest.json` and `content/`, a batch folder may hold `copy-first/`: verified copies made before the originals were moved (see `copy_first` under Entry fields).
 
 ### `platform` object
 
@@ -111,6 +117,9 @@ Each element in the `entries` array describes one deleted item:
 | `stat` | object | Raw stat results (see Stat Schema below) |
 | `metadata` | object or null | Preservelib metadata dict (see Metadata Schema below) |
 | `warnings` | array of strings | Warnings emitted during classification or staging |
+| `copy_first` | object or null | Present when a verified copy was made before the item was moved (dazzlecmd-lib 0.10.37 and later). `path`: the copy's location relative to the batch folder (`"copy-first/<name>"`); `algorithm`: `"SHA256"`; `files` and `bytes`: how much was verified; `verified`: true; `links_not_copied`: for a folder, the links inside it that were recorded and not copied (`path` relative to the item, and `target`). The copy proves content only: its own timestamps are new. Null when no copy was made. |
+
+An entry with `content_preserved: true` and `content_path: null` (and a `file_type` that is not a link) was never staged: it was refused or failed at delete time and was left where it was. `recover` reports it as skipped.
 
 ### File types
 

@@ -4,6 +4,22 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.26-alpha] - 2026-11-18
+
+### Added
+- **`dz worktree-teardown <worktree>`: remove a git worktree without deleting through the links inside it.** `git worktree remove` deletes through a junction or symlink in the worktree and empties what it points at -- measured on git 2.52 for Windows, with `--force` and also without it when the linked folder is gitignored, which is how a `private/` link to the main checkout's notes is normally set up. This command never runs it. It removes the links inside the worktree (the links only; what each points at is not touched), checks each target still holds what it held, moves the worktree folder to the safedel trash, checks again, and runs `git worktree prune`. It stops at the first step whose check fails and says what it had done.
+- It asks first at a console and needs `--yes` when nobody is at the keyboard, like `dz safedel`. `--dry-run` prints the plan -- the main repository, each link and its target, and the steps -- and changes nothing. It refuses a repository's main checkout, a folder that is not a worktree, and a path that is itself a link.
+- Everything it removes is in the safedel trash: the report lists the batches, `dz safedel recover <batch-name>` brings one back, and `git worktree repair` re-attaches a recovered worktree.
+- Exit codes: 0 done, 1 error, 2 usage, 3 refused with nothing changed, 4 stopped part-way. The last line of output is the verdict (`worktree-teardown: DONE <path>`).
+
+### Docs and tests
+- `MANIFEST_SCHEMA.md` describes the manifest fields added in dazzlecmd-lib 0.10.37 (`state`, `scopes`, `copy_first`) and what a batch with no readable manifest means.
+- `tests/test_worktree_teardown.py` (10 tests, on real git repositories in temporary folders); a hand-run checklist: `tests/checklists/v0.12.26__Tool__worktree-teardown.md`.
+- The safedel command-line tests are skipped, with the reason, when the installed dazzlecmd-lib is older than the command needs.
+
+### Versions
+- dazzlecmd 0.12.25 -> 0.12.26 (PATCH); dazzle-dz -> 0.12.26a0. dazzlecmd-lib minimum 0.10.37a0 -> 0.10.38a0.
+
 ## [0.12.25-alpha] - 2026-11-18
 
 `dz safedel` now refuses when nobody can answer, and says truthfully what it did. On 2026-11-17 it was run by an agent without `--yes`: it prompted, read end-of-file, printed "Aborted." and exited 0, and the command line that called it went on as if the delete had happened. Requires dazzlecmd-lib 0.10.37a0, now the minimum.
@@ -4292,7 +4308,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.25a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.26a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

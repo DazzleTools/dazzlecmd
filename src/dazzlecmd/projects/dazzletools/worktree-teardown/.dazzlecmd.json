@@ -1,0 +1,22 @@
+{
+    "name": "worktree-teardown",
+    "version": "0.1.0",
+    "description": "Remove a git worktree without deleting through the junctions or symlinks inside it: links first (links only), then the folder to the safedel trash, then git worktree prune. Never runs git worktree remove",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "worktree_teardown.py"
+    },
+    "pass_through": false,
+    "taxonomy": {
+        "category": "repo-tools",
+        "tags": ["git", "worktree", "junction", "symlink", "safedel", "teardown"]
+    },
+    "lifecycle": {
+        "status": "active"
+    }
+}

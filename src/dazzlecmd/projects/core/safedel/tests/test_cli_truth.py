@@ -27,6 +27,14 @@ import dazzlecmd_lib.core.safedel as sd
 WINDOWS = sys.platform == "win32"
 TEN_MB = 10 * 1024 * 1024
 
+# These tests exercise the command against the engine's plan/execute API.
+# Where the installed dazzlecmd-lib is older (a development checkout beside an
+# installed library), the command runs its previous code path instead, and
+# these tests do not apply.
+pytestmark = pytest.mark.skipif(
+    safedel._engine_too_old() is not None,
+    reason="needs dazzlecmd-lib 0.10.37 or later: " + str(safedel._engine_too_old()))
+
 
 class _GuardStore(sd.TrashStore):
     """A real store that cannot execute: planning works, moving raises."""
