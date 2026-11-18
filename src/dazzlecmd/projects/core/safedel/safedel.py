@@ -26,6 +26,16 @@ Protection zones (for clean):
     Zone B (< 48h):      Requires --force AND interactive Y/N.
     Zone C (48h-30d):    Interactive Y/N with warnings.
     Zone D (> 30d):      Interactive by default, --yes accepted.
+
+Consent:
+    Deleting asks first. At a console it prompts; anywhere else (a script,
+    an agent, a pipe) it refuses unless --yes is given. --yes can carry
+    scopes: --yes delete-through-junction, --yes copy-first, ...
+
+Exit codes (the last line of output is always "safedel: <VERDICT> ..."):
+    0  everything staged          3  refused -- nothing moved
+    1  unexpected error           4  partial -- some staged, some not
+    2  usage error                6  a post-condition check failed
 """
 
 import argparse
@@ -47,6 +57,70 @@ from dazzlecmd_lib.core.safedel import (
     cmd_clean,
     cmd_status,
 )
+
+# This command needs the engine's plan/execute API (dazzlecmd-lib 0.10.37,
+# core.safedel API version 3). dazzlecmd and dazzlecmd-lib are separate
+# packages and can be at different versions on one machine -- above all on a
+# development box, where the dazzlecmd checkout is installed in editable mode
+# (every saved edit is live) while dazzlecmd-lib is an ordinary installed
+# copy. When the engine is older, this file must not turn `dz safedel` into
+# an import error for every session on the machine: see `_engine_too_old`
+# and `main`.
+#
+# COMPATIBILITY PATH -- counted, with an exit (2026-11-18):
+#   who needs it:  one machine, the maintainer's dev box (plzwork), from the
+#                  moment this file was saved until dazzlecmd-lib 0.10.37 is
+#                  installed there. Counted by observation: `dz safedel
+#                  --help` failed with "cannot import name
+#                  'stdin_is_interactive'" against the installed 0.10.36.
+#   who cannot:    anyone installing a released dazzlecmd 0.12.25 -- its
+#                  dependency floor is dazzlecmd-lib>=0.10.37a0.
+#   by hand instead: installing the lib is the maintainer's act.
+#   exit:          delete this block, `_engine_too_old`, the branch in
+#                  `main`, and `_cli_0_12_24.py` in the first commit after
+#                  dazzlecmd-lib 0.10.37 is installed on that machine --
+#                  before dazzlecmd 0.12.25 is released.
+try:
+    from dazzlecmd_lib.core.safedel import (
+        stdin_is_interactive,
+        split_yes,
+        ScopeError,
+        SCOPES,
+        copy_first_settings,
+        parse_size,
+        verdict_line,
+        result_verdict,
+        EXIT_OK,
+        EXIT_ERROR,
+        EXIT_USAGE,
+        EXIT_REFUSED,
+    )
+    _ENGINE_IMPORT_ERROR = None
+except ImportError as _exc:  # an engine older than 0.10.37
+    _ENGINE_IMPORT_ERROR = _exc
+
+
+def _engine_too_old() -> Optional[str]:
+    """None when the engine has what this command needs, else why not."""
+    if _ENGINE_IMPORT_ERROR is None:
+        return None
+    try:
+        import dazzlecmd_lib
+        found = getattr(dazzlecmd_lib, "__version__", "unknown version")
+    except Exception:  # noqa: BLE001
+        found = "unknown version"
+    return (f"dazzlecmd-lib {found} is older than this safedel command "
+            f"needs (0.10.37 or later)")
+
+
+def _run_previous_cli(argv: List[str]) -> int:
+    """Run the 0.12.24 command, unchanged, against the older engine."""
+    import importlib.util
+    path = Path(__file__).parent / "_cli_0_12_24.py"
+    spec = importlib.util.spec_from_file_location("_safedel_cli_0_12_24", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.main(argv)
 
 # Initialize log_lib from _lib/
 _lib_dir = str(Path(__file__).parent / "_lib")
@@ -90,19 +164,39 @@ def _build_delete_parser() -> argparse.ArgumentParser:
             "  dz safedel clean [pattern]         Permanently delete entries\n"
             "  dz safedel status                  Show trash statistics\n"
             "\nExamples:\n"
-            "  dz safedel myfile.txt              Delete a file (stages to trash)\n"
-            "  dz safedel -r mydir/               Delete a directory tree\n"
-            "  dz safedel --dry-run myfile.txt     Show what would happen\n"
+            "  dz safedel myfile.txt              Delete a file (asks first at a console)\n"
+            "  dz safedel --yes mydir/            Delete without a prompt (scripts, agents)\n"
+            "  dz safedel --dry-run myfile.txt     Show exactly what would happen\n"
             "  dz safedel recover last             Recover most recent deletion\n"
             "  dz safedel recover today 10:4*      Recover by time pattern\n"
             "  dz safedel clean --age '>30d'       Clean old entries\n"
+            "\n--yes scopes (comma-separated; bare --yes means noninteractive):\n"
+            "  noninteractive            do not prompt\n"
+            "  delete-through-junction   also delete what a junction points at\n"
+            "  delete-through-symlink    also delete what a symlink points at\n"
+            "  copy-first                make a verified copy before moving\n"
+            "  no-copy-first             stage without that copy\n"
+            "  dangerous                 reserved for 'dz guarded'\n"
+            "  A word after --yes is read as scopes only if every part is a\n"
+            "  scope name; a file named like a scope is ./dangerous or after --.\n"
+            "\nExit codes (the last output line is 'safedel: <VERDICT> ...'):\n"
+            "  0 staged   1 error   2 usage   3 refused, nothing moved\n"
+            "  4 partial  6 a post-condition check failed\n"
         ),
     )
     parser.add_argument("paths", nargs="+", help="Files or directories to delete")
     parser.add_argument("-r", "--recursive", action="store_true",
                         help="Allow recursive directory deletion")
-    parser.add_argument("--yes", "-y", action="store_true",
-                        help="Skip interactive confirmation")
+    # --yes is taken out of the arguments before argparse runs (its optional
+    # value must never swallow a path); this entry exists for --help.
+    parser.add_argument("--yes", "-y", nargs="?", metavar="SCOPES",
+                        help="Consent to delete without a prompt; optional "
+                             "comma-separated scopes (see below). Required "
+                             "when nobody is at the keyboard")
+    parser.add_argument("--copy-first-max", metavar="SIZE", default=None,
+                        help="Largest batch copy-first will copy (e.g. 10MB, "
+                             "1g); a larger batch is refused while copy-first "
+                             "is on")
     parser.add_argument("--dry-run", "-n", action="store_true",
                         help="Show what would happen without changes")
     parser.add_argument("--json", "-j", dest="json_output", action="store_true",
@@ -179,6 +273,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
 
+    too_old = _engine_too_old()
+    if too_old:
+        # Keep working exactly as before rather than fail for every session
+        # on the machine (see the note at the imports). Said on stderr every
+        # time, so nobody mistakes this for the new behaviour: with the older
+        # engine, a delete WITHOUT --yes still exits 0 when it aborts.
+        print(f"  [safedel: {too_old}; running the previous command. "
+              f"Its exit codes are not graded: pass --yes, and check the "
+              f"result by looking.]", file=sys.stderr)
+        return _run_previous_cli(argv)
+
     if not argv:
         _build_delete_parser().print_help()
         return 0
@@ -230,99 +335,202 @@ def main(argv: Optional[List[str]] = None) -> int:
         return cmd_status(store)
 
     else:
-        # Default: treat all args as a delete operation
+        # Default: treat all args as a delete operation.
+        # --yes (and its optional scope list) comes out first, so its value
+        # can never be mistaken for a path, nor a path for its value.
+        try:
+            argv, scopes, yes_given = split_yes(argv)
+        except ScopeError as exc:
+            print(f"  safedel: {exc}", file=sys.stderr)
+            print(verdict_line("safedel", "USAGE", str(exc)))
+            return EXIT_USAGE
         args = _build_delete_parser().parse_args(argv)
         _init_output(
             verbose=getattr(args, "verbose", 0),
             quiet=getattr(args, "quiet", 0),
         )
-        return _do_delete(store, args)
+        json_output = getattr(args, "json_output", False)
+        try:
+            return _do_delete(store, args, scopes, yes_given)
+        except Exception as exc:  # noqa: BLE001
+            # Whatever went wrong, the caller still gets a truthful last
+            # line and a non-zero code -- never a silent 0.
+            import traceback
+            traceback.print_exc()
+            return _finish(EXIT_ERROR, "ERROR",
+                           f"{type(exc).__name__}: {exc}", json_output)
 
 
-def _do_delete(store: TrashStore, args: argparse.Namespace) -> int:
-    """Execute the delete operation."""
+def _finish(code: int, outcome: str, detail: str, json_output: bool,
+            payload: Optional[dict] = None) -> int:
+    """The one way the delete action ends: the verdict, then the code.
+
+    Text mode: the verdict is the LAST line on stdout, so a caller who reads
+    only the tail of the output still sees what happened. JSON mode: the
+    same facts are fields of the one JSON object (a trailing text line
+    would make the output unparseable).
+    """
+    line = verdict_line("safedel", outcome, detail)
+    if json_output:
+        import json
+        out = dict(payload or {})
+        out["verdict"] = line
+        out["exit_code"] = code
+        print(json.dumps(out, indent=2, default=str))
+    else:
+        sys.stderr.flush()
+        print(line)
+    sys.stdout.flush()
+    return code
+
+
+def _ask(prompt: str) -> Optional[str]:
+    """Ask on stderr (so ``dz safedel x > log`` still shows the question) and
+    read one line from stdin. None when no answer can be read."""
+    try:
+        sys.stderr.write(prompt)
+        sys.stderr.flush()
+        return input().strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        sys.stderr.write("\n")
+        return None
+
+
+def _do_delete(store: TrashStore, args: argparse.Namespace,
+               scopes=(), yes_given: bool = False) -> int:
+    """Plan the delete, show the plan, get consent, perform it, report."""
     paths = args.paths
     dry_run = args.dry_run
-    yes = args.yes
+    json_output = getattr(args, "json_output", False)
 
     if not paths:
         print("  No paths specified.", file=sys.stderr)
-        return 1
+        return _finish(EXIT_USAGE, "USAGE", "no paths given", json_output)
 
-    # Classify all paths first and show report
-    from dazzlecmd_lib.core.safedel._classifier import classify, format_classification
+    interactive = stdin_is_interactive()
 
-    json_output = getattr(args, "json_output", False)
-    classifications = [classify(p) for p in paths]
+    # Copy-first: forced on or off by a scope, else by the configured mode.
+    mode, max_bytes = copy_first_settings()
+    if args.copy_first_max is not None:
+        try:
+            max_bytes = parse_size(args.copy_first_max)
+        except ValueError:
+            msg = f"--copy-first-max: not a size: {args.copy_first_max!r}"
+            print(f"  safedel: {msg}", file=sys.stderr)
+            return _finish(EXIT_USAGE, "USAGE", msg, json_output)
+    if "no-copy-first" in scopes:
+        use_copy_first = False
+    elif "copy-first" in scopes:
+        use_copy_first = True
+    else:
+        use_copy_first = (mode == "always"
+                          or (mode == "auto" and not interactive))
 
-    # Show what we're about to do (suppress in JSON mode)
+    plan = store.plan(paths, scopes=scopes, copy_first=use_copy_first,
+                      copy_first_max=max_bytes)
+
+    # The preview IS the plan the real run will perform.
     if not json_output:
-        print("\n  safedel: staging for deletion:\n")
-        for c in classifications:
-            print(format_classification(c))
-            print()
+        if plan.refused:
+            # Say so BEFORE the list, so nobody reads "move into the trash"
+            # below as something that is about to happen.
+            print("\n  safedel: REFUSED -- nothing will be moved. "
+                  "This is what was asked for:\n")
+        else:
+            print("\n  safedel: this will happen:\n")
+        for line in plan.describe():
+            print(line)
+        for w in plan.warnings:
+            print(f"  * {w}")
+        for c in (i.classification for i in plan.items):
+            for w in c.warnings:
+                print(f"  * {w}")
+        print()
 
-    # Check for non-existent paths
-    missing = [c for c in classifications if not c.exists]
-    if missing:
-        for c in missing:
-            print(f"  WARNING: {c.path} does not exist", file=sys.stderr)
+    payload = {
+        "success": False,
+        "dry_run": bool(dry_run),
+        "scopes": list(scopes),
+        "copy_first": bool(plan.copy_first),
+        "trash_store": plan.store_path,
+        "planned": [
+            {"path": i.path, "kind": i.classification.file_type.value,
+             "action": i.action, "copy_first": i.copy_first,
+             "link_target": i.classification.link_target,
+             "via_link": i.via_link}
+            for i in plan.items
+        ],
+        "missing": list(plan.missing),
+        "refusals": list(plan.refusals),
+        "warnings": list(plan.warnings),
+        "errors": [],
+    }
 
-    existing = [c for c in classifications if c.exists]
-    if not existing:
-        print("  Nothing to delete.", file=sys.stderr)
-        return 1
+    if plan.refused:
+        sys.stdout.flush()    # the list above first, then the reasons
+        for reason in plan.refusals:
+            print(f"  REFUSED: {reason}", file=sys.stderr)
+        payload["errors"] = list(plan.refusals)
+        return _finish(EXIT_REFUSED, "REFUSED", plan.refusals[0],
+                       json_output, payload)
 
     if dry_run:
-        print("  DRY RUN: No files were modified.")
-        return 0
+        if not json_output:
+            print("  DRY RUN: nothing was changed.")
+        payload["success"] = True
+        detail = f"{len(plan.items)} would be staged"
+        if plan.missing:
+            detail += f", {len(plan.missing)} missing"
+        return _finish(EXIT_OK, "DRY-RUN", detail, json_output, payload)
 
-    # Interactive confirmation (unless --yes or --json)
-    is_tty = hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
-    if json_output or yes:
-        pass  # JSON and --yes: proceed without prompting
-    elif not is_tty:
-        # Non-TTY (LLM environment): proceed -- the safety net is the trash store.
-        print("  [non-interactive mode: files staged to trash, recoverable via 'dz safedel recover last']")
-    elif not yes:
-        try:
-            answer = input("  Proceed with deletion? [y/N]: ").strip().lower()
-            if answer != "y":
-                print("  Aborted.")
-                return 0
-        except (EOFError, KeyboardInterrupt):
-            print("\n  Aborted.")
-            return 0
+    # Consent. --yes is required unless a person is at the keyboard to ask.
+    if not yes_given:
+        if not interactive or json_output:
+            why = ("nobody is at the keyboard" if not interactive
+                   else "--json cannot prompt")
+            print(f"  REFUSED: {why} and --yes was not given. Nothing was "
+                  f"moved. Re-run with --yes to delete.", file=sys.stderr)
+            return _finish(EXIT_REFUSED, "REFUSED",
+                           "not interactive and --yes was not given",
+                           json_output, payload)
+        answer = _ask("  Proceed with deletion? [y/N]: ")
+        if answer != "y":
+            print("  Aborted. Nothing was moved.", file=sys.stderr)
+            return _finish(EXIT_REFUSED, "REFUSED", "declined at the prompt",
+                           json_output, payload)
 
-    # Execute
-    result = store.trash([c.path for c in existing])
+    # Execute exactly the plan that was shown.
+    result = store.execute(plan)
+    code, outcome, detail = result_verdict(result)
 
-    if json_output:
-        import json
-        output = {
-            "success": result.success,
-            "folder_name": result.folder_name,
-            "folder_path": result.folder_path,
-            "entries": [
-                {
-                    "original_path": e.original_path,
-                    "original_name": e.original_name,
-                    "file_type": e.file_type,
-                    "link_target": e.link_target,
-                    "content_preserved": e.content_preserved,
-                    "status": _entry_status(e),
-                }
-                for e in result.entries
-            ],
-            "warnings": result.warnings,
-            "errors": result.errors,
-            "recover_command": "dz safedel recover last",
-        }
-        print(json.dumps(output, indent=2, default=str))
-        return 0 if result.success else 1
+    payload.update({
+        "success": result.success,
+        "folder_name": result.folder_name,
+        "folder_path": result.folder_path,
+        "entries": [
+            {
+                "original_path": e.original_path,
+                "original_name": e.original_name,
+                "file_type": e.file_type,
+                "link_target": e.link_target,
+                "content_preserved": e.content_preserved,
+                "copy_first": e.copy_first,
+                "status": _entry_status(e),
+            }
+            for e in result.entries
+        ],
+        "staged": result.staged_count,
+        "not_staged": result.not_staged_count,
+        "postcondition_failures": list(result.postcondition_failures),
+        "warnings": result.warnings,
+        "errors": result.errors,
+        "recover_command": (f"dz safedel recover {result.folder_name}"
+                            if result.folder_name else None),
+    })
 
-    _print_delete_report(result)
-    return 0 if result.success else 1
+    if not json_output:
+        _print_delete_report(result)
+    return _finish(code, outcome, detail, json_output, payload)
 
 
 def _entry_status(entry) -> str:
@@ -358,9 +566,22 @@ def _print_delete_report(result) -> None:
         for e in result.errors:
             print(f"  ERROR: {e}", file=sys.stderr)
 
-    # Recovery instructions. The store is the one this batch actually went
-    # to (often the per-volume store), not the central default.
-    print(f"\n  To recover:  dz safedel recover last")
+    if result.postcondition_failures:
+        print("\n  CHECK FAILED -- the disk is not in the state reported "
+              "above:", file=sys.stderr)
+        for f in result.postcondition_failures:
+            print(f"    {f}", file=sys.stderr)
+
+    copied = [e for e in result.entries if e.copy_first]
+    if copied:
+        print(f"\n  Copy-first: {len(copied)} item(s) also have a verified "
+              f"copy (SHA-256 of content; the copy's own timestamps are new) "
+              f"under {os.path.join(result.folder_path, 'copy-first')}")
+
+    # Recovery instructions name THIS batch: "last" can be another session's
+    # deletion. The store is the one this batch actually went to (often the
+    # per-volume store), not the central default.
+    print(f"\n  To recover:  dz safedel recover {result.folder_name}")
     print(f"  To list:     dz safedel list {result.folder_name[:10]}*")
     print(f"  Trash store: {os.path.dirname(result.folder_path)}")
 

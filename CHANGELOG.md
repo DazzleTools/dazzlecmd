@@ -4,6 +4,39 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.25-alpha] - 2026-11-18
+
+`dz safedel` now refuses when nobody can answer, and says truthfully what it did. On 2026-11-17 it was run by an agent without `--yes`: it prompted, read end-of-file, printed "Aborted." and exited 0, and the command line that called it went on as if the delete had happened. Requires dazzlecmd-lib 0.10.37a0, now the minimum.
+
+### Changed
+- **`--yes` is required when nobody is at the keyboard.** In a script, under an agent, or with input redirected, `dz safedel <path>` without `--yes` moves nothing and exits 3. Before, it either went ahead without asking or, when its input was the Windows `NUL` device, "aborted" with exit 0. At a console it still asks; anything but `y` is now a refusal with exit 3, not a success. `--json` no longer stands in for `--yes`.
+- **The last line of output is the verdict, and the exit code is graded:** `safedel: STAGED 2`, `safedel: REFUSED <why>`, `safedel: PARTIAL staged 1, not staged 1`. Exit 0 staged, 1 error, 2 usage, 3 refused with nothing moved, 4 partial, 6 a check after the move failed. A non-zero code stops `&&`, and the verdict survives `| tail -1`. With `--json` the verdict and the code are fields. `clean` uses the same codes.
+- **Two items with the same name are refused together.** `dz safedel a\x.json b\x.json` now moves neither (exit 3) where 0.12.24 moved the first and left the second. Delete them in separate calls.
+- **A path that does not exist is no longer skipped quietly:** with other real paths the result is partial (exit 4); alone it is a refusal (exit 3).
+- **`--dry-run` shows the plan the real run performs** -- what each item is, what will happen to it, what a folder holds (files, folders, links, hidden and system entries, size), and which trash store it goes to -- and creates nothing. The real run prints the same plan first. A dry run of a call that would be refused says so and exits 3.
+- **The report names the batch to recover** (`dz safedel recover <batch-name>`), not `recover last`, which with two sessions on one machine can be someone else's deletion.
+
+### Added
+- **`--yes` can carry scopes:** `--yes delete-through-junction`, `--yes delete-through-symlink`, `--yes copy-first`, `--yes no-copy-first` (comma-separated; bare `--yes` means "do not prompt"). The word after `--yes` is read as scopes only when every part is a scope name, so `--yes notes.txt` still deletes `notes.txt`; a mistyped scope is an error (exit 2), not consent.
+- **Links:** naming a junction or symlink removes only the link, as before; the matching `delete-through-...` scope deletes what it points at as well. The other direction is now guarded: naming a real folder that a junction or directory symlink in one of your git worktrees points at is refused, with the link named.
+- **Copy-first:** before an item is moved, a copy can be made inside the batch and verified by SHA-256. On by default when nobody is at the keyboard, with a 10 MB limit per batch; a larger batch is refused and the message names both ways forward (`--yes no-copy-first`, `--copy-first-max <size>`). Settings: `~/.safedel/config.json` (`copy_first`), `SAFEDEL_COPY_FIRST`, `SAFEDEL_COPY_FIRST_MAX`.
+- **A check after the move** (exit 6) if something reported as moved is still there, or a removed link's target changed.
+
+### Fixed
+- **`dz safedel recover` could permanently delete trash content** when a batch's manifest was missing or unreadable, and could remove a different batch that happened to share a name in another trash store. (dazzlecmd-lib 0.10.37a0)
+- **`dz safedel list` and `status` name the trash store(s) that actually hold your batches.** (dazzlecmd-lib 0.10.37a0)
+- **Folders literally named `C:` containing `.safedel-trash-1000`** were left in the checkout by a test run under Linux; the test and the code path behind it are fixed, and the suite now fails if a test leaves anything beside the source.
+
+### Compatibility
+- If the installed dazzlecmd-lib is older than 0.10.37 (possible on a development checkout, never from a released install), `dz safedel` runs the 0.12.24 command unchanged and says so on every call, instead of failing to start.
+
+### Docs and tests
+- `USAGE.md`: "Consent, the verdict, and exit codes".
+- `tests/test_cli_truth.py` (33 tests); a hand-run checklist: `tests/checklists/v0.12.25__Feature__safedel-tells-the-truth.md`.
+
+### Versions
+- dazzlecmd 0.12.24 -> 0.12.25 (PATCH); dazzle-dz -> 0.12.25a0. dazzlecmd-lib minimum 0.10.36a0 -> 0.10.37a0.
+
 ## [0.12.24-alpha] - 2026-11-17
 
 ### Fixed
@@ -4259,7 +4292,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.24a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.25a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

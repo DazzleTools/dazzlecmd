@@ -57,8 +57,11 @@ class TestVolumeDetection:
 
 
 class TestPerVolumeTrashPath:
-    def test_local_drive_gets_path(self):
+    def test_local_drive_gets_path(self, tmp_path, monkeypatch):
         """A local drive should get a per-volume trash path."""
+        # Run from an empty temp folder: a stray made here would be seen,
+        # and an old stray elsewhere cannot confuse the check.
+        monkeypatch.chdir(tmp_path)
         v = VolumeInfo(
             device_id=1234,
             mount_point="C:" + os.sep,
@@ -66,11 +69,22 @@ class TestPerVolumeTrashPath:
             is_subst=False,
             is_readonly=False,
         )
-        path = get_per_volume_trash_path(v)
-        # On Windows with a Users dir, should get a path
+        # create=False: ask where the store WOULD be without making anything.
+        # This test used to call the creating form with no assertion off
+        # Windows; on Linux "C:/" is a relative name, so it made a folder
+        # literally called "C:" under whatever directory the suite ran from
+        # (the stray C:/.safedel-trash-1000 folders of 2026-11-09).
+        path = get_per_volume_trash_path(v, create=False)
         if sys.platform == "win32":
+            # On Windows with a Users dir, should get a path
             assert path is not None
             assert ".safedel-trash" in path
+        else:
+            # Not an absolute path on POSIX: never a store root.
+            assert path is None
+            # ... and the creating form makes nothing either
+            assert get_per_volume_trash_path(v) is None
+        assert os.listdir(tmp_path) == []
 
     def test_network_drive_returns_none(self):
         """Network drives should not get per-volume trash."""

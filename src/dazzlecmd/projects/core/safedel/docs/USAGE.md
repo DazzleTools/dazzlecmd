@@ -7,12 +7,13 @@ design decisions see `../ROADMAP.md`; for manifest internals see
 ## Contents
 
 1. [Quick Reference](#quick-reference)
-2. [Recipes](#recipes)
-3. [Trash Store Locations](#trash-store-locations)
-4. [Protection Zones](#protection-zones)
-5. [Platform Capability Matrix](#platform-capability-matrix)
-6. [Configuration](#configuration)
-7. [The "Oh Shit" Guide](#the-oh-shit-guide)
+2. [Consent, the verdict, and exit codes](#consent-the-verdict-and-exit-codes)
+3. [Recipes](#recipes)
+4. [Trash Store Locations](#trash-store-locations)
+5. [Protection Zones](#protection-zones)
+6. [Platform Capability Matrix](#platform-capability-matrix)
+7. [Configuration](#configuration)
+8. [The "Oh Shit" Guide](#the-oh-shit-guide)
 
 ---
 
@@ -23,9 +24,9 @@ design decisions see `../ROADMAP.md`; for manifest internals see
 | Command | Action |
 |---------|--------|
 | `dz safedel <path>...` | Stage file(s) for deletion to the trash store |
-| `dz safedel --dry-run <path>` | Preview classification and destination without changing anything |
-| `dz safedel --yes <path>` | Skip interactive confirmation (LLM mode) |
-| `dz safedel --json <path>` | Machine-readable output (LLM tool-use APIs) |
+| `dz safedel --dry-run <path>` | Show the plan the real run would carry out, without changing anything |
+| `dz safedel --yes <path>` | Delete without a prompt. Required when nobody is at the keyboard (scripts, agents) |
+| `dz safedel --yes --json <path>` | Machine-readable output; `--json` does not replace `--yes` |
 | `dz safedel list [pattern]` | List trash contents |
 | `dz safedel recover [pattern]` | Recover file(s) from trash |
 | `dz safedel clean [pattern]` | Permanently delete trash entries (zone-enforced) |
@@ -52,7 +53,8 @@ design decisions see `../ROADMAP.md`; for manifest internals see
 
 | Flag | Applies to | Meaning |
 |------|------------|---------|
-| `--yes`, `-y` | delete, clean | Skip interactive prompts |
+| `--yes`, `-y` | delete, clean | Consent to proceed without a prompt. For delete it may carry scopes (see [Consent, the verdict, and exit codes](#consent-the-verdict-and-exit-codes)) |
+| `--copy-first-max SIZE` | delete | Largest batch copy-first will copy (`10MB`, `1g`); a larger batch is refused while copy-first is on |
 | `--dry-run`, `-n` | delete, recover | Preview without acting |
 | `--force`, `-f` | clean | Required for Zone B (< 48h) entries |
 | `--json`, `-j` | delete, list | JSON output |
@@ -67,6 +69,81 @@ design decisions see `../ROADMAP.md`; for manifest internals see
 
 ---
 
+## Consent, the verdict, and exit codes
+
+### Deleting asks first
+
+Moving something into the trash is not free of consequences (a program may be writing to it; something may recreate it), so a delete always needs a yes:
+
+- **At a console**, `dz safedel <path>` shows what it will do and asks `Proceed with deletion? [y/N]`. Anything but `y` refuses.
+- **Anywhere else** (a script, an agent, a pipe, stdin redirected), nobody can answer, so it refuses unless `--yes` is given. It does not guess, and it does not report success.
+
+"At a console" means a person can type: a real Windows console, or a Git Bash / mintty terminal. Redirected or empty input does not count, and neither does the Windows `NUL` device, which older versions mistook for a terminal.
+
+### The last line is the verdict
+
+Whatever happened, the final line of output says so, and the exit code matches. A caller that reads only the end of the output, or only the exit status, still learns the truth:
+
+```
+safedel: STAGED 2
+safedel: REFUSED not interactive and --yes was not given
+safedel: PARTIAL staged 1, not staged 1
+safedel: DRY-RUN 3 would be staged
+```
+
+| Exit code | Meaning |
+|---|---|
+| 0 | Everything was staged (or a dry run completed) |
+| 1 | An unexpected error; nothing was staged |
+| 2 | A usage error (a bad flag, an unknown `--yes` scope) |
+| 3 | Refused: nothing was moved. No `--yes`, a declined prompt, two items with the same name, a folder that a link points at, a protected zone |
+| 4 | Partial: some items were staged and some were not (for example, one path did not exist) |
+| 6 | A check made after the move failed: something reported as moved is still there, or a link's target changed |
+
+Any non-zero code stops a shell `&&` chain. With `--json`, the same facts are the `verdict` and `exit_code` fields of the one JSON object.
+
+`clean` uses the same codes (3 when a protection zone refuses). `recover` returns 0 or 1.
+
+### What `--yes` can carry
+
+Bare `--yes` means "do not prompt". It can also carry a comma-separated list of scopes, each an explicit permission:
+
+| Scope | Meaning |
+|---|---|
+| `noninteractive` | Do not prompt (what bare `--yes` means) |
+| `delete-through-junction` | Also delete what a junction points at, not only the junction |
+| `delete-through-symlink` | Also delete what a symlink points at, not only the symlink |
+| `copy-first` | Make a verified copy before moving (see below) |
+| `no-copy-first` | Stage without that copy |
+| `dangerous` | Reserved for `dz guarded`; changes nothing in `safedel` itself |
+
+```bash
+dz safedel --yes delete-through-junction ./worktree/private
+dz safedel --yes=noninteractive,no-copy-first ./big-folder
+```
+
+The word after `--yes` is read as scopes only when every comma-separated part is a scope name; otherwise it is a path, so `dz safedel --yes notes.txt` deletes `notes.txt`. A file that is literally named like a scope is written as `./dangerous` or placed after `--`. A list that mixes real scopes with a typo is an error (exit 2), never silent consent.
+
+### Links: the link goes, the target stays
+
+Naming a junction or symlink removes only the link; what it points at is not touched. To delete the target as well, say so with the matching `delete-through-...` scope. Giving the scope for the wrong kind of link, or when no path is a link, is refused.
+
+The reverse direction is guarded too: if you name a real folder and a known junction or directory symlink elsewhere points at exactly that folder, `safedel` refuses and names the link, because deleting the folder empties what that link shows. "Known" links are those inside the worktrees of any git repository the folder sits in, plus any recorded in `~/.safedel/junctions.json`. Deleting something inside such a folder is ordinary work and is not refused.
+
+### Two items with the same name
+
+One batch holds each name once. If two paths in one call share a name (`a/x.json` and `b/x.json`, or names that differ only by case), the whole call is refused before anything moves. Delete them in separate calls.
+
+### Copy-first
+
+While `safedel` is still earning trust, it can keep a second net: before an item is moved, a copy is made inside the batch (`<batch>/copy-first/`) and its contents verified against the original by SHA-256. The original is then moved as usual and remains the faithful item, with all its timestamps and attributes; the copy proves content only (its own timestamps are new). Links are never copied through: a link inside a folder is recorded, and a link named directly gets no copy.
+
+- Mode `auto` (the default): on when nobody is at the keyboard, off at a console. `always` and `off` are the other modes.
+- Limit: 10 MB per batch by default. A larger batch is refused (exit 3) and the message names both ways forward: `--yes no-copy-first` to stage without the copy, or `--copy-first-max <size>` to raise the limit for that call.
+- Configure in `~/.safedel/config.json` under `copy_first` (`mode`, `max_bytes`), or with `SAFEDEL_COPY_FIRST` and `SAFEDEL_COPY_FIRST_MAX`.
+
+---
+
 ## Recipes
 
 ### "I want to delete this file safely"
@@ -75,8 +152,7 @@ design decisions see `../ROADMAP.md`; for manifest internals see
 dz safedel /path/to/file.txt
 ```
 
-The file is staged to the trash store. You can recover it with
-`dz safedel recover last` at any time up to the hold period.
+At a console this shows the plan and asks before moving anything. The file is staged to the trash store, and the report names the batch so you can recover exactly it: `dz safedel recover <batch-name>` (or `dz safedel recover last` for the most recent complete deletion), at any time up to the hold period.
 
 ### "I'm an LLM agent deleting a file"
 
@@ -84,10 +160,7 @@ The file is staged to the trash store. You can recover it with
 dz safedel --yes /path/to/file.txt
 ```
 
-`--yes` skips the interactive prompt (which you can't answer anyway in
-non-TTY mode). The file is staged with full metadata capture. The tool
-emits a recovery notice in stderr so you see the folder name to recover
-from later if needed.
+`--yes` is required: without it, a run with nobody at the keyboard refuses (exit 3) and moves nothing. Run the delete as its own command, read the last line (`safedel: STAGED 1`) or the exit code, and only then do the next step. The report names the batch folder to recover from.
 
 ### "I'm not sure -- show me what would happen first"
 
@@ -95,14 +168,9 @@ from later if needed.
 dz safedel --dry-run /path/to/suspicious
 ```
 
-Classifies the target and shows:
-- File type (regular_file, symlink_file, junction, hardlink, regular_dir, ...)
-- Which delete method will be used (`os.unlink`, `os.rmdir`, `shutil.rmtree`)
-- Link target if applicable
-- Any warnings (hardlink count, ADS presence, etc.)
+Prints the plan: for each path, what kind of thing it is (regular file, folder, symlink, junction, ...) and where a link points; what will happen to it (moved into the trash, or only the link removed); for a folder, what it holds (files, folders, links, hidden and system entries, total size); and which trash store it will go to. The real run carries out exactly this plan and prints the same lines first.
 
-No file is touched. Always use `--dry-run` when deleting something you're
-not certain about -- especially symlinks and junctions.
+No file is touched, and no trash folder is created. If the real run would be refused, the dry run says so and exits with the same code. Always use `--dry-run` when deleting something you're not certain about -- especially symlinks and junctions.
 
 ### "I accidentally deleted the wrong file -- get it back NOW"
 

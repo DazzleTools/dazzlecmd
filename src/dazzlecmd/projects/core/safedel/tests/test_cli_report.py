@@ -63,22 +63,30 @@ def test_json_output_carries_the_same_status(capsys, tmp_path, monkeypatch):
         success=False, folder_name=folder.name, folder_path=str(folder),
         entries=[_entry("a\\x.json", "content/x.json"), _entry("b\\x.json", None)],
         errors=["Failed to stage C:\\src\\b\\x.json: already staged"],
+        staged_count=1, not_staged_count=1,
     )
 
+    from dazzlecmd_lib.core.safedel import TrashPlan
+
     class _FakeStore:
-        def trash(self, paths):
+        """Stands in for the store: nothing on disk is planned or moved."""
+        def plan(self, paths, **kwargs):
+            return TrashPlan(store_path=str(tmp_path / "store"))
+
+        def execute(self, plan):
             return result
 
-    src = tmp_path / "src"
-    (src / "a").mkdir(parents=True)
-    (src / "b").mkdir()
-    (src / "a" / "x.json").write_text("A")
-    (src / "b" / "x.json").write_text("B")
+    monkeypatch.setattr(safedel, "stdin_is_interactive", lambda: False)
+    monkeypatch.setattr(safedel, "copy_first_settings",
+                        lambda: ("off", 10 * 1024 * 1024))
 
     args = safedel._build_delete_parser().parse_args(
-        ["--yes", "--json", str(src / "a" / "x.json"), str(src / "b" / "x.json")])
-    rc = safedel._do_delete(_FakeStore(), args)
+        ["--json", "a-path", "b-path"])
+    rc = safedel._do_delete(_FakeStore(), args, scopes=("noninteractive",),
+                            yes_given=True)
 
     data = json.loads(capsys.readouterr().out)
-    assert rc == 1
+    assert rc == 4                                    # partial: one of two
+    assert data["exit_code"] == 4
+    assert data["verdict"] == "safedel: PARTIAL staged 1, not staged 1"
     assert [e["status"] for e in data["entries"]] == ["OK", "NOT staged -- left in place"]
