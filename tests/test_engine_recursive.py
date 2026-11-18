@@ -1177,7 +1177,7 @@ class TestRealpathDedup:
         engine.discover(project_root=str(root_b))
         # The symlink should resolve to the same realpath as A's tools.
         # In a single-aggregator discovery, only one canonical per realpath.
-        fqcns = {p.fqcn for p in engine.projects if not p.get("_auto_realpath_alias")}
+        fqcns = {p.fqcn for p in engine.projects if not p.auto_realpath_alias}
         # Both tools should still be canonical (no other FQCN reaches them
         # in this single-engine setup).
         assert "core:toolA" in fqcns

@@ -310,6 +310,7 @@ def _do_delete(store: TrashStore, args: argparse.Namespace) -> int:
                     "file_type": e.file_type,
                     "link_target": e.link_target,
                     "content_preserved": e.content_preserved,
+                    "status": _entry_status(e),
                 }
                 for e in result.entries
             ],
@@ -320,15 +321,34 @@ def _do_delete(store: TrashStore, args: argparse.Namespace) -> int:
         print(json.dumps(output, indent=2, default=str))
         return 0 if result.success else 1
 
-    # Human-readable report
+    _print_delete_report(result)
+    return 0 if result.success else 1
+
+
+def _entry_status(entry) -> str:
+    """Report label for one entry of a finished batch.
+
+    Says what actually happened, not what the classifier thought could
+    happen: an item that was refused (for example, a second item with the
+    same name in one call) has no content_path and stays where it was.
+    """
+    if not entry.content_preserved:
+        return "metadata only"          # links: the target is recorded
+    if entry.content_path:
+        return "OK"
+    return "NOT staged -- left in place"
+
+
+def _print_delete_report(result) -> None:
+    """Print the human-readable report for a finished delete batch."""
     if result.success:
         print(f"\n  Staged to trash: {result.folder_name}")
     else:
         print(f"\n  Staged with errors: {result.folder_name}", file=sys.stderr)
 
     for entry in result.entries:
-        status = "OK" if entry.content_preserved else "metadata only"
-        print(f"    {entry.original_name} ({entry.file_type}) [{status}]")
+        print(f"    {entry.original_name} ({entry.file_type}) "
+              f"[{_entry_status(entry)}]")
 
     if result.warnings:
         for w in result.warnings:
@@ -338,12 +358,11 @@ def _do_delete(store: TrashStore, args: argparse.Namespace) -> int:
         for e in result.errors:
             print(f"  ERROR: {e}", file=sys.stderr)
 
-    # Recovery instructions
+    # Recovery instructions. The store is the one this batch actually went
+    # to (often the per-volume store), not the central default.
     print(f"\n  To recover:  dz safedel recover last")
     print(f"  To list:     dz safedel list {result.folder_name[:10]}*")
-    print(f"  Trash store: {store.store_path}")
-
-    return 0 if result.success else 1
+    print(f"  Trash store: {os.path.dirname(result.folder_path)}")
 
 
 if __name__ == "__main__":

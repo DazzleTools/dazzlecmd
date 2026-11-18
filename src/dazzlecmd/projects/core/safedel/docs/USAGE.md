@@ -453,3 +453,14 @@ Possible reasons:
 - **Files deleted before safedel was installed** or without `dz safedel`.
 - **Zone A blocked but the user disabled Zone A and then cleaned.** If you
   change config mid-stream, old protections may not apply.
+- **Same-named items in one call, before dazzlecmd-lib 0.10.36a0.** Every
+  item of a batch was staged at `content/<name>`, so two items with the same
+  name (for example `session-states\<id>.json` and `context-window\<id>.json`)
+  shared one trash path: the later one overwrote the earlier, and the batch
+  still reported success. Batches written that way hold only the last item's
+  bytes for that name; do not trust `recover` on them for the earlier items.
+  From dazzlecmd-lib 0.10.36a0 the second item is refused and left in place
+  ("an item named '...' is already staged in this batch; left in place so it
+  is not overwritten"): delete it in a separate call. Staging same-named items
+  side by side comes with the next safedel layout release
+  (DazzleLib/dazzlecmd-lib#7).

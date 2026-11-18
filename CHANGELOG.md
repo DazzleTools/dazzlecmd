@@ -4,6 +4,22 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.24-alpha] - 2026-11-17
+
+### Fixed
+- `dz safedel` no longer loses a file to another with the same name. Deleting two items that share a name in one call -- `a\x.json b\x.json`, or a session's `file-history\<id>` and `session-env\<id>` folders -- staged both at one trash path: the later replaced the earlier, the batch still said it succeeded, and `recover` put the wrong bytes back. Now the second item is refused and left where it is, with "an item named '...' is already staged in this batch; left in place so it is not overwritten", and the command exits non-zero; delete it in a separate call. Staging same-named items side by side comes in a later release. (Requires dazzlecmd-lib 0.10.36a0, now the minimum.)
+- `dz safedel "~"` targeted your whole home folder instead of a folder literally named `~`, because safedel expanded `~`, `%VAR%` and `$VAR` again after the shell had (the same for `"%USERPROFILE%"` and `"$HOME"`). Paths are now taken literally. (dazzlecmd-lib 0.10.36a0)
+- The delete report said `[OK]` for every item, even ones that were refused and left in place. It now labels them `[NOT staged -- left in place]`, and `--json` gives each entry a `status`. The report's `Trash store:` line now names the store the batch actually went to (usually the per-volume store such as `C:\Users\<you>\.safedel-trash`), not the central default.
+- `dz new aggregator <name> --with ci` reported "template dir missing" from a PyPI install: the `ci` workflow templates were never packaged. (dazzlecmd-lib 0.10.36a0)
+
+### Tests
+- Fixed three tests that only failed outside Windows or after a library change: the colour palette check now includes `BLUE` (added in dazzlecmd-lib 0.10.35a0), a Linux-only symlink test still read a tool's fields dict-style, and the "every source file is tracked" check now skips, with git's message, when git cannot read the checkout instead of reporting every file as untracked.
+- `tests/one-offs/run_suite_under_wsl.sh` runs the suite natively under Linux (WSL) from a Windows machine. The root `tests/` pass there (1,676); the remaining Linux-only failures in other tools are tracked in #124.
+- A hand-run checklist for this release: `tests/checklists/v0.12.24__Bugfix__safedel-same-name-and-literal-paths.md`.
+
+### Versions
+- dazzlecmd 0.12.23 -> 0.12.24 (PATCH); dazzle-dz -> 0.12.24a0 (it had fallen behind at 0.12.20a0). dazzlecmd-lib minimum 0.10.33a0 -> 0.10.36a0.
+
 ## [0.12.23-alpha] - 2026-10-04
 
 ### Added
@@ -4243,7 +4259,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.23a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.24a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

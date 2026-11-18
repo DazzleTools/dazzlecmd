@@ -283,6 +283,7 @@ class TestPublicConstants:
         assert _colors.RED == "\033[31m"
         assert _colors.GREEN == "\033[32m"
         assert _colors.YELLOW == "\033[33m"
+        assert _colors.BLUE == "\033[34m"
         assert _colors.CYAN == "\033[36m"
         assert _colors.BRIGHT_RED == "\033[91m"
 
@@ -297,8 +298,10 @@ class TestPublicConstants:
             and getattr(_colors, name).startswith("\033[")
         }
         # All exported color constants should match the documented 8-color
-        # palette + emphasis -- no extended codes.
-        expected = {"RESET", "BOLD", "DIM", "RED", "GREEN", "YELLOW", "CYAN", "BRIGHT_RED"}
+        # palette + emphasis -- no extended codes. BLUE (\033[34m) joined in
+        # dazzlecmd-lib 0.10.35-alpha for informational lines; still 8-color.
+        expected = {"RESET", "BOLD", "DIM", "RED", "GREEN", "YELLOW", "BLUE",
+                    "CYAN", "BRIGHT_RED"}
         assert public_attrs == expected, (
             f"Unexpected color constants exported: "
             f"{public_attrs - expected}"

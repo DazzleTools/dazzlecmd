@@ -82,6 +82,11 @@ def _tracked():
     """
     out = subprocess.run(["git", "-C", str(REPO), "ls-files"],
                          capture_output=True, text=True)
+    if out.returncode != 0:
+        # git could not read this checkout at all (e.g. a Windows git
+        # worktree opened from WSL: its .git file holds a C:/ path). An
+        # empty answer here is not evidence that files are untracked.
+        pytest.skip(f"git cannot read this checkout: {out.stderr.strip()}")
     return {ln.strip().replace("\\", "/")
             for ln in out.stdout.splitlines() if ln.strip()}
 
