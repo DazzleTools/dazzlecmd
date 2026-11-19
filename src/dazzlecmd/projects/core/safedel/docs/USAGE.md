@@ -61,8 +61,9 @@ design decisions see `../ROADMAP.md`; for manifest internals see
 | `-v` | delete | Verbose (timing, config) |
 | `-q` | delete, clean | Quiet (shortened warnings) |
 | `-qq` | delete, clean | Minimal (just prompts) |
-| `--to PATH` | recover | Recover to alternate parent directory |
+| `--to PATH` | recover | Recover to alternate parent directory. Items of a batch that held several keep their place relative to each other under it |
 | `--metadata-only` | recover | Apply metadata only, don't touch content |
+| `--force-identity` | recover | Recover a stored file even when its size differs from what was recorded when it was deleted (by default it is refused and stays in the trash) |
 | `--contains NAME` | list, recover, clean | Search by filename |
 | `--path PATTERN` | list, recover, clean | Search by original path |
 | `--age SPEC` | list, clean | Filter by age |
@@ -96,7 +97,7 @@ safedel: DRY-RUN 3 would be staged
 | 0 | Everything was staged (or a dry run completed) |
 | 1 | An unexpected error; nothing was staged |
 | 2 | A usage error (a bad flag, an unknown `--yes` scope) |
-| 3 | Refused: nothing was moved. No `--yes`, a declined prompt, two items with the same name, a folder that a link points at, a protected zone |
+| 3 | Refused: nothing was moved. No `--yes`, a declined prompt, a folder that a link points at, an item inside a link that is also named, a drive root, a protected zone |
 | 4 | Partial: some items were staged and some were not (for example, one path did not exist) |
 | 6 | A check made after the move failed: something reported as moved is still there, or a link's target changed |
 
@@ -132,7 +133,22 @@ The reverse direction is guarded too: if you name a real folder and a known junc
 
 ### Two items with the same name
 
-One batch holds each name once. If two paths in one call share a name (`a/x.json` and `b/x.json`, or names that differ only by case), the whole call is refused before anything moves. Delete them in separate calls.
+This works. Each item of a call is stored in the trash at its path relative to the folder the items have in common, so `a/x.json` and `b/x.json` are kept apart (`content/a/x.json`, `content/b/x.json`) and `recover` puts each back where it came from. `recover --to <dir>` keeps them apart too (`<dir>/a/x.json`, `<dir>/b/x.json`).
+
+Related cases in one call:
+
+- **The same path twice** is staged once, with a warning.
+- **An item inside another item** (`build` and `build/out/a.o`) is carried by the outer one, with a warning.
+- **An item inside a link that is also named** is refused: the link would be removed as a link, and the item is in what it points at. Name one or the other.
+- **Items on different drives** are stored under numbered prefixes (`content/0/...`, `content/1/...`), with a warning: one trash store holds the batch, so items that are not on its drive are copied there, not moved.
+
+This needs dazzlecmd-lib 0.10.39 or later. With 0.10.37 or 0.10.38 a call with two same-named items is refused whole before anything moves; delete them in separate calls.
+
+### When recovery refuses a file
+
+`recover` compares each stored file's size with the size recorded when it was deleted. If they differ, the file was changed or truncated while in the trash, or is not the item the record describes. It is not recovered and stays in the trash; the message names both sizes. `--force-identity` recovers it anyway. A modification time that differs is reported as a note and does not stop recovery.
+
+A batch written by a very old version (before dazzlecmd-lib 0.10.36) may hold one stored item for several same-named entries. `recover` gives it to the entry it belongs to and reports `content lost to a name collision` for the others; their content was lost when that batch was written.
 
 ### Copy-first
 
@@ -526,9 +542,9 @@ Possible reasons:
   name (for example `session-states\<id>.json` and `context-window\<id>.json`)
   shared one trash path: the later one overwrote the earlier, and the batch
   still reported success. Batches written that way hold only the last item's
-  bytes for that name; do not trust `recover` on them for the earlier items.
-  From dazzlecmd-lib 0.10.36a0 the second item is refused and left in place
-  ("an item named '...' is already staged in this batch; left in place so it
-  is not overwritten"): delete it in a separate call. Staging same-named items
-  side by side comes with the next safedel layout release
-  (DazzleLib/dazzlecmd-lib#7).
+  bytes for that name. From dazzlecmd-lib 0.10.39 `recover` gives that item
+  only to the entry it belongs to and says `content lost to a name collision`
+  for the earlier ones, instead of putting the surviving bytes under the
+  wrong path. 0.10.36 through 0.10.38 refused the second item (or the whole
+  call) instead of overwriting; from 0.10.39 same-named items are staged side
+  by side (see "Two items with the same name").

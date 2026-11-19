@@ -15,14 +15,32 @@ Each trash folder is structured as:
     2026-04-10__06-12-27/           # Timestamped folder
         manifest.json               # This file
         content/                    # Actual file data (if preserved)
-            <original_name>
-            <original_name_2>
+            <item's path relative to the batch's base>
             ...
 ```
 
 The folder name is `YYYY-MM-DD__hh-mm-ss` and serves as the primary
 index -- time-pattern queries match against these names directly with
 glob patterns. Collisions get a `_001`, `_002` suffix.
+
+### Where items sit under `content/`
+
+From dazzlecmd-lib 0.10.39 (`content_layout: "common-base-v1"`), each item is stored at its path **relative to the batch's base**: the folder that is the common parent of every item in the batch. Two items with the same name therefore never share a place.
+
+```
+dz safedel --yes C:\proj\a\docs C:\proj\b\docs C:\proj\notes.txt
+
+base:     C:\proj
+content/  a/docs/...
+          b/docs/...
+          notes.txt
+```
+
+- A batch of **one item** has that item's parent as its base, so the item sits at `content/<its name>`.
+- A batch that spans **more than one drive or root** has one base per root, and each item's path starts with its base's number: `content/0/...`, `content/1/...`. `bases` (below) says which number is which folder.
+- A junction, and the link of a delete-through pair, are recorded in the manifest only and take no place under `content/`.
+
+A manifest **without** `content_layout` is a flat batch written by an older version: every item is directly under `content/` by its bare name. Such batches are read and recovered as before. In batches older than dazzlecmd-lib 0.10.36, two same-named items could be written onto one place; see "Entries that share one stored item" below.
 
 ## Top-Level Schema
 
@@ -49,6 +67,8 @@ glob patterns. Collisions get a `_001`, `_002` suffix.
 | `entries` | array | List of deleted items (see below). |
 | `state` | string | `"staging"` while a delete is in progress, `"complete"` once it has finished. The manifest is written before anything moves and rewritten after each item, so a manifest that still says `"staging"` belongs to a run that was interrupted: its entries are the items that had been handled so far. `recover last` skips such a batch; naming the batch recovers what it holds. Absent in manifests written before dazzlecmd-lib 0.10.37, which are treated as complete. |
 | `scopes` | array of strings | The `--yes` scopes in force for the delete (for example `["noninteractive"]`, or `["delete-through-junction"]`). Empty when the caller gave none. Added in dazzlecmd-lib 0.10.37. |
+| `content_layout` | string | How items are arranged under `content/`. `"common-base-v1"`: each item at its path relative to the batch's base (see "Where items sit under `content/`"). Absent in manifests written before dazzlecmd-lib 0.10.39, which are flat. |
+| `bases` | array of objects | One per drive or root in the batch, in the order of the numbered prefixes: `native` is the base folder as a path on the machine that wrote the manifest; `key` is the same folder as a portable key (`C/proj`, `UNC/server/share/dir`, `ROOT/home/me`), for reading the manifest on another system. Informational: recovery uses each entry's `original_path`. Added in dazzlecmd-lib 0.10.39. |
 
 A batch folder with no readable `manifest.json` is not an empty batch: its `content/` may hold the only copy of something. `recover` reports it as an error and keeps the folder.
 
@@ -112,7 +132,8 @@ Each element in the `entries` array describes one deleted item:
 | `link_count` | integer | Hardlink count at deletion. Relevant for `file_type: "hardlink"` |
 | `is_dir` | boolean | True if the entry is a directory (including dir symlinks and junctions) |
 | `content_preserved` | boolean | True if file content was staged; false for links where only metadata was captured |
-| `content_path` | string or null | Relative path to staged content within the trash folder (e.g., `"content/test.txt"`). Null when no content was preserved. |
+| `content_path` | string or null | Relative path to staged content within the trash folder (e.g., `"content/test.txt"`, or `"content/a/docs"` in a batch of several items). Written with `/` on every platform from dazzlecmd-lib 0.10.39; older manifests used the writer's separator, and both are read. Null when no content was preserved. |
+| `staged_size` | integer or null | For a file: its size in bytes as it sat in the trash when staged. `recover` compares the stored file against it and refuses a mismatch unless `--force-identity` is given. Null for folders and links. Absent before dazzlecmd-lib 0.10.39; for those batches `recover` compares against `stat.st_size`. |
 | `delete_method` | string | Which OS call was used to delete the original: `"os.unlink"`, `"os.rmdir"`, `"shutil.rmtree"`, `"rename (moved to trash)"` |
 | `stat` | object | Raw stat results (see Stat Schema below) |
 | `metadata` | object or null | Preservelib metadata dict (see Metadata Schema below) |
@@ -120,6 +141,10 @@ Each element in the `entries` array describes one deleted item:
 | `copy_first` | object or null | Present when a verified copy was made before the item was moved (dazzlecmd-lib 0.10.37 and later). `path`: the copy's location relative to the batch folder (`"copy-first/<name>"`); `algorithm`: `"SHA256"`; `files` and `bytes`: how much was verified; `verified`: true; `links_not_copied`: for a folder, the links inside it that were recorded and not copied (`path` relative to the item, and `target`). The copy proves content only: its own timestamps are new. Null when no copy was made. |
 
 An entry with `content_preserved: true` and `content_path: null` (and a `file_type` that is not a link) was never staged: it was refused or failed at delete time and was left where it was. `recover` reports it as skipped.
+
+### Entries that share one stored item
+
+In a batch written before dazzlecmd-lib 0.10.36, two same-named items deleted in one call were staged onto one place, the later overwriting the earlier, while the manifest kept an entry for each. Such a manifest has several entries with the same `content_path`. What is stored there belongs to one of them: the last entry in the list whose type (file or folder) matches what is on disk. `recover` gives it to that entry only; for each of the others it reports `content lost to a name collision (batch written before the fix)` and exits non-zero. The content of those other items was lost when the batch was written and cannot be recovered from it.
 
 ### File types
 

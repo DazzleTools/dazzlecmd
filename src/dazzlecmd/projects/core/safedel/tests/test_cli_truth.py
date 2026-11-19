@@ -29,11 +29,17 @@ TEN_MB = 10 * 1024 * 1024
 
 # These tests exercise the command against the engine's plan/execute API.
 # Where the installed dazzlecmd-lib is older (a development checkout beside an
-# installed library), the command runs its previous code path instead, and
-# these tests do not apply.
+# installed library), the command reports that and changes nothing, and these
+# tests do not apply.
+#
+# The condition is the raw fact -- did importing the engine's names fail --
+# and NOT safedel._engine_too_old(): that function is under test here, and a
+# skip that asks it would silence every test in this file the moment it
+# wrongly answered "too old" (found by the red-green audit, 2026-11-18).
 pytestmark = pytest.mark.skipif(
-    safedel._engine_too_old() is not None,
-    reason="needs dazzlecmd-lib 0.10.37 or later: " + str(safedel._engine_too_old()))
+    safedel._ENGINE_IMPORT_ERROR is not None,
+    reason="needs dazzlecmd-lib 0.10.37 or later: "
+           + str(safedel._ENGINE_IMPORT_ERROR))
 
 
 class _GuardStore(sd.TrashStore):
@@ -211,7 +217,22 @@ def test_dry_run_prints_the_plan_and_moves_nothing(cli, tmp_path):
     assert not (tmp_path / "trash").exists()
 
 
-def test_a_dry_run_of_a_batch_that_would_be_refused_says_so(cli, tmp_path):
+def _two_items_on_one_place(monkeypatch):
+    """Make two same-named items collide in the batch, on any engine.
+
+    Through dazzlecmd-lib 0.10.38 a batch held each name once, so same-named
+    items collided by themselves. From 0.10.39 the engine gives each item its
+    own place, so the collision is manufactured by switching that step off
+    (``raising=False``: the older engine has no such step to switch off).
+    What is tested either way is the CLI's handling of a refused plan.
+    """
+    from dazzlecmd_lib.core.safedel import _store
+    monkeypatch.setattr(_store.TrashStore, "_plan_layout",
+                        lambda self, plan: None, raising=False)
+
+
+def test_a_dry_run_of_a_batch_that_would_be_refused_says_so(cli, tmp_path, monkeypatch):
+    _two_items_on_one_place(monkeypatch)
     a = _write(tmp_path / "src" / "a" / "x.json", b"A")
     b = _write(tmp_path / "src" / "b" / "x.json", b"B")
 
@@ -219,7 +240,7 @@ def test_a_dry_run_of_a_batch_that_would_be_refused_says_so(cli, tmp_path):
 
     assert rc == 3                                   # the code the real run would give
     assert _last_line(out).startswith("safedel: REFUSED")
-    assert "share a name" in err
+    assert "share a name" in err or "stored at one place" in err
 
 
 def test_the_real_run_shows_the_same_plan_before_acting(cli, tmp_path):
@@ -237,7 +258,8 @@ def test_the_real_run_shows_the_same_plan_before_acting(cli, tmp_path):
 # -- refusals reach the caller as code 3 -------------------------------------
 
 
-def test_same_name_batch_is_refused_whole(cli, tmp_path):
+def test_two_items_on_one_place_are_refused_whole(cli, tmp_path, monkeypatch):
+    _two_items_on_one_place(monkeypatch)
     a = _write(tmp_path / "src" / "a" / "x.json", b"A")
     b = _write(tmp_path / "src" / "b" / "x.json", b"B")
 
@@ -367,11 +389,15 @@ def test_an_unexpected_exception_still_ends_with_a_verdict(cli, tmp_path, monkey
 def test_a_failed_post_condition_is_code_6(cli, tmp_path, monkeypatch):
     from dazzlecmd_lib.core.safedel import _store
     f = _write(tmp_path / "src" / "a.txt", b"A")
-    monkeypatch.setattr(
-        _store, "stage_to_trash",
-        lambda path, dest, c: _store.StagingResult(
-            success=True, source_path=path,
-            dest_path=os.path.join(dest, "a.txt"), method="rename"))
+    def claims_success_but_moves_nothing(path, dest, c):
+        return _store.StagingResult(success=True, source_path=path,
+                                    dest_path=dest, method="rename")
+    # The engine stages through stage_to_trash (to 0.10.38) or _stage_item
+    # (0.10.39 on, where items have a place in the batch); stub whichever
+    # this library has, so the test does not depend on the installed version.
+    for name in ("stage_to_trash", "_stage_item"):
+        if hasattr(_store, name):
+            monkeypatch.setattr(_store, name, claims_success_but_moves_nothing)
 
     rc, out, err = cli(["--yes", f])
 

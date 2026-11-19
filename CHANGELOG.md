@@ -4,6 +4,25 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.28-alpha] - 2026-11-18
+
+`dz safedel` can delete two things with the same name in one call, and recovery checks that a stored file is the one it recorded. Needs dazzlecmd-lib 0.10.39.
+
+### Changed
+- **`dz safedel a/x.json b/x.json` now works.** Each item is stored in the trash at its path relative to the folder the items have in common, so same-named items are kept apart and `dz safedel recover` puts each back where it came from. Before, the call was refused and you had to delete them one at a time. The same path given twice is staged once; an item inside another item of the call is carried by the outer one; both with a warning.
+- **`dz safedel recover --to <dir>` keeps items apart** when the batch held several: each lands at its relative place under `<dir>` instead of all at `<dir>/<name>`.
+
+### Added
+- **`dz safedel recover --force-identity`.** `recover` now compares each stored file's size with the size recorded when it was deleted. A file whose size differs is not recovered and stays in the trash, with a message naming both sizes; `--force-identity` recovers it anyway. A modification time that differs is reported as a note only.
+- **Very old batches are recovered honestly.** A batch written before dazzlecmd-lib 0.10.36 could hold one stored item for several same-named entries. `recover` used to put that item under the first entry's path, which is the wrong file under the wrong name. It now goes only to the entry it belongs to, and each of the others reports `content lost to a name collision (batch written before the fix)`.
+
+### Docs
+- `MANIFEST_SCHEMA.md`: where items sit under `content/`, the new fields `content_layout`, `bases` and `staged_size`, and entries that share one stored item. `USAGE.md`: same names in one call, the related cases, and what to do when recovery refuses a file.
+- Checklist: `tests/checklists/v0.12.28__Feature__safedel-same-names-side-by-side.md`.
+
+### Versions
+- dazzlecmd 0.12.27 -> 0.12.28 (PATCH); dazzle-dz -> 0.12.28a0; requires dazzlecmd-lib >= 0.10.39a0.
+
 ## [0.12.27-alpha] - 2026-11-18
 
 ### Removed
@@ -4316,7 +4335,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.27a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.28a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

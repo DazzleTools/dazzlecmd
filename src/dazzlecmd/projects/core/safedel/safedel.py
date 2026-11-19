@@ -218,6 +218,11 @@ def _build_recover_parser() -> argparse.ArgumentParser:
     parser.add_argument("--to", dest="to_path", help="Recover to alternate location")
     parser.add_argument("--metadata-only", action="store_true",
                         help="Apply metadata without overwriting content")
+    parser.add_argument("--force-identity", action="store_true",
+                        help="Recover a stored file even when its size "
+                             "differs from what was recorded when it was "
+                             "deleted (by default such an item is refused "
+                             "and stays in the trash)")
     parser.add_argument("--dry-run", "-n", action="store_true")
     return parser
 
@@ -290,6 +295,10 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     elif first in ("recover", "restore"):
         args = _build_recover_parser().parse_args(argv[1:])
+        # The size check and its override arrived in dazzlecmd-lib 0.10.39.
+        # The keyword is passed only when the flag is given, so recovery
+        # without it calls the engine exactly as before.
+        extra = {"force_identity": True} if args.force_identity else {}
         return cmd_recover(
             store,
             positional_args=args.time_args,
@@ -298,6 +307,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             to_path=args.to_path,
             metadata_only=args.metadata_only,
             dry_run=args.dry_run,
+            **extra,
         )
 
     elif first in ("clean", "purge"):
