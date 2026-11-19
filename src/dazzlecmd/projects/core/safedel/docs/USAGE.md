@@ -430,6 +430,14 @@ For unavoidable cross-volume cases (e.g., USB drive to central store),
 metadata is captured in the JSON manifest and restored on recovery to the
 extent the platform allows.
 
+Recovery works the same way (dazzlecmd-lib 0.10.40 and later). When the trash and the place being recovered to are on one drive, the item is moved back with a rename: a folder returns with every file and subfolder inside it exactly as it was stored, creation times included, and nothing is rewritten. Each recovered item is followed by one line:
+
+- `times verified` -- the item's modification time (and creation time, where the platform records one) match what was recorded when it was deleted. For a folder it adds `moved back whole, so everything inside it is as it was`.
+- `times verified; copied back from another drive, so files and folders inside it have new creation times` -- the trash was on a different drive, so the folder had to be copied. The folder itself has its recorded times; its contents are new files with the same data and modification times.
+- `WARNING: times differ from the record: ...` -- something does not match; the content is recovered, and the line names what differs.
+
+If the original parent folder no longer exists, recovery creates it and says so; that folder's own timestamps are new. Before dazzlecmd-lib 0.10.40, recovery always copied a folder back, so its contents came back with new creation times even on one drive.
+
 ---
 
 ## Configuration
