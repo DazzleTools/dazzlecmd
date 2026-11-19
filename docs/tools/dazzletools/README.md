@@ -23,7 +23,6 @@ The DazzleTools kit contains cross-platform utilities from the [DazzleTools](htt
 | `git-snapshot` | Lightweight named checkpoints for git working state (save, diff, apply, drop) | Cross-platform |
 | `github` | Open GitHub project pages, issues, PRs, and releases from any git repo (needs `gh`) | Cross-platform |
 | `private-init` | Initialize `private/` as a standalone versioned git repo inside any project | Cross-platform |
-| `worktree-teardown` | Remove a git worktree without deleting through the junctions or symlinks inside it (links first, then the folder to the safedel trash, then `git worktree prune`); never runs `git worktree remove` | Cross-platform |
 
 ### Claude Code
 

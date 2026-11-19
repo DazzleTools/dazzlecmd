@@ -15,10 +15,11 @@ authors = [
 keywords = ["cli", "tools", "utility", "dazzletools", "dazzle", "command-line", "aggregator"]
 
 dependencies = [
-    # >=0.10.38a0: worktree-teardown needs the engine's teardown API; the
-    # safedel command needs plan/execute, graded verdicts, scoped --yes and
-    # console detection (0.10.37a0, core.safedel API version 3).
-    "dazzlecmd-lib>=0.10.39a0",
+    # The safedel command needs plan/execute, graded verdicts, scoped --yes
+    # and console detection (0.10.37a0, core.safedel API version 3); its
+    # docs describe same-named items side by side (0.10.39a0) and recovery
+    # by move with the times reported (0.10.40a0).
+    "dazzlecmd-lib>=0.10.40a0",
     # safedel + fixpath import these directly (safedel.py imports dazzle_filekit at
     # module top level), de-vendored from the old safedel/_lib bundle. unctools is
     # win32-only -- it is used solely for UNC->local-drive path conversion, and

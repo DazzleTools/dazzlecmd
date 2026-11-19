@@ -4,6 +4,19 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.12.29-alpha] - 2026-11-18
+
+### Removed
+- **`dz worktree-teardown`** (added in 0.12.26, never released). It existed because deleting a git worktree that holds a junction or symlink was only proven safe with `dz safedel` when the trash was on the same drive. With dazzlecmd-lib 0.10.40 and dazzle-filekit 0.5.1, a folder that holds links is safe to delete with plain `dz safedel` on one drive and across drives: the links travel as links and what they point at is never touched. So a worktree comes down with the ordinary steps, and one fewer git command has to be remembered:
+  1. `dz safedel --yes <worktree>` -- read the verdict on the last line
+  2. look: the folder is gone, and the link's target still holds its files
+  3. `git -C <main repo> worktree prune`
+
+  `git worktree remove` is still never the way: it deletes through a junction inside the worktree.
+
+### Versions
+- dazzlecmd 0.12.28 -> 0.12.29 (PATCH); dazzle-dz -> 0.12.29a0; requires dazzlecmd-lib >= 0.10.40a0.
+
 ## [0.12.28-alpha] - 2026-11-18
 
 `dz safedel` can delete two things with the same name in one call, and recovery checks that a stored file is the one it recorded. Needs dazzlecmd-lib 0.10.39.
@@ -4335,7 +4348,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.28a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.29a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
