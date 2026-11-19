@@ -4,6 +4,17 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.0-alpha] - 2026-11-19
+
+The start of `dz relaunch`: remember working sets of terminal tabs and bring them back after a restart. This release adds its storage layer; the command itself is not registered yet and arrives over the next releases.
+
+### Added
+- **`dz relaunch` set files** (`projects/dazzletools/relaunch/relaunch_store.py`). A *set* is one portable JSON file under `~/.dz/relaunch/sets/<name>.json` (override with `DZ_RELAUNCH_HOME`); disabled sets live in `sets/disabled/`. Members are one of four kinds -- a folder, a command with its arguments, a shell script in a named dialect, or a Claude session resolved through csb -- validated when the file is read. Member ids are never reused; removed members are kept for 30 days. Set names are matched case-insensitively, and names that would collide with commands, views or numbers are refused. A corrupt or invalid set file is reported with its path and is never rewritten.
+- Folders are stored exactly as given (no `~` or variable expansion) together with dazzle-filekit's portable path key, so a set can later be read on a machine whose folders live elsewhere, through an optional `local/path-map.json`.
+
+### Versions
+- dazzlecmd 0.12.29 -> 0.13.0 (MINOR: a new tool begins); dazzle-dz -> 0.13.0a0.
+
 ## [0.12.29-alpha] - 2026-11-18
 
 ### Removed
@@ -4348,7 +4359,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.12.29a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.0a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

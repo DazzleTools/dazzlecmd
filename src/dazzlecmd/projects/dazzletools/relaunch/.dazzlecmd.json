@@ -1,0 +1,29 @@
+{
+    "name": "relaunch",
+    "version": "0.1.0",
+    "description": "Remember working sets of terminal tabs (folders, commands, Claude sessions) and bring them back after a restart, one short command per tab",
+    "long_description": "Keeps named sets of members -- a folder, a command with its arguments, a shell script, or a Claude Code session (through csb) -- and records which terminal tab has claimed which member and what was open last session. After a restart, each fresh tab runs `dz relaunch <set> claim` (or `claim -o` to run the member there): the next member, last session's first. Claims expire on their own when a tab closes or the machine restarts. Restores folders and programs, not scrollback, layout or splits.",
+    "namespace": "dazzletools",
+    "language": "python",
+    "platform": "cross-platform",
+    "platforms": ["windows", "linux", "macos"],
+    "runtime": {
+        "type": "python",
+        "entry_point": "main",
+        "script_path": "relaunch.py"
+    },
+    "pass_through": false,
+    "dependencies": {
+        "python": ["dazzle-filekit", "dazzle-loglib", "dazzle-lib", "dazzlecmd-lib"],
+        "system": ["csb (for Claude members, optional)"]
+    },
+    "taxonomy": {
+        "category": "dev-tools",
+        "tags": ["terminal", "tabs", "session", "workspace", "restore", "restart", "claude", "csb"]
+    },
+    "lifecycle": {
+        "type": "tool",
+        "status": "active",
+        "created_as": "tool"
+    }
+}
