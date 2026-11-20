@@ -4,6 +4,16 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.3-alpha] - 2026-11-19
+
+### Added
+- **The `dz relaunch` command grammar** (`relaunch_grammar.py`, `relaunch_verbs.py`, `relaunch.py`). The set name comes first -- `dz relaunch ck3` shows a set, `dz relaunch ck3 claim` acts on it, several names can precede the action (`dz relaunch ck3 dz claim`) -- and the action-first form also works with one set (`dz relaunch claim ck3`). A member is `ck3:2`; a view is `last`, `last~1` or `last:3`. A misspelt set or action gets a suggestion ("no set named 'safedl' -- did you mean 'safedel'?"), and a word that is an action is never taken for a set. Help is generated from one verb table, in the order "first run", "after a restart", "the words".
+- **Output conventions**: the last line of output is a verdict (`relaunch: CLAIMED ck3 2 lib`) with graded exit codes (0 ok, 1 error, 2 usage, 3 refused, 4 partial), shared with `dz safedel`; `--json` puts the verdict inside one JSON object; diagnostics go through dazzle-loglib channels and `--log-file` writes them to a file.
+- `claim`'s three levels -- print (show what to do), open (run it here), tabs (open new tabs; reserved, not built) -- are one axis built on dazzle-lib's `Continuum`, capped to print when there is no console.
+
+### Versions
+- dazzlecmd 0.13.2 -> 0.13.3 (PATCH); dazzle-dz -> 0.13.3a0.
+
 ## [0.13.2-alpha] - 2026-11-19
 
 ### Added
@@ -4379,7 +4389,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.2a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.3a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
