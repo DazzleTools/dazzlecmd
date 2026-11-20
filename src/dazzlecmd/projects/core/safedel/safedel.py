@@ -213,8 +213,11 @@ def _build_recover_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="dz safedel recover")
     parser.add_argument("time_args", nargs="*", default=[],
                         help="Time pattern (e.g., 'last', 'today 10:46')")
-    parser.add_argument("--contains", help="Search by filename")
-    parser.add_argument("--path", dest="path_pattern", help="Search by original path")
+    parser.add_argument("--contains", help="Recover only the items with this name (wildcards "
+                                           "allowed), from the batch named before it, or from "
+                                           "every batch when none is named")
+    parser.add_argument("--path", dest="path_pattern",
+                        help="Recover only the items whose original path matches")
     parser.add_argument("--to", dest="to_path", help="Recover to alternate location")
     parser.add_argument("--metadata-only", action="store_true",
                         help="Apply metadata without overwriting content")

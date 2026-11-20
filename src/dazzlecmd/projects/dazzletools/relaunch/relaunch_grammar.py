@@ -100,6 +100,10 @@ def split_targets(argv: List[str], known_sets: Iterable[str]) -> Parsed:
             if not (verb.name == "drop" and rest[0] in ("rm", "disable")):
                 targets.append(_name_target(rest[0], known))
                 rest = rest[1:]
+            elif len(rest) > 1 and rest[1].lower() in {k.lower() for k in known}:
+                # `drop rm ck3 [3]` == `ck3 drop rm [3]`: the set may follow the mode word
+                targets.append(_name_target(rest[1], known))
+                rest = [rest[0]] + rest[2:]
         return Parsed(verb.name, targets, rest, flags)
 
     targets = []

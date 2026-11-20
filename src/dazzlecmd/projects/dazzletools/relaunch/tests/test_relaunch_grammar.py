@@ -33,6 +33,9 @@ def p(s):
     ("ck3 add --here", "add", [("ck3", None)], ["--here"]),
     ("claim ck3 2", "claim", [("ck3", None)], ["2"]),            # verb-first, one set
     ("drop rm 3", "drop", [], ["rm", "3"]),
+    ("drop rm ck3", "drop", [("ck3", None)], ["rm"]),
+    ("drop rm ck3 3", "drop", [("ck3", None)], ["rm", "3"]),
+    ("drop disable dz", "drop", [("dz", None)], ["disable"]),
     ("new work2", "new", [], ["work2"]),
     ("shell-init cmd", "shell-init", [], ["cmd"]),
     ("ls", "list", [], []),

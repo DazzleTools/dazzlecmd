@@ -4,6 +4,18 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.13-alpha] - 2026-11-19
+
+### Changed
+- **`dz relaunch drop rm ck3` now works** -- the set may follow the mode word in the action-first form, so `drop rm ck3`, `drop rm ck3 3` and `drop disable ck3` mean the same as `ck3 drop rm`, `ck3 drop rm 3` and `ck3 drop disable`. Before, `drop rm ck3` answered "'drop' works on exactly one set".
+- **`dz safedel recover --contains` / `--path` recover only the matching items.** Before, they recovered every item of each trash batch that held a match. The fix is in dazzlecmd-lib 0.10.50a0; the `recover` help and `docs/USAGE.md` now describe it.
+
+### Dependencies
+- dazzlecmd-lib floor raised to `>=0.10.50a0` (was `>=0.10.40a0`), for the safedel recovery fixes above. It also requires dazzle-filekit 0.5.x, now on PyPI as 0.5.3.
+
+### Versions
+- dazzlecmd 0.13.12 -> 0.13.13 (PATCH); dazzle-dz -> 0.13.13a0.
+
 ## [0.13.12-alpha] - 2026-11-19
 
 ### Added
@@ -4475,7 +4487,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.12a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.13a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

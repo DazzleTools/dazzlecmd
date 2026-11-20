@@ -64,8 +64,8 @@ design decisions see `../ROADMAP.md`; for manifest internals see
 | `--to PATH` | recover | Recover to alternate parent directory. Items of a batch that held several keep their place relative to each other under it |
 | `--metadata-only` | recover | Apply metadata only, don't touch content |
 | `--force-identity` | recover | Recover a stored file even when its size differs from what was recorded when it was deleted (by default it is refused and stays in the trash) |
-| `--contains NAME` | list, recover, clean | Search by filename |
-| `--path PATTERN` | list, recover, clean | Search by original path |
+| `--contains NAME` | list, recover, clean | Match items by name (wildcards allowed). With a batch named before it, only that batch is searched. `recover` recovers only the matching items and keeps the batch for the rest; `list` and `clean` act on the batches that hold a match |
+| `--path PATTERN` | list, recover, clean | Match items by original path; same rules as `--contains` |
 | `--age SPEC` | list, clean | Filter by age |
 
 ---
