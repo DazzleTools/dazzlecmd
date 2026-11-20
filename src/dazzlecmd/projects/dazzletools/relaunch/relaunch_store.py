@@ -41,6 +41,7 @@ RESERVED_NAMES = frozenset({
     # reserved ahead of need
     "open", "tabs", "run", "start", "stop", "status", "rename", "copy", "move",
     "import", "export", "csb", "sync", "help", "set", "all", "rm", "disable",
+    "launch", "detach",
 })
 
 _NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
@@ -249,6 +250,8 @@ def validate_member(m: Dict[str, Any], where: str = "member") -> None:
             raise StoreError(f"{where} {mid}: a shell member needs 'shell' in {', '.join(SHELL_DIALECTS)}")
         if not isinstance(m.get("script"), str) or not m["script"].strip():
             raise StoreError(f"{where} {mid}: a shell member needs a non-empty 'script'")
+    if m.get("detach") and kind not in ("command", "shell"):
+        raise StoreError(f"{where} {mid}: only command and shell members can be detached")
     if kind == "claude":
         if m.get("via") != "csb" or not m.get("session_id"):
             raise StoreError(f"{where} {mid}: a claude member needs via='csb' and 'session_id'")

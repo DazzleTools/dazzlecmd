@@ -121,6 +121,56 @@ def spawn(command, cwd: Optional[str], env) -> int:
         signal.signal(signal.SIGINT, old)
 
 
+def spawn_detached(command, cwd: Optional[str], env) -> None:
+    """Start a detached member and do not wait: no tab, no console window. (Seam.)
+
+    Windows: CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP -- measured (poc10/12): the
+    DETACHED_PROCESS form opens a visible console when a .cmd runs a console program.
+    """
+    import subprocess
+    if sys.platform == "win32":
+        flags = 0x08000000 | 0x00000200   # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
+        subprocess.Popen(command, cwd=cwd or None, env=env, creationflags=flags, close_fds=True,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    else:
+        subprocess.Popen(command, cwd=cwd or None, env=env, start_new_session=True, close_fds=True,
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def _launched_path(home=None):
+    import relaunch_store as rs
+    return os.path.join(rs.local_dir(home), "launched.json")
+
+
+def launched_this_boot(set_name: str, member_id: int, boot: Optional[float], home=None) -> bool:
+    """Was this detached member started since the current boot? (local/launched.json)"""
+    import json
+    import relaunch_claims as rc
+    p = _launched_path(home)
+    if boot is None or not os.path.isfile(p):
+        return False
+    try:
+        at = json.load(open(p, encoding="utf-8")).get(set_name, {}).get(str(member_id))
+    except ValueError:
+        return False
+    return at is not None and abs(at - boot) <= rc.BOOT_TOLERANCE_S
+
+
+def record_launched(set_name: str, member_id: int, boot: Optional[float], home=None) -> None:
+    import json
+    from dazzle_filekit import atomic_write_json
+    p = _launched_path(home)
+    data = {}
+    if os.path.isfile(p):
+        try:
+            data = json.load(open(p, encoding="utf-8"))
+        except ValueError:
+            data = {}
+    data.setdefault(set_name, {})[str(member_id)] = boot
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    atomic_write_json(p, data, indent=2, default=None)
+
+
 def open_asks(home=None, env=None) -> bool:
     """Whether -o asks first: env var > ~/.dz/relaunch/.env > local/config.json (default: ask)."""
     import json

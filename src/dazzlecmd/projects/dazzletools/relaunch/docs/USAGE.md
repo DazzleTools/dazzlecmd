@@ -45,6 +45,7 @@ Every `claim` prints what it took, with a tag -- `open last session -- before re
 | `<set> edit [<id>]` | change fields (`--label`, `--notes`, `--folder`, `-- <argv>`); with no flags, the whole set in your editor, applied only if nobody changed it meanwhile |
 | `<set> note [<id>] "text"` | a note on the set or a member |
 | `<set> claim [<id>]` | take the next member (or that one); `-o` run it here; `--next` take another; `--yes` a second copy of one open elsewhere |
+| `<set> launch [<id>...]` | start the set's **detached** members -- programs that need no tab, such as an editor (`add --detach -- code C:\code\ck3`). Each starts once per boot, with no window and no claim; naming one starts it again. Asks first, like `claim -o` |
 | `release` | let go of this tab's member; `<set> release --all` |
 | `<set> drop rm\|disable [<id>...]` | remove (a whole set goes to the safedel trash; `dz safedel recover` brings it back) or hide |
 | `<set> enable [<id>...]` | undo disable |

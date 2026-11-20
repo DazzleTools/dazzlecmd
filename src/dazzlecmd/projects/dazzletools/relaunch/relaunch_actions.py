@@ -115,6 +115,7 @@ def cmd_add(parsed, json_mode: bool) -> int:
     p.add_argument("--at", type=int)
     p.add_argument("--shell", nargs=2, metavar=("DIALECT", "SCRIPT"))
     p.add_argument("--claude", metavar="SESSION")
+    p.add_argument("--detach", action="store_true")
     a = p.parse_args(rest)
     set_name = _one_set(parsed)
     cwd = os.getcwd() if a.here else (os.path.abspath(a.folder) if a.folder else None)
@@ -137,6 +138,8 @@ def cmd_add(parsed, json_mode: bool) -> int:
         raise rs.StoreError("add what? give a folder, --here, --shell DIALECT SCRIPT, --claude SESSION, or -- <command>")
     if a.label:
         member["label"] = a.label
+    if a.detach:
+        member["detach"] = True
     member["notes"] = a.notes
     import relaunch_trust as trust
     with rc.store_lock():
@@ -145,7 +148,7 @@ def cmd_add(parsed, json_mode: bool) -> int:
         rs.save_set(doc)
         trust.record(doc["name"], m)
     print(f"added {set_name}:{m['id']} ({m['kind']}) -> {m.get('cwd') or ' '.join(m.get('argv', [])) or m.get('script') or m.get('session_id')}")
-    if a.here:
+    if a.here and not m.get("detach"):
         try:
             rc.claim(set_name, rc.current_tab(), str(m["id"]))
             print(f"claimed {set_name}:{m['id']} for this tab")
@@ -185,9 +188,11 @@ def cmd_edit(parsed, json_mode: bool) -> int:
     p.add_argument("--label")
     p.add_argument("--notes")
     p.add_argument("--folder")
+    p.add_argument("--detach", dest="detach", action="store_true", default=None)
+    p.add_argument("--no-detach", dest="detach", action="store_false")
     a = p.parse_args(rest)
     set_name = _one_set(parsed)
-    if a.member or a.label or a.notes is not None or a.folder or argv:
+    if a.member or a.label or a.notes is not None or a.folder or argv or a.detach is not None:
         with rc.store_lock():
             doc = rs.load_set(set_name)
             m = rs.find_member(doc, a.member) if a.member else None
@@ -200,6 +205,11 @@ def cmd_edit(parsed, json_mode: bool) -> int:
             if a.folder:
                 m["cwd"] = rs.literal_path(os.path.abspath(a.folder))
                 m["cwd_key"] = rs.portable_key(m["cwd"], doc.get("origin", {}).get("flavor"))
+            if a.detach is not None:
+                if a.detach:
+                    m["detach"] = True
+                else:
+                    m.pop("detach", None)
             if argv:
                 if m["kind"] != "command":
                     raise rs.StoreError(f"{set_name}:{m['id']} is a {m['kind']} member; only command members take -- argv")
@@ -324,6 +334,65 @@ def removed_rows() -> List[Dict[str, Any]]:
             rows.append({"what": "member", "name": f"{d['name']}:{t['member']['id']}",
                          "label": t["member"].get("label"), "removed": t.get("removed_at")})
     return rows
+
+
+# --------------------------------------------------------------------------
+# launch (detached members: no tab, no claim)
+# --------------------------------------------------------------------------
+
+def cmd_launch(parsed, json_mode: bool) -> int:
+    import relaunch_launch as launch
+    import relaunch_trust as trust
+    set_name = _one_set(parsed)
+    rest = list(parsed.rest) + [f for f in parsed.flags if f in ("-y", "--yes")]
+    yes = "--yes" in rest or "-y" in rest
+    refs = [r for r in rest if not r.startswith("-")]
+    doc = rs.load_set(set_name)
+    boot = rc.default_boot()
+    if refs:
+        todo = [rs.find_member(doc, r) for r in refs]
+        bad = [m for m in todo if not m.get("detach")]
+        if bad:
+            raise rs.StoreError(f"{set_name}:{bad[0]['id']} is not detached -- claim it in a tab instead")
+    else:
+        todo = [m for m in doc["members"] if m.get("detach") and not m.get("disabled")
+                and not launch.launched_this_boot(doc["name"], m["id"], boot)]
+    if not todo:
+        print("nothing to launch -- every detached member already started since this boot "
+              f"(dz relaunch {set_name} launch <member> starts one again)")
+        return io.finish("NOTHING", set_name, json_mode=json_mode)
+    plans, refused = [], []
+    for m in todo:
+        folder = rs.resolve_cwd(m, doc.get("origin", {}), path_map=rs.load_path_map()) if m.get("cwd") else None
+        try:
+            command, display = launch.build_command(m)
+        except launch.LaunchRefused as e:
+            refused.append((m, str(e)))
+            continue
+        plans.append((m, command, display, folder, trust.is_trusted(doc, m)))
+    for m, why in refused:
+        print(f"  refused {set_name}:{m['id']}: {why}", file=sys.stderr)
+    for m, _, display, folder, trusted in plans:
+        flag = "" if trusted else "   (not the command relaunch recorded)"
+        print(f"  will start: {display}" + (f"   in {folder}" if folder else "") + flag)
+    if not io.is_console():
+        return io.finish("PRINTED", f"{len(plans)} to launch (no console: nothing started)", json_mode=json_mode)
+    untrusted = [p for p in plans if not p[4]]
+    if untrusted or (launch.open_asks() and not yes):
+        if not io.confirm(f"start {len(plans)} program(s)?"):
+            return io.finish("REFUSED", "not started", io.EXIT_REFUSED, json_mode=json_mode)
+        for m, *_ in untrusted:
+            trust.record(doc["name"], m)
+    started = 0
+    for m, command, display, folder, _ in plans:
+        try:
+            launch.spawn_detached(command, folder, launch.child_env())
+            launch.record_launched(doc["name"], m["id"], boot)
+            started += 1
+        except OSError as e:
+            print(f"  could not start {set_name}:{m['id']}: {e}", file=sys.stderr)
+    code = io.EXIT_OK if started == len(plans) and not refused else io.EXIT_PARTIAL
+    return io.finish("LAUNCHED", f"{set_name} {started} started", code, json_mode=json_mode)
 
 
 # --------------------------------------------------------------------------

@@ -4,6 +4,14 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.12-alpha] - 2026-11-19
+
+### Added
+- **Detached members and `dz relaunch <set> launch`** -- for programs that need no tab, such as an editor. `add --detach -- code C:\code\ck3-save-migrator` (or `edit <member> --detach`) marks a command or shell member as detached: `claim` never hands it to a tab, and `dz relaunch <set> launch` starts every detached member not yet started since this boot -- with no console window, no claim, and without waiting for it. It shows what it will start and asks `[y/N]` with the same overrides and the same check of edited or copied commands as `claim -o`; `launch <member>` starts one again. (On Windows a detached `.cmd` started the obvious way opens a visible console window; relaunch starts it hidden instead.)
+
+### Versions
+- dazzlecmd 0.13.11 -> 0.13.12 (PATCH); dazzle-dz -> 0.13.12a0.
+
 ## [0.13.11-alpha] - 2026-11-19
 
 ### Added
@@ -4467,7 +4475,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.11a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.12a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -166,6 +166,7 @@ def order_free(doc: Dict[str, Any], held_ids: Iterable[int], history: Dict[str, 
     """Free, enabled members: most recently opened session first, never-opened last (set order)."""
     held, skip = set(held_ids), set(skip_ids)
     free = [m for m in doc["members"] if m["id"] not in held and m["id"] not in skip
+            and not m.get("detach")
             and not m.get("disabled")]
     pos = {m["id"]: i for i, m in enumerate(doc["members"])}
 
@@ -288,6 +289,10 @@ def claim(set_name: str, tab: Tab, member_ref: Optional[str] = None, *,
 
         if member_ref is not None:
             m = rs.find_member(doc, member_ref)
+            if m.get("detach"):
+                raise ClaimError(f"{doc['name']}:{m['id']} is detached (it needs no tab) -- "
+                                 f"start it with: dz relaunch {doc['name']} launch {m.get('label') or m['id']}",
+                                 "detached")
             if m.get("disabled"):
                 raise ClaimError(f"{doc['name']}:{m['id']} is disabled -- enable it first", "disabled")
             if m["id"] in held_here and not allow_duplicate:
@@ -306,7 +311,7 @@ def claim(set_name: str, tab: Tab, member_ref: Optional[str] = None, *,
                 candidates.sort(key=lambda c: this_n in history.get("opened", {}).get(
                     doc["name"], {}).get(str(c["id"]), []))
             if not candidates:
-                n = len([x for x in doc["members"] if not x.get("disabled")])
+                n = len([x for x in doc["members"] if not x.get("disabled") and not x.get("detach")])
                 raise ClaimError(f"all {n} members of {doc['name']} are claimed -- nothing left to claim",
                                  "none-free")
             m = candidates[0]

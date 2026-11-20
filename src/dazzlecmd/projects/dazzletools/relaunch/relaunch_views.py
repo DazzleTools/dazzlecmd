@@ -23,6 +23,8 @@ def _state(claims, set_name, member, tab) -> str:
     mine = [c for c in claims if c["set"] == set_name and c["member_id"] == member["id"]]
     if member.get("disabled"):
         return "disabled"
+    if member.get("detach"):
+        return "detached (launch)"
     if not mine:
         return "free"
     if tab and any(tab.matches(c.get("anchor", {})) for c in mine):

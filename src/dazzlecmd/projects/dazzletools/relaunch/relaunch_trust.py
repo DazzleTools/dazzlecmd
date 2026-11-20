@@ -25,6 +25,8 @@ def _path(home: Optional[str] = None) -> str:
 def member_hash(m: Dict[str, Any]) -> str:
     fields = {"kind": m["kind"], "argv": m.get("argv"), "shell": m.get("shell"),
               "script": m.get("script"), "cwd": m.get("cwd")}
+    if m.get("detach"):          # hashed only when true, so existing hashes stay valid
+        fields["detach"] = True
     return "sha256:" + hashlib.sha256(json.dumps(fields, sort_keys=True).encode("utf-8")).hexdigest()
 
 
