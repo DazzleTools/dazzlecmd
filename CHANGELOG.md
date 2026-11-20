@@ -4,6 +4,14 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.5-alpha] - 2026-11-19
+
+### Added
+- **`dz relaunch` read actions.** Bare `dz relaunch` (or `list`) is a dashboard: each set with its member count, how many are claimed, how many were open last session, and which member this tab holds; with no sets yet it says how to start. `dz relaunch <set>` shows the roster -- each member's kind, label, what it opens, whether it is free, held by this tab or by another (with that tab's process number), its last-session tag and its note -- and marks the member the next `claim` would take, with the exact command. `dz relaunch <set>:<id>` prints one member's card. `dz relaunch last` (or `last~1`, ...) lists what was opened in that session across all sets, and `last:<n>` picks one of them. None of these writes anything or takes the store lock; `--json` gives the same data.
+
+### Versions
+- dazzlecmd 0.13.4 -> 0.13.5 (PATCH); dazzle-dz -> 0.13.5a0.
+
 ## [0.13.4-alpha] - 2026-11-19
 
 ### Added
@@ -4397,7 +4405,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.4a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.5a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

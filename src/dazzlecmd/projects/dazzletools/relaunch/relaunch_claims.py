@@ -252,15 +252,16 @@ def _now_iso() -> str:
 def claim(set_name: str, tab: Tab, member_ref: Optional[str] = None, *,
           allow_duplicate: bool = False, take_next: bool = False, level: str = "print",
           skip_ids: Iterable[int] = (), home: Optional[str] = None,
-          liveness: Callable[[Dict[str, Any]], Optional[bool]] = default_liveness,
-          boot: Callable[[], Optional[float]] = default_boot,
+          liveness: Callable[[Dict[str, Any]], Optional[bool]] = None,
+          boot: Callable[[], Optional[float]] = None,
           lock_timeout: float = LOCK_TIMEOUT_S) -> ClaimResult:
     """Take a member of ``set_name`` for ``tab`` (see module docstring).
 
     ``skip_ids`` are members to pass over for a bare claim (csb reports them
     open -- advisory). Raises ClaimError with a ``code`` on refusal.
     """
-    boot_now = boot()
+    liveness = liveness or default_liveness
+    boot_now = (boot or default_boot)()
     with store_lock(home, lock_timeout):
         doc = rs.load_set(set_name, home)
         claims = load_claims(home)
@@ -347,9 +348,10 @@ def _finish(doc, m, instance, already, session_n, reason, live, history, skip_id
 
 def release(tab: Tab, set_name: Optional[str] = None, member_ref: Optional[str] = None, *,
             all_in_set: bool = False, home: Optional[str] = None,
-            liveness: Callable[[Dict[str, Any]], Optional[bool]] = default_liveness,
+            liveness: Callable[[Dict[str, Any]], Optional[bool]] = None,
             lock_timeout: float = LOCK_TIMEOUT_S) -> List[Dict[str, Any]]:
     """Drop claims: this tab's, a named member's, or every claim in a set. Returns what was dropped."""
+    liveness = liveness or default_liveness
     with store_lock(home, lock_timeout):
         claims = live_claims(load_claims(home), liveness)
         if all_in_set:
@@ -370,7 +372,7 @@ def release(tab: Tab, set_name: Optional[str] = None, member_ref: Optional[str] 
 
 
 def snapshot(home: Optional[str] = None,
-             liveness: Callable[[Dict[str, Any]], Optional[bool]] = default_liveness
+             liveness: Callable[[Dict[str, Any]], Optional[bool]] = None
              ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """(live claims, history) for read verbs -- takes no lock and writes nothing."""
-    return live_claims(load_claims(home), liveness), load_history(home)
+    return live_claims(load_claims(home), liveness or default_liveness), load_history(home)

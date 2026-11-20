@@ -68,6 +68,12 @@ def help_text() -> str:
     return "\n".join(lines)
 
 
+import relaunch_views as views  # noqa: E402
+
+HANDLERS["list"] = views.cmd_list
+HANDLERS["show"] = views.cmd_show
+
+
 @handler("shell-init")
 def _shell_init(parsed, json_mode: bool) -> int:
     import shutil
