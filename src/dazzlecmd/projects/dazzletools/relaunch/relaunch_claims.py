@@ -298,6 +298,13 @@ def claim(set_name: str, tab: Tab, member_ref: Optional[str] = None, *,
             if mine is not None:
                 exclude.add(mine["member_id"])
             candidates = order_free(doc, exclude, history, skip_ids)
+            if take_next and mine is not None:
+                # --next walks forward: members already opened in this session go last,
+                # so a tab stepping through a set never bounces back to what it just left
+                cur = current_session(history)
+                this_n = cur["n"] if cur else None
+                candidates.sort(key=lambda c: this_n in history.get("opened", {}).get(
+                    doc["name"], {}).get(str(c["id"]), []))
             if not candidates:
                 n = len([x for x in doc["members"] if not x.get("disabled")])
                 raise ClaimError(f"all {n} members of {doc['name']} are claimed -- nothing left to claim",
@@ -309,7 +316,8 @@ def claim(set_name: str, tab: Tab, member_ref: Optional[str] = None, *,
         while instance in taken:
             instance += 1
 
-        any_live_besides_me = bool(others)
+        # this tab swapping its own member (--next) keeps the session going
+        any_live_besides_me = bool(others) or mine is not None
         reason = needs_new_session(history, any_live_besides_me, boot_now)
         if reason:
             n = history["next_session"]

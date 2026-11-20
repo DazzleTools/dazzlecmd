@@ -4,6 +4,14 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.10-alpha] - 2026-11-19
+
+### Fixed
+- **`dz relaunch <set> claim --next` now steps forward.** Found in a real run with a five-tab set: `--next` bounced between two members (the one just released ranked first again), and each `--next` started a new session, so tags read "open last session" for members opened a minute earlier. Swapping a tab's own member now keeps the session, and members already opened in this session come last.
+
+### Versions
+- dazzlecmd 0.13.9 -> 0.13.10 (PATCH); dazzle-dz -> 0.13.10a0.
+
 ## [0.13.9-alpha] - 2026-11-19
 
 ### Fixed
@@ -4447,7 +4455,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.9a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.10a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

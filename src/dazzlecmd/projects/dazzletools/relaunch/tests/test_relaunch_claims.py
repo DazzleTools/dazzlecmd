@@ -85,6 +85,21 @@ def test_next_takes_another_and_releases_the_old(w):
     assert [c["member_id"] for c in rc.load_claims()] == [2]
 
 
+def test_next_walks_forward_in_one_session(w):
+    """Found in the real CK3 run: --next bounced 2 <-> 3 and opened a new session each time."""
+    make_set(n=5)
+    t = w.tab(1)
+    first = rc.claim("ck3", t, **w.kw())
+    seen = [first.member["id"]]
+    sessions = {first.session}
+    for _ in range(4):
+        r = rc.claim("ck3", t, take_next=True, **w.kw())
+        seen.append(r.member["id"])
+        sessions.add(r.session)
+    assert seen == [1, 2, 3, 4, 5]
+    assert sessions == {1}
+
+
 def test_duplicate_needs_permission_and_gets_instance_2(w):
     make_set()
     rc.claim("ck3", w.tab(1), "m1", **w.kw())
