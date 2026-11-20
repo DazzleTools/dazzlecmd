@@ -4,6 +4,14 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.4-alpha] - 2026-11-19
+
+### Added
+- **`dz relaunch shell-init cmd|bash` and the `dzr` wrapper** -- the piece that lets a claim change the tab's own folder, which no program can do for the shell that started it. `dzr` runs `dz relaunch` with a hand-over file in a temp folder it claims with `mkdir` (cmd's `%RANDOM%` repeats across tabs started together, so names are claimed, not guessed); relaunch writes the member's folder there and the wrapper, running inside the tab's shell, changes to it. Tested against real `cmd.exe` tabs for folders with spaces, `&` and `!` under both delayed-expansion modes, and with Git Bash under `set -u`; the exit code comes back unchanged and a failed claim leaves the tab where it was. A folder that cannot be written exactly in the console's code page is refused and the `cd` line printed instead, so a lossy `?` can never act as a wildcard. `shell-init cmd` suggests a local folder on PATH (the one holding `dz.exe`), not a network drive.
+
+### Versions
+- dazzlecmd 0.13.3 -> 0.13.4 (PATCH); dazzle-dz -> 0.13.4a0.
+
 ## [0.13.3-alpha] - 2026-11-19
 
 ### Added
@@ -4389,7 +4397,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.3a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.4a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

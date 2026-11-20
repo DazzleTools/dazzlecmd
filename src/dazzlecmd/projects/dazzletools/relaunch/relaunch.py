@@ -68,6 +68,31 @@ def help_text() -> str:
     return "\n".join(lines)
 
 
+@handler("shell-init")
+def _shell_init(parsed, json_mode: bool) -> int:
+    import shutil
+    import relaunch_wrappers as wr
+    shell = (parsed.rest[0] if parsed.rest else ("cmd" if sys.platform == "win32" else "bash")).lower()
+    try:
+        text = wr.wrapper_text(shell)
+    except ValueError as e:
+        print(f"relaunch: {e}", file=sys.stderr)
+        return io.finish("USAGE", str(e), io.EXIT_USAGE, json_mode=json_mode)
+    dz = shutil.which("dz")
+    where = os.path.dirname(dz) if dz else None
+    if json_mode:
+        return io.finish("PRINTED", f"dzr for {shell}", io.EXIT_OK, json_mode=True,
+                         payload={"shell": shell, "text": text, "suggested_folder": where})
+    sys.stdout.write(text.replace("\r\n", "\n"))
+    if shell == "cmd":
+        hint = (f"save it as dzr.cmd in a folder on PATH that is local (not a network drive), "
+                f"e.g. {where}" if where else "save it as dzr.cmd in a local folder on PATH")
+    else:
+        hint = "add it to ~/.bashrc, then: dzr <set> claim"
+    print(f"\n# {hint}", file=sys.stderr)
+    return io.finish("PRINTED", f"dzr for {shell}", io.EXIT_OK)
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] in ("-h", "--help", "help"):
