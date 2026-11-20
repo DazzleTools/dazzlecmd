@@ -4,6 +4,19 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.8-alpha] - 2026-11-19
+
+`dz relaunch` is now a registered tool: `dz relaunch --help`.
+
+### Added
+- `dz relaunch` joins the dazzletools kit. Usage page: `src/dazzlecmd/projects/dazzletools/relaunch/docs/USAGE.md`; a hand-run checklist for real tabs, a real restart and csb sessions: `tests/checklists/v0.13.8__Tool__dz-relaunch.md`.
+
+### Changed
+- Dependencies: `dazzle-filekit>=0.5.3` (was 0.3.4; relaunch needs its new lock and `current_flavor`), plus `dazzle-loglib>=0.3.3` and `dazzle-lib>=0.8.2`. dazzle-filekit 0.5.3 is not on PyPI yet, so this version installs only from source until it is.
+
+### Versions
+- dazzlecmd 0.13.7 -> 0.13.8 (PATCH); dazzle-dz -> 0.13.8a0.
+
 ## [0.13.7-alpha] - 2026-11-19
 
 ### Added
@@ -4425,7 +4438,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.7a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.8a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

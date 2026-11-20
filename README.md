@@ -185,7 +185,7 @@ dazzlecmd/
 │   │   ├── dos2unix/  split/  srch-path/  delete-nul/  md-rm-img/  md-unwrap/
 │   │   ├── git/  git-snapshot/  github/  private-init/
 │   │   ├── claude-cleanup/  claude-session-metadata/  claudeview/  ...
-│   │   ├── safe-icacls/  fixuser/  redact-msinfo/  unlockit/  extract-all/
+│   │   ├── safe-icacls/  fixuser/  redact-msinfo/  unlockit/  extract-all/  relaunch/
 │   │   └── .kit.json         # in-repo kit manifest (the tool list)
 │   └── media/                # Media kit (opt-in: dz kit enable media, 7 tools)
 │       ├── vid2gif/  vidresize/  img2vid/  crossfade/  song-to-vid/  ...

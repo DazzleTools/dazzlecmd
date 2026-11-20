@@ -42,6 +42,7 @@ The DazzleTools kit contains cross-platform utilities from the [DazzleTools](htt
 | `fixuser` | Diagnose and repair a broken Windows user profile (the temp-profile / `C:\Users\TEMP` state) | Windows |
 | `redact-msinfo` | Redact a Windows `msinfo32` export for safe sharing (PII scrub + section selection) | Cross-platform |
 | `unlockit` | Show which processes hold a locked file or folder and the window each belongs to; `--focus` brings that window to the front | Windows |
+| `relaunch` | Remember working sets of terminal tabs (folders, commands, Claude sessions) and bring them back after a restart, one `claim` per tab -- see [USAGE](../../../src/dazzlecmd/projects/dazzletools/relaunch/docs/USAGE.md) | Cross-platform (Windows tested) |
 
 ### Archives
 
