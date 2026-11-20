@@ -127,14 +127,19 @@ def current_flavor() -> str:
         return _cf()
     except ImportError:
         pass
+    # Same rule as filekit's compat.is_wsl (kept in step for older filekits).
     if sys.platform == "win32":
         return "windows"
-    try:
-        with open("/proc/version", encoding="utf-8", errors="replace") as f:
-            if "microsoft" in f.read().lower():
+    if sys.platform.startswith("linux"):
+        if os.environ.get("WSL_DISTRO_NAME"):
+            return "wsl"
+        try:
+            with open("/proc/version", encoding="utf-8", errors="replace") as f:
+                v = f.read().lower()
+            if "microsoft" in v or "wsl" in v:
                 return "wsl"
-    except OSError:
-        pass
+        except OSError:
+            pass
     return "posix"
 
 

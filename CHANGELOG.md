@@ -4,6 +4,17 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.1-alpha] - 2026-11-19
+
+### Added
+- **Process identity for `dz relaunch`** (`src/dazzlecmd/_vendor/procs/`): the process table, a process's creation time, whether it is alive, its program name, its chain of parents, and the machine's boot time -- without psutil (ctypes on Windows, `/proc` or `ps` elsewhere). A process counts as "the same one" only when it is alive with the same program name and the same creation time, because process numbers are reused (on Windows a dead number has come back as an unrelated program after a restart); when a process's details cannot be read, the answer is "unknown", never "gone". `find_anchor` names the process that stands for a terminal tab: the shell directly below the nearest terminal host (Windows Terminal, VS Code, mintty, ...), else the outermost shell. Vendored, with no dazzlecmd imports, so it can later move into a library that csb and other tools share; `_VENDORED.md` lists what each existing copy (unlockit, csb, dazzlecmd-lib's shell_fix) would use.
+
+### Changed
+- `relaunch` set files record the runtime flavor through dazzle-filekit's `current_flavor()` (filekit 0.5.3), with a matching local rule for older filekits.
+
+### Versions
+- dazzlecmd 0.13.0 -> 0.13.1 (PATCH); dazzle-dz -> 0.13.1a0. Uses dazzle-filekit 0.5.3 (`locking`, `current_flavor`) when installed; that release is not yet published.
+
 ## [0.13.0-alpha] - 2026-11-19
 
 The start of `dz relaunch`: remember working sets of terminal tabs and bring them back after a restart. This release adds its storage layer; the command itself is not registered yet and arrives over the next releases.
@@ -4359,7 +4370,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.0a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.1a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
