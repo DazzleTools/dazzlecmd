@@ -4,6 +4,15 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.6-alpha] - 2026-11-19
+
+### Added
+- **`dz relaunch <set> claim`** -- the command used in each new tab after a restart. It takes the next member (last session's first), says what it took and with which tag, tells the tab what to do -- the `cd` line for a folder (or moves the tab, through `dzr`), the command for a command member, `csb resume <id>` for a Claude member -- and names the member that comes next. Running it again in the same tab returns the same member; `--next` takes another; a member already open in another tab is only started again as a second copy, after a prompt or with `--yes`; several sets can be named and the first with a free member is used; `last:<n> claim` takes a member from the last-session view. `release` lets go of this tab's member, a named one, or all of a set's (`--all`).
+- **Managing sets**: `new` (with `--here`), `add` (a folder, `--here` which also claims it for this tab, `--shell <dialect> "<script>"` for compound actions, `-- <command and arguments>` for any program), `note`, `edit` (one member's fields, or the whole set in your editor -- applied only if nobody changed the set meanwhile, otherwise your copy is kept), `drop rm|disable` for a whole set or members (a removed set goes to the safedel trash and the recover command is printed; removed members are kept for 30 days), `enable`, and `list --removed only|all`.
+
+### Versions
+- dazzlecmd 0.13.5 -> 0.13.6 (PATCH); dazzle-dz -> 0.13.6a0.
+
 ## [0.13.5-alpha] - 2026-11-19
 
 ### Added
@@ -4405,7 +4414,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.5a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.6a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

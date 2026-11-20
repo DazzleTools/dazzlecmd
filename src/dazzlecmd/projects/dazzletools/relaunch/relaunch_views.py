@@ -122,6 +122,19 @@ def session_view(history, token: str, home=None) -> Tuple[List[Tuple[str, Dict[s
 
 def cmd_list(parsed, json_mode: bool) -> int:
     rest = parsed.rest
+    if "--removed" in rest:
+        import relaunch_actions as actions
+        removed = actions.removed_rows()
+        if "all" not in rest:
+            if json_mode:
+                return io.finish("LISTED", f"{len(removed)} removed", io.EXIT_OK, json_mode=True,
+                                 payload={"removed": removed})
+            for r in removed:
+                extra = f"  recover: dz safedel recover {r['recover']}" if r.get("recover") else ""
+                print(f"  {r['what']:<7} {r['name']:<24} removed {r.get('removed', '')}{extra}")
+            if not removed:
+                print("nothing removed")
+            return io.finish("LISTED", f"{len(removed)} removed")
     include_disabled = "--disabled" in rest or ("--removed" in rest and "all" in rest)
     sets = rs.list_sets(include_disabled=include_disabled)
     claims, history = rc.snapshot()

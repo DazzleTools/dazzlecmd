@@ -70,8 +70,18 @@ def help_text() -> str:
 
 import relaunch_views as views  # noqa: E402
 
+import relaunch_actions as actions  # noqa: E402
+
 HANDLERS["list"] = views.cmd_list
 HANDLERS["show"] = views.cmd_show
+HANDLERS["new"] = actions.cmd_new
+HANDLERS["add"] = actions.cmd_add
+HANDLERS["edit"] = actions.cmd_edit
+HANDLERS["note"] = actions.cmd_note
+HANDLERS["release"] = actions.cmd_release
+HANDLERS["drop"] = actions.cmd_drop
+HANDLERS["enable"] = actions.cmd_enable
+HANDLERS["claim"] = actions.cmd_claim
 
 
 @handler("shell-init")
