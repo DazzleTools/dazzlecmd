@@ -45,8 +45,11 @@ def write_cd_file(folder: str, *, env=None) -> Optional[bool]:
         data = (folder + ("\r\n" if fmt == "cmd" else "\n")).encode(encoding, errors="strict")
     except (UnicodeEncodeError, LookupError):
         return False
-    with open(path, "wb") as f:
-        f.write(data)
+    try:
+        with open(path, "wb") as f:
+            f.write(data)
+    except OSError:          # the wrapper's temp folder is gone (e.g. an inherited variable)
+        return False
     return True
 
 
@@ -101,7 +104,7 @@ def build_command(m, *, which=None):
 
 def child_env(base=None):
     env = dict(os.environ if base is None else base)
-    for k in DZ_ENV_VARS:
+    for k in DZ_ENV_VARS + (CD_FILE_ENV, CD_FORMAT_ENV):
         env.pop(k, None)
     return env
 

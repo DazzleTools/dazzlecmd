@@ -115,9 +115,11 @@ def test_dzr_bash_moves_the_shell(tmp_path, name):
 
 def test_shell_init_prints_the_wrapper(capsys):
     assert relaunch.main(["shell-init", "cmd"]) == 0
-    out = capsys.readouterr().out
+    cap = capsys.readouterr()
+    out = cap.out
     assert "dz relaunch %*" in out and "setlocal" not in out.split("Must not use setlocal")[1]
-    assert out.strip().splitlines()[-1] == "relaunch: PRINTED dzr for cmd"
+    assert out.strip().splitlines()[-1] == "exit /b %DZR_RC%"      # nothing after the wrapper
+    assert "relaunch: PRINTED dzr for cmd" in cap.err
 
 
 def test_shell_init_unknown_shell_is_usage(capsys):

@@ -13,6 +13,9 @@ is claimed with ``mkdir`` and retried. The bash form passed 72/72 cases.
 
 from __future__ import annotations
 
+import os
+import sys
+
 DZR_CMD_TEMPLATE = r"""@echo off
 rem dzr.cmd -- run `dz relaunch` and let it change this tab's folder.
 rem Printed by `dz relaunch shell-init cmd`. Must not use setlocal (it would undo the cd).
@@ -60,6 +63,56 @@ dzr() {
   return "$_dzr_rc"
 }
 """
+
+
+MARKER = "rem dzr.cmd -- run `dz relaunch` and let it change this tab's folder."
+
+
+def install_dir() -> str:
+    """The folder holding dz.exe -- already on PATH. (Seam: tests replace it.)"""
+    import shutil
+    dz = shutil.which("dz")
+    if not dz:
+        raise OSError("dz was not found on PATH, so there is no folder to install dzr.cmd into -- "
+                      "save it by hand: dz relaunch shell-init cmd > <a folder on PATH>\\dzr.cmd")
+    return os.path.dirname(os.path.abspath(dz))
+
+
+def _fixed_drive(folder: str) -> bool:
+    if sys.platform != "win32":
+        return True
+    import ctypes
+    root = os.path.splitdrive(os.path.abspath(folder))[0] + "\\"
+    return ctypes.windll.kernel32.GetDriveTypeW(root) == 3   # DRIVE_FIXED
+
+
+def install_cmd(folder: str = None) -> tuple:
+    """Write dzr.cmd into ``folder`` (default: beside dz.exe). Returns (outcome, path)."""
+    folder = folder or install_dir()
+    if not _fixed_drive(folder):
+        raise OSError(f"{folder} is not on a local fixed drive -- it may be missing right after a restart")
+    path = os.path.join(folder, "dzr.cmd")
+    text = wrapper_text("cmd").encode("ascii")
+    if os.path.exists(path):
+        current = open(path, "rb").read()
+        if current == text:
+            return "CURRENT", path
+        if MARKER.encode("ascii") not in current[:300]:
+            return "FOREIGN", path
+    with open(path, "wb") as f:
+        f.write(text)
+    return "INSTALLED", path
+
+
+def uninstall_cmd(folder: str = None, trash=None) -> tuple:
+    folder = folder or install_dir()
+    path = os.path.join(folder, "dzr.cmd")
+    if not os.path.exists(path):
+        return "ABSENT", path
+    if MARKER.encode("ascii") not in open(path, "rb").read()[:300]:
+        return "FOREIGN", path
+    trash.trash([path])
+    return "REMOVED", path
 
 
 def wrapper_text(shell: str, invoke: str = "dz relaunch") -> str:

@@ -99,14 +99,42 @@ def _shell_init(parsed, json_mode: bool) -> int:
     if json_mode:
         return io.finish("PRINTED", f"dzr for {shell}", io.EXIT_OK, json_mode=True,
                          payload={"shell": shell, "text": text, "suggested_folder": where})
+    def verdict(outcome, detail, code=io.EXIT_OK):
+        # stdout carries only the wrapper (so `> dzr.cmd` makes a clean file); the verdict goes to stderr
+        print(io.verdict_line(io.TOOL, outcome, detail), file=sys.stderr)
+        return code
+
+    if "--install" in parsed.rest or "--uninstall" in parsed.rest:
+        if shell != "cmd":
+            return verdict("USAGE", "--install/--uninstall are built for cmd; for bash, add the "
+                                    "printed function to ~/.bashrc yourself", io.EXIT_USAGE)
+        try:
+            if "--uninstall" in parsed.rest:
+                import relaunch_actions as actions
+                outcome, path = wr.uninstall_cmd(trash=actions.trash_store())
+            else:
+                outcome, path = wr.install_cmd()
+        except OSError as e:
+            print(f"relaunch: {e}", file=sys.stderr)
+            return verdict("REFUSED", str(e), io.EXIT_REFUSED)
+        messages = {"INSTALLED": f"wrote {path} -- `dzr <set> claim` works in every new tab",
+                    "CURRENT": f"{path} is already current",
+                    "FOREIGN": f"{path} exists and is not relaunch's -- left alone",
+                    "ABSENT": f"{path} is not there",
+                    "REMOVED": f"moved {path} to the safedel trash"}
+        print(messages[outcome], file=sys.stderr)
+        shadow = shutil.which("dzr")
+        if outcome == "INSTALLED" and shadow and os.path.normcase(shadow) != os.path.normcase(path):
+            print(f"warning: `dzr` resolves to {shadow} first on PATH", file=sys.stderr)
+        return verdict(outcome, path, io.EXIT_REFUSED if outcome == "FOREIGN" else io.EXIT_OK)
     sys.stdout.write(text.replace("\r\n", "\n"))
     if shell == "cmd":
-        hint = (f"save it as dzr.cmd in a folder on PATH that is local (not a network drive), "
-                f"e.g. {where}" if where else "save it as dzr.cmd in a local folder on PATH")
+        hint = (f"save it with: dz relaunch shell-init cmd --install   (writes dzr.cmd beside {where})"
+                if where else "save it as dzr.cmd in a local folder on PATH")
     else:
         hint = "add it to ~/.bashrc, then: dzr <set> claim"
-    print(f"\n# {hint}", file=sys.stderr)
-    return io.finish("PRINTED", f"dzr for {shell}", io.EXIT_OK)
+    print(f"# {hint}", file=sys.stderr)
+    return verdict("PRINTED", f"dzr for {shell}")
 
 
 def main(argv: Optional[List[str]] = None) -> int:

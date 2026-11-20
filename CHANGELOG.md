@@ -4,6 +4,18 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.11-alpha] - 2026-11-19
+
+### Added
+- **`dz relaunch shell-init cmd --install`** writes `dzr.cmd` beside `dz.exe` -- a folder already on PATH -- so `dzr <set> claim` works in every new tab with no PATH change and no absolute path. Running it again reports "already current"; a `dzr.cmd` that is not relaunch's is left alone (exit 3); one from an older relaunch is replaced; it refuses a folder that is not on a local fixed drive and warns if another `dzr` comes first on PATH. `--uninstall` moves relaunch's `dzr.cmd` to the safedel trash.
+
+### Fixed
+- **`dz relaunch shell-init cmd > dzr.cmd` (and `bash >> ~/.bashrc`) wrote the verdict line into the file**, where cmd or bash would try to run it. Only the wrapper now goes to stdout; the verdict and the hint go to stderr.
+- A program started by `claim -o` no longer inherits `dzr`'s hand-over variables, and a hand-over to a folder that no longer exists is reported as not written instead of raising an error.
+
+### Versions
+- dazzlecmd 0.13.10 -> 0.13.11 (PATCH); dazzle-dz -> 0.13.11a0.
+
 ## [0.13.10-alpha] - 2026-11-19
 
 ### Fixed
@@ -4455,7 +4467,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.10a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.11a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

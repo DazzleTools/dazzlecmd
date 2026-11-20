@@ -11,10 +11,10 @@ dz relaunch ck3 add C:\code\ck3 -- codex resume --last      # a command, run in 
 dz relaunch ck3 add --shell cmd "cd mod && build.cmd"       # a compound action, in cmd syntax
 dz relaunch ck3 add --claude CK3__2026-10-24__worker        # a Claude session, through csb
 dz relaunch new today --from-csb current     # one Claude member per session csb sees open
-dz relaunch shell-init cmd > dzr.cmd         # the wrapper that lets claim change the tab's folder
+dz relaunch shell-init cmd --install         # the wrapper that lets claim change the tab's folder
 ```
 
-Put `dzr.cmd` in a local folder on PATH -- the folder holding `dz.exe` works; avoid a network drive, which may not be mapped right after a restart. In bash: `dz relaunch shell-init bash >> ~/.bashrc`.
+`--install` writes `dzr.cmd` beside `dz.exe`, a folder already on PATH, so nothing needs setting; it never overwrites a `dzr.cmd` that is not relaunch's, and `--uninstall` moves it to the safedel trash. To place it yourself: `dz relaunch shell-init cmd > <a local folder on PATH>\dzr.cmd`. In bash: `dz relaunch shell-init bash >> ~/.bashrc` (only the function goes to stdout).
 
 ## After a restart
 
