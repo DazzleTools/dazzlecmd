@@ -4,6 +4,15 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.2-alpha] - 2026-11-19
+
+### Added
+- **Claims and sessions for `dz relaunch`** (`relaunch_claims.py`). A claim records that one terminal tab holds one member of a set, identified by the tab's own shell process (its number, program and creation time), so a claim is freed only when that process is gone or has been replaced -- never because its details could not be read. Two tabs claiming at the same moment never get the same member: every write happens under one store-wide lock (dazzle-filekit's `exclusive_lock`), measured with five and six processes racing for four members, from an empty store and from a store full of stale claims. A tab holds one member at a time; claiming again in the same tab returns the same member; `--next` takes another before letting the first go; a member already open in another tab is only taken again on request, as a second copy.
+- **Sessions and "last session".** A claim starts a new session when nothing else is claimed or when the machine has restarted since the current session began (boot time compared with a ten-minute tolerance), and records which members were opened in which session. A bare claim offers the most recently opened members first and never-opened ones last, and every member can be tagged `open this session`, `open last session -- before restart`, `open last session -- closed this boot`, `last open N sessions ago` or `never opened`. Reading claims and history never writes anything.
+
+### Versions
+- dazzlecmd 0.13.1 -> 0.13.2 (PATCH); dazzle-dz -> 0.13.2a0.
+
 ## [0.13.1-alpha] - 2026-11-19
 
 ### Added
@@ -4370,7 +4379,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.1a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.2a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
