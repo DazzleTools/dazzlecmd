@@ -138,10 +138,12 @@ def cmd_add(parsed, json_mode: bool) -> int:
     if a.label:
         member["label"] = a.label
     member["notes"] = a.notes
+    import relaunch_trust as trust
     with rc.store_lock():
         doc = rs.load_set(set_name)
         m = rs.add_member(doc, member, at=a.at)
         rs.save_set(doc)
+        trust.record(doc["name"], m)
     print(f"added {set_name}:{m['id']} ({m['kind']}) -> {m.get('cwd') or ' '.join(m.get('argv', [])) or m.get('script') or m.get('session_id')}")
     if a.here:
         try:
@@ -204,6 +206,8 @@ def cmd_edit(parsed, json_mode: bool) -> int:
                 m["argv"] = argv
             rs.validate_member(m)
             rs.save_set(doc)
+            import relaunch_trust as trust
+            trust.record(doc["name"], m)
         return io.finish("EDITED", f"{set_name} {m['id']}", json_mode=json_mode)
     # editor mode: no lock while the editor is open; hash check on save
     src = rs.find_set_file(set_name)
@@ -230,6 +234,9 @@ def cmd_edit(parsed, json_mode: bool) -> int:
                              io.EXIT_REFUSED, json_mode=json_mode)
         new_doc["_path"] = src
         rs.save_set(new_doc)
+        import relaunch_trust as trust
+        for m in new_doc["members"]:
+            trust.record(new_doc["name"], m)
     os.remove(work)
     return io.finish("EDITED", set_name, json_mode=json_mode)
 
@@ -416,6 +423,7 @@ def cmd_claim(parsed, json_mode: bool) -> int:
             else:
                 print(f"relaunch: {e}", file=sys.stderr)
                 return io.finish("REFUSED", str(e), io.EXIT_REFUSED, json_mode=json_mode)
+        r.yes = yes
         return _report_claim(r, level, json_mode)
     return io.finish("REFUSED", str(last_err), io.EXIT_REFUSED, json_mode=json_mode)
 

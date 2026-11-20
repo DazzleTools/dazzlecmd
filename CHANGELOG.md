@@ -4,6 +4,17 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.7-alpha] - 2026-11-19
+
+### Added
+- **`dz relaunch <set> claim -o`** runs the member in this tab: it shows the exact program, arguments and folder, asks `[y/N]`, starts it with the console intact (Ctrl-C belongs to the program; relaunch's own `DZ_*` variables are not passed on), returns the program's exit code, and when the program ends leaves the tab in the member's folder through `dzr`. The prompt can be turned off with `-y`, `DZ_RELAUNCH_OPEN_ASKS=0`, a line in `~/.dz/relaunch/.env`, or `"open_asks": false` in `~/.dz/relaunch/local/config.json` -- a `.env` in the current folder is never read, so a cloned project cannot switch the guard off. Without a console (a pipe, a script, an agent) `-o` only prints.
+- **A command or shell member that relaunch did not write as it now reads** -- edited by hand, or from a set copied from another machine -- is shown and asked about even with `-y`; once approved it is trusted until it changes again.
+- Programs are found the way Windows itself runs them (PATH and PATHEXT, so npm's `.cmd` shims work). An argument that a `.cmd`/`.bat` program would receive changed (`&`, `|`, `<`, `>`, `^`, `%`, `!`, `"`) is refused with a pointer to a shell member instead of being passed on silently altered. Shell members run as one command line in their own dialect (`cmd`, `bash`, `pwsh`).
+- **csb, read-only**: `add --claude <session name or id>` and `new <set> --from-csb current|last|boot|<csb set>` take Claude sessions from csb; a bare claim passes over sessions csb reports open. relaunch never runs a csb command that writes, reads csb at most once per command with a five-second limit, and keeps working when csb is missing.
+
+### Versions
+- dazzlecmd 0.13.6 -> 0.13.7 (PATCH); dazzle-dz -> 0.13.7a0.
+
 ## [0.13.6-alpha] - 2026-11-19
 
 ### Added
@@ -4414,7 +4425,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.6a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.7a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

@@ -81,8 +81,9 @@ def is_console() -> bool:
         return sys.stdin.isatty() and sys.stdout.isatty()
 
 
-def confirm(question: str, *, default: bool = False, ask=input) -> Optional[bool]:
+def confirm(question: str, *, default: bool = False, ask=None) -> Optional[bool]:
     """Ask on stderr when a person is at the console; None when nobody can answer."""
+    ask = ask or (lambda prompt: input(prompt))
     if not is_console():
         return None
     hint = "[Y/n]" if default else "[y/N]"
