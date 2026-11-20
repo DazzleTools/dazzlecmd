@@ -4,6 +4,15 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.9-alpha] - 2026-11-19
+
+### Fixed
+- **`dz relaunch <action> -h` now explains the action**: its usage, what it does, every option in plain words, and runnable examples with a comment each (`dz relaunch add -h`, `dz relaunch claim -h`, ...). Before, the help listed bare option names with no explanation.
+- **`-h` after a hand-parsed action no longer acts.** `dz relaunch ck3 claim -h` could claim a member, because `claim` ignored `-h`; every action now prints its help and changes nothing when `-h` or `--help` appears.
+
+### Versions
+- dazzlecmd 0.13.8 -> 0.13.9 (PATCH); dazzle-dz -> 0.13.9a0.
+
 ## [0.13.8-alpha] - 2026-11-19
 
 `dz relaunch` is now a registered tool: `dz relaunch --help`.
@@ -4438,7 +4447,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.8a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.9a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

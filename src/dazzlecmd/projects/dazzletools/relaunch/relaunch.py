@@ -45,7 +45,7 @@ def help_text() -> str:
     for v in rv.VERBS:
         alias = f" ({', '.join(v.aliases)})" if v.aliases else ""
         lines.append(f"  {v.name + alias:<16} {v.summary}")
-    lines += ["", "first run:"]
+    lines += ["", "help on one action: dz relaunch <action> -h   (e.g. dz relaunch claim -h)", "", "first run:"]
     first = [("dz relaunch new ck3", "create a set"),
              ("dz relaunch ck3 add --here", "add this tab's folder (run it in each tab)"),
              ("dz relaunch shell-init cmd", "print the dzr wrapper so claim can change folders")]
@@ -124,6 +124,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     except rs.StoreError as e:
         print(f"relaunch: {e}", file=sys.stderr)
         return io.finish("ERROR", str(e), io.EXIT_ERROR, json_mode=json_mode)
+    if any(t in ("-h", "--help") for t in parsed.rest + parsed.flags) and argv:
+        print(rv.verb_help(parsed.verb))      # help for that action; nothing runs
+        return io.EXIT_OK
     fn = HANDLERS.get(parsed.verb)
     if fn is None:
         msg = f"'{parsed.verb}' is not built yet in this version"

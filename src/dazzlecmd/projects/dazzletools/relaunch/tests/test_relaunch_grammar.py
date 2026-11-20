@@ -101,6 +101,26 @@ def test_help_lists_every_verb(capsys):
         assert v.name in out
 
 
+@pytest.mark.parametrize("verb", [v.name for v in rv.VERBS])
+def test_every_action_has_help_with_options_and_examples(verb, capsys):
+    assert relaunch.main([verb, "-h"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("usage: dz relaunch")
+    assert "examples:" in out and "options:" in out
+
+
+def test_help_after_a_set_runs_nothing(capsys, monkeypatch):
+    import relaunch_claims as rc
+    doc = rs.new_set("ck3")
+    rs.add_member(doc, {"kind": "folder", "cwd": os.getcwd()})
+    rs.save_set(doc)
+    monkeypatch.setattr(rc, "claim", lambda *a, **k: (_ for _ in ()).throw(AssertionError("claimed!")))
+    assert relaunch.main(["ck3", "claim", "-h"]) == 0
+    out = capsys.readouterr().out
+    assert "usage: dz relaunch <set>... claim" in out and "-o, --open" in out
+    assert not os.path.exists(rs.local_dir()) or not os.listdir(rs.local_dir())
+
+
 def test_log_file_receives_diagnostics(tmp_path):
     log = tmp_path / "relaunch.log"
     io.setup_output(verbose=3, log_file=str(log))
