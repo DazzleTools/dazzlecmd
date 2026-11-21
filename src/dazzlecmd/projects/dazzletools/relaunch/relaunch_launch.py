@@ -28,6 +28,22 @@ def _console_encoding() -> str:
     return "utf-8"
 
 
+def handover_from_argv(argv):
+    """Split ``--cd-file=`` / ``--cd-format=`` (passed by ``dzr.cmd``) out of ``argv``.
+
+    Returns (the remaining args, {env var: value}) -- the caller applies the mapping for one run.
+    """
+    rest, found = [], {}
+    for tok in argv:
+        if tok.startswith("--cd-file="):
+            found[CD_FILE_ENV] = tok[len("--cd-file="):]
+        elif tok.startswith("--cd-format="):
+            found[CD_FORMAT_ENV] = tok[len("--cd-format="):]
+        else:
+            rest.append(tok)
+    return rest, found
+
+
 def write_cd_file(folder: str, *, env=None) -> Optional[bool]:
     """Write ``folder`` for the wrapper. None: no wrapper in use; False: refused.
 
@@ -209,12 +225,24 @@ def open_member(r, doc, folder, *, json_mode: bool = False) -> int:
         return io.finish("REFUSED", str(e), io.EXIT_REFUSED, json_mode=json_mode)
     yes = bool(getattr(r, "yes", False))
     trusted = trust.is_trusted(doc, m)
+    if m["kind"] == "claude":           # resume by UUID (rename-proof); show the name so a person can decide
+        import relaunch_csb as csb
+        name = csb.name_for_member(r.set_name, m)
+        if name:
+            display = f"{display}  ({name})"
     print(f"  will run: {display}" + (f"\n  in: {folder}" if folder else ""))
     if not trusted:
         print("  this command is not the one relaunch recorded (edited outside relaunch, or from another box)")
     if (not trusted) or (open_asks() and not yes):
         ok = io.confirm("run it?" + ("" if not trusted else "  (-y skips; DZ_RELAUNCH_OPEN_ASKS=0 stops asking)"))
         if not ok:
+            # a "no" (n, Enter, Ctrl+C, closed input) gives the member back -- unless the tab already had it
+            import relaunch_claims as rc
+            label = m.get("label") or m["kind"]
+            if getattr(r, "already", False):
+                print(f"not run -- this tab still holds {r.set_name}:{m['id']} {label} (it had it before)")
+            elif rc.unclaim(r, rc.current_tab()):
+                print(f"not run -- released {r.set_name}:{m['id']} {label}")
             return io.finish("REFUSED", "not run", io.EXIT_REFUSED, json_mode=json_mode)
         if not trusted:
             trust.record(doc["name"], m)

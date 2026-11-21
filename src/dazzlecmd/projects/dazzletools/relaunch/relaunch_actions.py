@@ -412,7 +412,7 @@ def cmd_release(parsed, json_mode: bool) -> int:
     return io.finish("RELEASED", str(len(dropped)), json_mode=json_mode)
 
 
-def action_lines(m: Dict[str, Any], folder: Optional[str]) -> List[str]:
+def action_lines(m: Dict[str, Any], folder: Optional[str], set_name: Optional[str] = None) -> List[str]:
     """What the person does next for a member (print level)."""
     k = m["kind"]
     lines = []
@@ -429,7 +429,9 @@ def action_lines(m: Dict[str, Any], folder: Optional[str]) -> List[str]:
     elif k == "shell":
         lines.append(m["script"])
     elif k == "claude":
-        lines.append(f"csb resume {m['session_id']}")
+        import relaunch_csb as csb
+        name = csb.name_for_member(set_name, m) if set_name else m.get("name_at_add")
+        lines.append(f"csb resume {m['session_id']}" + (f"  ({name})" if name else ""))
     return lines
 
 
@@ -516,7 +518,7 @@ def _report_claim(r: rc.ClaimResult, level: str, json_mode: bool) -> int:
             return launch.open_member(r, doc, folder, json_mode=json_mode)
         print("note: claim -o is not built in this version -- showing what to do instead",
               file=sys.stderr)
-    for line in action_lines(m, folder):
+    for line in action_lines(m, folder, r.set_name):
         print(f"  {line}")
     if r.next_member:
         nm = r.next_member

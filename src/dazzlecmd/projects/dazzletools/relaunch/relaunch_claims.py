@@ -244,6 +244,7 @@ class ClaimResult:
     next_tag: str = ""
     member_tag: str = ""
     released: Optional[Dict[str, Any]] = None
+    added_open: bool = False          # this claim marked the member opened in its session
 
 
 def _now_iso() -> str:
@@ -338,14 +339,63 @@ def claim(set_name: str, tab: Tab, member_ref: Optional[str] = None, *,
                            "claimed_at": _now_iso(), "session": session_n, "level": level,
                            "anchor": tab.as_dict(), "boot_at": boot_now})
         opened = history["opened"].setdefault(doc["name"], {}).setdefault(str(m["id"]), [])
-        if session_n not in opened:
+        added_open = session_n not in opened
+        if added_open:
             opened.insert(0, session_n)
             del opened[HISTORY_DEPTH:]
         _write(claims_path(home), {"format": 1, "claims": new_claims})
         _write(history_path(home), history)
         res = _finish(doc, m, instance, False, session_n, reason, new_claims, history, skip_ids)
         res.released = released
+        res.added_open = added_open
         return res
+
+
+def unclaim(result: "ClaimResult", tab: Tab, *, home: Optional[str] = None,
+            liveness: Callable[[Dict[str, Any]], Optional[bool]] = None,
+            lock_timeout: float = LOCK_TIMEOUT_S) -> bool:
+    """Undo a claim this command just made -- a declined ``claim -o`` gives the member back.
+
+    Removes exactly what ``claim`` added, under the store lock: this tab's claim row; the member's
+    opened mark for that session, if this claim added it and no other live claim of the member
+    shares the session; the session itself, if this claim started it, nothing else belongs to it
+    and it is still the newest (so the next claim does not start a phantom session -- the 0.13.10
+    shape). A claim the tab already held before the command is never undone. Returns True if a
+    claim was removed.
+    """
+    if result.already:
+        return False
+    liveness = liveness or default_liveness
+    mid = result.member["id"]
+    anchor = tab.as_dict()
+    with store_lock(home, lock_timeout):
+        claims = load_claims(home)
+        history = load_history(home)
+        keep, dropped = [], False
+        for c in claims:
+            if (not dropped and c.get("set") == result.set_name and c.get("member_id") == mid
+                    and c.get("instance") == result.instance and c.get("anchor") == anchor):
+                dropped = True
+                continue
+            keep.append(c)
+        if not dropped:
+            return False
+        live_rest = live_claims(keep, liveness)
+        if result.added_open and not any(c["set"] == result.set_name and c["member_id"] == mid
+                                         and c.get("session") == result.session for c in live_rest):
+            opened = history.get("opened", {}).get(result.set_name, {}).get(str(mid), [])
+            if result.session in opened:
+                opened.remove(result.session)
+        if result.new_session:
+            sessions = history.get("sessions", [])
+            if (sessions and sessions[0].get("n") == result.session
+                    and history.get("next_session") == result.session + 1
+                    and not any(c.get("session") == result.session for c in live_rest)):
+                sessions.pop(0)
+                history["next_session"] = result.session
+        _write(claims_path(home), {"format": 1, "claims": keep})
+        _write(history_path(home), history)
+        return True
 
 
 def _finish(doc, m, instance, already, session_n, reason, live, history, skip_ids) -> ClaimResult:

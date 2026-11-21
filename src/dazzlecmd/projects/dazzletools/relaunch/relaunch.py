@@ -146,7 +146,25 @@ def _shell_init(parsed, json_mode: bool) -> int:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
-    argv = list(sys.argv[1:] if argv is None else argv)
+    """``dzr.cmd`` passes the hand-over file as ``--cd-file=`` / ``--cd-format=`` arguments rather
+    than variables set in the tab: if cmd's "Terminate batch job (Y/N)?" (after a Ctrl+C) stops the
+    wrapper, an argument leaves nothing behind in the tab, where a variable would linger and make a
+    later plain ``dz relaunch`` think a wrapper is waiting. They apply to this run only."""
+    import relaunch_launch as rl
+    argv, handover = rl.handover_from_argv(list(sys.argv[1:] if argv is None else argv))
+    saved = {k: os.environ.get(k) for k in handover}
+    os.environ.update(handover)
+    try:
+        return _main(argv)
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def _main(argv: List[str]) -> int:
     if argv and argv[0] in ("-h", "--help", "help"):
         print(help_text())
         return io.EXIT_OK

@@ -68,10 +68,44 @@ def open_member_ids(set_doc: Dict[str, Any]) -> List[int]:
     return [m["id"] for m in claude if m.get("session_id") in live]
 
 
+def session_name(session_id: str) -> Optional[str]:
+    """The csb session name for a UUID (read-only ``csb scan``), or None if csb cannot say."""
+    try:
+        rows = _json(["scan", session_id, "--json"])
+    except CsbUnavailable:
+        return None
+    for r in rows if isinstance(rows, list) else []:
+        if (r.get("session_id") or "").lower() == session_id.lower():
+            return r.get("session_name") or None
+    return None
+
+
+def name_for_member(set_name: str, m: Dict[str, Any]) -> Optional[str]:
+    """A claude member's session name for display: the one recorded at add, else looked up once
+    through csb and written back to the set, so later rosters show it without asking csb again."""
+    if m.get("name_at_add"):
+        return m["name_at_add"]
+    sid = m.get("session_id")
+    name = session_name(sid) if sid else None
+    if name:
+        try:
+            import relaunch_store as rs
+            doc = rs.load_set(set_name)
+            for x in doc["members"]:
+                if x["id"] == m["id"] and not x.get("name_at_add"):
+                    x["name_at_add"] = name
+                    rs.save_set(doc)
+                    break
+        except Exception:          # display only: a failed backfill never blocks a claim
+            pass
+    return name
+
+
 def member_for(query: str) -> Dict[str, Any]:
     """A claude member for a session given by UUID or exact session name."""
     if _UUID.match(query):
-        return {"kind": "claude", "via": "csb", "session_id": query.lower(), "name_at_add": None}
+        sid = query.lower()
+        return {"kind": "claude", "via": "csb", "session_id": sid, "name_at_add": session_name(sid)}
     rows = _json(["scan", query, "--json"])
     exact = [r for r in rows if r.get("session_name") == query]
     if not exact:

@@ -4,6 +4,19 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.15-alpha] - 2026-11-21
+
+### Changed
+- **`dz relaunch <set> claim -o`: answering "no" gives the member back.** The tab still takes the member before asking -- so two tabs started together can never both be offered the same one -- but `n`, a bare Enter, Ctrl+C or closed input now releases it again: the member is free, it is not marked as opened, and no new session is left behind. The tab prints `not run -- released <set>:<n> <label>`. If the tab already held that member before the command, it keeps it and says so. Answering `y` works as before.
+- **Claude members show their session's name.** `claim` and `claim -o` still resume by session id (it survives a rename and two sessions sharing a name), but now show the name after it -- `will run: csb resume 265b0cca-...  (CLAUDE__2026.10.3__creating-bookmark-plugin)` -- so you can tell which session a tab is about to open. A member added by id gets its name from csb (read-only), and an older member without one has it filled in once, at its next claim. If csb cannot answer, the line shows the id alone, as before.
+
+### Fixed
+- **Ctrl+C at any relaunch question** (`claim -o`, `launch`, `drop`) now counts as "no" instead of ending with a Python traceback.
+- **`dzr.cmd` leaves nothing behind when cmd stops it.** After Ctrl+C, cmd asks "Terminate batch job (Y/N)?"; answering Y used to leave `DZ_RELAUNCH_CD_FILE` set in that tab, so a later plain `dz relaunch ... claim` there would say the tab moves without moving it. `dzr.cmd` now passes the hand-over file as an argument, so nothing is set in the tab at all, and it clears a variable stranded by an older copy. Run `dz relaunch shell-init cmd --install` once to update an installed `dzr.cmd` (it replaces relaunch's older copy in place).
+
+### Versions
+- dazzlecmd 0.13.14 -> 0.13.15 (PATCH); dazzle-dz -> 0.13.15a0.
+
 ## [0.13.14-alpha] - 2026-11-20
 
 ### Added
@@ -4495,7 +4508,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.14a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.15a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

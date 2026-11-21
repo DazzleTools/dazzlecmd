@@ -93,6 +93,10 @@ def confirm(question: str, *, default: bool = False, ask=None) -> Optional[bool]
         answer = ask("").strip().lower()
     except EOFError:
         return None
+    except KeyboardInterrupt:          # Ctrl+C at the question means "no", not a traceback
+        sys.stderr.write("\n")
+        sys.stderr.flush()
+        return False
     if not answer:
         return default
     return answer in ("y", "yes")

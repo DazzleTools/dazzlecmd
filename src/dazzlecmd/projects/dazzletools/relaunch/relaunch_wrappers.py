@@ -22,15 +22,13 @@ rem Printed by `dz relaunch shell-init cmd`. Must not use setlocal (it would und
 :dzr_mk
 set "DZR_TMP=%TEMP%\dzr-%RANDOM%-%RANDOM%"
 mkdir "%DZR_TMP%" 2>nul || goto :dzr_mk
-set "DZ_RELAUNCH_CD_FILE=%DZR_TMP%\cd.txt"
-set "DZ_RELAUNCH_CD_FORMAT=cmd"
-{invoke} %*
+rem the hand-over file goes as an argument, not a variable: a Ctrl+C answered "Terminate batch job? Y" leaves nothing behind
+{invoke} --cd-file="%DZR_TMP%\cd.txt" --cd-format=cmd %*
 set "DZR_RC=%ERRORLEVEL%"
-set "DZ_RELAUNCH_CD_FORMAT="
-if not exist "%DZ_RELAUNCH_CD_FILE%" goto :dzr_done
+if not exist "%DZR_TMP%\cd.txt" goto :dzr_done
 set "DZR_DIR="
-set /p DZR_DIR=<"%DZ_RELAUNCH_CD_FILE%"
-del "%DZ_RELAUNCH_CD_FILE%" >nul 2>&1
+set /p DZR_DIR=<"%DZR_TMP%\cd.txt"
+del "%DZR_TMP%\cd.txt" >nul 2>&1
 if not defined DZR_DIR goto :dzr_done
 if "!!"=="" goto :dzr_delayed
 cd /d "%DZR_DIR%"
@@ -41,6 +39,7 @@ cd /d "!DZR_DIR!"
 rmdir "%DZR_TMP%" >nul 2>&1
 set "DZR_TMP="
 set "DZ_RELAUNCH_CD_FILE="
+set "DZ_RELAUNCH_CD_FORMAT="
 set "DZR_DIR="
 exit /b %DZR_RC%
 """

@@ -18,6 +18,8 @@ FAKE_DZ = (
     "    sys.exit(3)\n"
     "sys.path.insert(0, os.environ['TOOL_DIR'])\n"
     "import relaunch_launch as rl\n"
+    "_, handover = rl.handover_from_argv(sys.argv[1:])   # what relaunch.main does for dzr.cmd\n"
+    "os.environ.update(handover)\n"
     "ok = rl.write_cd_file(t)\n"
     "sys.exit(0 if ok else 7)\n"
 )
@@ -81,6 +83,34 @@ def test_dzr_cmd_moves_the_tab(tmp_path, name, v_on):
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="cmd.exe wrapper")
+def test_dzr_cmd_never_sets_the_handover_variable_in_the_tab(tmp_path):
+    """If cmd's "Terminate batch job? Y" stops dzr.cmd mid-run, nothing may linger in the tab:
+    the hand-over travels as an argument, so cmd never holds DZ_RELAUNCH_CD_FILE at all."""
+    fake = tmp_path / "fake_dz.py"
+    fake.write_text("import os,sys\n"
+                    "sys.exit(5 if 'DZ_RELAUNCH_CD_FILE' in os.environ else\n"
+                    "         (0 if any(a.startswith('--cd-file=') for a in sys.argv) else 6))\n",
+                    encoding="utf-8")
+    dzr = tmp_path / "dzr.cmd"
+    dzr.write_bytes(wr.wrapper_text("cmd", invoke=f'"{sys.executable}" "{fake}"').encode("ascii"))
+    tab = tmp_path / "tab.cmd"
+    tab.write_bytes(f'@echo off\r\ncall "{dzr}" x claim\r\necho rc=%ERRORLEVEL%\r\n'.encode("ascii"))
+    env = {k: v for k, v in os.environ.items() if not k.startswith("DZ_RELAUNCH_")}
+    r = subprocess.run(["cmd", "/d", "/c", str(tab)], capture_output=True, text=True, env=env, timeout=60)
+    assert r.stdout.strip().splitlines()[-1] == "rc=0", r.stdout + r.stderr
+
+
+def test_main_applies_the_handover_for_one_run_only(tmp_path, monkeypatch):
+    import relaunch
+    monkeypatch.delenv(rl.CD_FILE_ENV, raising=False)
+    seen = {}
+    monkeypatch.setattr(relaunch, "_main", lambda argv: seen.update(argv=argv, env=os.environ.get(rl.CD_FILE_ENV)) or 0)
+    assert relaunch.main([f"--cd-file={tmp_path / 'cd.txt'}", "--cd-format=cmd", "ck3", "claim"]) == 0
+    assert seen["argv"] == ["ck3", "claim"] and seen["env"] == str(tmp_path / "cd.txt")
+    assert rl.CD_FILE_ENV not in os.environ                      # restored after the run
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="cmd.exe wrapper")
 def test_dzr_cmd_passes_failure_back_and_stays(tmp_path):
     rc, cwd, start = _cmd_tab(tmp_path, tmp_path / "gone", True)
     assert rc == "rc=3"
@@ -117,7 +147,8 @@ def test_shell_init_prints_the_wrapper(capsys):
     assert relaunch.main(["shell-init", "cmd"]) == 0
     cap = capsys.readouterr()
     out = cap.out
-    assert "dz relaunch %*" in out and "setlocal" not in out.split("Must not use setlocal")[1]
+    assert 'dz relaunch --cd-file="%DZR_TMP%\\cd.txt" --cd-format=cmd %*' in out
+    assert "setlocal" not in out.split("Must not use setlocal")[1]
     assert out.strip().splitlines()[-1] == "exit /b %DZR_RC%"      # nothing after the wrapper
     assert "relaunch: PRINTED dzr for cmd" in cap.err
 
