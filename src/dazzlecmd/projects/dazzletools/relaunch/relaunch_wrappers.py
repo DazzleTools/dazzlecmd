@@ -65,7 +65,127 @@ dzr() {
 """
 
 
+# The installed bash/zsh/sh form: a file that is SOURCED (`. dzr <set> claim`), so it runs inside the
+# person's shell and its cd sticks -- no edit to ~/.bashrc (dcc-patcher's rule too). It must never
+# `exit` (that would close the shell), leaks no variables, and never touches the caller's "$@".
+DZR_SOURCED_TEMPLATE = r"""# dzr -- run `dz relaunch` and let it change this shell's folder.
+# Written by dz relaunch shell-init bash --install. Source it: . dzr <set> claim
+# (or add `alias dzr='. dzr'` to your shell's rc file yourself, then: dzr <set> claim)
+if ! (return 0 2>/dev/null); then
+  echo "dzr: source it so it can change this shell's folder: . dzr $*" >&2
+  exit 2
+fi
+__dzr_main() {
+  local _dzr_tmp='' _dzr_rc=0 _dzr_dir=''
+  _dzr_tmp=$(mktemp -d "${TMPDIR:-/tmp}/dzr.XXXXXX") || return 1
+  DZ_RELAUNCH_CD_FILE="$_dzr_tmp/cd.txt" DZ_RELAUNCH_CD_FORMAT=posix command {invoke} "$@" || _dzr_rc=$?
+  if [ -s "$_dzr_tmp/cd.txt" ]; then
+    IFS= read -r _dzr_dir < "$_dzr_tmp/cd.txt" || true
+  fi
+  rm -f -- "$_dzr_tmp/cd.txt"
+  rmdir -- "$_dzr_tmp" 2>/dev/null || true
+  if [ -n "$_dzr_dir" ]; then
+    cd -- "$_dzr_dir" || _dzr_rc=$?
+  fi
+  return "$_dzr_rc"
+}
+__dzr_main "$@"
+eval "unset -f __dzr_main; return $?"
+"""
+
 MARKER = "rem dzr.cmd -- run `dz relaunch` and let it change this tab's folder."
+SOURCED_MARKER = "# Written by dz relaunch shell-init bash --install."
+
+
+def _home() -> str:
+    """The person's home folder. (Seam: tests replace it.)"""
+    return os.path.expanduser("~")
+
+
+def bash_install_dir() -> tuple:
+    """Where the sourced ``dzr`` goes: (folder, needs_creating).
+
+    Beside ``dz`` on Linux/macOS -- on PATH for whoever runs dz, never needing root. On a Windows
+    host (Git Bash) the dz folder is on the Windows PATH, where an extensionless sh file would be
+    picked by Windows resolvers and fail (dcc-patcher v0.1.11), so it goes to ~/bin, which Git for
+    Windows puts first on Git Bash's PATH and Windows never searches.
+    """
+    if sys.platform == "win32":
+        folder = os.path.join(_home(), "bin")
+        return folder, not os.path.isdir(folder)
+    return install_dir(), False
+
+
+def _installed_record_path() -> str:
+    import relaunch_store as rs
+    return os.path.join(rs.local_dir(), "installed.json")
+
+
+def _record(key: str, value) -> None:
+    import json
+    from dazzle_filekit import atomic_write_json
+    p = _installed_record_path()
+    data = {}
+    if os.path.isfile(p):
+        try:
+            data = json.load(open(p, encoding="utf-8"))
+        except ValueError:
+            data = {}
+    if value is None:
+        data.pop(key, None)
+    else:
+        data[key] = value
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    atomic_write_json(p, data, indent=2, default=None)
+
+
+def _recorded(key: str):
+    import json
+    p = _installed_record_path()
+    try:
+        return json.load(open(p, encoding="utf-8")).get(key)
+    except (OSError, ValueError):
+        return None
+
+
+def install_bash(folder: str = None) -> tuple:
+    """Write the sourced ``dzr`` (LF bytes). Returns (outcome, path)."""
+    created = False
+    if folder is None:
+        folder, created = bash_install_dir()
+    path = os.path.join(folder, "dzr")
+    text = wrapper_text("sourced").encode("ascii")
+    if os.path.exists(path):
+        current = open(path, "rb").read()
+        if current == text:
+            return "CURRENT", path
+        if SOURCED_MARKER.encode("ascii") not in current[:300]:
+            return "FOREIGN", path
+    if created:
+        os.makedirs(folder, exist_ok=True)
+        _record("bash_dir_created", folder)
+    with open(path, "wb") as f:
+        f.write(text)
+    return "INSTALLED", path
+
+
+def uninstall_bash(folder: str = None, trash=None) -> tuple:
+    if folder is None:
+        folder, _ = bash_install_dir()
+    path = os.path.join(folder, "dzr")
+    if not os.path.exists(path):
+        return "ABSENT", path
+    if SOURCED_MARKER.encode("ascii") not in open(path, "rb").read()[:300]:
+        return "FOREIGN", path
+    trash.trash([path])
+    made = _recorded("bash_dir_created")
+    if made and os.path.normcase(os.path.abspath(made)) == os.path.normcase(os.path.abspath(folder)):
+        try:
+            os.rmdir(folder)            # only if empty, and only because we made it
+        except OSError:
+            pass
+        _record("bash_dir_created", None)
+    return "REMOVED", path
 
 
 def install_dir() -> str:
@@ -121,4 +241,6 @@ def wrapper_text(shell: str, invoke: str = "dz relaunch") -> str:
         return DZR_CMD_TEMPLATE.replace("{invoke}", invoke).replace("\n", "\r\n")
     if shell == "bash":
         return DZR_BASH_TEMPLATE.replace("{invoke}", invoke)
+    if shell == "sourced":
+        return DZR_SOURCED_TEMPLATE.replace("{invoke}", invoke)
     raise ValueError(f"no wrapper for shell '{shell}' (cmd and bash are built; pwsh follows #108)")

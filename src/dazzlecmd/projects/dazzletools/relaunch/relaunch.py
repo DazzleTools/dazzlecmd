@@ -106,25 +106,31 @@ def _shell_init(parsed, json_mode: bool) -> int:
         return code
 
     if "--install" in parsed.rest or "--uninstall" in parsed.rest:
-        if shell != "cmd":
-            return verdict("USAGE", "--install/--uninstall are built for cmd; for bash, add the "
-                                    "printed function to ~/.bashrc yourself", io.EXIT_USAGE)
+        if shell not in ("cmd", "bash"):
+            return verdict("USAGE", f"--install/--uninstall are built for cmd and bash, not {shell}",
+                           io.EXIT_USAGE)
         try:
             if "--uninstall" in parsed.rest:
                 import relaunch_actions as actions
-                outcome, path = wr.uninstall_cmd(trash=actions.trash_store())
+                remove = wr.uninstall_cmd if shell == "cmd" else wr.uninstall_bash
+                outcome, path = remove(trash=actions.trash_store())
             else:
-                outcome, path = wr.install_cmd()
+                outcome, path = wr.install_cmd() if shell == "cmd" else wr.install_bash()
         except OSError as e:
             print(f"relaunch: {e}", file=sys.stderr)
             return verdict("REFUSED", str(e), io.EXIT_REFUSED)
-        messages = {"INSTALLED": f"wrote {path} -- `dzr <set> claim` works in every new tab",
+        works = ("`dzr <set> claim` works in every new tab" if shell == "cmd" else
+                 "source it to use it: . dzr <set> claim")
+        messages = {"INSTALLED": f"wrote {path} -- {works}",
                     "CURRENT": f"{path} is already current",
                     "FOREIGN": f"{path} exists and is not relaunch's -- left alone",
                     "ABSENT": f"{path} is not there",
                     "REMOVED": f"moved {path} to the safedel trash"}
         print(messages[outcome], file=sys.stderr)
-        shadow = shutil.which("dzr")
+        if shell == "bash" and outcome in ("INSTALLED", "CURRENT"):
+            print("for plain `dzr <set> claim`, add this line to your shell's rc file yourself:\n"
+                  "  alias dzr='. dzr'", file=sys.stderr)
+        shadow = shutil.which("dzr") if (shell == "cmd" or sys.platform != "win32") else None
         if outcome == "INSTALLED" and shadow and os.path.normcase(shadow) != os.path.normcase(path):
             print(f"warning: `dzr` resolves to {shadow} first on PATH", file=sys.stderr)
         return verdict(outcome, path, io.EXIT_REFUSED if outcome == "FOREIGN" else io.EXIT_OK)
@@ -133,7 +139,8 @@ def _shell_init(parsed, json_mode: bool) -> int:
         hint = (f"save it with: dz relaunch shell-init cmd --install   (writes dzr.cmd beside {where})"
                 if where else "save it as dzr.cmd in a local folder on PATH")
     else:
-        hint = "add it to ~/.bashrc, then: dzr <set> claim"
+        hint = ("or install the sourced form (no rc edit): dz relaunch shell-init bash --install, "
+                "then: . dzr <set> claim   -- or add this function to ~/.bashrc yourself")
     print(f"# {hint}", file=sys.stderr)
     return verdict("PRINTED", f"dzr for {shell}")
 

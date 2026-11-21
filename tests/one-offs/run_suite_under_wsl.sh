@@ -18,11 +18,11 @@
 # WSL_DISTRO is optional; unset means the machine's default distro.
 #
 # The Dazzle stack (dazzlecmd, dazzlecmd-lib, dazzle-lib, dazzle-filekit,
-# unctools, dazzle-preservelib) is imported from the local source trees via
-# PYTHONPATH, so nothing is written into the Windows working trees. Only
-# third-party deps go into a venv inside WSL at ~/.cache/dazzlecmd-venv.
+# unctools, dazzle-preservelib, dazzle-loglib) is imported from the local source
+# trees via PYTHONPATH, so nothing is written into the Windows working trees.
+# Only third-party deps go into a venv inside WSL at ~/.cache/dazzlecmd-venv.
 # Override a sibling path with DAZZLECMD_LIB_SRC, DAZZLE_LIB_SRC, FILEKIT_SRC,
-# UNCTOOLS_SRC or PRESERVELIB_SRC (Git Bash form, /c/...).
+# UNCTOOLS_SRC, PRESERVELIB_SRC or LOGLIB_SRC (Git Bash form, /c/...).
 #
 # Known limit: this checkout is a git worktree whose .git file holds a C:/
 # path, which git under WSL cannot follow. Git-reading tests skip with that
@@ -38,7 +38,8 @@ for src in "${DAZZLECMD_LIB_SRC:-/c/code/dazzlecmd-lib}" \
            "${DAZZLE_LIB_SRC:-/c/code/dazzle-lib}" \
            "${FILEKIT_SRC:-/c/code/filetoolkit/github}" \
            "${UNCTOOLS_SRC:-/c/code/UNCtools/local}" \
-           "${PRESERVELIB_SRC:-/c/code/dazzle-preservelib}"; do
+           "${PRESERVELIB_SRC:-/c/code/dazzle-preservelib}" \
+           "${LOGLIB_SRC:-/c/code/dazzle-loglib}"; do
     PY_PATH="$PY_PATH:$(to_wsl "$src")"
 done
 TARGET="${1:-tests/}"

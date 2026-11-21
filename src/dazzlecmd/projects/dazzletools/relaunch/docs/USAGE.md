@@ -14,7 +14,16 @@ dz relaunch new today --from-csb current     # one Claude member per session csb
 dz relaunch shell-init cmd --install         # the wrapper that lets claim change the tab's folder
 ```
 
-`--install` writes `dzr.cmd` beside `dz.exe`, a folder already on PATH, so nothing needs setting; it never overwrites a `dzr.cmd` that is not relaunch's, and `--uninstall` moves it to the safedel trash. To place it yourself: `dz relaunch shell-init cmd > <a local folder on PATH>\dzr.cmd`. In bash: `dz relaunch shell-init bash >> ~/.bashrc` (only the function goes to stdout).
+`--install` writes `dzr.cmd` beside `dz.exe`, a folder already on PATH, so nothing needs setting; it never overwrites a `dzr.cmd` that is not relaunch's, and `--uninstall` moves it to the safedel trash. To place it yourself: `dz relaunch shell-init cmd > <a local folder on PATH>\dzr.cmd`.
+
+**Linux, macOS and Git Bash.** A program cannot change the folder of the shell that started it, and a script on PATH runs as a separate process, so in bash `dzr` is a file you *source* -- the leading dot runs it inside your shell:
+
+```bash
+dz relaunch shell-init bash --install   # writes dzr beside dz (Git Bash on Windows: into ~/bin)
+. dzr ck3 claim                         # the dot is what lets it change this shell's folder
+```
+
+It never edits your shell's startup files. For plain `dzr ck3 claim`, add one line to `~/.bashrc` (or `~/.zshrc`) yourself: `alias dzr='. dzr'`. Install needs no root: `dzr` goes wherever `dz` lives (`/usr/local/bin`, `~/.local/bin`, a venv), so it is on PATH for whoever runs `dz`. Under Git Bash it goes to `~/bin` instead, because a script with no extension must not sit in a folder Windows searches. Running `dzr` without the dot says how to call it; `--uninstall` moves it to the safedel trash. Prefer a function in `~/.bashrc`? `dz relaunch shell-init bash >> ~/.bashrc` (only the function goes to stdout).
 
 ## After a restart
 

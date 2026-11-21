@@ -4,6 +4,14 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.14-alpha] - 2026-11-20
+
+### Added
+- **`dzr` on Linux, macOS and Git Bash: `dz relaunch shell-init bash --install`.** A script on PATH cannot change your shell's folder, so in bash `dzr` is a file you source: `. dzr ck3 claim`. `--install` writes it beside `dz` (on PATH for whoever runs `dz`, so it never needs root) -- or, under Git Bash on Windows, into `~/bin`, since a script with no extension must not sit in a folder Windows searches. It never edits your shell's startup files; for plain `dzr ck3 claim`, add `alias dzr='. dzr'` to your rc file yourself (the install prints the line). A refused claim returns its exit code without closing your shell, nothing is left defined in it, and running `dzr` without the dot tells you how to call it. `--uninstall` moves it to the safedel trash, and removes `~/bin` only if relaunch created it and it is empty. The printed `dzr()` function for `~/.bashrc` is still offered.
+
+### Versions
+- dazzlecmd 0.13.13 -> 0.13.14 (PATCH); dazzle-dz -> 0.13.14a0.
+
 ## [0.13.13-alpha] - 2026-11-19
 
 ### Changed
@@ -4487,7 +4495,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.13a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.14a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40
