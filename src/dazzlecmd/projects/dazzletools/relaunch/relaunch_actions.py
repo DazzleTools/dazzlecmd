@@ -116,12 +116,27 @@ def cmd_add(parsed, json_mode: bool) -> int:
     p.add_argument("--shell", nargs=2, metavar=("DIALECT", "SCRIPT"))
     p.add_argument("--claude", metavar="SESSION")
     p.add_argument("--detach", action="store_true")
+    p.add_argument("-y", "--yes", action="store_true")
     a = p.parse_args(rest)
     set_name = _one_set(parsed)
     cwd = os.getcwd() if a.here else (os.path.abspath(a.folder) if a.folder else None)
     if a.claude:
         import relaunch_csb as csb
-        member = csb.member_for(a.claude)
+        try:
+            member = csb.member_for(a.claude)
+        except csb.SessionAmbiguous as e:
+            print(f"relaunch: {e}", file=sys.stderr)
+            return io.finish("REFUSED", str(e), io.EXIT_REFUSED, json_mode=json_mode)
+        except csb.CsbUnavailable as e:
+            # csb cannot see it (often: named a moment ago). Ask once -- no retrying by hand.
+            print(f"{e} (if it was just created or renamed, csb may not have it yet)", file=sys.stderr)
+            ok = True if a.yes else io.confirm("add it by name anyway? relaunch finds its id once csb can see it")
+            if ok is None:
+                return io.finish("REFUSED", f"csb cannot see '{a.claude}' -- --yes adds it by name anyway",
+                                 io.EXIT_REFUSED, json_mode=json_mode)
+            if not ok:
+                return io.finish("REFUSED", "not added", io.EXIT_REFUSED, json_mode=json_mode)
+            member = {"kind": "claude", "via": "csb", "name_at_add": a.claude}
         if cwd:
             member["cwd"] = cwd
     elif a.shell:
@@ -147,7 +162,9 @@ def cmd_add(parsed, json_mode: bool) -> int:
         m = rs.add_member(doc, member, at=a.at)
         rs.save_set(doc)
         trust.record(doc["name"], m)
-    print(f"added {set_name}:{m['id']} ({m['kind']}) -> {m.get('cwd') or ' '.join(m.get('argv', [])) or m.get('script') or m.get('session_id')}")
+    target = (m.get('cwd') or ' '.join(m.get('argv', [])) or m.get('script') or m.get('session_id')
+              or f"csb session {m.get('name_at_add')} (not found yet -- resolved once csb can see it)")
+    print(f"added {set_name}:{m['id']} ({m['kind']}) -> {target}")
     if a.here and not m.get("detach"):
         try:
             rc.claim(set_name, rc.current_tab(), str(m["id"]))
@@ -412,6 +429,35 @@ def cmd_release(parsed, json_mode: bool) -> int:
     return io.finish("RELEASED", str(len(dropped)), json_mode=json_mode)
 
 
+def cmd_swap(parsed, json_mode: bool) -> int:
+    """Two members trade places AND numbers, so the roster still reads 1, 2, 3... -- and every record
+    keyed by member number (claims, history, approvals, the launch record) is exchanged with them."""
+    import relaunch_launch as launch
+    import relaunch_trust as trust
+    set_name = _one_set(parsed)
+    refs = [r for r in parsed.rest if not r.startswith("-")]
+    if len(refs) != 2:
+        raise rs.StoreError(f"swap needs two members: dz relaunch {set_name} swap <member> <member>")
+    with rc.store_lock():
+        doc = rs.load_set(set_name)
+        a, b = rs.find_member(doc, refs[0]), rs.find_member(doc, refs[1])
+        if a["id"] == b["id"]:
+            raise rs.StoreError(f"{refs[0]} and {refs[1]} are the same member")
+        ia = next(i for i, m in enumerate(doc["members"]) if m is a)
+        ib = next(i for i, m in enumerate(doc["members"]) if m is b)
+        ida, idb = a["id"], b["id"]
+        doc["members"][ia], doc["members"][ib] = b, a
+        a["id"], b["id"] = idb, ida
+        rs.save_set(doc)
+        rc.swap_member_refs_unlocked(doc["name"], ida, idb)
+        trust.swap_ids(doc["name"], ida, idb)
+        launch.swap_launched(doc["name"], ida, idb)
+    la, lb = a.get("label") or a["kind"], b.get("label") or b["kind"]
+    print(f"swapped: {set_name}:{a['id']} is now {la}, {set_name}:{b['id']} is now {lb}")
+    return io.finish("SWAPPED", f"{set_name} {ida} <-> {idb}", json_mode=json_mode,
+                     payload={"set": set_name, "swapped": [ida, idb]})
+
+
 def action_lines(m: Dict[str, Any], folder: Optional[str], set_name: Optional[str] = None) -> List[str]:
     """What the person does next for a member (print level)."""
     k = m["kind"]
@@ -430,8 +476,11 @@ def action_lines(m: Dict[str, Any], folder: Optional[str], set_name: Optional[st
         lines.append(m["script"])
     elif k == "claude":
         import relaunch_csb as csb
-        name = csb.name_for_member(set_name, m) if set_name else m.get("name_at_add")
-        lines.append(f"csb resume {m['session_id']}" + (f"  ({name})" if name else ""))
+        if not m.get("session_id"):        # added by name before csb could see it
+            lines.append(f"csb resume {m['name_at_add']}  (csb has not found this session yet)")
+        else:
+            name = csb.name_for_member(set_name, m) if set_name else m.get("name_at_add")
+            lines.append(f"csb resume {m['session_id']}" + (f"  ({name})" if name else ""))
     return lines
 
 
@@ -501,6 +550,9 @@ def cmd_claim(parsed, json_mode: bool) -> int:
 
 def _report_claim(r: rc.ClaimResult, level: str, json_mode: bool) -> int:
     m = r.member
+    if m["kind"] == "claude" and not m.get("session_id"):   # added by name: ask csb again now
+        import relaunch_csb as csb
+        csb.resolve_pending(r.set_name, m)
     doc = rs.load_set(r.set_name)
     folder = rs.resolve_cwd(m, doc.get("origin", {}), path_map=rs.load_path_map()) if m.get("cwd") else None
     if m.get("cwd") and folder is None:

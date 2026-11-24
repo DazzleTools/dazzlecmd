@@ -114,7 +114,8 @@ def build_command(m, *, which=None):
         return argv, f"{d}: {m['script']}"
     if k == "claude":
         exe = (which or resolve_program)("csb")
-        return [exe, "resume", m["session_id"]], f"csb resume {m['session_id']}"
+        ref = m.get("session_id") or m["name_at_add"]     # by name until csb can see the session
+        return [exe, "resume", ref], f"csb resume {ref}"
     raise LaunchRefused(f"a {k} member has nothing to run")
 
 
@@ -184,6 +185,28 @@ def record_launched(set_name: str, member_id: int, boot: Optional[float], home=N
             data = {}
     data.setdefault(set_name, {})[str(member_id)] = boot
     os.makedirs(os.path.dirname(p), exist_ok=True)
+    atomic_write_json(p, data, indent=2, default=None)
+
+
+def swap_launched(set_name: str, a: int, b: int, home=None) -> None:
+    """``swap`` renumbered two members: their once-per-boot launch record moves with them."""
+    import json
+    from dazzle_filekit import atomic_write_json
+    p = _launched_path(home)
+    if not os.path.isfile(p):
+        return
+    try:
+        data = json.load(open(p, encoding="utf-8"))
+    except ValueError:
+        return
+    rec = data.get(set_name)
+    if not rec:
+        return
+    va, vb = rec.pop(str(a), None), rec.pop(str(b), None)
+    if va is not None:
+        rec[str(b)] = va
+    if vb is not None:
+        rec[str(a)] = vb
     atomic_write_json(p, data, indent=2, default=None)
 
 

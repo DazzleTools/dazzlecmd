@@ -4,6 +4,17 @@ All notable changes to dazzlecmd are documented here.
 
 Format follows [Keep a Changelog](https://keepachangelog.com/). Versions use [Semantic Versioning](https://semver.org/).
 
+## [0.13.16-alpha] - 2026-11-24
+
+### Added
+- **`dz relaunch <set> swap <member> <member>`** -- two members trade places and numbers, so the roster still reads 1, 2, 3... with the labels moved. A tab's claim, the opened history, an approved command and the once-per-boot launch record all follow the member that moved, so nothing is re-asked. Members can be given by number or label, and the set may come last: `dz relaunch swap 2 4 ck3`.
+
+### Changed
+- **`add --claude <name>` no longer fails when csb cannot see the session yet** -- often because it was named a moment ago. relaunch says so and asks once, "add it by name anyway?" (`-y` answers yes up front; with nobody at the console it refuses and says `--yes` will add it). The member shows as "not found yet" in the roster; the next time the set is shown or claimed and csb knows the session, relaunch records its id and resumes by id from then on. Until then, `claim -o` runs `csb resume <name>`. A name shared by several sessions is still refused -- give the id.
+
+### Versions
+- dazzlecmd 0.13.15 -> 0.13.16 (PATCH); dazzle-dz -> 0.13.16a0.
+
 ## [0.13.15-alpha] - 2026-11-21
 
 ### Changed
@@ -4508,7 +4519,7 @@ Phase 2 ships as a PATCH bump (0.7.8 -> 0.7.9) following the project's conventio
 - Core kit: rn (regex file renamer)
 - DazzleTools kit: dos2unix, delete-nul, srch-path, split
 
-[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.15a1...HEAD
+[Unreleased]: https://github.com/DazzleTools/dazzlecmd/compare/v0.13.16a1...HEAD
 [0.7.42]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.41...v0.7.42
 [0.7.41]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.40...v0.7.41
 [0.7.40]: https://github.com/DazzleTools/dazzlecmd/compare/v0.7.39...v0.7.40

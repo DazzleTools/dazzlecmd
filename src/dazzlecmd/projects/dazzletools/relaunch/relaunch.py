@@ -83,6 +83,7 @@ HANDLERS["drop"] = actions.cmd_drop
 HANDLERS["enable"] = actions.cmd_enable
 HANDLERS["claim"] = actions.cmd_claim
 HANDLERS["launch"] = actions.cmd_launch
+HANDLERS["swap"] = actions.cmd_swap
 
 
 @handler("shell-init")

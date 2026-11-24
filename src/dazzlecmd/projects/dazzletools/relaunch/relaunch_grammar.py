@@ -95,12 +95,20 @@ def split_targets(argv: List[str], known_sets: Iterable[str]) -> Parsed:
     if verb:  # verb-first
         rest = words[1:]
         targets: List[Target] = []
+        lower_known = {k.lower() for k in known}
+        if verb.name == "swap" and rest and rest[0].lower() not in lower_known:
+            # `swap 2 4 ck3` == `ck3 swap 2 4`: the set may come after the two members
+            named = [t for t in rest if t.lower() in lower_known]
+            if len(named) == 1:
+                rest = list(rest)
+                rest.remove(named[0])
+                return Parsed(verb.name, [_name_target(named[0], known)], rest, flags)
         if verb.sets in ("one", "many", "optional") and rest and not _is_flag(rest[0]) \
                 and verb.name not in ("new",) and rest[0] != "--":
             if not (verb.name == "drop" and rest[0] in ("rm", "disable")):
                 targets.append(_name_target(rest[0], known))
                 rest = rest[1:]
-            elif len(rest) > 1 and rest[1].lower() in {k.lower() for k in known}:
+            elif len(rest) > 1 and rest[1].lower() in lower_known:
                 # `drop rm ck3 [3]` == `ck3 drop rm [3]`: the set may follow the mode word
                 targets.append(_name_target(rest[1], known))
                 rest = [rest[0]] + rest[2:]

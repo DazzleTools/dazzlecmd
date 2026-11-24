@@ -50,7 +50,7 @@ Every `claim` prints what it took, with a tag -- `open last session -- before re
 | `dz relaunch` / `list` | dashboard; `list --removed` (`only` / `all`) shows removed sets and members |
 | `dz relaunch <set>` / `show` | roster; `<set>:<id>` a member's card; `last`, `last~N`, `last:<n>` the session views |
 | `new <set>` | create (`--here`, `--notes`, `--from-csb current\|last\|boot\|<csb set>`) |
-| `<set> add` | add a member (folder, `--here`, `-- <command>`, `--shell DIALECT SCRIPT`, `--claude SESSION`; `--label`, `--notes`, `--at N`) |
+| `<set> add` | add a member (folder, `--here`, `-- <command>`, `--shell DIALECT SCRIPT`, `--claude SESSION`; `--label`, `--notes`, `--at N`). A Claude session csb cannot see yet (often: just named) is offered by name with one question (`-y` answers yes); it shows as "not found yet" until csb sees it, then resumes by id |
 | `<set> edit [<id>]` | change fields (`--label`, `--notes`, `--folder`, `-- <argv>`); with no flags, the whole set in your editor, applied only if nobody changed it meanwhile |
 | `<set> note [<id>] "text"` | a note on the set or a member |
 | `<set> claim [<id>]` | take the next member (or that one); `-o` run it here; `--next` take another; `--yes` a second copy of one open elsewhere |
@@ -58,6 +58,7 @@ Every `claim` prints what it took, with a tag -- `open last session -- before re
 | `release` | let go of this tab's member; `<set> release --all` |
 | `<set> drop rm\|disable [<id>...]` | remove (a whole set goes to the safedel trash; `dz safedel recover` brings it back) or hide |
 | `<set> enable [<id>...]` | undo disable |
+| `<set> swap <id> <id>` | two members trade places and numbers (`swap 2 4 ck3` works too); a tab's claim, the opened history and an approved command follow the member, so nothing is re-asked |
 | `shell-init cmd\|bash` | print the `dzr` wrapper |
 
 The set name comes first (`dz relaunch ck3 claim`); the action-first form also works with one set (`dz relaunch claim ck3`).

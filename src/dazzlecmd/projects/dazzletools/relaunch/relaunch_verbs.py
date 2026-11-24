@@ -68,6 +68,11 @@ VERBS: Tuple[Verb, ...] = (
                    ("dz relaunch ck3 drop rm", "the whole set, recoverable with dz safedel recover"))),
     Verb("enable", "undo drop disable", writes=True,
          examples=(("dz relaunch ck3 enable 3", ""),)),
+    Verb("swap", "exchange two members' places and numbers (claims, history and approvals follow them)",
+         writes=True,
+         examples=(("dz relaunch ck3 swap 2 4", "member 2 becomes 4 and 4 becomes 2"),
+                   ("dz relaunch swap 2 4 ck3", "the same, with the set last"),
+                   ("dz relaunch ck3 swap repo oracle", "by label"))),
     Verb("shell-init", "print the dzr wrapper that lets claim change this tab's folder", sets="none",
          examples=(("dz relaunch shell-init cmd", "for Command Prompt"),
                    ("dz relaunch shell-init bash", "for bash (put it in ~/.bashrc)"))),
@@ -132,6 +137,10 @@ USAGE: Dict[str, Tuple[str, Tuple[Tuple[str, str], ...]]] = {
     "enable": ("dz relaunch <set> enable [<member>...]", (
         ("(nothing)", "bring back a disabled set"),
         ("<member>...", "bring back disabled members"))),
+    "swap": ("dz relaunch <set> swap <member> <member>   (or: dz relaunch swap <member> <member> <set>)", (
+        ("<member> <member>", "two members by number or label; they trade places and numbers"),
+        ("(what follows)", "a tab's claim, the opened history and an approved command stay with the "
+                           "member that moved, so nothing is re-asked"))),
     "shell-init": ("dz relaunch shell-init cmd|bash", (
         ("cmd", "print dzr.cmd -- save it in a local folder on PATH (the one holding dz.exe)"),
         ("bash", "print the dzr() function -- add it to ~/.bashrc"),

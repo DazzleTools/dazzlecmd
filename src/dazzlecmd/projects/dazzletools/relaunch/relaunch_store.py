@@ -35,7 +35,7 @@ HOME_ENV = "DZ_RELAUNCH_HOME"
 RESERVED_NAMES = frozenset({
     # actions
     "list", "ls", "show", "new", "add", "edit", "note", "claim", "release",
-    "drop", "enable", "shell-init",
+    "drop", "enable", "shell-init", "swap",
     # views
     "last", "current", "boot",
     # reserved ahead of need
@@ -253,8 +253,10 @@ def validate_member(m: Dict[str, Any], where: str = "member") -> None:
     if m.get("detach") and kind not in ("command", "shell"):
         raise StoreError(f"{where} {mid}: only command and shell members can be detached")
     if kind == "claude":
-        if m.get("via") != "csb" or not m.get("session_id"):
-            raise StoreError(f"{where} {mid}: a claude member needs via='csb' and 'session_id'")
+        # a session added by name before csb could see it has no id yet; it resolves later
+        if m.get("via") != "csb" or not (m.get("session_id") or m.get("name_at_add")):
+            raise StoreError(f"{where} {mid}: a claude member needs via='csb' and a 'session_id' "
+                             f"(or, until csb can see it, the session's name in 'name_at_add')")
 
 
 def validate_set(doc: Any, source: str = "set") -> Dict[str, Any]:

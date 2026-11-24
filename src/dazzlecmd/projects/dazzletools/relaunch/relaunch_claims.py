@@ -351,6 +351,27 @@ def claim(set_name: str, tab: Tab, member_ref: Optional[str] = None, *,
         return res
 
 
+def swap_member_refs_unlocked(set_name: str, a: int, b: int, home: Optional[str] = None) -> None:
+    """Exchange member ids ``a`` and ``b`` in claims and history. The caller holds the store lock
+    (``swap`` renumbers the two members in the same lock, so nothing sees a half-swapped set)."""
+    swap = {a: b, b: a}
+    claims = load_claims(home)
+    for c in claims:
+        if c.get("set") == set_name and c.get("member_id") in swap:
+            c["member_id"] = swap[c["member_id"]]
+    history = load_history(home)
+    opened = history.get("opened", {}).get(set_name)
+    if opened is not None:
+        ka, kb = str(a), str(b)
+        va, vb = opened.pop(ka, None), opened.pop(kb, None)
+        if va is not None:
+            opened[kb] = va
+        if vb is not None:
+            opened[ka] = vb
+    _write(claims_path(home), {"format": 1, "claims": claims})
+    _write(history_path(home), history)
+
+
 def unclaim(result: "ClaimResult", tab: Tab, *, home: Optional[str] = None,
             liveness: Callable[[Dict[str, Any]], Optional[bool]] = None,
             lock_timeout: float = LOCK_TIMEOUT_S) -> bool:

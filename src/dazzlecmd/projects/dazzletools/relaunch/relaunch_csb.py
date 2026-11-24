@@ -68,6 +68,37 @@ def open_member_ids(set_doc: Dict[str, Any]) -> List[int]:
     return [m["id"] for m in claude if m.get("session_id") in live]
 
 
+class SessionNotFound(CsbUnavailable):
+    """csb answered, but knows no session with exactly that name (it may be too new)."""
+
+
+class SessionAmbiguous(CsbUnavailable):
+    """Several sessions share the name -- only the id can say which."""
+
+
+def resolve_pending(set_name: str, m: Dict[str, Any]) -> Dict[str, Any]:
+    """A claude member added by name before csb could see it: look it up now, and once csb knows
+    it, record the id in the set so resume is by id from then on. Updates ``m`` in place."""
+    if m.get("kind") != "claude" or m.get("session_id") or not m.get("name_at_add"):
+        return m
+    try:
+        found = member_for(m["name_at_add"])
+    except CsbUnavailable:
+        return m
+    m["session_id"] = found["session_id"]
+    try:
+        import relaunch_store as rs
+        doc = rs.load_set(set_name)
+        for x in doc["members"]:
+            if x["id"] == m["id"] and not x.get("session_id"):
+                x["session_id"] = found["session_id"]
+                rs.save_set(doc)
+                break
+    except Exception:          # the run can still use the id it just found
+        pass
+    return m
+
+
 def session_name(session_id: str) -> Optional[str]:
     """The csb session name for a UUID (read-only ``csb scan``), or None if csb cannot say."""
     try:
@@ -109,9 +140,9 @@ def member_for(query: str) -> Dict[str, Any]:
     rows = _json(["scan", query, "--json"])
     exact = [r for r in rows if r.get("session_name") == query]
     if not exact:
-        raise CsbUnavailable(f"csb knows no session named exactly '{query}'")
+        raise SessionNotFound(f"csb knows no session named exactly '{query}'")
     if len({r["session_id"] for r in exact}) > 1:
-        raise CsbUnavailable(f"several sessions are named '{query}' -- give the UUID instead")
+        raise SessionAmbiguous(f"several sessions are named '{query}' -- give the UUID instead")
     return {"kind": "claude", "via": "csb", "session_id": exact[0]["session_id"], "name_at_add": query}
 
 

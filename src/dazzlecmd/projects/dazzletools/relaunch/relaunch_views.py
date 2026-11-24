@@ -42,6 +42,8 @@ def _describe(m: Dict[str, Any]) -> str:
         return " ".join(m["argv"]) + (f"   in {m['cwd']}" if m.get("cwd") else "")
     if k == "shell":
         return f"[{m['shell']}] {m['script']}" + (f"   in {m['cwd']}" if m.get("cwd") else "")
+    if not m.get("session_id"):
+        return f"csb session {m.get('name_at_add')}  (not found yet)"
     return f"csb session {m.get('name_at_add') or m['session_id']}"
 
 
@@ -198,6 +200,11 @@ def cmd_show(parsed, json_mode: bool) -> int:
                                  "label": m.get("label")})
             continue
         doc = rs.load_set(t.name)
+        pending = [m for m in doc["members"] if m["kind"] == "claude" and not m.get("session_id")]
+        if pending:                          # members added by name before csb could see them
+            import relaunch_csb as csb
+            for m in pending:
+                csb.resolve_pending(doc["name"], m)
         if t.entry is not None:
             rows, data = member_card(doc, rs.find_member(doc, t.entry), claims, history, tab)
         else:

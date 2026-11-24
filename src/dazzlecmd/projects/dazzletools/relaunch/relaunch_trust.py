@@ -49,6 +49,24 @@ def record(set_name: str, m: Dict[str, Any], home=None) -> None:
     atomic_write_json(_path(home), data, indent=2, default=None)
 
 
+def swap_ids(set_name: str, a: int, b: int, home=None) -> None:
+    """``swap`` renumbered two members: their approvals move with them, so nothing is re-asked."""
+    p = _path(home)
+    if not os.path.isfile(p):
+        return
+    from dazzle_filekit import atomic_write_json
+    data = _load(home)
+    approved = data["approved"].get(set_name)
+    if not approved:
+        return
+    va, vb = approved.pop(str(a), None), approved.pop(str(b), None)
+    if va is not None:
+        approved[str(b)] = va
+    if vb is not None:
+        approved[str(a)] = vb
+    atomic_write_json(p, data, indent=2, default=None)
+
+
 def is_trusted(doc: Dict[str, Any], m: Dict[str, Any], home=None) -> bool:
     if m["kind"] not in RUNNABLE:
         return True
